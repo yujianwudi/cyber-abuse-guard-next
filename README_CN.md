@@ -1,13 +1,12 @@
 # CPA Cyber Abuse Guard
 
-> **RC identity note:** `v0.16-rc.3` is an immutable failed Phase 1 Tag with
-> zero candidate artifacts and no Release. The active target is the unused
-> `v0.16-rc.4`; public publication remains blocked pending independent evidence.
-
 ```text
 current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
 ```
+
+> **RC 身份说明：** `v0.16-rc.3` 是不可移动的 Phase 1 失败 Tag，没有候选产物或
+> Release。当前目标是尚未占用的 `v0.16-rc.4`；在独立证据齐备前，公共发布继续硬阻断。
 
 > **仓库沿革：** 这是采用全新 Git 历史的后续项目。旧 tag、分支、Release
 > 和历史资产继续只读保留在

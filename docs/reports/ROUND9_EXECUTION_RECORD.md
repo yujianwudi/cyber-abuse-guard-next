@@ -55,6 +55,7 @@ successor_rc3_phase1: PROVIDED_FAIL / run 30118817188 / missing-pyyaml-at-safe-g
 successor_candidate_tag: v0.16-rc.4 / NOT_CREATED
 successor_release: NOT_CREATED
 successor_rc4_pr3_initial_checks: PROVIDED_FAIL / head edde8f7aee1bb264e07915b0992adff1914caa46 / CI 30122937438 + Round9 30122937432 + CodeQL 30122937442 / dynamic-python-read-only-contract / superseded-by-source-fix
+successor_rc4_pr3_followup_checks: PROVIDED_FAIL / head 78ea624c118d145119bd16653a93424a95dfc408 / CI 30123493758 + Round9 30123493678 + CodeQL 30123493698 / safe-gate-tests-204-PASS + contract-PASS + README_CN-prologue-position-FAIL / superseded-by-doc-fix
 successor_final_candidate_freeze: NOT_ESTABLISHED
 successor_independent_evidence: NOT_PROVIDED
 successor_external_ledger_ruleset: 19669641 / round9-eval-ledger-immutable / active / no-bypass
