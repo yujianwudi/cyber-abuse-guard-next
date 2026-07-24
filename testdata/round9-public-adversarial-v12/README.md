@@ -1,7 +1,8 @@
 # Round 9 public adversarial corpus v12
 
-This is the active visible development-only public adversarial corpus. Its
-manifest identity is recorded below after the frozen JSON is finalized:
+This is the frozen, immutable v12 historical development-only public adversarial
+corpus. Current validation and release checks use v13. The v12 manifest identity
+is recorded below:
 
 - bytes: `485221`
 - SHA-256: `eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387`

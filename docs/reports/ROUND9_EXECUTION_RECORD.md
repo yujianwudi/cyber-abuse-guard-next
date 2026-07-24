@@ -115,8 +115,10 @@ inspected or modified, so its live state is `NOT_PROVIDED` rather than verified.
 Statuses describe the current final-candidate position. `PASS` is used only for
 an immutable development identity or a reproducible result that is not invalidated
 by later source changes. `PENDING_FINAL_SOURCE_FREEZE` and `PENDING_RERUN` are
-not synonyms for `PASS`. Early failures remain disclosed in the Stage log, but
-are not presented as the current final result after subsequent classifier edits.
+not synonyms for `PASS`. `PENDING_LINUX_RERUN` specifically means the required
+Linux validator/CI rerun has not completed; it is also not a `PASS`. Early
+failures remain disclosed in the Stage log, but are not presented as the current
+final result after subsequent classifier edits.
 
 | Task clause | Source location | Test location | Source snapshot / freeze | Evidence path and SHA-256 | Current result | Status |
 |---|---|---|---|---|---|---|
@@ -514,7 +516,7 @@ are not presented as the current final result after subsequent classifier edits.
   Therefore no current classifier, plugin, performance, development-corpus, or
   release-readiness claim is PASS.
 
-### 2026-07-24 - live repository recheck and evidence-boundary correction
+### 2026-07-24 to 2026-07-25 - live repository recheck and evidence-boundary correction
 
 - Read-only GitHub metadata was rechecked without executing any third-party
   repository code, workflow, installer, hook, dependency, application, binary,
@@ -564,8 +566,9 @@ are not presented as the current final result after subsequent classifier edits.
   byte-identical to v12. Five changed-or-added Star History data/source/workflow/
   test blobs are excluded as non-payloads with review digest
   `56d4bfcdfa4bfa0b4b74b4229b4dd7d71fa6b0ebef58cd4417438209f45dd1cd`;
-  two removed source paths are recorded path-only. A second full metadata check
-  at `2026-07-25T00:00:54+08:00` remained exact-equal to the v13 manifest.
+  two removed source paths are recorded path-only. A post-midnight second full
+  metadata check was performed at `2026-07-25T00:00:54+08:00` and remained
+  exact-equal to the v13 manifest.
 - Documentation now separates repository-local counted-Mock, Tencent Cloud #2
   isolated counted-Mock, and protected external evaluation/one-shot-ledger
   evidence. All three remain `NOT_PROVIDED`.
