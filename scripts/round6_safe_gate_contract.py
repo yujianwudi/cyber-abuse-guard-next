@@ -1098,7 +1098,7 @@ ROUND9_MACHINE_REPORT_SCRIPT_SHA256 = (
 )
 ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
     2,
-    "b57d037bf33635a6985700bbb048d7349f609b7d192b3c9de0f0b15a0f8a058b",
+    "a99b170a154d4da1f523e53f89c48b5fc402dec5bf105a652028626cff0155a9",
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
@@ -9596,8 +9596,14 @@ def round9_machine_report_command_function_ast_contract(
         if isinstance(node, ast.FunctionDef) and node.name in {"git_output", "run_command"}
     ]
     functions.sort(key=lambda node: (node.lineno, node.name))
+    # CPython adds fields to FunctionDef over time, so ast.dump() is not a
+    # stable CI identity across supported Python minors.  The parsed source
+    # spans keep the structural owner check while remaining byte-deterministic.
+    lines = text.splitlines(keepends=True)
     payload = "\0\0".join(
-        function.name + "\0" + ast.dump(function, include_attributes=False)
+        function.name
+        + "\0"
+        + "".join(lines[function.lineno - 1 : function.end_lineno])
         for function in functions
     ).encode("utf-8")
     return len(functions), hashlib.sha256(payload).hexdigest()
