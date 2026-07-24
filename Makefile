@@ -390,7 +390,7 @@ round6-benchmark: benchmark
 		grep -Fxq 'TestRawCapturePerformanceAcceptance' || { \
 			echo 'required raw-capture performance acceptance test is missing' >&2; exit 1; \
 		}
-	$(GO) test ./internal/audit -count=1 -v \
+	CAG_RAW_CAPTURE_PERFORMANCE_ACCEPTANCE=1 $(GO) test ./internal/audit -count=1 -v \
 		-run='^TestRawCapturePerformanceAcceptance$$'
 	@listed="$$($(GO) test ./internal/audit -list='^(BenchmarkPrepareRawCapture|BenchmarkRecordRawCaptureQueue|BenchmarkEnqueueEventWithRawCapture)$$')" || exit $$?; \
 	for benchmark_name in BenchmarkPrepareRawCapture BenchmarkRecordRawCaptureQueue BenchmarkEnqueueEventWithRawCapture; do \

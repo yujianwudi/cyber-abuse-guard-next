@@ -3,9 +3,12 @@ package audit
 import (
 	"errors"
 	"fmt"
+	"os"
 	"testing"
 	"time"
 )
+
+const rawCapturePerformanceAcceptanceEnv = "CAG_RAW_CAPTURE_PERFORMANCE_ACCEPTANCE"
 
 var rawCaptureBenchmarkSizes = []struct {
 	name string
@@ -18,6 +21,9 @@ var rawCaptureBenchmarkSizes = []struct {
 }
 
 func TestRawCapturePerformanceAcceptance(t *testing.T) {
+	if os.Getenv(rawCapturePerformanceAcceptanceEnv) != "1" {
+		t.Skip("wall-clock raw-capture performance acceptance runs only through make round6-benchmark")
+	}
 	if auditRaceEnabled {
 		t.Skip("wall-clock and allocation acceptance is not meaningful under the race detector")
 	}

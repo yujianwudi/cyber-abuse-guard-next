@@ -353,6 +353,7 @@ func TestRawCaptureColdDisableRejectsWhenExistingPurgeCannotComplete(t *testing.
 	directory := t.TempDir()
 	path := filepath.Join(directory, "events.db")
 	now := time.Date(2026, 7, 21, 17, 0, 0, 0, time.UTC)
+	testNow := func() time.Time { return now }
 	rawRequest := []byte(`{"messages":[{"role":"user","content":"retained cold-start review canary"}]}`)
 	eventID := "01234567-89ab-4def-8123-456789abcdef"
 	event := audit.Event{
@@ -363,6 +364,7 @@ func TestRawCaptureColdDisableRejectsWhenExistingPurgeCannotComplete(t *testing.
 	}
 	store, err := audit.Open(audit.Config{
 		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		Now: testNow,
 		RawCapture: audit.RawCaptureConfig{
 			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
 		},
@@ -417,6 +419,7 @@ func TestRawCaptureColdDisableRejectsWhenExistingPurgeCannotComplete(t *testing.
 	locked = false
 	reopened, err := audit.Open(audit.Config{
 		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		Now: testNow,
 		RawCapture: audit.RawCaptureConfig{
 			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
 		},
