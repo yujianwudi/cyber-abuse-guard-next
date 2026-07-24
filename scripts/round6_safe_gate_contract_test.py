@@ -58,6 +58,7 @@ from round6_safe_gate_contract import (
     mutation_shell_commands,
     mutating_command_reason,
     read_only_gh_api_mutation_reason,
+    reject_repository_yaml_shadow,
     round9_eval_subprocess_function_contract,
     round9_host_evidence_command_function_contract,
     shell_command_segments,
@@ -107,6 +108,29 @@ CHECKOUT_SHA = "a" * 40
 
 
 class Round6SafeGateContractTest(unittest.TestCase):
+    def test_repository_local_pyyaml_shadow_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            for relative in ("yaml.py", "yaml"):
+                candidate = scripts / relative
+                if candidate.suffix:
+                    candidate.write_text(
+                        "raise AssertionError('shadow executed')\n", encoding="utf-8"
+                    )
+                else:
+                    candidate.mkdir()
+                with self.subTest(relative=relative):
+                    with self.assertRaisesRegex(
+                        RuntimeError, "repository-local PyYAML shadow is forbidden"
+                    ):
+                        reject_repository_yaml_shadow(root, [str(scripts)])
+                if candidate.is_dir():
+                    candidate.rmdir()
+                else:
+                    candidate.unlink()
+
     def test_round9_malicious_text_producer_static_closure_is_hash_bound(self):
         root = Path(__file__).resolve().parent.parent
         validate_round9_malicious_text_producer_static_closure(root)
@@ -4354,6 +4378,35 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "ROUND9_NEW_PUBLIC_PRERELEASE_CREATION: "
                 "BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE",
                 "ROUND9_NEW_PUBLIC_PRERELEASE_CREATION: ALLOWED_BY_HOST_ONLY",
+                1,
+            ),
+            original.replace(
+                "8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2",
+                "0" * 64,
+                1,
+            ),
+            original.replace(
+                "8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2",
+                "0" * 64,
+                2,
+            ).replace(
+                "0" * 64,
+                "8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2",
+                1,
+            ),
+            original.replace(
+                "        shell: bash\n",
+                "        shell: sh\n",
+                1,
+            ),
+            original.replace(
+                "        shell: bash\n",
+                "        shell: sh\n",
+                2,
+            ).replace("        shell: sh\n", "        shell: bash\n", 1),
+            original.replace(
+                "/usr/lib/python3/dist-packages/yaml/__init__.py",
+                "/tmp/yaml/__init__.py",
                 1,
             ),
             original.replace(

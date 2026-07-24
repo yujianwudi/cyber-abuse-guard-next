@@ -1,10 +1,10 @@
-name: Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission
+name: Round 9 RC release v0.16-rc.4 - Linux counted-Mock admission
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing annotated Round 9 RC tag (must be v0.16-rc.3)
+        description: Existing annotated Round 9 RC tag (must be v0.16-rc.4)
         required: true
         type: string
       expected_tag_object_sha:
@@ -57,7 +57,7 @@ env:
   GOFLAGS: -mod=readonly
   GO_VERSION: '1.26.4'
   VERSION: '0.16'
-  RC_VERSION: '0.16-rc.3'
+  RC_VERSION: '0.16-rc.4'
   CYCLONEDX_GOMOD_VERSION: 'v1.9.0'
   GOVULNCHECK_VERSION: 'v1.6.0'
   GH_CLI_VERSION: '2.96.0'
@@ -100,7 +100,7 @@ jobs:
           WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
-          [[ "$TAG" == v0.16-rc.3 ]]
+          [[ "$TAG" == v0.16-rc.4 ]]
           [[ "$EXPECTED_TAG_OBJECT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
@@ -164,7 +164,7 @@ jobs:
 
           releases="$RUNNER_TEMP/releases.json"
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
-          title='v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required'
+          title='v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required'
           jq -e --arg tag "$TAG" --arg title "$title" '
             [.[][] | select(.name == $title and .tag_name != $tag)] | length == 0
           ' "$releases" >/dev/null
@@ -225,6 +225,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: docker.io/library/golang:1.26.4-bookworm@sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 150
     permissions:
       actions: read
@@ -235,6 +238,19 @@ jobs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
       artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
     steps:
+      - name: Install exact Safe Gate runtime before checkout
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$package" 'https://deb.debian.org/debian/pool/main/p/pyyaml/python3-yaml_6.0-3+b2_amd64.deb'
+          printf '%s  %s\n' '8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "$package" | sha256sum -c -
+          dpkg -i "$package"
+          [[ "$(dpkg-query -W -f='${Version}' python3-yaml)" == '6.0-3+b2' ]]
+          [[ "$(dpkg-query -W -f='${Architecture}' python3-yaml)" == amd64 ]]
+          [[ "$(python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
+          python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
+          rm -f -- "$package"
+
       - name: Checkout exact Round 9 tag with restricted data excluded
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -353,7 +369,7 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s\n' \
-            'CPA Cyber Abuse Guard v0.16-rc.3 Round 9 canonical Linux release gates' \
+            'CPA Cyber Abuse Guard v0.16-rc.4 Round 9 canonical Linux release gates' \
             'summary_schema=1' \
             "commit=$EXPECTED_COMMIT" \
             "tree=$EXPECTED_TREE" \
@@ -399,7 +415,7 @@ jobs:
             --output "$work/audit-contract-report.json" \
             --log "$work/audit-contract-producer.log" --go go
           python3 -B scripts/round9_machine_reports.py development \
-            --root . --tag v0.16-rc.3 --commit "$EXPECTED_COMMIT" \
+            --root . --tag v0.16-rc.4 --commit "$EXPECTED_COMMIT" \
             --tree "$EXPECTED_TREE" --runtime "$runtime" --platform "$platform" \
             --development-benign-report "$work/development-benign-report.json" \
             --paired-report "$work/paired-malicious-report.json" \
@@ -411,7 +427,7 @@ jobs:
             --output "$work/development-evidence.json"
           python3 -B scripts/round9_machine_reports.py validate-development \
             --root . --input "$work/development-evidence.json" \
-            --tag v0.16-rc.3 --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE"
+            --tag v0.16-rc.4 --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE"
           {
             printf 'path=%s\n' "$work/development-evidence.json"
             printf 'sha256=%s\n' "$(sha256sum "$work/development-evidence.json" | awk '{print $1}')"
@@ -446,11 +462,11 @@ jobs:
           set -euo pipefail
           expected="$(printf '%s\n' \
             build-metadata.json checksums.txt \
-            cyber-abuse-guard-v0.16-rc.3.so cyber-abuse-guard-v0.16-rc.3.so.sha256 \
-            cyber-abuse-guard_0.16-rc.3_linux_amd64.zip \
-            cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip \
-            cyber-abuse-guard-v0.16-rc.3-source.tar.gz \
-            cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256 \
+            cyber-abuse-guard-v0.16-rc.4.so cyber-abuse-guard-v0.16-rc.4.so.sha256 \
+            cyber-abuse-guard_0.16-rc.4_linux_amd64.zip \
+            cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip \
+            cyber-abuse-guard-v0.16-rc.4-source.tar.gz \
+            cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256 \
             rc-release-evidence.md rc-release-evidence.md.sha256 \
             rc-release-manifest.json rc-release-manifest.json.sha256 \
             rc-release-test-summary.txt rc-release-test-summary.txt.sha256 \
@@ -491,8 +507,8 @@ jobs:
             .round9.external_ledger_proof == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
             .round9.classifier.version == "classifier-policy-v8" and
             .round9.ruleset.version == "1.0.10" and
-            .round9.release.tag == "v0.16-rc.3" and
-            .round9.release.title == "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required" and
+            .round9.release.tag == "v0.16-rc.4" and
+            .round9.release.title == "v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required" and
             .round9.release.body == "NOT_PROVIDED / EXTERNAL_EVALUATION_REQUIRED" and
             .round9.release.publication_permitted == false and
             .round9.release.draft == false and .round9.release.prerelease == true and
@@ -531,6 +547,9 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: docker.io/library/golang:1.26.4-bookworm@sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 120
     permissions:
       actions: read
@@ -538,6 +557,19 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Install exact Safe Gate runtime before checkout
+        run: |
+          set -euo pipefail
+          package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$package" 'https://deb.debian.org/debian/pool/main/p/pyyaml/python3-yaml_6.0-3+b2_amd64.deb'
+          printf '%s  %s\n' '8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "$package" | sha256sum -c -
+          dpkg -i "$package"
+          [[ "$(dpkg-query -W -f='${Version}' python3-yaml)" == '6.0-3+b2' ]]
+          [[ "$(dpkg-query -W -f='${Architecture}' python3-yaml)" == amd64 ]]
+          [[ "$(python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
+          python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
+          rm -f -- "$package"
+
       - name: Checkout exact Round 9 tag with restricted data excluded
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -690,7 +722,7 @@ jobs:
           for name in round9-external-evaluation.json round9-external-ledger-proof.json; do
             gh attestation verify "$external/$name" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-host-validation.yml" \
-              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.4 \
               --source-digest "$EXPECTED_COMMIT" >/dev/null
           done
           evaluation="$external/round9-external-evaluation.json"
@@ -748,7 +780,7 @@ jobs:
             --sandbox-adapter-config-sha256 "$sandbox_adapter_config_sha256" \
             --docker-sandbox-sha256 "$docker_sandbox_sha256" \
             --cpa-image-id "$cpa_image_id" --counted-mock-image-id "$counted_mock_image_id" \
-            --model "$model" --repository "$GITHUB_REPOSITORY" --tag v0.16-rc.3 \
+            --model "$model" --repository "$GITHUB_REPOSITORY" --tag v0.16-rc.4 \
             --tag-object-sha "$EXPECTED_TAG_OBJECT" --commit "$EXPECTED_COMMIT" \
             --tree "$EXPECTED_TREE" --so-sha256 "$so_sha256" \
             --classifier-policy-version "$classifier_version" \
@@ -768,7 +800,7 @@ jobs:
           jq -e --arg repo "$GITHUB_REPOSITORY" --arg commit "$EXPECTED_COMMIT" \
             --argjson run "$phase1_run_id" --argjson attempt "$phase1_run_attempt" '
               .id == $run and .run_attempt == $attempt and
-              .name == "Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission" and
+              .name == "Round 9 RC release v0.16-rc.4 - Linux counted-Mock admission" and
               .path == ".github/workflows/round9-release-rc.yml" and
               .event == "workflow_dispatch" and .head_sha == $commit and
               .status == "completed" and .conclusion == "success" and
@@ -776,7 +808,7 @@ jobs:
             ' <<<"$phase1_run_json" >/dev/null
           phase1_artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase1_run_id}/artifacts?per_page=100")"
           phase1_artifact="$(jq -ce \
-            --arg name "round9-rc-v0.16-rc.3-${EXPECTED_COMMIT}-${phase1_run_id}-${phase1_run_attempt}" \
+            --arg name "round9-rc-v0.16-rc.4-${EXPECTED_COMMIT}-${phase1_run_id}-${phase1_run_attempt}" \
             --arg digest "$phase1_artifact_digest" --argjson id "$phase1_artifact_id" \
             --argjson run "$phase1_run_id" '
               [.artifacts[] | select(.id == $id)] |
@@ -800,12 +832,12 @@ jobs:
           source, destination = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
           expected = {
               "build-metadata.json", "checksums.txt",
-              "cyber-abuse-guard-v0.16-rc.3.so",
-              "cyber-abuse-guard-v0.16-rc.3.so.sha256",
-              "cyber-abuse-guard_0.16-rc.3_linux_amd64.zip",
-              "cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip",
-              "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
-              "cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256",
+              "cyber-abuse-guard-v0.16-rc.4.so",
+              "cyber-abuse-guard-v0.16-rc.4.so.sha256",
+              "cyber-abuse-guard_0.16-rc.4_linux_amd64.zip",
+              "cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip",
+              "cyber-abuse-guard-v0.16-rc.4-source.tar.gz",
+              "cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256",
               "rc-release-evidence.md", "rc-release-evidence.md.sha256",
               "rc-release-manifest.json", "rc-release-manifest.json.sha256",
               "rc-release-test-summary.txt", "rc-release-test-summary.txt.sha256",
@@ -833,7 +865,7 @@ jobs:
           gh attestation verify "$phase1/rc-release-manifest.json" \
             --repo "$GITHUB_REPOSITORY" \
             --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-release-rc.yml" \
-            --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+            --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.4 \
             --source-digest "$EXPECTED_COMMIT" >/dev/null
           (
             cd "$phase1"
@@ -843,7 +875,7 @@ jobs:
           phase1_manifest="$phase1/rc-release-manifest.json"
           [[ "$(sha256sum "$phase1_manifest" | awk '{print $1}')" == \
             "$release_manifest_sha256" ]]
-          [[ "$(sha256sum "$phase1/cyber-abuse-guard-v0.16-rc.3.so" | awk '{print $1}')" == \
+          [[ "$(sha256sum "$phase1/cyber-abuse-guard-v0.16-rc.4.so" | awk '{print $1}')" == \
             "$so_sha256" ]]
           [[ "$(sha256sum "$phase1/ruleset-manifest.json" | awk '{print $1}')" == \
             "$ruleset_manifest_sha256" ]]
@@ -856,7 +888,7 @@ jobs:
               .commit == $commit and .tree == $tree and
               .workflow.run_id == $run and .workflow.run_attempt == $attempt and
               .workflow.ref ==
-                (env.GITHUB_REPOSITORY + "/.github/workflows/round9-release-rc.yml@refs/tags/v0.16-rc.3") and
+                (env.GITHUB_REPOSITORY + "/.github/workflows/round9-release-rc.yml@refs/tags/v0.16-rc.4") and
               .round9.release_lane == "round9" and
               .round9.corpus_contract_status == "PASS" and
               .round9.development_evidence.schema == "round9-development-evidence/v1" and
@@ -876,7 +908,7 @@ jobs:
           Path(sys.argv[2]).write_bytes(canonical_bytes(value))
           PY
           python3 -B scripts/round9_machine_reports.py validate-development \
-            --root . --input "$development" --tag v0.16-rc.3 \
+            --root . --input "$development" --tag v0.16-rc.4 \
             --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE"
           jq -e --slurpfile development "$development" \
             '.payload.development_evidence == $development[0]' \
@@ -899,7 +931,7 @@ jobs:
           ROUND9_GATE_RUN_ATTEMPT: ${{ needs.admission.outputs.round9_gate_run_attempt }}
         run: |
           printf '%s\n' \
-            'CPA Cyber Abuse Guard v0.16-rc.3 Round 9 canonical Linux release gates' \
+            'CPA Cyber Abuse Guard v0.16-rc.4 Round 9 canonical Linux release gates' \
             'summary_schema=1' "commit=$EXPECTED_COMMIT" "tree=$EXPECTED_TREE" \
             "exact_main_ci_run=$CI_RUN_ID" "exact_main_ci_attempt=$CI_RUN_ATTEMPT" \
             "exact_main_round9_gate_run=$ROUND9_GATE_RUN_ID" \
@@ -954,11 +986,11 @@ jobs:
           set -euo pipefail
           expected="$(printf '%s\n' \
             build-metadata.json checksums.txt \
-            cyber-abuse-guard-v0.16-rc.3.so cyber-abuse-guard-v0.16-rc.3.so.sha256 \
-            cyber-abuse-guard_0.16-rc.3_linux_amd64.zip \
-            cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip \
-            cyber-abuse-guard-v0.16-rc.3-source.tar.gz \
-            cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256 \
+            cyber-abuse-guard-v0.16-rc.4.so cyber-abuse-guard-v0.16-rc.4.so.sha256 \
+            cyber-abuse-guard_0.16-rc.4_linux_amd64.zip \
+            cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip \
+            cyber-abuse-guard-v0.16-rc.4-source.tar.gz \
+            cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256 \
             rc-release-evidence.md rc-release-evidence.md.sha256 \
             rc-release-manifest.json rc-release-manifest.json.sha256 \
             rc-release-test-summary.txt rc-release-test-summary.txt.sha256 \
@@ -1042,7 +1074,7 @@ jobs:
               .round9.external_evaluation.public_counted_mock and
             .round9.external_evaluation.development_evidence ==
               .round9.development_evidence and
-            .round9.external_evaluation.candidate.tag == "v0.16-rc.3" and
+            .round9.external_evaluation.candidate.tag == "v0.16-rc.4" and
             .round9.external_evaluation.candidate.commit == $commit and
             .round9.external_evaluation.candidate.cpa_version == "v7.2.95" and
             .round9.external_evaluation.execution.workflow_run_id == $host_run and
@@ -1137,8 +1169,8 @@ jobs:
             (.artifacts.external_evaluation.sha256 | test("^[0-9a-f]{64}$")) and
             .artifacts.external_ledger_proof.name == "round9-external-ledger-proof.json" and
             (.artifacts.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
-            .round9.release.tag == "v0.16-rc.3" and
-            .round9.release.title == "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required" and
+            .round9.release.tag == "v0.16-rc.4" and
+            .round9.release.title == "v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required" and
             (.round9.release.body | type == "string" and contains("Public adversarial v13") and
               contains("latest=false") and contains("independent audit")) and
             .round9.release.publication_permitted == true and
@@ -1154,12 +1186,12 @@ jobs:
           subject-path: |
             dist/build-metadata.json
             dist/checksums.txt
-            dist/cyber-abuse-guard-v0.16-rc.3.so
-            dist/cyber-abuse-guard-v0.16-rc.3.so.sha256
-            dist/cyber-abuse-guard_0.16-rc.3_linux_amd64.zip
-            dist/cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip
-            dist/cyber-abuse-guard-v0.16-rc.3-source.tar.gz
-            dist/cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256
+            dist/cyber-abuse-guard-v0.16-rc.4.so
+            dist/cyber-abuse-guard-v0.16-rc.4.so.sha256
+            dist/cyber-abuse-guard_0.16-rc.4_linux_amd64.zip
+            dist/cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip
+            dist/cyber-abuse-guard-v0.16-rc.4-source.tar.gz
+            dist/cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256
             dist/rc-release-evidence.md
             dist/rc-release-evidence.md.sha256
             dist/rc-release-manifest.json
@@ -1217,7 +1249,7 @@ jobs:
               --public-key "$public_key" --public-key-sha256 "$AUDIT_PUBLIC_KEY_SHA256" \
               --host-evaluator-public-key-sha256 "$HOST_EVALUATOR_PUBLIC_KEY_SHA256" \
               --key-id "$AUDIT_KEY_ID" --repository "$GITHUB_REPOSITORY" \
-              --tag v0.16-rc.3 --tag-object-sha "$EXPECTED_TAG_OBJECT" \
+              --tag v0.16-rc.4 --tag-object-sha "$EXPECTED_TAG_OBJECT" \
               --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
               --challenge "$AUDIT_CHALLENGE" --auditor-repository "$AUDIT_REPOSITORY" \
               --auditor-workflow-name "$AUDIT_WORKFLOW_NAME" \
@@ -1303,7 +1335,7 @@ jobs:
             --public-key "$public_key" --public-key-sha256 "$AUDIT_PUBLIC_KEY_SHA256" \
             --host-evaluator-public-key-sha256 "$HOST_EVALUATOR_PUBLIC_KEY_SHA256" \
             --key-id "$AUDIT_KEY_ID" --repository "$GITHUB_REPOSITORY" \
-            --tag v0.16-rc.3 --tag-object-sha "$EXPECTED_TAG_OBJECT" \
+            --tag v0.16-rc.4 --tag-object-sha "$EXPECTED_TAG_OBJECT" \
             --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
             --challenge "$AUDIT_CHALLENGE" --auditor-repository "$AUDIT_REPOSITORY" \
             --auditor-workflow-name "$AUDIT_WORKFLOW_NAME" \
@@ -1356,7 +1388,7 @@ jobs:
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
         run: |
           set -euo pipefail
-          title='v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required'
+          title='v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required'
           release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
           jq -e --arg commit "$EXPECTED_COMMIT" --arg title "$title" '
             .draft == false and .immutable == true and .prerelease == true and
@@ -1366,11 +1398,11 @@ jobs:
           ' <<<"$release" >/dev/null
           expected="$(printf '%s\n' \
             build-metadata.json checksums.txt \
-            cyber-abuse-guard-v0.16-rc.3.so cyber-abuse-guard-v0.16-rc.3.so.sha256 \
-            cyber-abuse-guard_0.16-rc.3_linux_amd64.zip \
-            cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip \
-            cyber-abuse-guard-v0.16-rc.3-source.tar.gz \
-            cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256 \
+            cyber-abuse-guard-v0.16-rc.4.so cyber-abuse-guard-v0.16-rc.4.so.sha256 \
+            cyber-abuse-guard_0.16-rc.4_linux_amd64.zip \
+            cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip \
+            cyber-abuse-guard-v0.16-rc.4-source.tar.gz \
+            cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256 \
             rc-release-evidence.md rc-release-evidence.md.sha256 \
             rc-release-manifest.json rc-release-manifest.json.sha256 \
             rc-release-test-summary.txt rc-release-test-summary.txt.sha256 \
@@ -1521,7 +1553,7 @@ jobs:
             (.round9.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
             .artifacts.external_evaluation.name == "round9-external-evaluation.json" and
             .artifacts.external_ledger_proof.name == "round9-external-ledger-proof.json" and
-            .round9.release.tag == "v0.16-rc.3" and
+            .round9.release.tag == "v0.16-rc.4" and
             .round9.release.title == $title and .round9.release.body == $body and
             .round9.release.publication_permitted == true and
             .round9.release.draft == false and .round9.release.prerelease == true and
@@ -1538,13 +1570,13 @@ jobs:
           while IFS= read -r name; do
             gh attestation verify "$RUNNER_TEMP/published/$name" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-release-rc.yml" \
-              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.4 \
               --source-digest "$EXPECTED_COMMIT" >/dev/null
           done <<<"$ordinary"
           for name in round9-external-evaluation.json round9-external-ledger-proof.json; do
             gh attestation verify "$RUNNER_TEMP/published/$name" --repo "$GITHUB_REPOSITORY" \
               --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-host-validation.yml" \
-              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.4 \
               --source-digest "$EXPECTED_COMMIT" >/dev/null
           done
           latest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"

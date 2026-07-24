@@ -5,9 +5,21 @@ current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
 ```
 
-Source-tree status updated: 2026-07-23 (Asia/Shanghai)
+Source-tree status updated: 2026-07-25 (Asia/Shanghai)
 
-## Unreleased - v0.16-rc.3 Round 9 candidate
+## Unreleased - v0.16-rc.4 Round 9 candidate
+
+- Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
+  passed, but its fixed Go container lacked the undeclared PyYAML dependency;
+  no candidate asset, attestation, or GitHub Release was created.
+- Bootstrap the exact Safe Gate in both containerized Round 9 build paths with
+  Debian `python3-yaml=6.0-3+b2`, verify both the package and module versions,
+  and fail closed when any bootstrap command or pin drifts.
+- Move the complete active Round 9 workflow, Host, evaluator, audit, artifact,
+  test, and documentation identity to the unused `v0.16-rc.4` namespace. The
+  old Tag is never moved, deleted, or reused.
+
+## Historical - v0.16-rc.3 Round 9 candidate
 
 - Redesign Balanced around candidate-bound `CandidateBlockEligibility`: score
   and hard floors cannot create block eligibility, and malicious-text blocks in

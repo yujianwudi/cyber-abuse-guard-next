@@ -45,31 +45,30 @@ restricted_evaluation_gate_metadata_incident: true
 
 ```text
 successor_repository: https://github.com/yujianwudi/cyber-abuse-guard-next
-successor_main_snapshot_commit: 98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35
-successor_main_snapshot_tree: 77c496e8f4fd1771fc54ed11e8e82970ba3c56b8
-successor_round9_policy_gate: PASS / run 30073551215 / artifact 8589043564
-successor_codeql: PASS / run 30073550953
-successor_full_ci: PROVIDED_FAIL / run 30073551084 / workflow-lint
-successor_full_ci_passed_before_failure: unit,race,vet,fuzz-smoke,round9-bounded-fuzz,fuzz-long
-successor_full_ci_skipped_after_failure: corpus,benchmark,vulnerability,build,artifact,reproducibility,cpa-source-compile
-successor_candidate_tag: v0.16-rc.3 / NOT_CREATED
+successor_main_snapshot_commit: 77cf2de50f89af12a4a1e7c651a2ac0074cabcdd
+successor_main_snapshot_tree: ef5f35086ece6fcd415db1d5578ad89d4df55929
+successor_round9_policy_gate: PASS / run 30116119599
+successor_codeql: PASS / run 30116119625
+successor_full_ci: PASS / run 30116119718
+successor_rc3_tag: v0.16-rc.3 / ANNOTATED_IMMUTABLE / object a70e30fe5b66a6060e0358efd084edfbb60722e1
+successor_rc3_phase1: PROVIDED_FAIL / run 30118817188 / missing-pyyaml-at-safe-gate-import / zero-artifacts
+successor_candidate_tag: v0.16-rc.4 / NOT_CREATED
 successor_release: NOT_CREATED
 successor_final_candidate_freeze: NOT_ESTABLISHED
 successor_independent_evidence: NOT_PROVIDED
 successor_external_ledger_ruleset: 19669641 / round9-eval-ledger-immutable / active / no-bypass
 successor_independent_audit_ledger_ruleset: 19669780 / round9-independent-audit-ledger-immutable / active / no-bypass
-successor_host_environment: round9-host-validation / reviewer-required / tag=v0.16-rc.3
-successor_publication_environment: round9-rc-publication / reviewer-required / tag=v0.16-rc.3
+successor_host_environment: round9-host-validation / current-policy-tag=v0.16-rc.3 / rc4-policy-migration-and-independent-reviewer=PENDING
+successor_publication_environment: round9-rc-publication / current-policy-tag=v0.16-rc.3 / rc4-policy-migration-and-independent-reviewer=PENDING
 successor_self_hosted_runner: REGISTERED_ONLINE / cag-round9-tencent-2 / Linux X64 / cag-round9-sandbox / observed 2026-07-24 / NOT_HOST_EVIDENCE
 successor_main_protection: ENABLED / strict / pull-request-required / five-required-checks
 ```
 
-The successor continuation contains the workflow-lint repair and migrates
-active Round 9 Host/evaluator identities to `cyber-abuse-guard-next` on a
-pull-request branch. The repair remains pending exact-main CI; local Linux
-verification is development evidence only, and this block must not be upgraded
-to exact-main PASS until a new main commit and all required GitHub checks
-complete successfully.
+The successor continuation passed exact-main CI, Round 9 policy, and CodeQL at
+`77cf2de50f89af12a4a1e7c651a2ac0074cabcdd`. The first immutable Round 9 Tag
+then exposed a deterministic container dependency gap before any candidate
+asset was built. The active identity therefore advances to `v0.16-rc.4`; the
+failed `v0.16-rc.3` identity remains immutable historical evidence.
 
 The pre-existing uncommitted Round 8 RC workflow repair was isolated without
 publication in Git stash
@@ -737,6 +736,30 @@ final result after subsequent classifier edits.
   an independent audit. The source-archive contract intentionally uses
   `git archive HEAD` and is therefore rerun only after the reviewed tree is
   committed; it is not represented here as a pre-commit PASS.
+
+### 2026-07-25 - immutable rc.3 Phase 1 failure and rc.4 migration
+
+- Created annotated Tag `v0.16-rc.3` at exact-main commit
+  `77cf2de50f89af12a4a1e7c651a2ac0074cabcdd`; Tag object
+  `a70e30fe5b66a6060e0358efd084edfbb60722e1` is protected by no-bypass
+  update/deletion ruleset `19698669` and must not be moved, deleted, or reused.
+- Exact-main CI `30116119718`, Round 9 gate `30116119599`, and CodeQL
+  `30116119625` all passed before dispatch.
+- Phase 1 run `30118817188` admitted the exact Tag, commit, tree, and successful
+  exact-main runs. Build job `89566080301` then failed in the first Safe Gate
+  command because the pinned `golang:1.26.4-bookworm` container did not provide
+  the undeclared Python `yaml` module.
+- The failure occurred before dependency setup, Linux quality gates, evidence
+  generation, candidate assembly, attestations, or upload. The run has zero
+  Actions artifacts; no draft or public GitHub Release exists for the Tag.
+- Re-running the same immutable Tag and fixed container would reproduce the
+  failure. The active workflow, Host, evaluator, audit, artifact, test, and
+  documentation identity moves to the unused `v0.16-rc.4` namespace through a
+  new pull request. Both containerized Safe Gate paths install and verify exact
+  Debian package `python3-yaml=6.0-3+b2` before importing the reviewed gate.
+- `v0.16-rc.4` remains `NOT_CREATED` until its source is merged, all exact-main
+  checks pass, a no-bypass Tag ruleset exists, and the protected Environment
+  policies have been migrated. Public publication remains mechanically blocked.
 
 ## Current conclusion
 

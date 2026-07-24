@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing annotated RC tag (must be v0.16-rc.3)
+        description: Existing annotated RC tag (must be v0.16-rc.4)
         required: true
         type: string
       expected_tag_object_sha:
@@ -89,7 +89,7 @@ jobs:
           WORKFLOW_SHA: ${{ github.workflow_sha }}
         run: |
           set -euo pipefail
-          [[ "$TAG" == v0.16-rc.3 ]]
+          [[ "$TAG" == v0.16-rc.4 ]]
           [[ "$DISPATCH_REF" == "refs/tags/$TAG" ]]
           [[ "$DISPATCH_SHA" == "$COMMIT" ]]
           [[ "$WORKFLOW_REF" == "${REPOSITORY}/.github/workflows/round9-host-validation.yml@refs/tags/$TAG" ]]

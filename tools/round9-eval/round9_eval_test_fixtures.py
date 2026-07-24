@@ -282,7 +282,7 @@ def development_evidence(
         "schema": "round9-development-evidence/v1",
         "state": "PASS",
         "candidate": {
-            "tag": "v0.16-rc.3",
+            "tag": "v0.16-rc.4",
             "tag_object_sha": tag_object_sha,
             "commit": commit,
             "tree": tree,

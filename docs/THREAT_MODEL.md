@@ -22,7 +22,7 @@ management middleware are trusted. No upstream or external classifier is
 trusted with request text.
 
 The active source version is `0.16`; the Round 9 artifact target is the
-non-latest Linux amd64 prerelease `v0.16-rc.3`. Stable `v0.16` does not exist and
+non-latest Linux amd64 prerelease `v0.16-rc.4`. Stable `v0.16` does not exist and
 production approval has not been granted. The source/compile and future
 counted-Mock Host matrix is fixed to CPA v7.2.95
 (`f71ec0eb6776854457892452cf28c47f0d658251`). Later upstream
@@ -32,8 +32,9 @@ bindings are outside the admitted sandbox.
 
 Source overlays, CI, candidate bytes, protected Host records, one-shot
 independent corpora, and independent review are separate evidence classes. The
-v0.16-rc.1 package and Round 8 v0.16-rc.2 identity are historical evidence
-only. Neither local tests nor source compatibility proves
+v0.16-rc.1 package, Round 8 v0.16-rc.2 identity, and failed Phase 1
+v0.16-rc.3 identity are historical evidence only. Neither local tests nor
+source compatibility proves
 that an exact candidate loaded correctly, blocked before Auth/Provider/Usage,
 or preserved benign upstream calls at any named runtime evidence boundary.
 
@@ -55,7 +56,7 @@ did not inspect or change production.
 
 | Threat | Control |
 |---|---|
-| Explicit malicious request reaches an upstream account | ModelRouter runs before provider/auth selection; handled decisions target only the local executor. The exact v0.16-rc.3 candidate must be loaded by CPA v7.2.95, and each eligible malicious local block must prove zero Auth Selector, Provider, Usage, and Mock Upstream deltas. Repository-local counted-Mock, Tencent Cloud #2 isolated counted-Mock, and protected external verification are all `NOT_PROVIDED`. |
+| Explicit malicious request reaches an upstream account | ModelRouter runs before provider/auth selection; handled decisions target only the local executor. The exact v0.16-rc.4 candidate must be loaded by CPA v7.2.95, and each eligible malicious local block must prove zero Auth Selector, Provider, Usage, and Mock Upstream deltas. Repository-local counted-Mock, Tencent Cloud #2 isolated counted-Mock, and protected external verification are all `NOT_PROVIDED`. |
 | Another router handles the request first | Install at priority 300, verify effective ordering, disable the obsolete identity-rewrite filter, and document that any higher-priority handled Router can bypass this guard. At equal priority CPA orders by plugin ID ascending, so a lexicographically earlier handled Router can also win. |
 | Plugin is absent, registration fails, it is fused, or its self executor is unusable | Treat load/registration/fuse state, Router errors or pre-result panics, invalid/empty targets, and executor-not-ready as CPA host fail-open conditions that may continue other Routers or native routing. `enforcement_ready` is internal plugin state only; external load/order/readiness monitoring remains required. |
 | Keyword-only false positive blocks legitimate coding or security work | Balanced uses candidate-bound eligibility before score or hard floor. Incomplete, defensive, analytical, quoted, credential-lifecycle, code/log/fixture, cross-scope, or ambiguous evidence is allow+audit unless an independent current malicious clause proves complete actionable harm. |
@@ -148,11 +149,13 @@ not include the complete Go classifier/extractor policy. Repository-local
 counted-Mock, Tencent Cloud #2 isolated counted-Mock, protected external
 evaluation/one-shot-ledger evidence, independent source/artifact/Host review,
 and candidate-bound external admission all remain `NOT_PROVIDED`. The Round 9
-lane targets the non-latest `v0.16-rc.3` identity, but new public Release
+lane targets the non-latest `v0.16-rc.4` identity, but new public Release
 creation is `BLOCKED_FAIL_CLOSED` until exact-candidate independent-audit
 evidence is provided and the mechanical audit-admission gate is implemented and
-passes. An already existing matching Release may only be verified read-only;
-the lane must not mutate it or create/imply stable `v0.16`. Any later stable
+passes. Admission rejects every already existing matching Release; the retained
+legacy verifier is statically unreachable and documents only a possible future
+review contract. The lane must not mutate a Release or create/imply stable
+`v0.16`. Any later stable
 promotion remains a separate protected operation on the unchanged,
 independently admitted draft. Historical v10 remains `CONSUMED / FAIL`, cannot
 be rerun, and is not a formal-build input. Formal source/audit bundles exclude

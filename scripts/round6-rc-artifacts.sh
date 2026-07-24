@@ -73,7 +73,7 @@ release_assert_tag
 release_assert_rc_build
 case "$rc_release_lane" in
   round8) [[ "$RELEASE_RC_TAG" == v0.16-rc.2 ]] || release_die "Round 8 RC lane requires v0.16-rc.2" ;;
-  round9) [[ "$RELEASE_RC_TAG" == v0.16-rc.3 ]] || release_die "Round 9 RC lane requires v0.16-rc.3" ;;
+  round9) [[ "$RELEASE_RC_TAG" == v0.16-rc.4 ]] || release_die "Round 9 RC lane requires v0.16-rc.4" ;;
 esac
 release_rc_tag_object="$(git -C "$root" rev-parse "$RELEASE_RC_TAG^{tag}")"
 [[ "$release_rc_tag_object" =~ ^[0-9a-f]{40}$ ]] || \
@@ -921,9 +921,9 @@ create_rc_source_archive() {
   local temporary listing restricted_listing verifier_sha verifier_test_sha
   local archive_prefix="cyber-abuse-guard-v${RELEASE_ARTIFACT_VERSION}/"
   local verifier_path='scripts/round9_external_evaluation_contract.py'
-  local verifier_sha256='4c330ece27ce5e000f13ebc06bff6dbcaa2f18b5b62f73f940e78591051fae7e'
+  local verifier_sha256='b632063bed7cdb59ae7d56b5f9634efd4945b8a0c769cb3dd86b9c52de1a2076'
   local verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
-  local verifier_test_sha256='f42625714cb46b89a4bc32a1ec52c2352d6f9c67f5f782ea117d08e7650c43c9'
+  local verifier_test_sha256='6ce01201f808e28299b61c66e380e52981778bccfa9df407357de22bd56a31f8'
   local verifier_entry="${archive_prefix}${verifier_path}"
   local verifier_test_entry="${archive_prefix}${verifier_test_path}"
   local transient_path_pattern='(^|/)(classifier_(candidate|single)_[^/]*|[^/]*\.(cpu|mem|pprof|test\.exe|exe))($|/)'
@@ -1461,7 +1461,7 @@ finalize_rc_package() {
   fi
 
   if [[ "$rc_release_lane" == round9 ]]; then
-    round9_release_title='v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required'
+    round9_release_title='v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required'
     round9_release_assets="$(
       printf '%s\n' "${published_artifacts[@]}" | LC_ALL=C sort | \
         jq -Rsc 'split("\n")[:-1]'

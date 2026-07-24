@@ -9,10 +9,10 @@ current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74
 
 Cyber Abuse Guard is an in-process CPA C-ABI v1 plugin for CLIProxyAPI. The
 current source version is `0.16`; the Round 9 development target is the Linux
-amd64 prerelease `v0.16-rc.3`. It is not the stable `v0.16` release and is not
-production-approved. The earlier `v0.16-rc.1` and Round 8 `v0.16-rc.2`
-identities are immutable historical evidence and must not be overwritten,
-relabeled, repaired, or republished as Round 9 output.
+amd64 prerelease `v0.16-rc.4`. It is not the stable `v0.16` release and is not
+production-approved. The earlier `v0.16-rc.1`, Round 8 `v0.16-rc.2`, and failed
+Phase 1 `v0.16-rc.3` identities are immutable historical evidence and must not
+be overwritten, relabeled, repaired, or republished as current Round 9 output.
 
 The fixed CPA source/compile target is:
 
@@ -118,7 +118,7 @@ Host HTTP 405. No current official public route maps Guard's error to final
 client 405, so the result is `NOT AVAILABLE / NOT RUN` and remains a handoff
 blocker that current CI cannot solve. The real four-protocol HTTP/SSE and zero
 Auth/Usage/Provider/Upstream matrix must be executed against the exact
-`v0.16-rc.3` candidate in the protected Round 9 counted-Mock lane before it
+`v0.16-rc.4` candidate in the protected Round 9 counted-Mock lane before it
 becomes Host evidence.
 
 CPA ABI v1 `ExecutorResponse` has payload and headers but no HTTP status.
@@ -844,7 +844,7 @@ and dirty state. Build metadata and the verifier bind
 these identities. Candidate mode requires a clean worktree, exact expected
 commit/tree, the commit timestamp, an absent stable `v0.16` tag, and forbids
 formal operations. The Round 9 RC workflow may create only the non-latest
-prerelease `v0.16-rc.3`. `ALLOW_DIRTY_BUILD=1` remains development-only and
+prerelease `v0.16-rc.4`. `ALLOW_DIRTY_BUILD=1` remains development-only and
 cannot produce the Host-test candidate.
 
 `SOURCE_DATE_EPOCH` derives from the commit timestamp; clean candidate and formal

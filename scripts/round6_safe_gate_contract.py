@@ -18,6 +18,25 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+
+def reject_repository_yaml_shadow(repository_root: Path, search_path: list[str]) -> None:
+    repository_root = repository_root.resolve()
+    for raw_entry in search_path:
+        entry = Path(raw_entry or ".").resolve()
+        try:
+            entry.relative_to(repository_root)
+        except ValueError:
+            continue
+        for relative in ("yaml.py", "yaml"):
+            candidate = entry / relative
+            if candidate.exists() or candidate.is_symlink():
+                raise RuntimeError(
+                    f"repository-local PyYAML shadow is forbidden: {candidate}"
+                )
+
+
+_REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+reject_repository_yaml_shadow(_REPOSITORY_ROOT, sys.path)
 import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 from yaml.tokens import (
@@ -31,6 +50,13 @@ from yaml.tokens import (
     KeyToken,
     TagToken,
 )
+
+try:
+    Path(yaml.__file__).resolve().relative_to(_REPOSITORY_ROOT)
+except ValueError:
+    pass
+else:
+    raise RuntimeError("PyYAML must resolve outside the repository")
 
 
 RESTRICTED_PATH_MARKERS = (
@@ -248,6 +274,25 @@ SAFE_GATE_COMMANDS = (
     "python3 -B scripts/round6_safe_gate_contract_test.py",
     "python3 -B scripts/round6_safe_gate_contract.py --root .",
     "./scripts/release-doc-consistency.sh",
+)
+ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS = (
+    "set -euo pipefail",
+    'package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"',
+    "curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 "
+    "--output \"$package\" "
+    "'https://deb.debian.org/debian/pool/main/p/pyyaml/"
+    "python3-yaml_6.0-3+b2_amd64.deb'",
+    "printf '%s  %s\\n' "
+    "'8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "
+    '"$package" | sha256sum -c -',
+    'dpkg -i "$package"',
+    '[[ "$(dpkg-query -W -f=\'${Version}\' python3-yaml)" == \'6.0-3+b2\' ]]',
+    '[[ "$(dpkg-query -W -f=\'${Architecture}\' python3-yaml)" == amd64 ]]',
+    "[[ \"$(python3 -I -B -c 'import pathlib, yaml; "
+    "print(pathlib.Path(yaml.__file__).resolve())')\" == "
+    "/usr/lib/python3/dist-packages/yaml/__init__.py ]]",
+    "python3 -I -B -c 'import yaml; assert yaml.__version__ == \"6.0\"'",
+    'rm -f -- "$package"',
 )
 SAFE_WORKFLOW_ENV_LINES = {
     "GOTOOLCHAIN: go1.26.4",
@@ -517,7 +562,7 @@ SOURCE_RELEASE_EXCLUSION_CONTRACT_TEST_SCRIPT = (
     "scripts/source-release-exclusion-contract-test.sh"
 )
 SOURCE_RELEASE_EXCLUSION_CONTRACT_TEST_SHA256 = (
-    "7d0815e9de02a3b1adecb6bd7af6d0b8241be88e50ae9b235c3f7873b3fe84b4"
+    "e2e49d8c89f0f1cbe076f9bc96b9b6ac3b0076811e67353ad3aaa9ac1ccff822"
 )
 SOURCE_RELEASE_SAFE_SHELL_FIXTURE_LINE = "  internal/config/id_rsa_policy.go; do"
 SOURCE_RELEASE_SAFE_SCRIPT_PATH_FIXTURE_LINE = "  scripts/package-tar-gz.sh \\"
@@ -588,9 +633,9 @@ CONSUMED_BOUNDARY_LINES = {
         "  '!/.round9-local-sandbox/**'",
         'git -C "$sparse_fixture" sparse-checkout set --no-cone "${sparse_patterns[@]}"',
         "verifier_path='scripts/round9_external_evaluation_contract.py'",
-        "verifier_sha256='4c330ece27ce5e000f13ebc06bff6dbcaa2f18b5b62f73f940e78591051fae7e'",
+        "verifier_sha256='b632063bed7cdb59ae7d56b5f9634efd4945b8a0c769cb3dd86b9c52de1a2076'",
         "verifier_test_path='scripts/round9_external_evaluation_contract_test.py'",
-        "verifier_test_sha256='f42625714cb46b89a4bc32a1ec52c2352d6f9c67f5f782ea117d08e7650c43c9'",
+        "verifier_test_sha256='6ce01201f808e28299b61c66e380e52981778bccfa9df407357de22bd56a31f8'",
         'verifier_sha="$(tar -xOf "$archive" "$verifier_path" | sha256sum | awk \'{print $1}\')"',
         'verifier_test_sha="$(tar -xOf "$archive" "$verifier_test_path" | sha256sum | awk \'{print $1}\')"',
         "if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)' <<<\"$restricted_listing\"; then",
@@ -986,7 +1031,7 @@ CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
     "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
 }
-RC_RELEASE_SCRIPT_SHA256 = "1c69f310a252b393e5fbe6c1a140086f07f03c1ef37ad0f03a0ac1a01267feb9"
+RC_RELEASE_SCRIPT_SHA256 = "4efc553b644e239beca3a9406da27a6c949cc9d2317ec78688bafac056f8214f"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
 RELEASE_BUILD_METADATA_SCRIPT_SHA256 = (
     "6d5312459fd238f35ddbdee6c79779cb340fba4029f49f7f6490b64f639a259c"
@@ -1084,23 +1129,23 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
 ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
 ROUND9_GATE_WORKFLOW_SHA256 = "2c71516851b1a2743c3d23434c6e330eafd44ee7cea2930fe8c3697fbb2a979a"
-ROUND9_HOST_WORKFLOW_SHA256 = "cae1b9db0d22a9bab0dbbccacc3dc688a8308ed450304374a6f0722843e717c0"
-ROUND9_RC_WORKFLOW_SHA256 = "20c59c3b72a39753be446df7393f2879397003d559a1c08cd1d9eab57041ba33"
+ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
+ROUND9_RC_WORKFLOW_SHA256 = "39fa2b0b8aa5ecee384523f0184fd6c4d5f9f6fb8fd068fb60da7f51b6e1a356"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
 ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT = (
     "scripts/round9_independent_audit_contract_test.py"
 )
 ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256 = {
     ROUND9_INDEPENDENT_AUDIT_SCRIPT: (
-        "4ef8292fa596b2e0a9007194585b24b082e897c3f3524718d96dab82fbeaf456"
+        "b8e4d8803b9f692bcf49efd074efdc8092cffad303068737e2c2c9b0f36021a7"
     ),
     ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT: (
-        "34fe3089cb9ffe695f577db9325bfc52e96ebeb807fe6d66aa22f44f5c655b33"
+        "abc6f53c090321908c50bc05d888d0a7ca13e9999c046158196280ac631b372f"
     ),
 }
 ROUND9_MACHINE_REPORT_SCRIPT = "scripts/round9_machine_reports.py"
 ROUND9_MACHINE_REPORT_SCRIPT_SHA256 = (
-    "9ea70f3a01f79b41effbc0fb56bb7ddc77e9024a5a7f57c3115e1c909dbc1919"
+    "100c1c6a526dc16c78da0d7e1a6b3a1e5060dd413974087c2c82bd3cbd08e895"
 )
 ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
     2,
@@ -1176,12 +1221,12 @@ ROUND9_PRIVATE_ASSET_NAMES = frozenset(
     {
         "build-metadata.json",
         "checksums.txt",
-        "cyber-abuse-guard-v0.16-rc.3.so",
-        "cyber-abuse-guard-v0.16-rc.3.so.sha256",
-        "cyber-abuse-guard_0.16-rc.3_linux_amd64.zip",
-        "cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip",
-        "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
-        "cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256",
+        "cyber-abuse-guard-v0.16-rc.4.so",
+        "cyber-abuse-guard-v0.16-rc.4.so.sha256",
+        "cyber-abuse-guard_0.16-rc.4_linux_amd64.zip",
+        "cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip",
+        "cyber-abuse-guard-v0.16-rc.4-source.tar.gz",
+        "cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256",
         "rc-release-evidence.md",
         "rc-release-evidence.md.sha256",
         "rc-release-manifest.json",
@@ -1283,11 +1328,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "b873cca3496b7e781a4af0734dbf5f357a6f60bfa07e738ae0b11611603fe741"
+    "37e2fa439f636884dc3f1620105b43b624e03630e562417d86f4cf2f39fc7a37"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "559e890e6b3b03b2bb108e558fc5ebe70d010caff2f27959bc490fbdca20c326",
-    "scripts/release-doc-consistency.sh": "069a9280555ea60d6abc178bc747d3d503a7b0903cf8803c500900d64d8e2b78",
+    "scripts/release-doc-consistency-test.sh": "a2b9c7046af3eee7d0005e47ede7523621ddae954ac760d54b8bbb8a736bf08b",
+    "scripts/release-doc-consistency.sh": "37bac336034f084b37633c713645faaa1727aaa2838ae3446dce9af0277d420d",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1342,15 +1387,15 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
     "scripts/round8_docker_sandbox.py": "30585beb793b7d35d842adce962fdc111eb76ef6a5ec963b6ab52470bbc64301",
 }
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "aef764bec0e0cc4e96d7d42b56255f91317fb53b947a10e08f56ee0971b9c62d",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "9c69d17955ce9c572fa5c846e79131af67650af6459d6a287eb64a362dec0c2c",
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "df006d0a36aa68d90350221dd7401be17979c4931cb038cbdc226350a71ea6a5",
-    "tools/round9-eval/cag_round9_eval_broker.py": "ba967771932a7e7aaa99ea31710cc391e56b0b77c5fe7f35ba4c5b9462000201",
-    "tools/round9-eval/cag_round9_eval_broker_test.py": "3c1a55d0c845e46e2ca1070ec196fd8d9bc4c4ca99e1ef8f7055ec2ed1fda91d",
+    "tools/round9-eval/cag_round9_eval_broker.py": "73383d83094432689535c0d2a7e9e6dd96e614c4a2822f89e752a391e546c93d",
+    "tools/round9-eval/cag_round9_eval_broker_test.py": "b6d32e69017115531c9c73bbdb59468a0cfd8baeb6f2fd71bf87e4b636c8c1b4",
     "tools/round9-eval/cag_round9_external_evaluator.py": "0c4b4eb0877824dbea8578845ba2b4da707b6ccfde2ab792e0b3401f44cbfb04",
     "tools/round9-eval/cag_round9_external_evaluator_test.py": "e58e1808c9413a44a547b32cdb0353eeb86275cb1dfe78458f0736b7c3d42ca5",
-    "tools/round9-eval/round9_eval_core.py": "6e4d961e6b63469608d6bbd95888c7868d8187c9a4f740ad60dd817e84569f5c",
-    "tools/round9-eval/round9_eval_core_test.py": "6e62fc522f4067efc8e50271e8ae112117566ec6d3c603ae0260b6ffd66ae06e",
-    "tools/round9-eval/round9_eval_test_fixtures.py": "6879e1feaedd85745d9490e2d4928bd05a3800dc2b670bc8037b5a79ad8a4fe0",
+    "tools/round9-eval/round9_eval_core.py": "a5bc266d98f8fa81da0e6e99516a2315febcae5557d8811ee1f79370829b0458",
+    "tools/round9-eval/round9_eval_core_test.py": "c831902a6148eff1a4d1989bcf7b85123d24ab79ee418ab3cad3e0085b153bc0",
+    "tools/round9-eval/round9_eval_test_fixtures.py": "0106901b4d1f403e752c082f8fc18fe00f705c4429c2e7552415388440d82229",
 }
 ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": (
@@ -1404,7 +1449,7 @@ ROUND9_HOST_EVIDENCE_TEST_SUBPROCESS_CONTRACT = (
 )
 ROUND9_HOST_EVIDENCE_SCRIPT = "scripts/round9_host_evidence.py"
 ROUND9_HOST_EVIDENCE_SCRIPT_SHA256 = (
-    "5bb278a463339c34d46b9aaa3241e30032088ce220b35602ab744f7458a0fc7c"
+    "95758ffc523d871a5f6f68cfdbf45f3c0fb00c82805c7cd8e94d2408390f9732"
 )
 ROUND9_HOST_EVIDENCE_COMMAND_FUNCTION_CONTRACT = (
     1,
@@ -1429,7 +1474,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "d671cc809f63eb9ba2851cac32f9e3fd6db0e2c0b7b9adc8acc4cf2cddbf378e"
+ROUND6_SAFE_GATE_TEST_SHA256 = "992a9456583233eb46aa9e581e17f6ba4daaca7bb632f364b4abece41d49515c"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "d51fe316a686c1b4dd629f6a7b63f4159b882095811fcdea3311255527bd5da1"
 
 
@@ -2632,6 +2677,23 @@ def is_safe_gate_step(step: str) -> bool:
     return commands == SAFE_GATE_COMMANDS
 
 
+def is_round9_safe_gate_bootstrap_step(step: str) -> bool:
+    if re.search(r"(?m)^\s+continue-on-error:\s*true\s*$", step):
+        return False
+    if re.search(r"(?m)^\s+if:\s*", step):
+        return False
+    if not re.search(
+        r"(?m)^\s+-\s+name:\s*Install exact Safe Gate runtime before checkout\s*$",
+        step,
+    ):
+        return False
+    runs = yaml_run_blocks(step)
+    if len(runs) != 1:
+        return False
+    commands = tuple(line.strip() for line in runs[0].splitlines() if line.strip())
+    return commands == ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS
+
+
 def contains_repository_command(step: str) -> bool:
     if re.search(r"(?m)^\s+(?:-\s+)?uses:\s*\./", step):
         return True
@@ -2745,7 +2807,9 @@ def validate_workflow_safety(text: str, source: Path) -> tuple[tuple[str, ...], 
                     f"workflow job {job_name} sparse checkout differs from the reviewed contract"
                 )
             sparse_sets.append(patterns)
-            if checkout_index + 1 >= len(steps) or not is_safe_gate_step(steps[checkout_index + 1]):
+            if checkout_index + 1 >= len(steps) or not is_safe_gate_step(
+                steps[checkout_index + 1]
+            ):
                 raise ContractError(
                     f"workflow job {job_name} must run the exact Round6 safe-gate immediately after checkout"
                 )
@@ -3779,7 +3843,7 @@ def validate_release_mode_contracts(root: Path) -> None:
                     "RC release artifact script must preserve the protected attested Host evidence boundary"
                 )
         for marker in (
-            "Round 9 RC lane requires v0.16-rc.3",
+            "Round 9 RC lane requires v0.16-rc.4",
             "rc_manifest_schema=6",
             "RC_ROUND9_DEVELOPMENT_EVIDENCE_INPUT",
             "validate_round9_development_evidence",
@@ -7389,7 +7453,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
     )
     require_yaml_scalar(
         root.get("name"),
-        "Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission",
+        "Round 9 RC release v0.16-rc.4 - Linux counted-Mock admission",
         source,
         "name",
     )
@@ -7453,7 +7517,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         ("GOFLAGS", "-mod=readonly"),
         ("GO_VERSION", "1.26.4"),
         ("VERSION", "0.16"),
-        ("RC_VERSION", "0.16-rc.3"),
+        ("RC_VERSION", "0.16-rc.4"),
         (
             "ROUND9_NEW_PUBLIC_PRERELEASE_CREATION",
             "BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE",
@@ -7577,6 +7641,25 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             raise ContractError(
                 f"Round 9 RC workflow retains retired public-recovery input or state: {forbidden}"
             )
+
+    for job_name in ("build", "publish"):
+        job = yaml_mapping(jobs[job_name], source, f"jobs.{job_name}")
+        defaults = require_yaml_keys(
+            job.get("defaults"), ("run",), source, f"jobs.{job_name}.defaults"
+        )
+        run_defaults = require_yaml_keys(
+            defaults["run"],
+            ("shell",),
+            source,
+            f"jobs.{job_name}.defaults.run",
+        )
+        require_yaml_scalar(
+            run_defaults["shell"],
+            "bash",
+            source,
+            f"jobs.{job_name}.defaults.run.shell",
+        )
+
     publish = require_yaml_keys(
         jobs["publish"],
         (
@@ -7585,6 +7668,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             "environment",
             "runs-on",
             "container",
+            "defaults",
             "timeout-minutes",
             "permissions",
             "steps",
@@ -7636,6 +7720,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
 
     publish_steps = yaml_sequence(publish["steps"], source, "jobs.publish.steps")
     expected_publish_step_names = (
+        "Install exact Safe Gate runtime before checkout",
         "Checkout exact Round 9 tag with restricted data excluded",
         "Run exact Safe Gate after restricted checkout",
         "Recheck Round 9 external-evaluation and independent-audit contracts",
@@ -7649,7 +7734,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
     )
     if len(publish_steps) != len(expected_publish_step_names):
         raise ContractError(
-            "Round 9 RC publish job must retain the exact ten reviewed steps"
+            "Round 9 RC publish job must retain the exact eleven reviewed steps"
         )
     parsed_publish_steps: list[dict[str, Node]] = []
     for index, (step_node, expected_name) in enumerate(
@@ -7670,7 +7755,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
 
     audit_step = parsed_publish_steps[-1]
     audit_env = exact_string_mapping(
-        audit_step.get("env"), source, "jobs.publish.steps[9].env"
+        audit_step.get("env"), source, "jobs.publish.steps[10].env"
     )
     expected_audit_env = (
         ("EXPECTED_TAG_OBJECT", "${{ inputs.expected_tag_object_sha }}"),
@@ -7736,7 +7821,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             "Round 9 independent-audit step trust anchors differ from reviewed configuration"
         )
     audit_run = yaml_scalar(
-        audit_step.get("run"), source, "jobs.publish.steps[9].run"
+        audit_step.get("run"), source, "jobs.publish.steps[10].run"
     )
     audit_markers = (
         "set -euo pipefail",
@@ -7778,7 +7863,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         '--public-key "$public_key" --public-key-sha256 "$AUDIT_PUBLIC_KEY_SHA256"',
         '--host-evaluator-public-key-sha256 "$HOST_EVALUATOR_PUBLIC_KEY_SHA256"',
         '--key-id "$AUDIT_KEY_ID" --repository "$GITHUB_REPOSITORY"',
-        '--tag v0.16-rc.3 --tag-object-sha "$EXPECTED_TAG_OBJECT"',
+        '--tag v0.16-rc.4 --tag-object-sha "$EXPECTED_TAG_OBJECT"',
         '--commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE"',
         '--challenge "$AUDIT_CHALLENGE" --auditor-repository "$AUDIT_REPOSITORY"',
         '--auditor-workflow-name "$AUDIT_WORKFLOW_NAME"',
@@ -7943,6 +8028,12 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
                 raise ContractError(
                     f"Round 9 RC job {job_name} checkout differs from the restricted boundary"
                 )
+            if checkout_index == 0 or not is_round9_safe_gate_bootstrap_step(
+                steps[checkout_index - 1]
+            ):
+                raise ContractError(
+                    f"Round 9 RC job {job_name} must install the exact hash-bound Safe Gate runtime before checkout"
+                )
             if checkout_index + 1 >= len(steps) or not is_safe_gate_step(
                 steps[checkout_index + 1]
             ):
@@ -7998,7 +8089,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         raise ContractError("Round 9 RC recovered Phase 1 allowlist is not the exact 17 assets")
 
     for marker in (
-        '[[ "$TAG" == v0.16-rc.3 ]]',
+        '[[ "$TAG" == v0.16-rc.4 ]]',
         "make unit-test race round6-vet fuzz-smoke round9-fuzz round6-script-test",
         "RC_RELEASE_LANE: round9",
         ".schema_version == 6",

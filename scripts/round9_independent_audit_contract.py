@@ -44,13 +44,13 @@ from round9_eval_core import (  # noqa: E402
 )
 
 
-TAG = "v0.16-rc.3"
+TAG = "v0.16-rc.4"
 SOURCE_VERSION = "0.16"
-ARTIFACT_VERSION = "0.16-rc.3"
+ARTIFACT_VERSION = "0.16-rc.4"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
 HOST_WORKFLOW = ".github/workflows/round9-host-validation.yml"
 RELEASE_TITLE = (
-    "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required"
+    "v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required"
 )
 SIGNED_ENVELOPE_SCHEMA = "round9-independent-audit-signed-envelope/v1"
 EVIDENCE_SCHEMA = "round9-independent-audit-evidence/v1"
@@ -61,12 +61,12 @@ PROVENANCE_PREDICATE = "https://slsa.dev/provenance/v1"
 ASSET_NAMES = (
     "build-metadata.json",
     "checksums.txt",
-    "cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip",
-    "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
-    "cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256",
-    "cyber-abuse-guard-v0.16-rc.3.so",
-    "cyber-abuse-guard-v0.16-rc.3.so.sha256",
-    "cyber-abuse-guard_0.16-rc.3_linux_amd64.zip",
+    "cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip",
+    "cyber-abuse-guard-v0.16-rc.4-source.tar.gz",
+    "cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256",
+    "cyber-abuse-guard-v0.16-rc.4.so",
+    "cyber-abuse-guard-v0.16-rc.4.so.sha256",
+    "cyber-abuse-guard_0.16-rc.4_linux_amd64.zip",
     "rc-release-evidence.md",
     "rc-release-evidence.md.sha256",
     "rc-release-manifest.json",
@@ -341,7 +341,7 @@ def validate_manifest(
         "so": (
             so.get("name"),
             so.get("sha256"),
-            "cyber-abuse-guard-v0.16-rc.3.so",
+            "cyber-abuse-guard-v0.16-rc.4.so",
         ),
         "external evaluation": (
             external_evaluation.get("name"),
@@ -407,7 +407,7 @@ def validate_candidate(
         "tree": args.tree,
         "release_manifest_bytes": manifest_identity["bytes"],
         "release_manifest_sha256": manifest_identity["sha256"],
-        "so_sha256": assets["cyber-abuse-guard-v0.16-rc.3.so"]["sha256"],
+        "so_sha256": assets["cyber-abuse-guard-v0.16-rc.4.so"]["sha256"],
         "build_metadata_sha256": assets["build-metadata.json"]["sha256"],
         "ruleset_manifest_sha256": assets["ruleset-manifest.json"]["sha256"],
         "classifier_policy_version": manifest["round9"]["classifier"]["version"],

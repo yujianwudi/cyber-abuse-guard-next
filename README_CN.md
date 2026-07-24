@@ -1,5 +1,9 @@
 # CPA Cyber Abuse Guard
 
+> **RC identity note:** `v0.16-rc.3` is an immutable failed Phase 1 Tag with
+> zero candidate artifacts and no Release. The active target is the unused
+> `v0.16-rc.4`; public publication remains blocked pending independent evidence.
+
 ```text
 current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
@@ -11,7 +15,7 @@ current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74
 > 本仓库不会重新创建或冒充这些历史产物。
 
 > **当前开发状态：** 第九轮正在以候选/子句/scope/referent 绑定的阻断资格
-> 重新设计 Balanced，并准备 Linux amd64 `v0.16-rc.3` 预发行链。固定源码/编译目标仅为 CPA
+> 重新设计 Balanced，并准备 Linux amd64 `v0.16-rc.4` 预发行链。固定源码/编译目标仅为 CPA
 > `v7.2.95`。源码变更本身不会创建标签、Release
 > 或稳定版 `v0.16`。无 checkout 的受保护 CPA 外部评估、受保护账本证明、exact-main CI
 > 和独立审计仍是必需门禁；尚未获得生产批准，也不得据此自动重新开启生产 Balanced。
@@ -40,10 +44,10 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 
 | 项目 | 状态 |
 |---|---|
-| 源码版本 / RC 目标 | `0.16` / 仅 `v0.16-rc.3` 预发行；精确 tag、commit、tree 和产物 hash 必须由未来 clean release run 生成 |
-| 历史候选 | `v0.16-rc.1` 与不可变的第八轮 `v0.16-rc.2` 身份仅保留为历史证据，不得覆盖、改名或冒充第九轮产物 |
-| GitHub 发布 | 当前没有第九轮 tag 或 Release；`round9-release-rc.yml` 目前只能生成私有 17 资产 Actions 候选，公共预发行写入保持硬阻断，必须由独立证据通过后的单独审查变更恢复 |
-| 新仓 main 快照 | `98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35` / tree `77c496e8f4fd1771fc54ed11e8e82970ba3c56b8`；Round 9 gate 与 CodeQL 已通过，完整 CI `30073551084` 在 unit/race/vet/fuzz 通过后因 workflow lint 失败 |
+| 源码版本 / RC 目标 | `0.16` / 仅 `v0.16-rc.4` 预发行；精确 tag、commit、tree 和产物 hash 必须由未来 clean release run 生成 |
+| 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
+| GitHub 发布 | `v0.16-rc.3` 仅有 annotated Tag，没有 Release 或 Actions artifact；当前尚无 `v0.16-rc.4` Tag 或 Release。`round9-release-rc.yml` 只能生成私有 17 资产候选，公共预发行写入保持硬阻断 |
+| 上一个 exact-main 基线 | `77cf2de50f89af12a4a1e7c651a2ac0074cabcdd` / tree `ef5f35086ece6fcd415db1d5578ad89d4df55929`；CI `30116119718`、Round 9 gate `30116119599`、CodeQL `30116119625` 均通过；随后 rc.3 Phase 1 run `30118817188` 因固定容器缺少 PyYAML 而在产物创建前失败 |
 | CPA 源码/编译目标 | `v7.2.95`（`f71ec0eb6776854457892452cf28c47f0d658251`） |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |

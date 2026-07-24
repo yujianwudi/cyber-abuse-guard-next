@@ -5,11 +5,11 @@ current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
 ```
 
-Last updated: 2026-07-23 (Asia/Shanghai)
+Last updated: 2026-07-25 (Asia/Shanghai)
 
 ## Current Round 9 source-tree status — not a release PASS
 
-The active development target is Linux amd64 `v0.16-rc.3`,
+The active development target is Linux amd64 `v0.16-rc.4`,
 classifier-policy-v8, ruleset 1.0.10, audit schema v6, and CPA
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
@@ -17,8 +17,13 @@ counted Mock. Final classifier/public-corpus freeze, exact-main CI, reproducible
 release assets, protected Host execution, independent audit, tag, and GitHub
 prerelease are not provided by this source snapshot.
 
+The immutable `v0.16-rc.3` Tag is a failed Phase 1 identity, not the current
+candidate. Run `30118817188` failed on the undeclared PyYAML import before any
+candidate, attestation, or Release asset was created. It is retained unchanged
+while the active namespace advances to `v0.16-rc.4`.
+
 ```text
-candidate_tag: v0.16-rc.3 / NOT CREATED
+candidate_tag: v0.16-rc.4 / NOT CREATED
 release_kind: prerelease
 latest: false
 exact_main_ci: NOT_PROVIDED
@@ -920,7 +925,7 @@ not provided by this source-tree record.
 
 ```text
 source_version: 0.16
-candidate_tag: v0.16-rc.3 / NOT CREATED
+candidate_tag: v0.16-rc.4 / NOT CREATED
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE

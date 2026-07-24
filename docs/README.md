@@ -8,7 +8,7 @@ current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
-The current publication target is the Linux-only `v0.16-rc.3` Round 9
+The current publication target is the Linux-only `v0.16-rc.4` Round 9
 prerelease. It uses the single CPA v7.2.95 pin and the exact loopback Host
 binding `127.0.0.1:18394 -> 8317/tcp`. Protected counted-Mock Host evidence,
 one-shot independent corpora, exact-main CI, and independent audit remain
@@ -90,7 +90,7 @@ Current GitHub Actions entry points are intentionally limited to:
 - `.github/workflows/round9-host-validation.yml` for the protected Linux
   v7.2.95 one-shot independent-corpus and counted-Mock run;
 - `.github/workflows/round9-release-rc.yml` for the exact-main, Linux-only
-  `v0.16-rc.3` private-candidate/public-prerelease lane;
+  `v0.16-rc.4` private-candidate/public-prerelease lane;
 - `.github/workflows/release-rc.yml` and
   `.github/workflows/round8-host-validation.yml` as read-only Round 8 identity
   records;
@@ -108,7 +108,7 @@ The retired attempted `v0.15-rc.2` workflow definition is archived under
 [`archive/workflows/`](archive/workflows/) and cannot be dispatched by GitHub
 Actions. Its recorded runs failed and did not produce the public RC, which was
 published separately through the disclosed direct owner override. It remains
-historical evidence and is separate from the active v0.16-rc.3 workflow.
+historical evidence and is separate from the active v0.16-rc.4 workflow.
 
 The protected `v0.15-rc.3` tag is separate failed evidence. Workflow run
 29728286559 passed admission, failed before packaging, published no Actions

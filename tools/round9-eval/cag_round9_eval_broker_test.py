@@ -88,7 +88,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.args = argparse.Namespace(
             repository="example/cyber-abuse-guard",
-            tag="v0.16-rc.3",
+            tag="v0.16-rc.4",
             tag_object_sha="1" * 40,
             commit="2" * 40,
             tree="3" * 40,
@@ -107,11 +107,11 @@ class BrokerIdentityContractTest(unittest.TestCase):
             challenge="b" * 64,
             workflow_run_id=303,
             workflow_run_attempt=1,
-            dispatch_ref="refs/tags/v0.16-rc.3",
+            dispatch_ref="refs/tags/v0.16-rc.4",
             dispatch_sha="2" * 40,
             workflow_ref=(
                 "example/cyber-abuse-guard/"
-                ".github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.3"
+                ".github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.4"
             ),
             workflow_sha="2" * 40,
         )
@@ -140,7 +140,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
         extra: list[tuple[tarfile.TarInfo, bytes | None]] | None = None,
     ) -> None:
         source = self.public_corpus_root()
-        prefix = "cyber-abuse-guard-v0.16-rc.3"
+        prefix = "cyber-abuse-guard-v0.16-rc.4"
         corpus_prefix = prefix + "/testdata/round9-public-adversarial-v13"
         overrides = overrides or {}
         omitted = omitted or set()
@@ -301,19 +301,19 @@ class BrokerIdentityContractTest(unittest.TestCase):
                     )
 
             traversal = tarfile.TarInfo(
-                "cyber-abuse-guard-v0.16-rc.3/testdata/../../escape"
+                "cyber-abuse-guard-v0.16-rc.4/testdata/../../escape"
             )
             traversal.size = 1
             reject("traversal", "invalid path|outside its fixed prefix", extra=[(traversal, b"x")])
 
             for kind, link_type in (("symlink", tarfile.SYMTYPE), ("hardlink", tarfile.LNKTYPE)):
-                link = tarfile.TarInfo(f"cyber-abuse-guard-v0.16-rc.3/{kind}")
+                link = tarfile.TarInfo(f"cyber-abuse-guard-v0.16-rc.4/{kind}")
                 link.type = link_type
-                link.linkname = "cyber-abuse-guard-v0.16-rc.3/testdata"
+                link.linkname = "cyber-abuse-guard-v0.16-rc.4/testdata"
                 reject(kind, "link or special file", extra=[(link, None)])
 
             duplicate = tarfile.TarInfo(
-                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v13/manifest.json"
+                "cyber-abuse-guard-v0.16-rc.4/testdata/round9-public-adversarial-v13/manifest.json"
             )
             duplicate.size = len(manifest_raw)
             reject(
@@ -323,7 +323,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
             )
 
             extra_corpus = tarfile.TarInfo(
-                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v13/extra.txt"
+                "cyber-abuse-guard-v0.16-rc.4/testdata/round9-public-adversarial-v13/extra.txt"
             )
             extra_corpus.size = 1
             reject(
@@ -460,7 +460,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
     def build_metadata(self) -> dict:
         return {
             "schema_version": 4,
-            "version": "0.16-rc.3",
+            "version": "0.16-rc.4",
             "source_version": "0.16",
             "commit": self.args.commit,
             "tree": self.args.tree,
@@ -495,7 +495,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
     def ruleset_manifest(self) -> dict:
         return {
             "schema_version": 1,
-            "plugin_version": "0.16-rc.3",
+            "plugin_version": "0.16-rc.4",
             "ruleset_version": self.args.ruleset_version,
             "ruleset_sha256": self.args.ruleset_sha256,
             "files": [
@@ -532,7 +532,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
             "status": "ROUND9_INTERNAL_GATES_PASS",
             "packaging_profile": "ROUND9_SCHEMA6",
             "source_version": "0.16",
-            "artifact_version": "0.16-rc.3",
+            "artifact_version": "0.16-rc.4",
             "tag": self.args.tag,
             "tag_object": self.args.tag_object_sha,
             "commit": self.args.commit,
@@ -560,14 +560,14 @@ class BrokerIdentityContractTest(unittest.TestCase):
             "independent_evaluation_requirement": "required",
             "workflow": {
                 "repository": self.args.repository,
-                "ref": "refs/tags/v0.16-rc.3",
+                "ref": "refs/tags/v0.16-rc.4",
                 "sha": self.args.commit,
                 "dispatch_ref": self.args.tag,
                 "run_id": self.args.phase1_run_id,
                 "run_attempt": self.args.phase1_run_attempt,
             },
             "artifacts": {
-                "so": {"name": "cyber-abuse-guard-v0.16-rc.3.so", "sha256": self.args.so_sha256, "sidecar_sha256": "d" * 64},
+                "so": {"name": "cyber-abuse-guard-v0.16-rc.4.so", "sha256": self.args.so_sha256, "sidecar_sha256": "d" * 64},
                 "store_zip": {},
                 "audit_bundle": {},
                 "build_metadata_sha256": self.args.build_metadata_sha256,

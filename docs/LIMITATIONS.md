@@ -5,7 +5,7 @@ current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
 ```
 
-Last updated: 2026-07-24 (Asia/Shanghai)
+Last updated: 2026-07-25 (Asia/Shanghai)
 
 ## Current Round 9 evidence boundary
 
@@ -32,14 +32,14 @@ for any of the three missing runtime evidence classes.
 
 2. **The Round 9 candidate is not frozen or production-approved.** The current
    source version is `0.16`; the development artifact target is the non-latest
-   Linux amd64 prerelease `v0.16-rc.3`, but there is no final source freeze,
+   Linux amd64 prerelease `v0.16-rc.4`, but there is no final source freeze,
    exact candidate, tag, or Release. Stable `v0.16` does not exist. Independent
    source/artifact audit, repository-local counted-Mock, Tencent Cloud #2
    isolated counted-Mock, protected external evaluation/one-shot-ledger
    evidence, and external admission remain required. The local `v0.16-rc.1`
-   package, Round 8 `v0.16-rc.2` identity, and Round 5/6 v0.15 evidence are
-   immutable historical records and cannot be moved, overwritten, or relabeled
-   as Round 9 output.
+   package, Round 8 `v0.16-rc.2` identity, failed Phase 1 `v0.16-rc.3` identity,
+   and Round 5/6 v0.15 evidence are immutable historical records and cannot be
+   moved, overwritten, or relabeled as current Round 9 output.
 
 3. **Deterministic language rules are imperfect.** Novel phrasing, languages,
    slang, semantic indirection, encrypted content, unknown encodings, and
@@ -349,7 +349,7 @@ for any of the three missing runtime evidence classes.
     `cyber-abuse-guard-v<version>-audit-bundle.zip`. Historical round5.1 dirty
     versions of these files exist on a blocked development prerelease, but
     neither is an approved stable release artifact. Any future Round 9 runtime
-    evidence must use the exact frozen v0.16-rc.3 candidate and name its
+    evidence must use the exact frozen v0.16-rc.4 candidate and name its
     repository-local, Tencent Cloud #2 isolated, or protected-external boundary;
     it cannot use a historical Round 5/6/8 or v0.16-rc.1 asset.
 

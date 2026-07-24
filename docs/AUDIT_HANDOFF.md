@@ -5,10 +5,10 @@ current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
 ```
 
-## 2026-07-24 Round 9 当前交接门禁
+## 2026-07-25 Round 9 当前交接门禁
 
 当前源码版本为 `0.16`，开发目标为 Linux amd64 非 latest 预发行
-`v0.16-rc.3`、`classifier-policy-v8`、ruleset `1.0.10`、audit schema v6，
+`v0.16-rc.4`、`classifier-policy-v8`、ruleset `1.0.10`、audit schema v6，
 以及唯一 CPA 合同
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`。受保护 Host 作业不做
 source checkout，只把候选与 Phase 1 的不可变身份交给预装的 root-owned broker；
@@ -75,7 +75,7 @@ BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md) 和
 [ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md)。
 
-`v0.16-rc.1` 与 Round 8 `v0.16-rc.2` 身份、Release、SO、checksum、manifest、
+`v0.16-rc.1`、Round 8 `v0.16-rc.2` 与 failed Phase 1 `v0.16-rc.3` 身份、Release、SO、checksum、manifest、
 attestation 和 Host evidence 均为不可变历史证据；Round 9 不得覆盖、重打、改名、
 修复或冒充这些产物。生产仍保持 `mode=audit`、`subject_control=false`；本文件中的
 生产章节只属于 operator runbook，不构成 Codex 的生产变更授权。

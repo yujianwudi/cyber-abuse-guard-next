@@ -1217,7 +1217,7 @@ def validate_candidate(value: Any) -> dict[str, Any]:
         },
         "candidate",
     )
-    require_literal(candidate["tag"], "v0.16-rc.3", "candidate tag")
+    require_literal(candidate["tag"], "v0.16-rc.4", "candidate tag")
     require_pattern(candidate["tag_object_sha"], HEX40, "candidate tag object")
     require_literal(candidate["source_version"], "0.16", "candidate source version")
     require_pattern(candidate["commit"], HEX40, "candidate commit")
@@ -1369,7 +1369,7 @@ def validate_development_evidence(
         {"tag", "tag_object_sha", "commit", "tree", "classifier", "ruleset"},
         "development evidence candidate",
     )
-    require_literal(candidate["tag"], "v0.16-rc.3", "development candidate tag")
+    require_literal(candidate["tag"], "v0.16-rc.4", "development candidate tag")
     require_pattern(candidate["tag_object_sha"], HEX40, "development candidate tag object")
     require_pattern(candidate["commit"], HEX40, "development candidate commit")
     require_pattern(candidate["tree"], HEX40, "development candidate tree")

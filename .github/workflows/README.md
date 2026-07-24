@@ -14,8 +14,8 @@ permission to publish.
 | `release-rc.yml` | Repository-disabled historical dispatch for annotated exact-main `v0.16-rc.2` | Immutable Round 8 identity only; workflow ID `315644586` must remain `disabled_manually` and is not a Round 9 lane |
 | `round8-host-validation.yml` | Repository-disabled historical dispatch for annotated exact-main `v0.16-rc.2` | Immutable Round 8 Host identity only; workflow ID `318443961` must remain `disabled_manually` and is not accepted as Round 9 evidence |
 | `round9-gate.yml` | Pull requests to `main`; pushes to `main` | Linux-only Round 9 policy, Safe Gate, development-corpus, and public-corpus verification; explicitly does not execute either independent corpus |
-| `round9-host-validation.yml` | Manual dispatch from annotated exact-main `v0.16-rc.3` | Protected Linux x64, no-checkout external evaluation through a fixed root-owned broker; emits only the signed privacy-bounded evaluation and protected-ledger proof |
-| `round9-release-rc.yml` | Manual dispatch from annotated exact-main `v0.16-rc.3` | Admit exact-main CI plus the exact-main Round 9 gate run, build/attest/upload only a private 17-asset candidate, and retain a fail-closed exact-19-asset independent-audit verifier; all public publication and existing-Release paths remain disabled |
+| `round9-host-validation.yml` | Manual dispatch from annotated exact-main `v0.16-rc.4` | Protected Linux x64, no-checkout external evaluation through a fixed root-owned broker; emits only the signed privacy-bounded evaluation and protected-ledger proof |
+| `round9-release-rc.yml` | Manual dispatch from annotated exact-main `v0.16-rc.4` | Admit exact-main CI plus the exact-main Round 9 gate run, build/attest/upload only a private 17-asset candidate, and retain a fail-closed exact-19-asset independent-audit verifier; all public publication and existing-Release paths remain disabled |
 | `release.yml` | Exact `v0.15` tag | Rebuild and verify the formal bytes, then create a draft Release |
 | `release-promote.yml` | Manual dispatch from exact `v0.15` | Publish the already verified, unchanged formal draft |
 
@@ -67,13 +67,29 @@ workflow run and not Round 8 release authorization.
 
 ## Current Round 9 lane
 
+The immutable `v0.16-rc.3` Tag records Phase 1 run
+[`30118817188`](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/runs/30118817188),
+which admitted the exact source and then failed before asset construction because
+the fixed Go container did not contain the previously undeclared PyYAML runtime.
+The run produced zero Actions artifacts and no Release. The Tag is historical
+evidence and is never moved or reused; the complete active identity is now
+`v0.16-rc.4`.
+
+Each containerized rc.4 job installs the exact Debian
+`python3-yaml_6.0-3+b2_amd64.deb` before source checkout and verifies SHA-256
+`8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2`,
+package version, architecture, module version, and system module path. The job
+run shell is fixed to Bash. Restricted checkout is still followed immediately
+by the unchanged Safe Gate, and the gate rejects repository-local `yaml.py` or
+`yaml/` import shadows.
+
 The current engineering chain is `round9-gate.yml` → the private-candidate phase
 of `round9-release-rc.yml` → `round9-host-validation.yml`. There is no enabled
 public-release phase. RC admission requires both successful exact-main push CI
 and a successful exact-main push run of `Round 9 policy gate`, including exact
 run attempts and the candidate commit. It also fails unless historical workflow
 IDs `315644586` and `318443961` remain `disabled_manually`, and it rejects every
-existing `v0.16-rc.3` Release instead of treating one as recovery success. The
+existing `v0.16-rc.4` Release instead of treating one as recovery success. The
 ordinary gate uses the restricted source boundary and never executes an
 independent corpus. The protected Host workflow deliberately performs no source
 checkout. Its ten dispatch inputs carry only the exact tag/tree/Phase 1
@@ -94,7 +110,7 @@ accounting, or default-disabled Raw Capture observations prevents a publishable
 `PASS`; required checks cannot be hidden in a `not_observed` list.
 The workflow additionally binds `github.ref`, `github.sha`,
 `github.workflow_ref`, and `github.workflow_sha` to the exact
-`refs/tags/v0.16-rc.3` candidate and forwards all four values to the root-owned
+`refs/tags/v0.16-rc.4` candidate and forwards all four values to the root-owned
 broker. A branch dispatch, a different workflow revision, or a substituted
 broker argument fails before evaluation.
 

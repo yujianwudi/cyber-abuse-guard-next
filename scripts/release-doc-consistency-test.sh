@@ -97,8 +97,8 @@ make_fixture() {
         'current_source_version: 0.16' \
         'current_formal_tag_reserved: v0.16' \
         'current_version_alias_policy: reject-v0.16.0' \
-        'current_candidate_tag: v0.16-rc.3' \
-        'current_candidate_status: DEVELOPMENT_IN_PROGRESS_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED' \
+        'current_candidate_tag: v0.16-rc.4' \
+        'current_candidate_status: PENDING_FINAL_SOURCE_FREEZE_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED' \
         'current_platform: linux-amd64' \
         'current_go_contract: 1.26.4' \
         'current_cpa_version: v7.2.95' \
@@ -157,7 +157,7 @@ make_fixture() {
         'current_independent_malicious_recall_requirement: aggregate-and-each-category-at-least-9500-basis-points' \
         'current_release_kind: private-candidate-only-public-prerelease-blocked' \
         'current_release_latest: false' \
-        'current_legacy_verifier_identity_contract: release-object,tag=v0.16-rc.3,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true' \
+        'current_legacy_verifier_identity_contract: release-object,tag=v0.16-rc.4,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true' \
         'current_legacy_verifier_asset_contract: exact-count=19,download-count=19,byte-compare-each=rebuilt-candidate,attestation-check=17-release-workflow-plus-2-host-workflow' \
         'current_release_recovery: fail-only-existing-release-rejected-no-automatic-verifier' \
         'current_release_new_dispatch_or_rerun_all: admission-existing-release-fail-only-otherwise-private-candidate-only' \
@@ -175,7 +175,7 @@ make_fixture() {
         'The rejected attempt to rebind corrected bytes to the same v8 identity is retained separately.' \
         'The disabled legacy verifier documents the prospective signer split.' \
         'The two external assets remain separately attested.' \
-        'Admission rejects any existing `v0.16-rc.3` Release.' \
+        'Admission rejects any existing `v0.16-rc.4` Release.' \
         'A new dispatch either creates a fresh private 17-asset candidate after all admission checks or fails closed.' \
         'The Host result is necessary evaluation evidence, but it is not sufficient publication authorization.' \
         'Release title/body text such as `independent audit required` is also not evidence.' \
@@ -454,7 +454,7 @@ policy_keys=(
   historical_round8_rc_publish_host_evidence
 )
 policy_values=(
-  v0.16-rc.3
+  v0.16-rc.4
   linux-amd64
   1.26.4
   f71ec0eb6776854457892452cf28c47f0d658251
@@ -491,7 +491,7 @@ policy_values=(
   aggregate-and-each-category-exactly-10000-basis-points
   aggregate-and-each-category-at-least-9500-basis-points
   private-candidate-only-public-prerelease-blocked
-  'release-object,tag=v0.16-rc.3,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true'
+  'release-object,tag=v0.16-rc.4,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true'
   'exact-count=19,download-count=19,byte-compare-each=rebuilt-candidate,attestation-check=17-release-workflow-plus-2-host-workflow'
   false
   fail-only-existing-release-rejected-no-automatic-verifier
@@ -547,10 +547,10 @@ policy_bad_values=(
   same-run-re-run-failed-or-admission-read-only-verifier
   admission-existing-public-read-only-verify-otherwise-publish
   automatic-delete-and-recreate
-  v0.16-rc.3
+  v0.16-rc.4
   PASS
   GRANTED
-  0.16-rc.3
+  0.16-rc.4
   round9-host-evidence.json
 )
 for index in "${!policy_keys[@]}"; do

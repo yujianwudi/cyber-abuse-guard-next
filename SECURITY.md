@@ -10,8 +10,8 @@ current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74
 | Version | Status | Security support |
 |---|---|---|
 | `v0.15` | Current latest stable, manually published on 2026-07-20 UTC | Supported for confirmed security defects |
-| Source `0.16` / `v0.16-rc.3` target | Round 9 Linux amd64 prerelease development target only; exact-main CI, counted-Mock Host evidence, and independent audit are `NOT_PROVIDED`, production approval is `NOT_GRANTED`, and stable `v0.16` is not released | Reports are accepted, but the target is not production-supported |
-| `v0.16-rc.1` / `v0.16-rc.2` identities | Immutable historical candidate and incident evidence; they are not Round 9 output and must not be overwritten or republished | Historical only; not production-supported |
+| Source `0.16` / `v0.16-rc.4` target | Round 9 Linux amd64 prerelease development target only; exact-main CI, counted-Mock Host evidence, and independent audit are `NOT_PROVIDED`, production approval is `NOT_GRANTED`, and stable `v0.16` is not released | Reports are accepted, but the target is not production-supported |
+| `v0.16-rc.1` / `v0.16-rc.2` / failed `v0.16-rc.3` identities | Immutable historical candidate and incident evidence; they are not current Round 9 output and must not be overwritten or republished | Historical only; not production-supported |
 | Earlier versions | Historical or development evidence | Unsupported |
 
 The project uses exact two-part stable versions. `v0.15.0` is not an alias for

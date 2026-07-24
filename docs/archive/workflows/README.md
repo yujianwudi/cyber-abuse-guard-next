@@ -12,10 +12,10 @@ direct owner override. The embedded reference to
 `.github/workflows/release-rc.yml` records the path used by those historical
 runs and is intentionally unchanged. Do not copy that RC2 definition back into
 the executable workflow directory or treat it as authorization for a new RC
-publication. The active RC3 workflow is a separately reviewed and hashed file;
+publication. The active rc.4 workflow is a separately reviewed and hashed file;
 it does not mutate the archived RC2 record.
 
 The active release chain is documented in
-[the release policy](../../RELEASE_POLICY.md). Its current workflow entry
-points are `candidate.yml`, `attested-prerelease.yml`, `release-rc.yml`,
-`release.yml`, and `release-promote.yml` under `.github/workflows/`.
+[the release policy](../../RELEASE_POLICY.md), and the complete executable
+workflow inventory is maintained in
+[the active workflow README](../../../.github/workflows/README.md).

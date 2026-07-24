@@ -144,7 +144,7 @@ class ExternalEvaluationContractTest(unittest.TestCase):
             counted_mock_image_id="sha256:" + "3" * 64,
             model="gpt-5.4",
             repository="example/cyber-abuse-guard",
-            tag="v0.16-rc.3",
+            tag="v0.16-rc.4",
             tag_object_sha="4" * 40,
             commit="5" * 40,
             tree="6" * 40,

@@ -80,21 +80,21 @@ from round9_eval_core import (  # noqa: E402
 CONFIG_PATH = Path("/etc/cag-round9-eval-broker/config.json")
 CONFIG_SCHEMA = "round9-eval-broker-config/v1"
 ADAPTER_CONFIG_SCHEMA = "round9-cpa-sandbox-adapter-config/v1"
-TAG = "v0.16-rc.3"
+TAG = "v0.16-rc.4"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
 HOST_WORKFLOW = ".github/workflows/round9-host-validation.yml"
 HOST_WORKFLOW_NAME = "Round 9 protected CPA Host validation"
-PHASE1_WORKFLOW_NAME = "Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission"
-SO_NAME = "cyber-abuse-guard-v0.16-rc.3.so"
+PHASE1_WORKFLOW_NAME = "Round 9 RC release v0.16-rc.4 - Linux counted-Mock admission"
+SO_NAME = "cyber-abuse-guard-v0.16-rc.4.so"
 ARTIFACT_NAMES = {
     "build-metadata.json",
     "checksums.txt",
     SO_NAME,
     f"{SO_NAME}.sha256",
-    "cyber-abuse-guard_0.16-rc.3_linux_amd64.zip",
-    "cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip",
-    "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
-    "cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256",
+    "cyber-abuse-guard_0.16-rc.4_linux_amd64.zip",
+    "cyber-abuse-guard-v0.16-rc.4-audit-bundle.zip",
+    "cyber-abuse-guard-v0.16-rc.4-source.tar.gz",
+    "cyber-abuse-guard-v0.16-rc.4-source.tar.gz.sha256",
     "rc-release-evidence.md",
     "rc-release-evidence.md.sha256",
     "rc-release-manifest.json",
@@ -1073,7 +1073,7 @@ def validate_phase1_build_metadata(value: Any, args: argparse.Namespace) -> dict
     )
     expected = {
         "schema_version": 4,
-        "version": "0.16-rc.3",
+        "version": "0.16-rc.4",
         "source_version": "0.16",
         "commit": args.commit,
         "tree": args.tree,
@@ -1122,7 +1122,7 @@ def validate_phase1_ruleset_manifest(value: Any, args: argparse.Namespace) -> di
     )
     expected = {
         "schema_version": 1,
-        "plugin_version": "0.16-rc.3",
+        "plugin_version": "0.16-rc.4",
         "ruleset_version": args.ruleset_version,
         "ruleset_sha256": args.ruleset_sha256,
     }
@@ -1187,7 +1187,7 @@ def validate_phase1_release_manifest(
         "release_phase": "candidate",
         "publish_rc_release": False,
         "source_version": "0.16",
-        "artifact_version": "0.16-rc.3",
+        "artifact_version": "0.16-rc.4",
         "tag": TAG,
         "tag_object": args.tag_object_sha,
         "commit": args.commit,
@@ -2149,7 +2149,7 @@ def evaluate_once(config: dict[str, Any], args: argparse.Namespace) -> tuple[dic
         public_evidence = development_evidence["corpus"]["public_adversarial"]
         public_root = work / "public-development-corpus"
         public_identity = safe_extract_public_development_corpus(
-            assets / "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
+            assets / "cyber-abuse-guard-v0.16-rc.4-source.tar.gz",
             public_root,
             public_evidence,
         )

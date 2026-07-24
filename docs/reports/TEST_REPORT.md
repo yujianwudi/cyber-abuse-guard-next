@@ -5,11 +5,11 @@ current_classifier_policy_version: classifier-policy-v8
 current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
 ```
 
-Last updated: 2026-07-24 (Asia/Shanghai)
+Last updated: 2026-07-25 (Asia/Shanghai)
 
 ## Current Round 9 source-tree snapshot verification
 
-The active target is Linux amd64 `v0.16-rc.3`, classifier-policy-v8, ruleset
+The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v8, ruleset
 1.0.10, audit schema v6, and CPA
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
@@ -17,8 +17,11 @@ identity is classifier-policy-v8 /
 `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
-The source tree is still converging, so no final commit/tree, exact Linux `.so`,
-exact-main CI, tag, external evaluation, artifact, or Release PASS is claimed.
+The source tree is still converging, so no rc.4 final commit/tree, exact Linux
+`.so`, exact-main CI, tag, external evaluation, artifact, or Release PASS is
+claimed. The immutable rc.3 attempt passed exact-main CI at `77cf2de` and then
+failed before asset creation because PyYAML was undeclared in the fixed builder
+container; it supplies failure history, not rc.4 evidence.
 The visible development-only active corpus is `round9-public-adversarial-v13` (481448 bytes,
 SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`);
 it is frozen public development evidence, not independent evidence. The exact
@@ -29,7 +32,7 @@ rejected evidence. The exact v6 bytes also remain immutable but frozen-invalid.
 
 | Current Round 9 identity/check | Result |
 |---|---|
-| Source version / candidate | `0.16` / `v0.16-rc.3`, Linux amd64 prerelease, `latest=false` |
+| Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
 | Classifier policy | `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Audit database | schema v6; closed decision/explanation contract; mandatory pre-v6 backup and old-SO rollback |
@@ -42,7 +45,7 @@ rejected evidence. The exact v6 bytes also remain immutable but frozen-invalid.
 | Protected Host execution boundary | **NO SOURCE CHECKOUT**; a fixed root-owned broker owns corpus decryption, evaluator/adapter paths, keys, image identities, result directory, and protected one-shot ledger |
 | External evidence schemas | evaluation v3, evaluator aggregate v3, ledger event v3, ledger proof v1, external counted-Mock v1, CPA sandbox descriptor v2 |
 | CPA external evaluation | **NOT RUN / PENDING** for the exact v7.2.95 loopback lane; Audit→Balanced→Strict plus database/restart/panic/usage/Raw Capture runtime checks are required for `PASS` |
-| Exact-main GitHub CI / tag / Release | **NOT RUN / PENDING**; no `v0.16-rc.3` publication claim |
+| Exact-main GitHub CI / tag / Release | rc.4: **NOT RUN / PENDING**. Historical rc.3 baseline CI/Round 9 gate/CodeQL passed, but Phase 1 run `30118817188` failed before asset creation; rc.3 has no Release and cannot be reused |
 | Independent audit | **NOT_PROVIDED / REQUIRED** |
 | Production approval | **NOT_GRANTED** |
 | Overall | **BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT** |

@@ -25,8 +25,15 @@ current_round: 9
 current_source_version: 0.16
 current_formal_tag_reserved: v0.16
 current_version_alias_policy: reject-v0.16.0
-current_candidate_tag: v0.16-rc.3
-current_candidate_status: DEVELOPMENT_IN_PROGRESS_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED
+current_candidate_tag: v0.16-rc.4
+current_candidate_status: PENDING_FINAL_SOURCE_FREEZE_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED
+historical_failed_candidate_tag: v0.16-rc.3
+historical_failed_candidate_tag_object: a70e30fe5b66a6060e0358efd084edfbb60722e1
+historical_failed_candidate_commit: 77cf2de50f89af12a4a1e7c651a2ac0074cabcdd
+historical_failed_candidate_phase1_run: 30118817188
+historical_failed_candidate_reason: missing-pyyaml-at-safe-gate-import
+historical_failed_candidate_actions_artifact_count: 0
+historical_failed_candidate_release: ABSENT
 current_platform: linux-amd64
 current_go_contract: 1.26.4
 current_cpa_version: v7.2.95
@@ -93,7 +100,7 @@ current_development_paired_recall_requirement: aggregate-and-each-category-exact
 current_independent_malicious_recall_requirement: aggregate-and-each-category-at-least-9500-basis-points
 current_release_kind: private-candidate-only-public-prerelease-blocked
 current_release_latest: false
-current_legacy_verifier_identity_contract: release-object,tag=v0.16-rc.3,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true
+current_legacy_verifier_identity_contract: release-object,tag=v0.16-rc.4,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true
 current_legacy_verifier_asset_contract: exact-count=19,download-count=19,byte-compare-each=rebuilt-candidate,attestation-check=17-release-workflow-plus-2-host-workflow
 current_release_recovery: fail-only-existing-release-rejected-no-automatic-verifier
 current_release_new_dispatch_or_rerun_all: admission-existing-release-fail-only-otherwise-private-candidate-only
@@ -151,7 +158,7 @@ and offline/remote mechanical verifier now exist. They are implemented in
 `docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md`. No independently signed evidence
 package, pinned auditor trust configuration, auditor run/artifact, or protected
 audit-ledger events have been provided. The verifier therefore returns
-`NOT_PROVIDED`, and no new public `v0.16-rc.3` prerelease can be created by this
+`NOT_PROVIDED`, and no new public `v0.16-rc.4` prerelease can be created by this
 workflow.
 
 The verifier does not create, sign, repair, or infer any of those external records.
@@ -167,7 +174,7 @@ The disabled legacy verifier documents the prospective signer split: the 17
 candidate-built assets would require the Round 9 RC-workflow attestation, while
 the two external assets would require the protected Round 9 Host-workflow
 attestation. It retains byte and stable-latest checks for future review, but no
-execution path can enter it. Admission rejects any existing `v0.16-rc.3`
+execution path can enter it. Admission rejects any existing `v0.16-rc.4`
 Release, whether draft or public, and never deletes, edits, uploads to, repairs,
 or treats that Release as success. A new dispatch or `Re-run all jobs` therefore
 either creates a fresh private 17-asset candidate after all admission checks or
@@ -500,7 +507,7 @@ low-sensitivity report is bound by SHA-256 in the Host/audit prerelease
 attestation. Raw evaluation, holdout, consumed, private, blind, and retired
 materials are not copied into formal source or audit bundles.
 
-`0.16` is the current source version and `v0.16-rc.3` is the only admitted
+`0.16` is the current source version and `v0.16-rc.4` is the only admitted
 Round 9 publication target. A stable `v0.16` has not been approved or
 released. If a future independent process admits it, the project version remains
 two-component and must not publish a `v0.16.0` alias. The historical v0.15

@@ -22,7 +22,7 @@ from typing import Any
 
 SCHEMA = "round9-host-evidence/v1"
 CONTRACT_SCHEMA = "round9-evaluation-contract/v1"
-TAG = "v0.16-rc.3"
+TAG = "v0.16-rc.4"
 CPA_VERSION = "v7.2.95"
 CPA_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
 CPA_HOST_IP = "127.0.0.1"

@@ -229,7 +229,7 @@ class Round9EvalCoreTest(unittest.TestCase):
 
     def fixture(self) -> tuple[dict, dict, dict]:
         candidate = {
-            "tag": "v0.16-rc.3",
+            "tag": "v0.16-rc.4",
             "tag_object_sha": "1" * 40,
             "source_version": "0.16",
             "commit": "2" * 40,

@@ -309,8 +309,8 @@ required_policy_lines=(
   "current_source_version: $current_release_version"
   "current_formal_tag_reserved: v$current_release_version"
   "current_version_alias_policy: reject-v$current_release_version.0"
-  "current_candidate_tag: v$current_release_version-rc.3"
-  "current_candidate_status: DEVELOPMENT_IN_PROGRESS_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED"
+  "current_candidate_tag: v$current_release_version-rc.4"
+  "current_candidate_status: PENDING_FINAL_SOURCE_FREEZE_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED"
   "current_platform: linux-amd64"
   "current_go_contract: 1.26.4"
   "current_cpa_version: v7.2.95"
@@ -369,7 +369,7 @@ required_policy_lines=(
   "current_independent_malicious_recall_requirement: aggregate-and-each-category-at-least-9500-basis-points"
   "current_release_kind: private-candidate-only-public-prerelease-blocked"
   "current_release_latest: false"
-  "current_legacy_verifier_identity_contract: release-object,tag=v$current_release_version-rc.3,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true"
+  "current_legacy_verifier_identity_contract: release-object,tag=v$current_release_version-rc.4,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true"
   "current_legacy_verifier_asset_contract: exact-count=19,download-count=19,byte-compare-each=rebuilt-candidate,attestation-check=17-release-workflow-plus-2-host-workflow"
   "current_release_recovery: fail-only-existing-release-rejected-no-automatic-verifier"
   "current_release_new_dispatch_or_rerun_all: admission-existing-release-fail-only-otherwise-private-candidate-only"
@@ -403,7 +403,7 @@ required_public_v13_policy_markers=(
   "The original v8 manifest remains frozen"
   "The rejected attempt to rebind corrected bytes to the same v8 identity"
   "The disabled legacy verifier documents the prospective signer split"
-  'Admission rejects any existing `v0.16-rc.3`'
+  'Admission rejects any existing `v0.16-rc.4`'
   'either creates a fresh private 17-asset candidate after all admission checks or'
   'The Host result is necessary evaluation evidence, but it is not sufficient'
   'Release title/body text such as `independent audit required` is also not evidence'

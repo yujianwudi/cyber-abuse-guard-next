@@ -33,7 +33,7 @@ class Fixture:
     ledger_ruleset_id = 303
     ledger_ruleset_name = "round9-independent-audit-ledger-immutable"
     audit_artifact_id = 404
-    audit_artifact_name = "round9-independent-audit-v0.16-rc.3"
+    audit_artifact_name = "round9-independent-audit-v0.16-rc.4"
     audit_artifact_digest = "sha256:" + "6" * 64
 
     def __init__(self, root: Path) -> None:
@@ -105,8 +105,8 @@ class Fixture:
             },
             "artifacts": {
                 "so": {
-                    "name": "cyber-abuse-guard-v0.16-rc.3.so",
-                    "sha256": assets["cyber-abuse-guard-v0.16-rc.3.so"]["sha256"],
+                    "name": "cyber-abuse-guard-v0.16-rc.4.so",
+                    "sha256": assets["cyber-abuse-guard-v0.16-rc.4.so"]["sha256"],
                 },
                 "build_metadata_sha256": assets["build-metadata.json"]["sha256"],
                 "ruleset_manifest_sha256": assets["ruleset-manifest.json"]["sha256"],
@@ -163,7 +163,7 @@ class Fixture:
             "tree": self.tree,
             "release_manifest_bytes": manifest["bytes"],
             "release_manifest_sha256": manifest["sha256"],
-            "so_sha256": self.asset_identity["cyber-abuse-guard-v0.16-rc.3.so"][
+            "so_sha256": self.asset_identity["cyber-abuse-guard-v0.16-rc.4.so"][
                 "sha256"
             ],
             "build_metadata_sha256": self.asset_identity["build-metadata.json"][

@@ -32,7 +32,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
-        self.so = self.root / "cyber-abuse-guard-v0.16-rc.3.so"
+        self.so = self.root / "cyber-abuse-guard-v0.16-rc.4.so"
         self.so.write_bytes(b"round9-so")
         self.policy = self.root / "policy_identity.go"
         self.policy.write_text(
@@ -45,7 +45,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
             canonical(
                 {
                     "schema_version": 1,
-                    "plugin_version": "0.16-rc.3",
+                    "plugin_version": "0.16-rc.4",
                     "ruleset_version": "1.0.10",
                     "ruleset_sha256": "4" * 64,
                     "files": [],

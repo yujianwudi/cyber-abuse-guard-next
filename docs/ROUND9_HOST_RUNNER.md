@@ -6,7 +6,7 @@ current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74
 ```
 
 `.github/workflows/round9-host-validation.yml` is the only admissible Round 9
-Host evaluation path for `v0.16-rc.3`, but it is not publication authorization
+Host evaluation path for `v0.16-rc.4`, but it is not publication authorization
 by itself. The job deliberately performs no source checkout. It passes only
 immutable candidate, Phase 1, workflow, challenge, dispatch ref/SHA, and
 workflow ref/SHA identities to the separately reviewed command:
@@ -31,13 +31,13 @@ and a public RC do not authorize production Balanced mode.
 
 | Contract | Exact identity |
 |---|---|
-| Candidate | annotated exact-main `v0.16-rc.3` |
+| Candidate | annotated exact-main `v0.16-rc.4` |
 | Platform | Linux amd64 only |
 | CPA | `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251` |
 | Host workflow | `.github/workflows/round9-host-validation.yml` |
-| Dispatch ref | exact `refs/tags/v0.16-rc.3` |
+| Dispatch ref | exact `refs/tags/v0.16-rc.4` |
 | Dispatch SHA | exact candidate commit |
-| Workflow ref | `OWNER/REPO/.github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.3` |
+| Workflow ref | `OWNER/REPO/.github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.4` |
 | Workflow SHA | exact candidate commit |
 | Protected environment | `round9-host-validation` |
 | Dedicated runner labels | `self-hosted`, `linux`, `x64`, `cag-round9-sandbox` |
@@ -239,10 +239,10 @@ non-replayed audit execution identity. Negative tests must reject Host-only or
 title-only approval, hand-filled status, asset substitution, signer drift,
 unknown fields, stale evidence, and digest drift. The verifier contract is
 currently `IMPLEMENTED_FAIL_CLOSED / INDEPENDENTLY_SIGNED_EVIDENCE_NOT_PROVIDED`,
-so no new public `v0.16-rc.3` prerelease is authorized or creatable through the
+so no new public `v0.16-rc.4` prerelease is authorized or creatable through the
 workflow.
 
-Admission rejects every pre-existing `v0.16-rc.3` Release, including an exact
+Admission rejects every pre-existing `v0.16-rc.4` Release, including an exact
 non-draft immutable 19-asset object. The preserved read-only verifier is legacy,
 statically unreachable documentation for a future independently reviewed gate;
 it is not a recovery path and cannot convert existing remote state into success.

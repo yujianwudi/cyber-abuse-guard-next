@@ -69,7 +69,7 @@ PAIRED_CORPUS_NAME = re.compile(
     r"round9-development-paired-malicious-v(?P<version>[0-9]+)"
 )
 
-DEVELOPMENT_TAG = "v0.16-rc.3"
+DEVELOPMENT_TAG = "v0.16-rc.4"
 DEVELOPMENT_RUNTIME = "go1.26.4"
 DEVELOPMENT_PLATFORM = "linux/amd64"
 DEVELOPMENT_SCHEMA = "round9-development-evidence/v1"

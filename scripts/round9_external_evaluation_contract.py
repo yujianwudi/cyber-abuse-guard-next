@@ -39,9 +39,9 @@ from round9_eval_core import (  # noqa: E402
 )
 
 
-TAG = "v0.16-rc.3"
+TAG = "v0.16-rc.4"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
-PHASE1_WORKFLOW_NAME = "Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission"
+PHASE1_WORKFLOW_NAME = "Round 9 RC release v0.16-rc.4 - Linux counted-Mock admission"
 HOST_WORKFLOW = ".github/workflows/round9-host-validation.yml"
 HOST_WORKFLOW_NAME = "Round 9 protected CPA Host validation"
 

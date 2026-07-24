@@ -43,8 +43,8 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 import round9_docker_sandbox as docker_sandbox
 
 
-TAG = "v0.16-rc.3"
-ARTIFACT_VERSION = "0.16-rc.3"
+TAG = "v0.16-rc.4"
+ARTIFACT_VERSION = "0.16-rc.4"
 SO_NAME = f"cyber-abuse-guard-v{ARTIFACT_VERSION}.so"
 STORE_NAME = f"cyber-abuse-guard_{ARTIFACT_VERSION}_linux_amd64.zip"
 SOURCE_NAME = f"cyber-abuse-guard-v{ARTIFACT_VERSION}-source.tar.gz"

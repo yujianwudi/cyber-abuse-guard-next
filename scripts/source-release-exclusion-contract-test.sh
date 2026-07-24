@@ -10,9 +10,9 @@ work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 archive="$work/source.tar"
 verifier_path='scripts/round9_external_evaluation_contract.py'
-verifier_sha256='4c330ece27ce5e000f13ebc06bff6dbcaa2f18b5b62f73f940e78591051fae7e'
+verifier_sha256='b632063bed7cdb59ae7d56b5f9634efd4945b8a0c769cb3dd86b9c52de1a2076'
 verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
-verifier_test_sha256='f42625714cb46b89a4bc32a1ec52c2352d6f9c67f5f782ea117d08e7650c43c9'
+verifier_test_sha256='6ce01201f808e28299b61c66e380e52981778bccfa9df407357de22bd56a31f8'
 
 tracked_independent="$(git -C "$root" ls-files -- \
   ':(glob)testdata/round9-independent-*/**')"

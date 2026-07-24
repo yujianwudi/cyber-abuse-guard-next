@@ -12,9 +12,11 @@ current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74
 
 > **Current development state:** Round 9 redesigns Balanced around
 > candidate/clause/scope/referent-bound block eligibility and prepares the Linux
-> amd64 `v0.16-rc.3` prerelease lane. The fixed source/compile target is CPA
-> `v7.2.95` only. No candidate tag, Release, or
-> stable `v0.16` is created by the source changes alone. The protected
+> amd64 `v0.16-rc.4` prerelease lane. The fixed source/compile target is CPA
+> `v7.2.95` only. The immutable `v0.16-rc.3` Tag records a deterministic Phase 1
+> dependency-bootstrap failure and has no candidate assets or Release. No
+> `v0.16-rc.4` Tag, Release, or stable `v0.16` is created by the source changes
+> alone. The protected
 > no-checkout external CPA evaluation, protected-ledger proof, exact-main CI,
 > and an independent audit are still required. Production approval has not been
 > granted, and production Balanced must remain gated.
@@ -50,10 +52,10 @@ classifier.
 
 | Item | State |
 |---|---|
-| Source version / RC target | `0.16` / `v0.16-rc.3` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
-| Historical candidates | `v0.16-rc.1` and the immutable Round 8 `v0.16-rc.2` identity are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
-| GitHub publication | No Round 9 tag or Release exists; `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
-| Successor main snapshot | `98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35` / tree `77c496e8f4fd1771fc54ed11e8e82970ba3c56b8`; Round 9 gate and CodeQL passed, while full CI run `30073551084` failed at workflow lint after unit/race/vet/fuzz passed |
+| Source version / RC target | `0.16` / `v0.16-rc.4` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
+| Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
+| GitHub publication | `v0.16-rc.3` has an annotated Tag but no Release or Actions artifact; no `v0.16-rc.4` Tag or Release exists. `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
+| Last exact-main baseline | `77cf2de50f89af12a4a1e7c651a2ac0074cabcdd` / tree `ef5f35086ece6fcd415db1d5578ad89d4df55929`; CI `30116119718`, Round 9 gate `30116119599`, and CodeQL `30116119625` passed. The subsequent `v0.16-rc.3` Phase 1 run `30118817188` failed before asset creation because PyYAML was undeclared in the fixed container |
 | CPA source/compile target | `v7.2.95` (`f71ec0eb6776854457892452cf28c47f0d658251`) |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |

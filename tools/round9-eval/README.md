@@ -24,7 +24,7 @@ workflow must not use repository code, `jq`, or an ad-hoc shell parser to expand
 that object. Duplicate keys, unknown fields, non-canonical encoding, or an
 object larger than 4096 UTF-8 bytes fail before any ledger reservation.
 The workflow also proves and forwards four independent GitHub identities:
-`dispatch_ref=refs/tags/v0.16-rc.3`, `dispatch_sha=exact candidate commit`, the
+`dispatch_ref=refs/tags/v0.16-rc.4`, `dispatch_sha=exact candidate commit`, the
 exact tagged `round9-host-validation.yml` workflow ref, and
 `workflow_sha=exact candidate commit`. The broker requires all four values for
 both `evaluate` and `recover-abort`; substituting a branch ref, a different
@@ -194,7 +194,7 @@ artifact, candidate identity, challenge and Host workflow identity arguments as
 the failed `evaluate` invocation, but omit `--output`:
 
     sudo -n /usr/local/libexec/cag-round9-eval-broker recover-abort \
-      --repository OWNER/REPO --tag v0.16-rc.3 \
+      --repository OWNER/REPO --tag v0.16-rc.4 \
       --tag-object-sha TAG_OBJECT --commit COMMIT --tree TREE \
       --phase1-run-id RUN --phase1-run-attempt ATTEMPT \
       --phase1-artifact-id ARTIFACT \
@@ -202,9 +202,9 @@ the failed `evaluate` invocation, but omit `--output`:
       --candidate-identity "$CANDIDATE_IDENTITY_JSON" \
       --challenge CHALLENGE --workflow-run-id HOST_RUN \
       --workflow-run-attempt HOST_ATTEMPT \
-      --dispatch-ref refs/tags/v0.16-rc.3 \
+      --dispatch-ref refs/tags/v0.16-rc.4 \
       --dispatch-sha COMMIT \
-      --workflow-ref OWNER/REPO/.github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.3 \
+      --workflow-ref OWNER/REPO/.github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.4 \
       --workflow-sha COMMIT
 
 Recovery re-downloads and verifies the exact Phase 1 identity, authenticates
