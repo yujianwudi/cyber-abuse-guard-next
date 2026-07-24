@@ -180,7 +180,7 @@ results, exact 100% visible-development paired recall, independent malicious
 aggregate and per-category recall of at least 95%, per-category Wilson
 intervals, the closed decision-kind set, the fixed loopback CPA listener, and
 authenticated mode-transition evidence. The external evaluation payload is
-schema v2 and its counted-Mock object is a closed mechanical derivation of the
+schema v3 and its counted-Mock object is a closed mechanical derivation of the
 validated execution and metrics; a hand-filled `state=PASS` is rejected.
 Private-candidate manifests leave external evaluation, protected ledger, and
 counted-Mock results as `NOT_PROVIDED / EXTERNAL_EVALUATION_REQUIRED`.
