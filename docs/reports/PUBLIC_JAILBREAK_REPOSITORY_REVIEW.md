@@ -19,9 +19,9 @@ The current development corpus is frozen at:
 
 | Property | Frozen value |
 |---|---|
-| Path | `testdata/round9-public-adversarial-v11/manifest.json` |
-| Manifest identity | 476165 bytes; SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038` |
-| Schema / dataset | `round9-public-adversarial-corpus/v11` / `round9-public-adversarial-v11` |
+| Path | `testdata/round9-public-adversarial-v13/manifest.json` |
+| Manifest identity | 481448 bytes; SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6` |
+| Schema / dataset | `round9-public-adversarial-corpus/v13` / `round9-public-adversarial-v13` |
 | Payload records | 24 |
 | Formal unique payloads | 23 |
 | Historical unique payloads | 8 |
@@ -30,26 +30,33 @@ The current development corpus is frozen at:
 | Unmerged candidate carriers | 1 |
 | Active behind non-default branches | 5 |
 | Formal Release assets reviewed | 16 total; 4 with prompt entries |
-| Release asset metadata frozen | 199 total; GitHub metadata/digest only; none downloaded or opened during v11 |
+| Release asset metadata frozen | 199 total; GitHub metadata/digest only; none downloaded or opened during v13 |
 | Serialized contexts | 5 per scenario payload, 120 total |
 | Methodology flags | `development_only=true`; `independent_holdout=false`; `third_party_code_executed=false` |
 
-The v11 manifest is visible development regression data, not blind, holdout,
+The v13 manifest is visible development regression data, not blind, holdout,
 independent, production, or attack-origin evidence. Its frozen `queried_at` is
-part of the manifest identity. V10 remains byte-for-byte history at 183752 bytes
+part of the manifest identity. V12 remains byte-for-byte history at 485221 bytes
 and SHA-256
-`bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`.
+`eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387`;
+v11 and earlier identities also remain immutable history.
 
 The repositories were live rechecked through authenticated, read-only GitHub
-metadata at `2026-07-24T16:40:44+08:00`. MDX advanced by two Star History
-renderer/test commits and Codex-X advanced by three skin-center/release commits,
-so the refresh received a new v11 identity even though no standalone prompt
-payload changed or was added:
+metadata at `2026-07-24T23:47:18+08:00`. Since v12, MDX advanced from
+`cccbfae8a75c948bde22407dd07de7af88731d9b` to
+`61feb6a1940bd1d58163c2550869a0a9aed2ddc1`; the other three repository
+snapshots remained unchanged. The refresh therefore received a new v13
+identity even though no standalone prompt payload changed or was added:
+
+The MDX delta contains five current changed-or-added Star History data,
+maintenance-source, workflow, and test blobs. Two removed source paths are
+recorded path-only; no current blob identity is fabricated for them. All 19
+previously frozen MDX payload-source paths remain byte-identical.
 
 | Repository | Default HEAD | Branches | Open PRs | Tags | Releases |
 |---|---|---:|---:|---:|---:|
 | `Jia-Ethan/codex-keysmith` | `700f1be22446af4dc2c362080cbde669e215094d` | 5 | 0 | 2 | 2 |
-| `MDX-Tom/gpt-5.6-instruct` | `334f8cd2ec132aa4317b62bd2a3228ed827cbb87` | 1 | 0 | 2 | 2 |
+| `MDX-Tom/gpt-5.6-instruct` | `61feb6a1940bd1d58163c2550869a0a9aed2ddc1` | 1 | 0 | 2 | 2 |
 | `yynxxxxx/Codex-X` | `e8b0e5b73c508484cfb636339c82d70360487442` | 2 | 0 | 37 | 36 |
 | `yynxxxxx/Codex-5.5-codex-instruct-5.5` | `ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d` | 1 | 1 | 0 | 0 |
 
@@ -60,10 +67,10 @@ Five behind non-default branches are recorded separately and do not create new
 formal payload identities. The new Codex-X `v0.3.1` tag is frozen at
 `5b6655754d578a4b303bea3df0844d8c932e0f4e`; its five prompt files are
 byte-identical to main and `v0.3.0`. All 199 enumerated Release assets retain
-only GitHub metadata and server-provided SHA-256 digests in the v11 refresh;
+only GitHub metadata and server-provided SHA-256 digests in the v13 refresh;
 none was downloaded or opened. The 16 earlier bounded asset reviews remain
 inherited v10 provenance rather than a new binary inspection. Historical
-v1-v10 corpora remain immutable and are not relabeled as v11.
+v1-v12 corpora remain immutable and are not relabeled as v13.
 
 The production rule set does not contain repository names, release names, file
 hashes, or complete third-party prompts. Tests use repository-neutral, disarmed
@@ -113,13 +120,13 @@ poison subject risk.
 
 ## Repository-neutral coverage
 
-The frozen v11 manifest carries 24 scenario payload records and five serialized
+The frozen v13 manifest carries 24 scenario payload records and five serialized
 contexts per payload. Its direct-current-user ground truth is split between 12
 `block_malicious_text` and 12 `allow_or_audit` cases; repository origin never
 creates block eligibility. Static identity validation is development evidence
-only, and the final static validator rerun remains `PENDING_RERUN`. Final
+only, and the final static validator rerun remains `PENDING_LINUX_RERUN`. Final
 classifier scenario results remain `PENDING_FINAL_SOURCE_FREEZE` and
-`PENDING_RERUN`; counted-Mock results for the v11 payloads are `NOT_PROVIDED`.
+`PENDING_LINUX_RERUN`; counted-Mock results for the v13 payloads are `NOT_PROVIDED`.
 
 The regression matrix covers these observed control families without copying a
 live prompt:

@@ -114,7 +114,7 @@ The active machine contracts are:
 | Independent-audit signed evidence | `round9-independent-audit-evidence/v1` |
 | Independent-audit ledger event | `round9-independent-audit-ledger-event/v1` |
 | Independent-audit ledger proof | `round9-independent-audit-ledger-proof/v1` |
-| Visible development-only public corpus | `round9-public-adversarial-v11` / 476,165 bytes / `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`; 199 Release assets recorded as metadata/digests only |
+| Visible development-only public corpus | `round9-public-adversarial-v13` / 481,448 bytes / `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; 199 Release assets recorded as metadata/digests only |
 
 The Host workflow attests and uploads exactly
 `round9-external-evaluation.json` and

@@ -183,8 +183,13 @@ raw-capture race tests, and the pinned CPA v7.2.95 raw-capture Host source
 overlay.
 
 - `go test ./internal/extract -count=1 -v -run='^TestRound6LongTextScaleAcceptance$'`
-- `go test ./internal/audit -count=1 -v -run='^TestRawCapturePerformanceAcceptance$'`
+- `CAG_RAW_CAPTURE_PERFORMANCE_ACCEPTANCE=1 go test ./internal/audit -count=1 -v -run='^TestRawCapturePerformanceAcceptance$'`
 - `go test -tags=sqlite_omit_load_extension ./internal/plugin -count=1 -v -run='^TestRawCaptureManagementResponsePerformanceAcceptance$'`
+
+The raw-capture wall-clock acceptance is enabled only by the serialized
+`round6-benchmark` recipe. Broad multi-package unit runs skip that timing gate
+so shared-runner contention cannot masquerade as a production regression; the
+dedicated recipe retains the original latency and allocation limits.
 
 ### P2 long-JSON scaling
 

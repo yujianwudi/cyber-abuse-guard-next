@@ -311,9 +311,9 @@ class ExternalEvaluatorTest(unittest.TestCase):
     @staticmethod
     def public_identity() -> dict:
         return {
-            "schema": "round9-public-adversarial-corpus/v11",
-            "dataset": "round9-public-adversarial-v11",
-            "bytes": 476_165,
+            "schema": "round9-public-adversarial-corpus/v13",
+            "dataset": "round9-public-adversarial-v13",
+            "bytes": 481_448,
             "sha256": "d" * 64,
         }
 

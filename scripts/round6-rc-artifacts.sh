@@ -1307,9 +1307,9 @@ finalize_rc_package() {
         .payload.public_counted_mock.independent_holdout == false and
         .payload.public_counted_mock.third_party_code_executed == false and
         .payload.public_counted_mock.manifest.schema ==
-          "round9-public-adversarial-corpus/v11" and
+          "round9-public-adversarial-corpus/v13" and
         .payload.public_counted_mock.manifest.dataset ==
-          "round9-public-adversarial-v11" and
+          "round9-public-adversarial-v13" and
         .payload.public_counted_mock.route_matrix == {
           modes: ["audit", "balanced", "strict"],
           protocols: ["openai_chat", "openai_responses"],
@@ -1476,7 +1476,7 @@ Round 9 Linux amd64 prerelease for CPA v7.2.95.
 - Independent benign: $(jq -r '.independent_benign.unique_semantic_samples' <<<"$round9_corpus") unique; 0 blocked; Wilson95 upper $(jq -r '.independent_benign.wilson_upper_bound_ppm' <<<"$round9_corpus") ppm
 - Paired malicious recall: $(jq -r '.paired_malicious.recall_basis_points' <<<"$round9_corpus") basis points
 - Paired label audit: manifest v$(jq -r '.paired_malicious.corpus_manifest_version' <<<"$round9_corpus"); $(jq -r '.paired_malicious.label_audit.sha256' <<<"$round9_corpus")
-- Public adversarial v11: $(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus") formal unique ($(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus") historical + $(jq -r '.public_adversarial.unique_branch_head_payloads' <<<"$round9_corpus") branch-head + $(jq -r '.public_adversarial.unique_current_prompt_like_payloads' <<<"$round9_corpus") current prompt-like); $(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus") payload records; $(jq -r '.public_adversarial.unmerged_candidate_carriers' <<<"$round9_corpus") unmerged carrier; $(jq -r '.public_adversarial.nondefault_branch_candidate_carriers' <<<"$round9_corpus") active behind branches; $(jq -r '.public_adversarial.release_assets_reviewed' <<<"$round9_corpus") reviewed historical Release assets / $(jq -r '.public_adversarial.release_assets_with_prompt_entries' <<<"$round9_corpus") with prompt entries; $(jq -r '.public_adversarial.release_asset_metadata_records' <<<"$round9_corpus") Release asset metadata/digest records (none downloaded/opened); $(jq -r '.public_adversarial.candidate_carrier_executions' <<<"$round9_corpus") executed; $(jq -r '.public_adversarial.candidate_carriers_not_provided' <<<"$round9_corpus") NOT_PROVIDED; direct $(jq -r '.public_adversarial.direct_active_blocked' <<<"$round9_corpus") blocked / $(jq -r '.public_adversarial.direct_active_allowed' <<<"$round9_corpus") allowed; $(jq -r '.public_adversarial.serialized_route_executions' <<<"$round9_corpus") serialized routes
+- Public adversarial v13: $(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus") formal unique ($(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus") historical + $(jq -r '.public_adversarial.unique_branch_head_payloads' <<<"$round9_corpus") branch-head + $(jq -r '.public_adversarial.unique_current_prompt_like_payloads' <<<"$round9_corpus") current prompt-like); $(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus") payload records; $(jq -r '.public_adversarial.unmerged_candidate_carriers' <<<"$round9_corpus") unmerged carrier; $(jq -r '.public_adversarial.nondefault_branch_candidate_carriers' <<<"$round9_corpus") active behind branches; $(jq -r '.public_adversarial.release_assets_reviewed' <<<"$round9_corpus") reviewed historical Release assets / $(jq -r '.public_adversarial.release_assets_with_prompt_entries' <<<"$round9_corpus") with prompt entries; $(jq -r '.public_adversarial.release_asset_metadata_records' <<<"$round9_corpus") Release asset metadata/digest records (none downloaded/opened); $(jq -r '.public_adversarial.candidate_carrier_executions' <<<"$round9_corpus") executed; $(jq -r '.public_adversarial.candidate_carriers_not_provided' <<<"$round9_corpus") NOT_PROVIDED; direct $(jq -r '.public_adversarial.direct_active_blocked' <<<"$round9_corpus") blocked / $(jq -r '.public_adversarial.direct_active_allowed' <<<"$round9_corpus") allowed; $(jq -r '.public_adversarial.serialized_route_executions' <<<"$round9_corpus") serialized routes
 - Independent malicious recall: $(jq -r '.independent_malicious.recall_basis_points' <<<"$round9_corpus") basis points
 - Audit schema v6; Raw Capture schema v4; CPA v7.2.95 counted-Mock PASS
 
@@ -1569,7 +1569,7 @@ EOF
           "$(jq -r '.paired_malicious.schema' <<<"$round9_machine_reports")" \
           "$(jq -r '.paired_malicious.bytes' <<<"$round9_machine_reports")" \
           "$(jq -r '.paired_malicious.sha256' <<<"$round9_machine_reports")"
-        printf -- '- Public adversarial v11: payloads=%s; formal_unique=%s; historical=%s; branch_head=%s; current_prompt_like=%s; unmerged_carriers=%s; nondefault_branches=%s; release_assets=%s; release_assets_with_prompts=%s; release_asset_metadata_records=%s; executed=%s; NOT_PROVIDED=%s; scenario_payloads=%s; serialized_routes=%s; direct_blocked=%s; direct_allowed=%s\n' \
+        printf -- '- Public adversarial v13: payloads=%s; formal_unique=%s; historical=%s; branch_head=%s; current_prompt_like=%s; unmerged_carriers=%s; nondefault_branches=%s; release_assets=%s; release_assets_with_prompts=%s; release_asset_metadata_records=%s; executed=%s; NOT_PROVIDED=%s; scenario_payloads=%s; serialized_routes=%s; direct_blocked=%s; direct_allowed=%s\n' \
           "$(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus")" \

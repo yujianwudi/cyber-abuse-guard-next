@@ -358,12 +358,12 @@ required_policy_lines=(
   "current_publication_write_permission: absent"
   "current_round9_gate_admission: workflow=Round 9 policy gate,path=.github/workflows/round9-gate.yml,event=push,branch=main,exact-commit,completed-success"
   "current_historical_workflow_disable_requirement: 315644586:release-rc.yml=disabled_manually,318443961:round8-host-validation.yml=disabled_manually"
-  "current_public_adversarial_corpus: round9-public-adversarial-v11"
-  "current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v11"
-  "current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v11"
+  "current_public_adversarial_corpus: round9-public-adversarial-v13"
+  "current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v13"
+  "current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v13"
   "current_public_adversarial_counts: payloads-24_formal-unique-23_historical-8_branch-head-1_prompt-like-14_unmerged-carriers-1_nondefault-branches-5_release-assets-16_release-assets-with-prompt-entries-4_release-asset-metadata-records-199_executed-1_not-provided-0_scenario-payloads-24_serialized-routes-120_direct-blocked-12_direct-allowed-12"
-  "current_public_adversarial_manifest_bytes: 476165"
-  "current_public_adversarial_manifest_sha256: 297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038"
+  "current_public_adversarial_manifest_bytes: 481448"
+  "current_public_adversarial_manifest_sha256: 91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6"
   "current_public_counted_mock_matrix: unique-10_routes-120_audit-allow-40_enforcement-block-80_upstream-40_usage-40"
   "current_development_paired_recall_requirement: aggregate-and-each-category-exactly-10000-basis-points"
   "current_independent_malicious_recall_requirement: aggregate-and-each-category-at-least-9500-basis-points"
@@ -398,8 +398,8 @@ for line in "${required_policy_lines[@]}"; do
     fail "docs/RELEASE_POLICY.md must contain exactly one policy line: $line"
 done
 
-required_public_v11_policy_markers=(
-  "The current public adversarial corpus is development-only v11 evidence under"
+required_public_v13_policy_markers=(
+  "The current public adversarial corpus is development-only v13 evidence under"
   "The original v8 manifest remains frozen"
   "The rejected attempt to rebind corrected bytes to the same v8 identity"
   "The disabled legacy verifier documents the prospective signer split"
@@ -410,9 +410,9 @@ required_public_v11_policy_markers=(
   'Before any public writer may be restored, an independent authority must provide'
   'The verifier does not create, sign, repair, or infer any of those external records.'
 )
-for marker in "${required_public_v11_policy_markers[@]}"; do
+for marker in "${required_public_v13_policy_markers[@]}"; do
   grep -Fq "$marker" "$policy" || \
-    fail "docs/RELEASE_POLICY.md is missing the active public-v11/release-attestation contract: $marker"
+    fail "docs/RELEASE_POLICY.md is missing the active public-v13/release-attestation contract: $marker"
 done
 if grep -Eq \
   'The current public adversarial corpus is development-only v[0-9] evidence' \

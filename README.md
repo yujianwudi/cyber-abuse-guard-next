@@ -57,7 +57,7 @@ classifier.
 | CPA source/compile target | `v7.2.95` (`f71ec0eb6776854457892452cf28c47f0d658251`) |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
-| Public adversarial corpus | `round9-public-adversarial-v11` / 476,165 bytes / SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
+| Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
 | Independent audit | **REQUIRED / NOT PROVIDED**; development self-tests do not satisfy this gate |
 | Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
 | v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
@@ -250,11 +250,11 @@ policy.
   freeze. The exact announced v8 is immutable-invalid at 105,299 bytes /
   SHA-256 `5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f`;
   the corrected in-place 105,298-byte / `2f953da4…` v8 rebind is retained only
-as rejected evidence. Active evidence is `round9-public-adversarial-v11` at
-476,165 bytes / SHA-256
-`297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`;
+as rejected evidence. Active evidence is `round9-public-adversarial-v13` at
+481,448 bytes / SHA-256
+`91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`;
 its 199 GitHub Release assets are metadata/digest records only and no binary
-asset was downloaded or opened. V10 and v9 remain immutable history; v9 is
+asset was downloaded or opened. V12, v11, v10, and v9 remain immutable history; v9 is
 105,888 bytes / SHA-256
 `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.
   This visible corpus is not an independent holdout or production approval.

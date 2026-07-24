@@ -986,7 +986,7 @@ CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
     "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
 }
-RC_RELEASE_SCRIPT_SHA256 = "b60f8e6c31e2ac2e21f30a2c117c6119bb8a8576e2ce3ed20ea47b46d29b98d2"
+RC_RELEASE_SCRIPT_SHA256 = "1c69f310a252b393e5fbe6c1a140086f07f03c1ef37ad0f03a0ac1a01267feb9"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
 RELEASE_BUILD_METADATA_SCRIPT_SHA256 = (
     "6d5312459fd238f35ddbdee6c79779cb340fba4029f49f7f6490b64f639a259c"
@@ -1085,22 +1085,22 @@ ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
 ROUND9_GATE_WORKFLOW_SHA256 = "2c71516851b1a2743c3d23434c6e330eafd44ee7cea2930fe8c3697fbb2a979a"
 ROUND9_HOST_WORKFLOW_SHA256 = "cae1b9db0d22a9bab0dbbccacc3dc688a8308ed450304374a6f0722843e717c0"
-ROUND9_RC_WORKFLOW_SHA256 = "40405cb996ea8aaefb6401d067c3b766ea9f2df30c206d2794267ba5b4c035b5"
+ROUND9_RC_WORKFLOW_SHA256 = "20c59c3b72a39753be446df7393f2879397003d559a1c08cd1d9eab57041ba33"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
 ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT = (
     "scripts/round9_independent_audit_contract_test.py"
 )
 ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256 = {
     ROUND9_INDEPENDENT_AUDIT_SCRIPT: (
-        "1b148b9826d5f1d6fafb1c11ea4e2546bc927524a3b2008ea1f9f5b573389d44"
+        "4ef8292fa596b2e0a9007194585b24b082e897c3f3524718d96dab82fbeaf456"
     ),
     ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT: (
-        "d7344d5860da050c20e63a89bcf061cb0843722e3c710295cf35faba4c85a3e4"
+        "34fe3089cb9ffe695f577db9325bfc52e96ebeb807fe6d66aa22f44f5c655b33"
     ),
 }
 ROUND9_MACHINE_REPORT_SCRIPT = "scripts/round9_machine_reports.py"
 ROUND9_MACHINE_REPORT_SCRIPT_SHA256 = (
-    "246e08150bb6b21035639b6497fd8346d947a4b3f8839fd746b8163573c27f8e"
+    "9ea70f3a01f79b41effbc0fb56bb7ddc77e9024a5a7f57c3115e1c909dbc1919"
 )
 ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
     2,
@@ -1108,7 +1108,7 @@ ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
-    "4594a969eb8d9a83955287207ed86ad5f045bf980a52aebe7d4442e63ef51785"
+    "752c5766423239cd41e640f8e5a23c04379a1bf3ed34063d81b7ab06c91def25"
 )
 ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1283,11 +1283,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "c7c4367d84f74a78ae10417955e2e7c7dfa9f3d4382eff20d0f524ac9846d725"
+    "b873cca3496b7e781a4af0734dbf5f357a6f60bfa07e738ae0b11611603fe741"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "8ecff0456607bce8d61fe6210e539492b9c4399db9429d9d810ac9239c4926d1",
-    "scripts/release-doc-consistency.sh": "220bab5325a322f0d5d645e26efccbaba73eb0c2819a6ab8bdb8a24c004c84ce",
+    "scripts/release-doc-consistency-test.sh": "559e890e6b3b03b2bb108e558fc5ebe70d010caff2f27959bc490fbdca20c326",
+    "scripts/release-doc-consistency.sh": "069a9280555ea60d6abc178bc747d3d503a7b0903cf8803c500900d64d8e2b78",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1342,15 +1342,15 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
     "scripts/round8_docker_sandbox.py": "30585beb793b7d35d842adce962fdc111eb76ef6a5ec963b6ab52470bbc64301",
 }
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "607f4c673fd050811c9c3e6f01d36048378210949bb95a0500b03c7b72986d2e",
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "66c0a3dab8f7b5caebb85e52938dcc763b7c96cc581def47a9a8033040f6f90b",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "aef764bec0e0cc4e96d7d42b56255f91317fb53b947a10e08f56ee0971b9c62d",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "df006d0a36aa68d90350221dd7401be17979c4931cb038cbdc226350a71ea6a5",
     "tools/round9-eval/cag_round9_eval_broker.py": "ba967771932a7e7aaa99ea31710cc391e56b0b77c5fe7f35ba4c5b9462000201",
-    "tools/round9-eval/cag_round9_eval_broker_test.py": "bb9c5d62141a93f9df6a6f30339f536d20e9983118c2ad424a7d0c95841f6925",
+    "tools/round9-eval/cag_round9_eval_broker_test.py": "3c1a55d0c845e46e2ca1070ec196fd8d9bc4c4ca99e1ef8f7055ec2ed1fda91d",
     "tools/round9-eval/cag_round9_external_evaluator.py": "0c4b4eb0877824dbea8578845ba2b4da707b6ccfde2ab792e0b3401f44cbfb04",
-    "tools/round9-eval/cag_round9_external_evaluator_test.py": "c43bb07b615abe8f8a49f06d7c53cd58640a23a05b1b4d2e4b082cce275028c3",
-    "tools/round9-eval/round9_eval_core.py": "fb75d314d25361b60404af473a0a469d04e344bc25c8d90c5641ccea34e078ec",
+    "tools/round9-eval/cag_round9_external_evaluator_test.py": "e58e1808c9413a44a547b32cdb0353eeb86275cb1dfe78458f0736b7c3d42ca5",
+    "tools/round9-eval/round9_eval_core.py": "6e4d961e6b63469608d6bbd95888c7868d8187c9a4f740ad60dd817e84569f5c",
     "tools/round9-eval/round9_eval_core_test.py": "6e62fc522f4067efc8e50271e8ae112117566ec6d3c603ae0260b6ffd66ae06e",
-    "tools/round9-eval/round9_eval_test_fixtures.py": "e6eb4584dc9c200bacbdc269cf2ac57c29649498323cce38e54a4ab1dbf8b05d",
+    "tools/round9-eval/round9_eval_test_fixtures.py": "6879e1feaedd85745d9490e2d4928bd05a3800dc2b670bc8037b5a79ad8a4fe0",
 }
 ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": (
@@ -1429,7 +1429,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "337d93df8a7d7db54765fbf555bb2e7640fe4605f6fa7956da5492a75a42cc62"
+ROUND6_SAFE_GATE_TEST_SHA256 = "d671cc809f63eb9ba2851cac32f9e3fd6db0e2c0b7b9adc8acc4cf2cddbf378e"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "d51fe316a686c1b4dd629f6a7b63f4159b882095811fcdea3311255527bd5da1"
 
 
@@ -3805,7 +3805,7 @@ def validate_release_mode_contracts(root: Path) -> None:
             "docs/ROUND9_HOST_RUNNER.md",
             "docs/ROUND9_OPERATOR_ROLLOUT.md",
             "docs/reports/ROUND9_EXECUTION_RECORD.md",
-            "Public adversarial v11",
+            "Public adversarial v13",
             'initial_mode: "audit"',
             'phase_order: ["audit", "balanced", "strict"]',
             'status_required_after_each_phase_transition: true',
@@ -3825,13 +3825,13 @@ def validate_release_mode_contracts(root: Path) -> None:
                 raise ContractError(
                     "RC release artifact script must preserve the Round 9 schema-6 external-evaluation contract"
                 )
-        if rc_script.count("Public adversarial v11") != 2:
+        if rc_script.count("Public adversarial v13") != 2:
             raise ContractError(
-                "RC release artifact script must bind public adversarial v11 in both release summaries"
+                "RC release artifact script must bind public adversarial v13 in both release summaries"
             )
-        if "Public adversarial v10" in rc_script:
+        if "Public adversarial v12" in rc_script:
             raise ContractError(
-                "RC release artifact script retains the stale public adversarial v10 label"
+                "RC release artifact script retains the stale public adversarial v12 label"
             )
         fixed_binding = 'host_ip: "127.0.0.1", host_port: 18394, container_port: 8317'
         if rc_script.count(fixed_binding) != 2:
@@ -8045,8 +8045,8 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             "Round 9 RC workflow must run independent-audit verifier tests in build and publish"
         )
 
-    public_v11_marker_counts = {
-        'round9-public-adversarial-report/v11': 3,
+    public_v13_marker_counts = {
+        'round9-public-adversarial-report/v13': 3,
         '.round9.corpus.public_adversarial.payload_records == 24': 3,
         '.round9.corpus.public_adversarial.unique_formal_payloads == 23': 3,
         '.round9.corpus.public_adversarial.unique_historical_payloads == 8': 2,
@@ -8062,10 +8062,10 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         '.round9.corpus.public_adversarial.direct_active_blocked == 12': 2,
         '.round9.corpus.public_adversarial.direct_active_allowed == 12': 2,
     }
-    for marker, expected_count in public_v11_marker_counts.items():
+    for marker, expected_count in public_v13_marker_counts.items():
         if text.count(marker) != expected_count:
             raise ContractError(
-                f"Round 9 RC workflow must bind the public-v11 marker in every reviewed phase: {marker}"
+                f"Round 9 RC workflow must bind the public-v13 marker in every reviewed phase: {marker}"
             )
 
     external_v3_marker_counts = {
@@ -9208,7 +9208,7 @@ def validate_round6_makefile_contract(text: str, source: Path) -> None:
         "@$(GO) test ./internal/extract -list='^BenchmarkRound6ScanLongJSON$$' | grep -Fxq 'BenchmarkRound6ScanLongJSON' || { echo 'required Round6 long-JSON benchmark is missing' >&2; exit 1; }",
         "$(GO) test ./internal/extract -run='^$$' -bench='^BenchmarkRound6ScanLongJSON$$' -benchmem -benchtime=1x -count=1",
         "@$(GO) test ./internal/audit -list='^TestRawCapturePerformanceAcceptance$$' | grep -Fxq 'TestRawCapturePerformanceAcceptance' || { echo 'required raw-capture performance acceptance test is missing' >&2; exit 1; }",
-        "$(GO) test ./internal/audit -count=1 -v -run='^TestRawCapturePerformanceAcceptance$$'",
+        "CAG_RAW_CAPTURE_PERFORMANCE_ACCEPTANCE=1 $(GO) test ./internal/audit -count=1 -v -run='^TestRawCapturePerformanceAcceptance$$'",
         "@listed=\"$$($(GO) test ./internal/audit -list='^(BenchmarkPrepareRawCapture|BenchmarkRecordRawCaptureQueue|BenchmarkEnqueueEventWithRawCapture)$$')\" || exit $$?; for benchmark_name in BenchmarkPrepareRawCapture BenchmarkRecordRawCaptureQueue BenchmarkEnqueueEventWithRawCapture; do printf '%s\\n' \"$$listed\" | grep -Fxq \"$$benchmark_name\" || { echo \"required raw-capture benchmark $$benchmark_name is missing\" >&2; exit 1; }; done",
         "$(GO) test ./internal/audit -run='^$$' -bench='^(BenchmarkPrepareRawCapture|BenchmarkRecordRawCaptureQueue|BenchmarkEnqueueEventWithRawCapture)$$' -benchmem -benchtime=1x -count=1",
         "@$(GO) test -tags=$(TEST_TAGS) ./internal/plugin -list='^TestRawCaptureManagementResponsePerformanceAcceptance$$' | grep -Fxq 'TestRawCaptureManagementResponsePerformanceAcceptance' || { echo 'required raw-capture management performance acceptance test is missing' >&2; exit 1; }",

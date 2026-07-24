@@ -14,7 +14,7 @@ import (
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
 )
 
-func TestRound9PublicCorpusV11RetainsV1ThroughV10UniquePayloads(t *testing.T) {
+func TestRound9PublicCorpusV13RetainsV1ThroughV12UniquePayloads(t *testing.T) {
 	t.Parallel()
 	root := publicCorpusRepositoryRoot(t)
 	historical := []struct {
@@ -32,6 +32,8 @@ func TestRound9PublicCorpusV11RetainsV1ThroughV10UniquePayloads(t *testing.T) {
 		{dataset: "round9-public-adversarial-v8", bytes: 105299, sha256: "5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f"},
 		{dataset: "round9-public-adversarial-v9", bytes: 105888, sha256: "dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38"},
 		{dataset: "round9-public-adversarial-v10", bytes: 183752, sha256: "bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d"},
+		{dataset: "round9-public-adversarial-v11", bytes: 476165, sha256: "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038"},
+		{dataset: "round9-public-adversarial-v12", bytes: 485221, sha256: "eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387"},
 	}
 	for _, identity := range historical {
 		data, err := os.ReadFile(filepath.Join(root, "testdata", identity.dataset, "manifest.json"))
@@ -44,7 +46,7 @@ func TestRound9PublicCorpusV11RetainsV1ThroughV10UniquePayloads(t *testing.T) {
 		}
 	}
 
-	previousDirectory := filepath.Join(root, "testdata", "round9-public-adversarial-v10")
+	previousDirectory := filepath.Join(root, "testdata", "round9-public-adversarial-v12")
 	previousManifestData, err := os.ReadFile(filepath.Join(previousDirectory, "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +59,7 @@ func TestRound9PublicCorpusV11RetainsV1ThroughV10UniquePayloads(t *testing.T) {
 	if err := json.Unmarshal(previousManifestData, &previous); err != nil {
 		t.Fatal(err)
 	}
-	if previous.Schema != "round9-public-adversarial-corpus/v10" || previous.Dataset != "round9-public-adversarial-v10" {
+	if previous.Schema != "round9-public-adversarial-corpus/v12" || previous.Dataset != "round9-public-adversarial-v12" {
 		t.Fatalf("unexpected prior corpus identity: schema=%q dataset=%q", previous.Schema, previous.Dataset)
 	}
 
@@ -82,7 +84,7 @@ func TestRound9PublicCorpusV11RetainsV1ThroughV10UniquePayloads(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(previousEncoded, currentEncoded) {
-			t.Fatalf("unique payload index %d encoded bytes differ from frozen v10", index)
+			t.Fatalf("unique payload index %d encoded bytes differ from frozen v12", index)
 		}
 	}
 }
@@ -200,7 +202,7 @@ func TestRound9PublicCorpusV8RejectedRebindRetention(t *testing.T) {
 	for _, before := range rejected.Payloads {
 		after, ok := activePayloads[before.ID]
 		if !ok || before.EncodedFile != after.EncodedFile || before.DecodedBytes != after.DecodedBytes || before.DecodedSHA256 != after.DecodedSHA256 {
-			t.Fatalf("payload %q identity differs between rejected v8 rebind and active v11", before.ID)
+			t.Fatalf("payload %q identity differs between rejected v8 rebind and active v13", before.ID)
 		}
 		beforeEncoded, err := os.ReadFile(filepath.Join(rejectedDirectory, filepath.FromSlash(before.EncodedFile)))
 		if err != nil {
@@ -211,12 +213,12 @@ func TestRound9PublicCorpusV8RejectedRebindRetention(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(beforeEncoded, afterEncoded) {
-			t.Fatalf("payload %q encoded bytes differ between rejected v8 rebind and active v11", before.ID)
+			t.Fatalf("payload %q encoded bytes differ between rejected v8 rebind and active v13", before.ID)
 		}
 	}
 }
 
-func TestRound9PublicCorpusV11Identity(t *testing.T) {
+func TestRound9PublicCorpusV13Identity(t *testing.T) {
 	t.Parallel()
 	root := publicCorpusRepositoryRoot(t)
 	manifestData, err := os.ReadFile(filepath.Join(root, "testdata", datasetName, "manifest.json"))
@@ -224,8 +226,8 @@ func TestRound9PublicCorpusV11Identity(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifestSum := sha256.Sum256(manifestData)
-	if len(manifestData) != 476165 || fmt.Sprintf("%x", manifestSum) != "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038" {
-		t.Fatalf("round9 public v11 manifest identity drift: bytes=%d sha256=%x", len(manifestData), manifestSum)
+	if len(manifestData) != 481448 || fmt.Sprintf("%x", manifestSum) != "91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6" {
+		t.Fatalf("round9 public v13 manifest identity drift: bytes=%d sha256=%x", len(manifestData), manifestSum)
 	}
 	var manifest publicManifest
 	if err := decodeStrictJSON(manifestData, &manifest); err != nil {
@@ -238,7 +240,7 @@ func TestRound9PublicCorpusV11Identity(t *testing.T) {
 		manifest.ReleaseAssetMetadataRecords != expectedAssetMetadata ||
 		promptLikeReviewSHA256(manifest.PromptLikeDeltaReview.ExcludedSources) != expectedDeltaReviewSHA256 {
 		t.Fatalf(
-			"round9 public v11 structural identity drift: schema=%q dataset=%q branches=%d assets=%d prompt_assets=%d metadata_assets=%d review=%q",
+			"round9 public v13 structural identity drift: schema=%q dataset=%q branches=%d assets=%d prompt_assets=%d metadata_assets=%d review=%q",
 			manifest.Schema,
 			manifest.Dataset,
 			manifest.NondefaultBranchCandidateCarriers,
@@ -259,7 +261,7 @@ func TestRound9PublicCorpusV11Identity(t *testing.T) {
 	}
 }
 
-func TestRound9PublicCorpusV11ClassifierScenarios(t *testing.T) {
+func TestRound9PublicCorpusV13ClassifierScenarios(t *testing.T) {
 	metrics, err := validatePublicCorpus(publicCorpusRepositoryRoot(t), true)
 	if err != nil {
 		t.Fatal(err)
@@ -271,7 +273,7 @@ func TestRound9PublicCorpusV11ClassifierScenarios(t *testing.T) {
 	}
 }
 
-func TestRound9PublicCorpusV11PromptLikeDefensiveScenarios(t *testing.T) {
+func TestRound9PublicCorpusV13PromptLikeDefensiveScenarios(t *testing.T) {
 	root := publicCorpusRepositoryRoot(t)
 	manifest := loadPublicManifest(t)
 	directory := filepath.Join(root, "testdata", datasetName)
@@ -345,7 +347,7 @@ func TestRound9PublicCorpusRejectsCarrierSourceAndReviewProvenanceDrift(t *testi
 	manifest = loadPublicManifest(t)
 	manifest.PromptLikeDeltaReview.ExcludedSources[0].SHA256 = strings.Repeat("0", 64)
 	if err := validatePromptLikeDeltaReview(manifest.PromptLikeDeltaReview, repositoryIndex(manifest.Repositories), manifest.Payloads); err == nil {
-		t.Fatal("mutated v11 excluded-source file digest was accepted")
+		t.Fatal("mutated v13 excluded-source file digest was accepted")
 	}
 }
 

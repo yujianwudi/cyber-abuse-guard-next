@@ -314,7 +314,7 @@ def validate_manifest(
         fail("Round 9 release identity differs")
     body = release.get("body")
     if not isinstance(body, str) or not all(
-        marker in body for marker in ("Public adversarial v11", "latest=false", "independent audit")
+        marker in body for marker in ("Public adversarial v13", "latest=false", "independent audit")
     ):
         fail("Round 9 release body does not retain the reviewed claim boundary")
     allowlist = release.get("asset_allowlist")
