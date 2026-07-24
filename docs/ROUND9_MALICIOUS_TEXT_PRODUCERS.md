@@ -35,7 +35,7 @@ The current closure has four layers:
 The Go contract fails closed when a new producer or block-capable caller is not
 registered, a registered AST identity drifts, a gate function drifts, or the
 `CandidateBlockEligibility` branch is bypassed. Its negative fixtures exercise
-all three failure classes.
+all four failure classes.
 
 This is static closure evidence for the reviewed source tree. It is not runtime
 audit evidence, independent review, exact-candidate Host evidence, or proof

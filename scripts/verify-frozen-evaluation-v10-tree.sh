@@ -13,6 +13,13 @@ paths=(
 # Check only Git metadata. The clean-history successor repository must retain
 # no consumed evaluation-v10 path in the worktree, index, or reachable history.
 # Do not print the status payload, object listing, or read any payload blobs.
+for path in "${paths[@]}"; do
+  if [[ -e "$root/$path" || -L "$root/$path" ]]; then
+    printf 'consumed evaluation-v10 path remains in the worktree: %s\n' "$path" >&2
+    exit 1
+  fi
+done
+
 status="$(git -C "$root" status --porcelain=v1 --untracked-files=all -- "${paths[@]}")"
 if [[ -n "$status" ]]; then
   printf 'frozen evaluation-v10 paths have staged, unstaged, or untracked changes\n' >&2

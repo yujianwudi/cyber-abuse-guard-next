@@ -1276,7 +1276,7 @@ REPRODUCIBILITY_WRAPPER_SCRIPT_SHA256 = (
 )
 FROZEN_EVALUATION_TREE_SCRIPT = "scripts/verify-frozen-evaluation-v10-tree.sh"
 FROZEN_EVALUATION_TREE_SCRIPT_SHA256 = (
-    "077de76d195776c5263f8861efdcb073daf4fffb81bc160da48774735cf78609"
+    "18c5a6d8adcae724f15742b21995a5d5c0cc2484cb7ac2c56d5c23ddf121d256"
 )
 FROZEN_EVALUATION_STATUS_COMMAND = (
     'status="$(git -C "$root" status --porcelain=v1 --untracked-files=all -- "${paths[@]}")"'
@@ -1344,7 +1344,7 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "607f4c673fd050811c9c3e6f01d36048378210949bb95a0500b03c7b72986d2e",
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "66c0a3dab8f7b5caebb85e52938dcc763b7c96cc581def47a9a8033040f6f90b",
-    "tools/round9-eval/cag_round9_eval_broker.py": "ddc0de686483ec7bc3801928b930ae4f11602f556f56a0df7277b199030fb447",
+    "tools/round9-eval/cag_round9_eval_broker.py": "ba967771932a7e7aaa99ea31710cc391e56b0b77c5fe7f35ba4c5b9462000201",
     "tools/round9-eval/cag_round9_eval_broker_test.py": "bb9c5d62141a93f9df6a6f30339f536d20e9983118c2ad424a7d0c95841f6925",
     "tools/round9-eval/cag_round9_external_evaluator.py": "0c4b4eb0877824dbea8578845ba2b4da707b6ccfde2ab792e0b3401f44cbfb04",
     "tools/round9-eval/cag_round9_external_evaluator_test.py": "c43bb07b615abe8f8a49f06d7c53cd58640a23a05b1b4d2e4b082cce275028c3",
@@ -8104,7 +8104,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
     for marker, expected_count in external_v3_marker_counts.items():
         if text.count(marker) != expected_count:
             raise ContractError(
-                f"Round 9 RC workflow external-v2/count-Mock binding changed: {marker}"
+                f"Round 9 RC workflow external-v3/count-Mock binding changed: {marker}"
             )
 
     threshold_marker_counts = {

@@ -912,8 +912,10 @@ def safe_extract_public_development_corpus(
             path.is_absolute()
             or any(part in {"", ".", ".."} for part in path.parts)
             or str(path) != stripped
-            or not stripped.startswith(archive_prefix.rstrip("/") + "/")
-            and stripped != archive_prefix.rstrip("/")
+            or (
+                not stripped.startswith(archive_prefix.rstrip("/") + "/")
+                and stripped != archive_prefix.rstrip("/")
+            )
         ):
             fail("Phase 1 source archive contains an entry outside its fixed prefix")
         return stripped

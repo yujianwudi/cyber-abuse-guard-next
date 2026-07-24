@@ -6,7 +6,7 @@ verified through the GitHub API. They are **not claimed to be enabled merely
 because this document exists**.
 
 The controls below are to be enabled only after the current hardening pull
-request has passed all four named checks, has been merged, and the corresponding
+request has passed all five named checks, has been merged, and the corresponding
 checks have appeared successfully for the repository. Creating required checks
 before their successful contexts exist can lock the default branch.
 
