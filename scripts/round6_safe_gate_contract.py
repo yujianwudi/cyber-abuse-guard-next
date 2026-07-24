@@ -517,7 +517,7 @@ SOURCE_RELEASE_EXCLUSION_CONTRACT_TEST_SCRIPT = (
     "scripts/source-release-exclusion-contract-test.sh"
 )
 SOURCE_RELEASE_EXCLUSION_CONTRACT_TEST_SHA256 = (
-    "cd5e757f760762db301f27b50626b587c85c258b04a952331eebba6fba187992"
+    "7d0815e9de02a3b1adecb6bd7af6d0b8241be88e50ae9b235c3f7873b3fe84b4"
 )
 SOURCE_RELEASE_SAFE_SHELL_FIXTURE_LINE = "  internal/config/id_rsa_policy.go; do"
 SOURCE_RELEASE_SAFE_SCRIPT_PATH_FIXTURE_LINE = "  scripts/package-tar-gz.sh \\"
@@ -587,7 +587,13 @@ CONSUMED_BOUNDARY_LINES = {
         "  '!/testdata/round9-independent-*/**'",
         "  '!/.round9-local-sandbox/**'",
         'git -C "$sparse_fixture" sparse-checkout set --no-cone "${sparse_patterns[@]}"',
-        "if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)' <<<\"$listing\"; then",
+        "verifier_path='scripts/round9_external_evaluation_contract.py'",
+        "verifier_sha256='4c330ece27ce5e000f13ebc06bff6dbcaa2f18b5b62f73f940e78591051fae7e'",
+        "verifier_test_path='scripts/round9_external_evaluation_contract_test.py'",
+        "verifier_test_sha256='f42625714cb46b89a4bc32a1ec52c2352d6f9c67f5f782ea117d08e7650c43c9'",
+        'verifier_sha="$(tar -xOf "$archive" "$verifier_path" | sha256sum | awk \'{print $1}\')"',
+        'verifier_test_sha="$(tar -xOf "$archive" "$verifier_test_path" | sha256sum | awk \'{print $1}\')"',
+        "if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)' <<<\"$restricted_listing\"; then",
         "transient_path_pattern='(^|/)(classifier_(candidate|single)_[^/]*|[^/]*\\.(cpu|mem|pprof|test\\.exe|exe))($|/)'",
         "test_binary_path_pattern='(^|/)[^/]*\\.test($|/)'",
         "safe_test_source_pattern='(^|/)Dockerfile\\.test($|/)'",
@@ -977,10 +983,10 @@ CANDIDATE_ARTIFACTS = (
     "dist/candidate-manifest.json",
 )
 CANDIDATE_SCRIPT_SHA256 = {
-    "round6-candidate-artifacts.sh": "3f45700378adc9fe2f4d5194fa8466020f54b8e3b05f8df634f89e4341515676",
+    "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
     "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
 }
-RC_RELEASE_SCRIPT_SHA256 = "e1a1befcdb3e7ab23cf5fb6bc264ae1940b2c38b239fa7073784c0b0deaa8f35"
+RC_RELEASE_SCRIPT_SHA256 = "b60f8e6c31e2ac2e21f30a2c117c6119bb8a8576e2ce3ed20ea47b46d29b98d2"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
 RELEASE_BUILD_METADATA_SCRIPT_SHA256 = (
     "6d5312459fd238f35ddbdee6c79779cb340fba4029f49f7f6490b64f639a259c"
@@ -1075,26 +1081,26 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     rm -f -- "$temporary"
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
-ACTIVE_RC_WORKFLOW_SHA256 = "5b3be6f0d9813820d04570801517d8f8f32541c3bca626316e0eb47fd68f5e62"
-ROUND8_HOST_WORKFLOW_SHA256 = "62effadf742b3308761e2c833a43c004d18079a6a28af06d5d013bd0eb05b7b1"
+ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
+ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
 ROUND9_GATE_WORKFLOW_SHA256 = "2c71516851b1a2743c3d23434c6e330eafd44ee7cea2930fe8c3697fbb2a979a"
 ROUND9_HOST_WORKFLOW_SHA256 = "cae1b9db0d22a9bab0dbbccacc3dc688a8308ed450304374a6f0722843e717c0"
-ROUND9_RC_WORKFLOW_SHA256 = "48c1f6b3dbd97cfa26ad173ed5c9e6662620fa156520754cd01716a2675bb5bc"
+ROUND9_RC_WORKFLOW_SHA256 = "40405cb996ea8aaefb6401d067c3b766ea9f2df30c206d2794267ba5b4c035b5"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
 ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT = (
     "scripts/round9_independent_audit_contract_test.py"
 )
 ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256 = {
     ROUND9_INDEPENDENT_AUDIT_SCRIPT: (
-        "07cd6ae2df4b842bd7ae6d91ef798f43c67ae424659868e0161ec8a3719c3473"
+        "1b148b9826d5f1d6fafb1c11ea4e2546bc927524a3b2008ea1f9f5b573389d44"
     ),
     ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT: (
-        "692556e299aa81233e92b1de48549f5ec1742a9f6ae4c0c0e138414f6a09ebc5"
+        "d7344d5860da050c20e63a89bcf061cb0843722e3c710295cf35faba4c85a3e4"
     ),
 }
 ROUND9_MACHINE_REPORT_SCRIPT = "scripts/round9_machine_reports.py"
 ROUND9_MACHINE_REPORT_SCRIPT_SHA256 = (
-    "5b8f1bc004c2ce58ed8f7e5092e1a1e924f76118d160ac1fa79738b691506f10"
+    "246e08150bb6b21035639b6497fd8346d947a4b3f8839fd746b8163573c27f8e"
 )
 ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
     2,
@@ -1102,7 +1108,7 @@ ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
-    "75db380b8b9b498b417e2b5f322f84d9c0d5d9ae234ea21be2f5cd2b4f258235"
+    "4594a969eb8d9a83955287207ed86ad5f045bf980a52aebe7d4442e63ef51785"
 )
 ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1204,7 +1210,7 @@ ROUND8_HOST_STEP_RUN_SHA256 = {
     9: "9a80a01795c411bd5bd269f49951765bd349a16b925c8027f5663d0e24d27c19",
 }
 ROUND8_BASE_STEP_RUN_SHA256 = {
-    0: "eebf31a5fa4e12cf0e45bb1b199d4bed0975686a2b0657ca5f2f0648c29f139c",
+    0: "083c67c86749f4f988952b912fd1eafa32b97998417d0cbcd4d1be423b71ecdf",
     1: "0d6ed073233abaa1e9b7849828fdc63b77166c35c6f4a15bf07a73437d6bfdb6",
 }
 CODEQL_WORKFLOW_SHA256 = "4ec3510381b925ea154845e046023a5717af63916cf661e9de7caf8b4cfc7405"
@@ -1270,18 +1276,18 @@ REPRODUCIBILITY_WRAPPER_SCRIPT_SHA256 = (
 )
 FROZEN_EVALUATION_TREE_SCRIPT = "scripts/verify-frozen-evaluation-v10-tree.sh"
 FROZEN_EVALUATION_TREE_SCRIPT_SHA256 = (
-    "eda0524cfc297095edc018b710fc18a98312914112968dba2d094f0e8a03aac2"
+    "077de76d195776c5263f8861efdcb073daf4fffb81bc160da48774735cf78609"
 )
 FROZEN_EVALUATION_STATUS_COMMAND = (
     'status="$(git -C "$root" status --porcelain=v1 --untracked-files=all -- "${paths[@]}")"'
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "67a4041f43fda15d9b2542a2e40da8eac25ac5f8e99e795b471d206440ae13a8"
+    "c7c4367d84f74a78ae10417955e2e7c7dfa9f3d4382eff20d0f524ac9846d725"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "49f511a5f511d81779875157857330c65faf386a4293abd844e904b1e9da7f7f",
-    "scripts/release-doc-consistency.sh": "a7860432ce617cb5b7a4f185cbdeee844f5e143a62e33e79e397ea175c90a6dc",
+    "scripts/release-doc-consistency-test.sh": "8ecff0456607bce8d61fe6210e539492b9c4399db9429d9d810ac9239c4926d1",
+    "scripts/release-doc-consistency.sh": "220bab5325a322f0d5d645e26efccbaba73eb0c2819a6ab8bdb8a24c004c84ce",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1336,15 +1342,15 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
     "scripts/round8_docker_sandbox.py": "30585beb793b7d35d842adce962fdc111eb76ef6a5ec963b6ab52470bbc64301",
 }
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "ca4bce5d13391e914e567466b0a88f2cfc2a4f56f65b2fc778c8fe667a499879",
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "14f6cd84f97fec809660c3cfb36c7eb42f610cdd45dd27ee2654c3ef48664418",
-    "tools/round9-eval/cag_round9_eval_broker.py": "3586ab1da146064e9ab21f4422b946cf328e81cd1202a4ebd9d834e47c354be4",
-    "tools/round9-eval/cag_round9_eval_broker_test.py": "c19d95369e5d146ec55f0a257013ba14891ab1c5b60ccd84cf19628c2c33f1dd",
-    "tools/round9-eval/cag_round9_external_evaluator.py": "a107ff8d715eb0dd48711ea04f6eaa5e956849e8cc96689bc3e10b13d30ff691",
-    "tools/round9-eval/cag_round9_external_evaluator_test.py": "8a5c26fa4af32de799aed8111c2567cba0591c46ab6fef03414535e6de700eef",
-    "tools/round9-eval/round9_eval_core.py": "0f35796c2ca3c24b74dd5f5da7a999df83b26e2760ef3ef5e177753b5a57bffd",
-    "tools/round9-eval/round9_eval_core_test.py": "89a5fb5032fa6a6d300899639d4e9947f182164beab66f9384f29127c57567ce",
-    "tools/round9-eval/round9_eval_test_fixtures.py": "270ed774a517efa87096bfa97b7583079599b22b644b7b1f0d9e48445ad5058b",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "607f4c673fd050811c9c3e6f01d36048378210949bb95a0500b03c7b72986d2e",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "66c0a3dab8f7b5caebb85e52938dcc763b7c96cc581def47a9a8033040f6f90b",
+    "tools/round9-eval/cag_round9_eval_broker.py": "ddc0de686483ec7bc3801928b930ae4f11602f556f56a0df7277b199030fb447",
+    "tools/round9-eval/cag_round9_eval_broker_test.py": "bb9c5d62141a93f9df6a6f30339f536d20e9983118c2ad424a7d0c95841f6925",
+    "tools/round9-eval/cag_round9_external_evaluator.py": "0c4b4eb0877824dbea8578845ba2b4da707b6ccfde2ab792e0b3401f44cbfb04",
+    "tools/round9-eval/cag_round9_external_evaluator_test.py": "c43bb07b615abe8f8a49f06d7c53cd58640a23a05b1b4d2e4b082cce275028c3",
+    "tools/round9-eval/round9_eval_core.py": "fb75d314d25361b60404af473a0a469d04e344bc25c8d90c5641ccea34e078ec",
+    "tools/round9-eval/round9_eval_core_test.py": "6e62fc522f4067efc8e50271e8ae112117566ec6d3c603ae0260b6ffd66ae06e",
+    "tools/round9-eval/round9_eval_test_fixtures.py": "e6eb4584dc9c200bacbdc269cf2ac57c29649498323cce38e54a4ab1dbf8b05d",
 }
 ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": (
@@ -1356,8 +1362,8 @@ ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
         "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     ),
     "tools/round9-eval/cag_round9_eval_broker.py": (
-        6,
-        "8035fc1438296ce2b7d10cfb12befb8d5d26ee534c7b41019245fc28a6b59791",
+        7,
+        "217c672077bf01c668de2569f5bb7a179b357fbe0e6861f8eac7428728f24127",
     ),
     "tools/round9-eval/cag_round9_eval_broker_test.py": (
         0,
@@ -1369,7 +1375,7 @@ ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
     ),
     "tools/round9-eval/cag_round9_external_evaluator_test.py": (
         2,
-        "1e8764b30400c5ea7f07aa94abde792ef74b72ef504ee13efcdb97ee49dab90e",
+        "5abef5d748263f1a5023287fb6253abe789e70b10300d56ad0e9c772ddf816fe",
     ),
     "tools/round9-eval/round9_eval_core.py": (
         2,
@@ -1386,7 +1392,7 @@ ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
 }
 ROUND9_EVAL_INSTALL_SCRIPT = "tools/round9-eval/install.sh"
 ROUND9_EVAL_INSTALL_SCRIPT_SHA256 = (
-    "1fcebc7def039adc1a0319a31d814d461f413a201bf220bc10a679ecceb851dc"
+    "99c851fb92d0e840ee6e1c0021890455743131b7882d47b12e5e09aa5fb1ee0d"
 )
 ROUND9_HOST_EVIDENCE_TEST_SCRIPT = "scripts/round9-host-evidence-test.py"
 ROUND9_HOST_EVIDENCE_TEST_SCRIPT_SHA256 = (
@@ -1398,7 +1404,7 @@ ROUND9_HOST_EVIDENCE_TEST_SUBPROCESS_CONTRACT = (
 )
 ROUND9_HOST_EVIDENCE_SCRIPT = "scripts/round9_host_evidence.py"
 ROUND9_HOST_EVIDENCE_SCRIPT_SHA256 = (
-    "44c3f6504e439fdfd9ff2b9e0f7d348dfa64baba7192e6474ca50a7132d2f9b7"
+    "5bb278a463339c34d46b9aaa3241e30032088ce220b35602ab744f7458a0fc7c"
 )
 ROUND9_HOST_EVIDENCE_COMMAND_FUNCTION_CONTRACT = (
     1,
@@ -1413,14 +1419,35 @@ ROUND9_DOCKER_SANDBOX_SUBPROCESS_CONTRACT = (
     1,
     "29f706df26ec3fde1237d6120439a90737667768a770d15c8d0ec7956f17b90c",
 )
+ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
+    "internal/classifier/malicious_text_producer_inventory_test.go": (
+        "e11969e711fc5a5c84fd0a7b5ba5317ba2bf6c2f4bf0aa33c5e4e8ac9d65ef88"
+    ),
+    "docs/reports/ROUND9_MALICIOUS_TEXT_PRODUCER_INVENTORY.json": (
+        "96ffcd050a0896d3b3294aec8fe993c19ad9e05b8be61c7f82317a1c883c9a16"
+    ),
+}
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "230eb27d9bcb4c316f43a82d631ef8dd9caab30276a3ef80c696b6f2a562262d"
+ROUND6_SAFE_GATE_TEST_SHA256 = "337d93df8a7d7db54765fbf555bb2e7640fe4605f6fa7956da5492a75a42cc62"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "d51fe316a686c1b4dd629f6a7b63f4159b882095811fcdea3311255527bd5da1"
 
 
 class ContractError(RuntimeError):
     pass
+
+
+def validate_round9_malicious_text_producer_static_closure(root: Path) -> None:
+    for relative, expected_hash in (
+        ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256.items()
+    ):
+        source = root / relative
+        actual_hash = hashlib.sha256(read_regular_bytes(source, root)).hexdigest()
+        if actual_hash != expected_hash:
+            raise ContractError(
+                "Round 9 malicious-text producer static-closure artifact "
+                f"differs from the reviewed contract: {relative}"
+            )
 
 
 def validate_consumed_boundary_files(root: Path) -> None:
@@ -1851,6 +1878,20 @@ def read_regular_text(path: Path, root: Path) -> str:
     if safe_path.is_symlink() or not safe_path.is_file():
         raise ContractError(f"gate input must be a regular non-symlink file: {safe_path}")
     return safe_path.read_text(encoding="utf-8")
+
+
+def read_regular_bytes(path: Path, root: Path) -> bytes:
+    safe_path = assert_safe_repo_path(path, root)
+    try:
+        resolved = safe_path.resolve(strict=True)
+    except FileNotFoundError as exc:
+        raise ContractError(f"required gate input is missing: {safe_path}") from exc
+    resolved_root = root.resolve()
+    if resolved != resolved_root and resolved_root not in resolved.parents:
+        raise ContractError(f"gate input escapes repository root: {safe_path}")
+    if safe_path.is_symlink() or not safe_path.is_file():
+        raise ContractError(f"gate input must be a regular non-symlink file: {safe_path}")
+    return safe_path.read_bytes()
 
 
 def logical_make_lines(text: str) -> list[str]:
@@ -3744,8 +3785,14 @@ def validate_release_mode_contracts(root: Path) -> None:
             "validate_round9_development_evidence",
             "validate_round9_external_evaluation",
             "Round 9 publication consumes signed external evaluation, not legacy Host evidence inputs",
-            'round9-external-evaluation/v2',
+            'round9-external-evaluation/v3',
             'round9-external-counted-mock/v1',
+            'round9-public-counted-mock/v1',
+            '.payload.public_counted_mock.total.serialized_executions == 120',
+            '.payload.public_counted_mock.total.local_blocked == 80',
+            '.payload.public_counted_mock.total.upstream_delta == 40',
+            '.payload.public_counted_mock.total.usage_delta == 40',
+            '.payload.metrics.public_counted_mock == .payload.public_counted_mock',
             '.payload.development_evidence == $development[0]',
             'expected_count=17',
             'expected_count=19',
@@ -3758,7 +3805,7 @@ def validate_release_mode_contracts(root: Path) -> None:
             "docs/ROUND9_HOST_RUNNER.md",
             "docs/ROUND9_OPERATOR_ROLLOUT.md",
             "docs/reports/ROUND9_EXECUTION_RECORD.md",
-            "Public adversarial v10",
+            "Public adversarial v11",
             'initial_mode: "audit"',
             'phase_order: ["audit", "balanced", "strict"]',
             'status_required_after_each_phase_transition: true',
@@ -3778,13 +3825,13 @@ def validate_release_mode_contracts(root: Path) -> None:
                 raise ContractError(
                     "RC release artifact script must preserve the Round 9 schema-6 external-evaluation contract"
                 )
-        if rc_script.count("Public adversarial v10") != 2:
+        if rc_script.count("Public adversarial v11") != 2:
             raise ContractError(
-                "RC release artifact script must bind public adversarial v10 in both release summaries"
+                "RC release artifact script must bind public adversarial v11 in both release summaries"
             )
-        if "Public adversarial v9" in rc_script:
+        if "Public adversarial v10" in rc_script:
             raise ContractError(
-                "RC release artifact script retains the stale public adversarial v9 label"
+                "RC release artifact script retains the stale public adversarial v10 label"
             )
         fixed_binding = 'host_ip: "127.0.0.1", host_port: 18394, container_port: 8317'
         if rc_script.count(fixed_binding) != 2:
@@ -7969,8 +8016,11 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         ".round9.corpus.paired_malicious.corpus_manifest_version == 2",
         ".round9.corpus.paired_malicious.label_audit.sha256",
         ".round9.audit_contract.decision_kinds == [",
-        "round9-external-evaluation/v2",
+        "round9-external-evaluation/v3",
         "round9-external-counted-mock/v1",
+        "round9-public-counted-mock/v1",
+        ".round9.external_evaluation.public_counted_mock.total.serialized_executions == 120",
+        ".round9.external_evaluation.metrics.public_counted_mock ==",
         ".round9.external_evaluation.development_evidence ==",
         ".round9.counted_mock == .round9.external_evaluation.counted_mock",
         '.payload.development_evidence == $development[0]',
@@ -7995,8 +8045,8 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             "Round 9 RC workflow must run independent-audit verifier tests in build and publish"
         )
 
-    public_v10_marker_counts = {
-        'round9-public-adversarial-report/v10': 3,
+    public_v11_marker_counts = {
+        'round9-public-adversarial-report/v11': 3,
         '.round9.corpus.public_adversarial.payload_records == 24': 3,
         '.round9.corpus.public_adversarial.unique_formal_payloads == 23': 3,
         '.round9.corpus.public_adversarial.unique_historical_payloads == 8': 2,
@@ -8006,20 +8056,30 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         '.round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5': 3,
         '.round9.corpus.public_adversarial.release_assets_reviewed == 16': 3,
         '.round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4': 3,
+        '.round9.corpus.public_adversarial.release_asset_metadata_records == 199': 3,
         '.round9.corpus.public_adversarial.scenario_payload_executions == 24': 2,
         '.round9.corpus.public_adversarial.serialized_route_executions == 120': 2,
         '.round9.corpus.public_adversarial.direct_active_blocked == 12': 2,
         '.round9.corpus.public_adversarial.direct_active_allowed == 12': 2,
     }
-    for marker, expected_count in public_v10_marker_counts.items():
+    for marker, expected_count in public_v11_marker_counts.items():
         if text.count(marker) != expected_count:
             raise ContractError(
-                f"Round 9 RC workflow must bind the public-v10 marker in every reviewed phase: {marker}"
+                f"Round 9 RC workflow must bind the public-v11 marker in every reviewed phase: {marker}"
             )
 
-    external_v2_marker_counts = {
-        'round9-external-evaluation/v2': 2,
+    external_v3_marker_counts = {
+        'round9-external-evaluation/v3': 2,
         'round9-external-counted-mock/v1': 2,
+        'round9-public-counted-mock/v1': 2,
+        '.round9.external_evaluation.public_counted_mock.total.unique_payloads == 10': 2,
+        '.round9.external_evaluation.public_counted_mock.total.serialized_executions == 120': 2,
+        '.round9.external_evaluation.public_counted_mock.total.local_blocked == 80': 2,
+        '.round9.external_evaluation.public_counted_mock.total.upstream_delta == 40': 2,
+        '.round9.external_evaluation.public_counted_mock.total.usage_delta == 40': 2,
+        '.round9.external_evaluation.public_counted_mock.total.decision_kind_counts.audit_eligible_malicious_text == 40': 2,
+        '.round9.external_evaluation.public_counted_mock.total.decision_kind_counts.block_malicious_text == 80': 2,
+        '.round9.external_evaluation.metrics.public_counted_mock ==': 2,
         '.round9.external_evaluation.development_evidence ==': 2,
         '.round9.counted_mock == .round9.external_evaluation.counted_mock': 2,
         'host_ip:"127.0.0.1",host_port:18394,container_port:8317': 4,
@@ -8041,7 +8101,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         '.round9.counted_mock.host_results.mode_switch_authenticated == true': 2,
         '.round9.counted_mock.host_results.runtime_checks ==': 2,
     }
-    for marker, expected_count in external_v2_marker_counts.items():
+    for marker, expected_count in external_v3_marker_counts.items():
         if text.count(marker) != expected_count:
             raise ContractError(
                 f"Round 9 RC workflow external-v2/count-Mock binding changed: {marker}"
@@ -8292,6 +8352,7 @@ def validate_round8_host_workflow(text: str, source: Path) -> None:
             ("TAG", "${{ inputs.tag }}"),
             ("EXPECTED_COMMIT", "${{ inputs.expected_commit }}"),
             ("EXPECTED_TREE", "${{ inputs.expected_tree }}"),
+            ("ROUND8_LANE_RETIRED", "true"),
         ),
         1: (
             ("GO_REPOSITORY", "docker.io/library/golang"),
@@ -9809,9 +9870,11 @@ def validate_round9_eval_broker_subprocess_structure(
         "evaluator_command",
         '[str(config["_evaluator"]), "--corpus-root", str(corpus_root), "--signed-manifest", '
         'str(corpus_root / "bundle-manifest.signed.json"), "--author-public-key", '
-        'config["corpus"]["author_public_key"], "--author-key-id", '
-        'config["identities"]["author_key_id"], "--bundle-sha256", corpus["bundle_sha256"], '
-        '"--sandbox-descriptor", str(descriptor), "--expected-candidate-so-sha256", '
+         'config["corpus"]["author_public_key"], "--author-key-id", '
+         'config["identities"]["author_key_id"], "--bundle-sha256", corpus["bundle_sha256"], '
+         '"--public-corpus-root", str(public_root), "--public-development-evidence", '
+         'str(public_evidence_path), '
+         '"--sandbox-descriptor", str(descriptor), "--expected-candidate-so-sha256", '
         'candidate["so_sha256"], "--expected-core-sha256", '
         'config["identities"]["core_sha256"], "--challenge", args.challenge, "--output", '
         'str(aggregate_path), "--audit-expectations-output", str(expectations_path)]',
@@ -9975,6 +10038,8 @@ def validate_round9_eval_adapter_runner_structure(
         "inspect_container",
         "run_runtime_preflight",
         "finalize_evaluation",
+        "verify_cleanup_daemon",
+        "cleanup_exact_name_absent",
         "cleanup",
         "start",
     )
@@ -11803,6 +11868,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     root = args.root.resolve()
     try:
+        validate_round9_malicious_text_producer_static_closure(root)
         entrypoints = (
             [root / item for item in args.entrypoint]
             if args.entrypoint

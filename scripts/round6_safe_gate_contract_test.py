@@ -47,6 +47,7 @@ from round6_safe_gate_contract import (
     ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256,
     ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256,
     ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT,
+    ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256,
     ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT,
     WORKFLOW_DIRECTORY_AUXILIARY_PATHS,
     ContractError,
@@ -96,6 +97,7 @@ from round6_safe_gate_contract import (
     validate_round9_machine_report_test_script,
     validate_round9_eval_tool_bundle,
     validate_round9_machine_report_script,
+    validate_round9_malicious_text_producer_static_closure,
     validate_round9_rc_workflow,
     validate_workflow_layout,
 )
@@ -105,6 +107,37 @@ CHECKOUT_SHA = "a" * 40
 
 
 class Round6SafeGateContractTest(unittest.TestCase):
+    def test_round9_malicious_text_producer_static_closure_is_hash_bound(self):
+        root = Path(__file__).resolve().parent.parent
+        validate_round9_malicious_text_producer_static_closure(root)
+        for relative, expected_hash in (
+            ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256.items()
+        ):
+            with self.subTest(relative=relative):
+                self.assertEqual(
+                    hashlib.sha256((root / relative).read_bytes()).hexdigest(),
+                    expected_hash,
+                )
+
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        fixture_root = Path(temporary.name)
+        for relative in ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256:
+            target = fixture_root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((root / relative).read_bytes())
+        validate_round9_malicious_text_producer_static_closure(fixture_root)
+
+        inventory = (
+            fixture_root
+            / "docs/reports/ROUND9_MALICIOUS_TEXT_PRODUCER_INVENTORY.json"
+        )
+        inventory.write_bytes(inventory.read_bytes() + b"\n")
+        with self.assertRaisesRegex(
+            ContractError, "malicious-text producer static-closure artifact"
+        ):
+            validate_round9_malicious_text_producer_static_closure(fixture_root)
+
     def test_round9_independent_audit_scripts_require_exact_reviewed_hashes(self):
         root = Path(__file__).resolve().parent.parent
         for relative, expected in ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256.items():
@@ -4388,8 +4421,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace(
+                "round9-public-adversarial-report/v11",
                 "round9-public-adversarial-report/v10",
-                "round9-public-adversarial-report/v9",
                 1,
             ),
             original.replace(
@@ -4418,8 +4451,13 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace(
-                'round9-external-evaluation/v2',
+                'round9-external-evaluation/v3',
                 'round9-external-evaluation/v1',
+                1,
+            ),
+            original.replace(
+                'round9-public-counted-mock/v1',
+                'round9-public-counted-mock/v0',
                 1,
             ),
             original.replace(
@@ -4621,7 +4659,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace("      docs/ROUND9_HOST_RUNNER.md\n", "", 1),
-            original.replace("Public adversarial v10", "Public adversarial v9", 1),
+            original.replace("Public adversarial v11", "Public adversarial v10", 1),
             original.replace('initial_mode: "audit"', 'initial_mode: "balanced"', 1),
             original.replace(
                 "round9-external-cpa-runtime-checks/v1",

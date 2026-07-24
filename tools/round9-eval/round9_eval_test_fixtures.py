@@ -40,7 +40,7 @@ def runtime_checks(phase: str = "post_evaluation") -> dict[str, Any]:
             "schema_version": 6,
             "migration_versions": [1, 2, 3, 4, 5, 6],
             "wal_checkpoint_passed": True,
-            "evaluation_event_delta": 1083 if phase == "post_evaluation" else 0,
+            "evaluation_event_delta": 1203 if phase == "post_evaluation" else 0,
         },
         "restart_recovery": {
             "observed": True,
@@ -60,8 +60,8 @@ def runtime_checks(phase: str = "post_evaluation") -> dict[str, Any]:
             "observed": True,
             "allowed_request_delta": 1,
             "blocked_request_delta": 0,
-            "evaluation_allowed_delta": 7562 if phase == "post_evaluation" else 0,
-            "evaluation_blocked_delta": 721 if phase == "post_evaluation" else 0,
+            "evaluation_allowed_delta": 7602 if phase == "post_evaluation" else 0,
+            "evaluation_blocked_delta": 801 if phase == "post_evaluation" else 0,
             "post_evaluation_quiet": True,
         },
         "raw_capture": {
@@ -83,22 +83,25 @@ def runtime_checks(phase: str = "post_evaluation") -> dict[str, Any]:
 
 def decision_audit() -> dict[str, Any]:
     return {
-        "schema": "round9-external-decision-audit/v2",
+        "schema": "round9-external-decision-audit/v3",
         "state": "PASS",
         "observed": True,
         "expectations_sha256": "a" * 64,
-        "expectation_count": 8283,
-        "required_expectation_count": 1083,
+        "expectation_count": 8403,
+        "required_expectation_count": 1203,
         "optional_expectation_count": 7200,
-        "matched_count": 1083,
+        "matched_count": 1203,
         "optional_persisted_count": 0,
         "optional_missing_count": 7200,
         "unexpected_event_count": 0,
         "decision_kind_counts": {
-            "audit_eligible_malicious_text": 360,
+            "allow_clean": 0,
+            "audit_eligible_malicious_text": 400,
             "audit_ineligible_risk": 2,
-            "block_malicious_text": 720,
+            "block_malicious_text": 800,
             "block_incomplete_inspection": 1,
+            "block_opaque_media": 0,
+            "block_subject_risk": 0,
         },
         "group_counts": {
             "benign": 0,
@@ -106,6 +109,7 @@ def decision_audit() -> dict[str, Any]:
             "malicious_enforcement": 720,
             "incomplete_non_strict": 2,
             "strict_incomplete": 1,
+            "public_development": 120,
         },
         "subject_state_rows": 0,
         "incomplete_malicious_category_count": 0,
@@ -120,6 +124,139 @@ def decision_audit() -> dict[str, Any]:
                 "decision_kind": "block_incomplete_inspection",
             }
         ],
+    }
+
+
+def public_counted_mock(*, hard_policy_blocked: int = 0) -> dict[str, Any]:
+    families = {
+        "historical_unique": ("historical_default_payload", 8, 96, 64, 32, 32),
+        "branch_head": ("branch_head_payload", 1, 12, 8, 4, 4),
+        "unmerged_candidate_carrier": (
+            "unmerged_candidate_carrier",
+            1,
+            12,
+            8,
+            4,
+            4,
+        ),
+    }
+    remaining_hard = hard_policy_blocked
+    rows: dict[str, Any] = {}
+    decision_keys = (
+        "allow_clean",
+        "audit_ineligible_risk",
+        "audit_eligible_malicious_text",
+        "block_malicious_text",
+        "block_incomplete_inspection",
+        "block_opaque_media",
+        "block_subject_risk",
+    )
+    for family, (role, unique, routes, blocked, upstream, usage) in families.items():
+        hard = min(remaining_hard, blocked)
+        remaining_hard -= hard
+        decisions = {key: 0 for key in decision_keys}
+        decisions["audit_eligible_malicious_text"] = unique * 4
+        decisions["block_malicious_text"] = unique * 8
+        rows[family] = {
+            "corpus_role": role,
+            "unique_payloads": unique,
+            "serialized_executions": routes,
+            "local_blocked": blocked,
+            "upstream_delta": upstream,
+            "usage_delta": usage,
+            "hard_policy_blocked": hard,
+            "decision_kind_counts": decisions,
+        }
+    if remaining_hard:
+        raise ValueError("synthetic hard-policy count exceeds public block count")
+    total_decisions = {
+        key: sum(row["decision_kind_counts"][key] for row in rows.values())
+        for key in decision_keys
+    }
+    return {
+        "schema": "round9-public-counted-mock/v1",
+        "state": "PASS",
+        "development_only": True,
+        "independent_holdout": False,
+        "third_party_code_executed": False,
+        "manifest": {
+            "schema": "round9-public-adversarial-corpus/v11",
+            "dataset": "round9-public-adversarial-v11",
+            "bytes": 1024,
+            "sha256": "d" * 64,
+        },
+        "route_matrix": {
+            "modes": ["audit", "balanced", "strict"],
+            "protocols": ["openai_chat", "openai_responses"],
+            "streams": ["nonstream", "stream"],
+            "routes_per_payload": 12,
+        },
+        "families": rows,
+        "total": {
+            "unique_payloads": 10,
+            "serialized_executions": 120,
+            "local_blocked": 80,
+            "upstream_delta": 40,
+            "usage_delta": 40,
+            "hard_policy_blocked": hard_policy_blocked,
+            "decision_kind_counts": total_decisions,
+        },
+        "claim_boundary": (
+            "Public, candidate-visible development regression payloads executed as exact decoded bytes "
+            "through loopback-only CPA counted-Mock routes; this is Host transport and decision evidence, "
+            "not independent holdout evidence or production approval. Candidate-owned manifest provenance "
+            "is format/hash checked but does not independently prove third-party source extraction."
+        ),
+    }
+
+
+def public_counted_mock_transport(*, hard_policy_blocked: int = 0) -> dict[str, Any]:
+    counted = public_counted_mock(hard_policy_blocked=hard_policy_blocked)
+    family_keys = {
+        "corpus_role",
+        "unique_payloads",
+        "serialized_executions",
+        "local_blocked",
+        "upstream_delta",
+        "usage_delta",
+        "hard_policy_blocked",
+    }
+    return {
+        "schema": "round9-public-counted-mock-transport/v1",
+        "manifest": dict(counted["manifest"]),
+        "route_matrix": dict(counted["route_matrix"]),
+        "families": {
+            family: {key: value for key, value in row.items() if key in family_keys}
+            for family, row in counted["families"].items()
+        },
+        "total": {
+            key: value
+            for key, value in counted["total"].items()
+            if key != "decision_kind_counts"
+        },
+    }
+
+
+def public_decision_audit() -> dict[str, Any]:
+    counted = public_counted_mock()
+    return {
+        "schema": "round9-public-cpa-decision-audit/v1",
+        "manifest": dict(counted["manifest"]),
+        "route_matrix": dict(counted["route_matrix"]),
+        "families": {
+            family: {
+                "corpus_role": row["corpus_role"],
+                "unique_payloads": row["unique_payloads"],
+                "serialized_executions": row["serialized_executions"],
+                "decision_kind_counts": dict(row["decision_kind_counts"]),
+            }
+            for family, row in counted["families"].items()
+        },
+        "total": {
+            "unique_payloads": counted["total"]["unique_payloads"],
+            "serialized_executions": counted["total"]["serialized_executions"],
+            "decision_kind_counts": dict(counted["total"]["decision_kind_counts"]),
+        },
     }
 
 
@@ -179,11 +316,7 @@ def development_evidence(
                 "unique_semantic_samples": 120,
                 "semantic_blocked": 120,
                 "serialized_route_executions": 960,
-                "enforcement_route_executions": 960,
-                "audit_route_executions": 0,
                 "passed_route_executions": 960,
-                "audit_allowed_route_executions": 0,
-                "audit_policy_blocked": 0,
                 "recall_basis_points": 10_000,
                 "per_category": {
                     "credential_theft": dict(paired_category),
@@ -191,26 +324,27 @@ def development_evidence(
                 },
             },
             "public_adversarial": {
-                "name": "round9-public-adversarial-v5",
+                "name": "round9-public-adversarial-v11",
                 "manifest": _binding("d"),
                 "development_only": True,
                 "independent_holdout": False,
                 "third_party_code_executed": False,
-                "metrics": {
-                    "payload_records": 24,
-                    "formal_unique_payloads": 23,
-                    "candidate_carriers": 1,
-                    "candidate_executions": 1,
-                    "not_provided": 0,
-                    "scenario_payload_executions": 24,
-                    "serialized_route_executions": 120,
-                    "direct_blocked": 12,
-                    "direct_allowed": 12,
-                    "quoted_blocked": 0,
-                    "historical_blocked": 0,
-                    "system_blocked": 0,
-                    "tool_blocked": 0,
-                },
+                "payload_records": 24,
+                "candidate_carrier_executions": 1,
+                "candidate_carriers_not_provided": 0,
+                "scenario_payload_executions": 24,
+                "serialized_route_executions": 120,
+                "direct_active_blocked": 12,
+                "direct_active_allowed": 12,
+                "unique_historical_payloads": 8,
+                "unique_branch_head_payloads": 1,
+                "unique_current_prompt_like_payloads": 14,
+                "unique_formal_payloads": 23,
+                "unmerged_candidate_carriers": 1,
+                "nondefault_branch_candidate_carriers": 5,
+                "release_assets_reviewed": 16,
+                "release_assets_with_prompt_entries": 4,
+                "release_asset_metadata_records": 199,
             },
         },
         "audit_contract": {
@@ -236,7 +370,7 @@ def development_evidence(
                 "f", schema="round9-development-paired-malicious-machine-report/v1"
             ),
             "public_adversarial": _binding(
-                "1", schema="round9-public-adversarial-report/v5"
+                "1", schema="round9-public-adversarial-report/v11"
             ),
             "audit_contract": _binding("2", schema="round9-audit-contract-report/v1"),
         },

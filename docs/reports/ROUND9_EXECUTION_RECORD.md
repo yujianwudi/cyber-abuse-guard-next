@@ -9,11 +9,11 @@ This document is the single working record for the Round 9 Balanced redesign.
 It records development evidence only. It is not production authorization,
 independent audit evidence, or a claim of zero false positives.
 
-## Immutable execution baseline
+## Immutable predecessor execution baseline
 
 ```text
 task_document_sha256: 389f2ac88672c6cc6dc4bdfa39f10419ad8b62eacf130395b2b6dd32826780b8
-repository: https://github.com/yujianwudi/cyber-abuse-guard-next
+repository: https://github.com/yujianwudi/cyber-abuse-guard
 base_commit: 9665fdd1aacab0d79b8790d68c87c6c8c80f8911
 base_tree: 84c6636b2012c825627bad34f922dfa0329d0a1e
 branch: feat/round9-balanced-eligibility
@@ -21,14 +21,14 @@ source_version: 0.16
 cpa_target: v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251
 round8_classifier: classifier-policy-v7
 round8_ruleset: 1.0.9
-round9_classifier: classifier-policy-v8 / b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde / WORKING_TREE_DEVELOPMENT_IDENTITY
-round9_ruleset: 1.0.10 / e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0 / WORKING_TREE_DEVELOPMENT_IDENTITY
+round9_classifier: classifier-policy-v8 / b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde / PREDECESSOR_WORKING_TREE_DEVELOPMENT_IDENTITY
+round9_ruleset: 1.0.10 / e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0 / PREDECESSOR_WORKING_TREE_DEVELOPMENT_IDENTITY
 
-round9_public_adversarial: v10 / 183752 bytes / bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d
+round9_public_adversarial: v11 / 476165 bytes / 297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038
 round9_candidate: v0.16-rc.3 (confirmed unoccupied by tag and Release API at start)
 final_source_commit: PENDING_FINAL_SOURCE_FREEZE
 exact_candidate_independent_audit_evidence_status: NOT_PROVIDED
-exact_candidate_independent_audit_mechanical_gate: NOT_IMPLEMENTED
+exact_candidate_independent_audit_mechanical_gate: IMPLEMENTED_FAIL_CLOSED_EVIDENCE_NOT_PROVIDED
 new_public_release_creation: BLOCKED_FAIL_CLOSED
 cpa_host_listener: 127.0.0.1:18394->8317/tcp
 latest_release_at_start: v0.15
@@ -40,6 +40,36 @@ real_provider_contact_authorized: false
 restricted_material_zero-access_claim: false
 restricted_evaluation_gate_metadata_incident: true
 ```
+
+## Successor repository continuation snapshot
+
+```text
+successor_repository: https://github.com/yujianwudi/cyber-abuse-guard-next
+successor_main_snapshot_commit: 98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35
+successor_main_snapshot_tree: 77c496e8f4fd1771fc54ed11e8e82970ba3c56b8
+successor_round9_policy_gate: PASS / run 30073551215 / artifact 8589043564
+successor_codeql: PASS / run 30073550953
+successor_full_ci: PROVIDED_FAIL / run 30073551084 / workflow-lint
+successor_full_ci_passed_before_failure: unit,race,vet,fuzz-smoke,round9-bounded-fuzz,fuzz-long
+successor_full_ci_skipped_after_failure: corpus,benchmark,vulnerability,build,artifact,reproducibility,cpa-source-compile
+successor_candidate_tag: v0.16-rc.3 / NOT_CREATED
+successor_release: NOT_CREATED
+successor_final_candidate_freeze: NOT_ESTABLISHED
+successor_independent_evidence: NOT_PROVIDED
+successor_external_ledger_ruleset: 19669641 / round9-eval-ledger-immutable / active / no-bypass
+successor_independent_audit_ledger_ruleset: 19669780 / round9-independent-audit-ledger-immutable / active / no-bypass
+successor_host_environment: round9-host-validation / reviewer-required / tag=v0.16-rc.3
+successor_publication_environment: round9-rc-publication / reviewer-required / tag=v0.16-rc.3
+successor_self_hosted_runner: REGISTERED_ONLINE / cag-round9-tencent-2 / Linux X64 / cag-round9-sandbox / observed 2026-07-24 / NOT_HOST_EVIDENCE
+successor_main_protection: ENABLED / strict / pull-request-required / five-required-checks
+```
+
+The successor continuation contains the workflow-lint repair and migrates
+active Round 9 Host/evaluator identities to `cyber-abuse-guard-next` on a
+pull-request branch. The repair remains pending exact-main CI; local Linux
+verification is development evidence only, and this block must not be upgraded
+to exact-main PASS until a new main commit and all required GitHub checks
+complete successfully.
 
 The pre-existing uncommitted Round 8 RC workflow repair was isolated without
 publication in Git stash
@@ -74,7 +104,7 @@ used as evidence for another boundary.
 |---|---|---|---|
 | Repository-local counted-Mock | Final source commit/tree and exact Linux candidate SHA-256 | No admissible result asset exists | `NOT_PROVIDED` |
 | Tencent Cloud #2 isolated counted-Mock | Same exact candidate, isolated loopback CPA v7.2.95 sandbox, no production/Provider/account/user contact | No admissible result asset exists | `NOT_PROVIDED` |
-| Protected external evaluation and one-shot ledger | Same exact candidate, signed external-evaluation/counts, ledger event v2, and protected ledger proof v1 | No signed evaluation or ledger asset exists | `NOT_PROVIDED` |
+| Protected external evaluation and one-shot ledger | Same exact candidate, signed external-evaluation/counts, ledger event v3, and protected ledger proof v1 | No signed evaluation or ledger asset exists | `NOT_PROVIDED` |
 
 The task requires production to remain `mode=audit` and subject control to
 remain disabled. This is a requested safety constraint only. Production was not
@@ -91,7 +121,7 @@ are not presented as the current final result after subsequent classifier edits.
 | Task clause | Source location | Test location | Source snapshot / freeze | Evidence path and SHA-256 | Current result | Status |
 |---|---|---|---|---|---|---|
 | Candidate/clause/scope/referent-bound eligibility | `internal/classifier/eligibility.go`, `ownership.go`, `classifier.go` | `round9_eligibility_gate_test.go`, `eligibility_winner_invariant_test.go`, `round9_carrier_boundary_test.go` | Final classifier source not frozen | No final invariant log | Implementation exists on the shared working tree; final invariant result is not claimed | `PENDING_FINAL_SOURCE_FREEZE` |
-| One eligibility gate for every malicious-text producer | `classifier.go`, `semantic.go`, `roles.go`, `streaming.go`, `meta_override.go`, `signal_pool.go` | `round9_eligibility_gate_test.go`, `round9_streaming_eligibility_test.go`, legacy contract regressions | Producer set still subject to final source freeze | No final producer-inventory artifact | Static/runtime producer closure must be repeated on the final tree | `PENDING_RERUN` |
+| One eligibility gate for every malicious-text producer | `internal/classifier/malicious_text_producer_inventory_test.go`, `classifier.go`, `eligibility.go`, `roles.go`, `internal/plugin/disposition.go`, `management.go` | `TestRound9MaliciousTextProducerInventoryClosure`, Safe Gate hash-drift regression | Current working tree only; final commit/tree not frozen | `docs/reports/ROUND9_MALICIOUS_TEXT_PRODUCER_INVENTORY.json`, 10835 bytes, SHA-256 `96ffcd050a0896d3b3294aec8fe993c19ad9e05b8be61c7f82317a1c883c9a16`; contract test, 26766 bytes, SHA-256 `e11969e711fc5a5c84fd0a7b5ba5317ba2bf6c2f4bf0aa33c5e4e8ac9d65ef88` | Tracked static closure enumerates 19 production/call sites and 5 gate functions, scans package-level initializers and function literals, and does not read corpus text; the targeted Linux test passed on the current tree. Final-tree rerun, runtime/Host proof, and independent audit remain pending | `DEVELOPMENT_STATIC_CLOSURE_PASS / PENDING_FINAL_SOURCE_FREEZE` |
 | Score and hard floor cannot create eligibility | `eligibility.go`, classifier score/hard-floor paths | `hard_floor_reason_test.go`, `round9_eligibility_gate_test.go`, `eligibility_winner_invariant_test.go` | Final classifier source not frozen | No final log | Intermediate tests exist; no final-tree result | `PENDING_RERUN` |
 | Balanced and Strict share malicious-text eligibility; incomplete/opaque/subject remain distinct | `internal/plugin/disposition.go`, `router.go`, classifier eligibility | `internal/plugin/disposition_test.go`, `round8_decision_audit_contract_test.go`, `subject_admission_test.go` | Classifier/plugin source not frozen | No final package log | Final mode matrix not rerun | `PENDING_RERUN` |
 | Defensive, analytical, quoted, credential-lifecycle, code/log/fixture, and mixed-trust requests are audit/allow unless independently eligible | classifier ownership/role/referent code | `defensive_quote_regression_test.go`, `finding_origin_test.go`, Round 9 current-user/meta-control tests | Working-tree development identity `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`; final commit/tree not frozen | `dist/round9-worklogs/development-benign-post-perf-20260724.json`, 2515 bytes, SHA-256 `607b751defeebd9681170a558528aa1a4827c1c176bce2886a1929b59193af01`; frozen cases `36d7f4dd635710f7ee81d02f9f62502c6276e554c80fc852f3d40acbfa70688d`; manifest `d33e4ff8954741a2fe9c24c0d34b239c649c7e0a6d31463cddba84dc6b6580b8` | Development snapshot: 0/1200 semantic blocks and 0/7200 route blocks; 166 audit and 7034 allow routes; stream false/true 3600/3600. This is visible candidate-owned evidence, not independent evidence | `DEVELOPMENT_SELF_CHECK_PASS / PENDING_FINAL_SOURCE_FREEZE` |
@@ -103,11 +133,11 @@ are not presented as the current final result after subsequent classifier edits.
 | Unique semantic samples separated from route executions | Round 9 corpus runner/report schema | `internal/round9corpus`, machine-report tests | Runner/report source and final commit/tree not frozen | Benign report SHA-256 `607b751defeebd9681170a558528aa1a4827c1c176bce2886a1929b59193af01`; paired report SHA-256 `ba9733503985195204c0bc1eef95f936951ab8947c67ce4d316abcb8c6ab3276` | Development accounting records 1200 vs 7200 and 120 vs 960 separately; benign stream false/true 3600/3600 and malicious stream false/true 480/480 | `DEVELOPMENT_SELF_CHECK_PASS / PENDING_FINAL_SOURCE_FREEZE` |
 | 600 independently authored benign holdout requests | External encrypted root-owned bundle only | Protected external evaluator | No candidate freeze; no admissible bundle/result identity in this record | No signed external evaluation | Zero-block result and Wilson upper bound absent | `NOT_PROVIDED` |
 | Independent malicious ground truth, paired/independent recall, and per-category Wilson intervals | External bundle/evaluator plus frozen paired v3 development set | Protected evaluator and development runner | No exact candidate freeze | No signed independent result | Independent malicious evidence absent | `NOT_PROVIDED` |
-| Four public repositories frozen by repo/ref/commit/path/bytes/SHA-256 | `testdata/round9-public-adversarial-v10/manifest.json`, public corpus validator | `cmd/round9-public-corpus-validator`, `internal/round9corpus` static identity tests | V10 manifest frozen; validator source not final | 183752 bytes; SHA-256 `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d` | 2026-07-24 live rechecked; MDX default head advanced by one deployment-only commit; five behind branches and 16 Release assets are separated from formal prompt provenance; no third-party code executed; final static validator rerun pending | `PENDING_RERUN` |
-| Public-v10 classifier scenarios and per-payload counted-Mock | classifier plus public corpus runner/Host boundary | public scenario tests and counted-Mock runner | Classifier/candidate not frozen | No final scenario log; no counted-Mock asset | Static identity does not prove classification or upstream counters | `PENDING_RERUN` / `NOT_PROVIDED` |
+| Four public repositories frozen by repo/ref/commit/path/bytes/SHA-256 | `testdata/round9-public-adversarial-v11/manifest.json`, public corpus validator | `cmd/round9-public-corpus-validator`, `internal/round9corpus` static identity tests | V11 manifest frozen; validator source not final | 476165 bytes; SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038` | 2026-07-24 live rechecked; Codex-X default head advanced without adding a standalone prompt payload; five behind branches and 16 historical Release assets remain separated from formal prompt provenance; all 199 Release assets are metadata/digest-only and were neither downloaded nor opened; no third-party code executed; final static validator rerun pending | `PENDING_RERUN` |
+| Public-v11 classifier scenarios and per-payload counted-Mock | classifier plus public corpus runner/Host boundary | public scenario tests and counted-Mock runner | Classifier/candidate not frozen | No final scenario log; no counted-Mock asset | Static identity does not prove classification or upstream counters | `PENDING_RERUN` / `NOT_PROVIDED` |
 | Repository-local counted-Mock | `integration/round9countedmock`, local isolated runner | Exact-candidate Audit→Balanced→Strict matrix | No exact candidate freeze | No admissible result asset | Not run as final evidence | `NOT_PROVIDED` |
 | Tencent Cloud #2 isolated counted-Mock | `scripts/round9-host-evidence*`, isolated operator sandbox contract | Exact-candidate Host/runtime matrix | No exact candidate freeze | No admissible result asset; 2026-07-24 read-only connectivity/preflight metadata is not counted-Mock evidence | SSH preflight succeeded, but the root-owned broker and independent bundle are absent; no CPA/container/runtime test was performed | `NOT_PROVIDED` |
-| Protected external CPA/count-Mock evaluation | root-owned broker contract, external evaluator/adapter contracts | Signed external evaluation v2 admission and runtime checks | No exact candidate freeze | No signed evaluation/counts | No protected external run | `NOT_PROVIDED` |
+| Protected external CPA/count-Mock evaluation | root-owned broker contract, external evaluator/adapter contracts | Signed external evaluation v3 admission and runtime checks | No exact candidate freeze | No signed evaluation/counts | No protected external run | `NOT_PROVIDED` |
 | Protected one-shot Git ledger | external ledger contract | Reserved/started/result event and proof verification | No exact candidate freeze | No ledger event/proof asset | No one-shot ledger evidence | `NOT_PROVIDED` |
 | Performance, RSS, panic, queue, WAL, restart, Raw Capture defaults | classifier/plugin/audit source plus runtime harness | final benchmark gate and three named runtime boundaries | Working-tree development benchmark only; final performance-sensitive source, commit/tree, and exact `.so` are not frozen | `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063`; pre-fix diagnostic CPU/memory profiles `6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69` / `fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6` | Complete `make round6-benchmark` recipe and explicit profiled maximum-parts hard bound passed. Three candidate-rich samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. Exact-candidate RSS/Host/runtime evidence remains absent | `DEVELOPMENT_SELF_CHECK_PASS / NOT_PROVIDED_FOR_FINAL_CANDIDATE` |
 | New Round 9 CI/Release/Host identity | `.github/workflows/round9-*.yml`, release/Host scripts | actionlint, ShellCheck, Safe Gate, exact-main, reproducibility, admission contracts | Shared workflow tree still converging; no final commit | No exact-main final run | Engineering lanes are not final-source evidence yet | `PENDING_FINAL_SOURCE_FREEZE` |
@@ -454,8 +484,8 @@ are not presented as the current final result after subsequent classifier edits.
   plaintext independent fixtures. A fixed root-owned broker owns the encrypted
   bundle, evaluator, CPA sandbox adapter, keys, images, result state, and
   protected Git one-shot ledger.
-- The active identities are external evaluation v2, evaluator aggregate v2,
-  ledger event v2, protected ledger proof v1, external counted-Mock v1, CPA
+- The active identities are external evaluation v3, evaluator aggregate v3,
+  ledger event v3, protected ledger proof v1, external counted-Mock v1, CPA
   sandbox descriptor v2, and CPA runtime-checks v1.
 - A publishable counted-Mock result must be mechanically derived from the signed
   execution and metrics, use Audit→Balanced→Strict with authenticated mode
@@ -493,25 +523,25 @@ are not presented as the current final result after subsequent classifier edits.
   `9665fdd1aacab0d79b8790d68c87c6c8c80f8911`; open repository PRs remain zero;
   Git ref lookup for `v0.16-rc.3` remains absent; Release enumeration has no
   matching `v0.16-rc.3`; latest Release remains `v0.15`.
-- The four public repositories were frozen into a new v10 manifest because the
-  MDX default head advanced by one deployment-only commit:
+- The four public repositories were refreshed into a new v11 manifest after a
+  Codex-X default-head advance; no new standalone prompt payload was found:
 
   | Repository | Default HEAD | Branches / open PRs / tags / releases |
   |---|---|---|
   | `Jia-Ethan/codex-keysmith` | `700f1be22446af4dc2c362080cbde669e215094d` | 5 / 0 / 2 / 2 |
-  | `MDX-Tom/gpt-5.6-instruct` | `b32eb0dd7078a092d7dd5d28137d3bc95aa9b705` | 1 / 0 / 2 / 2 |
-  | `yynxxxxx/Codex-X` | `7d0e0064d54f860d4bf12b557fd9f8c489043a35` | 2 / 0 / 36 / 35 |
+  | `MDX-Tom/gpt-5.6-instruct` | `334f8cd2ec132aa4317b62bd2a3228ed827cbb87` | 1 / 0 / 2 / 2 |
+  | `yynxxxxx/Codex-X` | `e8b0e5b73c508484cfb636339c82d70360487442` | 2 / 0 / 36 / 35 |
   | `yynxxxxx/Codex-5.5-codex-instruct-5.5` | `ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d` | 1 / 1 / 0 / 0 |
 
 - The sole open public-repository PR remains Codex-5.5 PR #9 at
   `3b64052a7706626b47bd66fde74d43f8b80e020d`. It remains an
   `unmerged_candidate_carrier`, not default-branch provenance.
-- Result: `live rechecked; new v10 identity`. V9 remains byte-for-byte history.
-  V10 is 183752 bytes with SHA-256
-  `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`.
-  Its MDX delta review records eight non-payload deployment/documentation blobs,
-  five behind non-default branches are separate candidates, and 16 formal
-  Release assets were reviewed with four carrying already-counted prompt entries.
+- Result: `live rechecked; new v11 identity`. V10 and v9 remain byte-for-byte history.
+  V11 is 476165 bytes with SHA-256
+  `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`.
+  Its Codex-X delta review records no standalone prompt payload, five behind
+  non-default branches remain separate candidates, and all 199 Release assets
+  are retained as metadata/digest-only records; none was downloaded or opened.
 - Documentation now separates repository-local counted-Mock, Tencent Cloud #2
   isolated counted-Mock, and protected external evaluation/one-shot-ledger
   evidence. All three remain `NOT_PROVIDED`.
@@ -545,7 +575,9 @@ are not presented as the current final result after subsequent classifier edits.
   exact `main` commit/tree, successful exact-main `CI` push run, and successful
   exact-main `Round 9 policy gate` push run. Any existing `v0.16-rc.3` Release
   is fail-only. The public publish, publication-blocked, and legacy verification
-  jobs remain statically disabled with `if: false`.
+  jobs require `needs.admission.outputs.publication_permitted == 'true'`, while
+  the sole admission producer is fixed to `publication_permitted=false`; those
+  jobs therefore remain unreachable.
 - The protected Host lane and broker now bind all four GitHub identities:
   `DISPATCH_REF`, `DISPATCH_SHA`, `WORKFLOW_REF`, and `WORKFLOW_SHA`.
   Development paired-malicious recall is exactly 10000 basis points overall
@@ -648,6 +680,36 @@ are not presented as the current final result after subsequent classifier edits.
   evaluation, independently authored benign/malicious evidence, exact-candidate
   independent audit, exact-main CI, tag, and Release evidence remain
   `NOT_PROVIDED`.
+
+### 2026-07-24 - final pre-PR Linux development verification
+
+- Verification used WSL `Ubuntu-26.04` on Linux amd64. Go gates that require the
+  frozen runtime used `GOTOOLCHAIN=go1.26.4`; this did not change the system Go
+  installation. The source baseline remained
+  `main@98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35` while the candidate was still an
+  uncommitted review tree.
+- The real-tree Safe Gate passed with 11 entrypoints, 40 reachable Make targets,
+  and 60 reviewed scripts. Its negative/fixture suite passed 202/202 tests.
+- The final evaluator contract set passed 62/62 tests: core 11, external
+  evaluator 5, CPA adapter 20, and broker 26. These include pre-request ground-
+  truth freezing, malicious all-allow rejection, Docker-daemon cleanup failure,
+  evaluator/author SPKI separation, and ZIP/tar traversal/link/duplicate/size
+  rejection cases.
+- `make round6-vet`, `make race`, and `make round9-fuzz` passed. The bounded fuzz
+  run exercised the classifier, request content-type extractor, and audit
+  DecisionExplanationV2 targets for five seconds each with one worker.
+- `GOTOOLCHAIN=go1.26.4 GOFLAGS=-mod=readonly make unit-test` passed across all
+  first-party packages, including `internal/classifier` and the isolated Round 9
+  counted-Mock integration package.
+- Actionlint (`make workflow-lint`), ShellCheck 0.10.0, v11 public-corpus and
+  retained-corpus identity gates, machine-report 24/24, external-evaluation 6/6,
+  independent-audit 12/12, Host-evidence 20/20, release-document consistency,
+  and `git diff --check` passed.
+- These are working-tree Linux development results, not exact-main CI, an exact
+  candidate build, Host counted-Mock evidence, independent holdout evidence, or
+  an independent audit. The source-archive contract intentionally uses
+  `git archive HEAD` and is therefore rerun only after the reviewed tree is
+  committed; it is not represented here as a pre-commit PASS.
 
 ## Current conclusion
 

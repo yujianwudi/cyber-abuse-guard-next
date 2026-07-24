@@ -129,7 +129,7 @@ class Fixture:
                 "release": {
                     "tag": contract.TAG,
                     "title": contract.RELEASE_TITLE,
-                    "body": "Public adversarial v10; latest=false; independent audit required",
+                    "body": "Public adversarial v11; latest=false; independent audit required",
                     "publication_permitted": True,
                     "draft": False,
                     "prerelease": True,
@@ -540,7 +540,7 @@ class IndependentAuditContractTest(unittest.TestCase):
                 "title": contract.RELEASE_TITLE,
             },
             "host-only": {
-                "schema": "round9-external-evaluation/v2",
+                "schema": "round9-external-evaluation/v3",
                 "state": "PASS",
             },
             "boolean-pass": {"schema": contract.EVIDENCE_SCHEMA, "state": "PASS"},

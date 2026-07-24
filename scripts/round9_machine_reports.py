@@ -75,11 +75,11 @@ DEVELOPMENT_PLATFORM = "linux/amd64"
 DEVELOPMENT_SCHEMA = "round9-development-evidence/v1"
 DEVELOPMENT_PAIRED_RECALL_BASIS_POINTS = 10_000
 INDEPENDENT_MALICIOUS_RECALL_BASIS_POINTS = 9_500
-PUBLIC_CORPUS = "round9-public-adversarial-v10"
-PUBLIC_REPORT_SCHEMA = "round9-public-adversarial-report/v10"
-PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v10"
-PUBLIC_MANIFEST_BYTES = 183752
-PUBLIC_MANIFEST_SHA256 = "bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d"
+PUBLIC_CORPUS = "round9-public-adversarial-v11"
+PUBLIC_REPORT_SCHEMA = "round9-public-adversarial-report/v11"
+PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v11"
+PUBLIC_MANIFEST_BYTES = 476165
+PUBLIC_MANIFEST_SHA256 = "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038"
 PUBLIC_METRICS = {
     "payload_records": 24,
     "formal_unique_payloads": 23,
@@ -108,6 +108,7 @@ PUBLIC_MANIFEST_CONTRACT = {
     "nondefault_branch_candidate_carriers": 5,
     "release_assets_reviewed": 16,
     "release_assets_with_prompt_entries": 4,
+    "release_asset_metadata_records": 199,
     "serialized_contexts_per_scenario_payload": 5,
 }
 PUBLIC_RELEASE_SUMMARY_METRIC_FIELDS = {
@@ -128,6 +129,7 @@ PUBLIC_RELEASE_SUMMARY_MANIFEST_FIELDS = {
     "nondefault_branch_candidate_carriers": "nondefault_branch_candidate_carriers",
     "release_assets_reviewed": "release_assets_reviewed",
     "release_assets_with_prompt_entries": "release_assets_with_prompt_entries",
+    "release_asset_metadata_records": "release_asset_metadata_records",
 }
 PUBLIC_RELEASE_SUMMARY_KEYS = frozenset(
     {
@@ -459,8 +461,8 @@ def public_manifest_identity(root: Path) -> tuple[dict[str, Any], dict[str, Any]
     path = root / "testdata" / PUBLIC_CORPUS / "manifest.json"
     manifest, raw = read_json_document(
         path,
-        maximum=262144,
-        label="public adversarial v10 manifest",
+        maximum=524288,
+        label="public adversarial v11 manifest",
         canonical=False,
     )
     identity = bytes_identity(raw)
@@ -468,32 +470,39 @@ def public_manifest_identity(root: Path) -> tuple[dict[str, Any], dict[str, Any]
         "bytes": PUBLIC_MANIFEST_BYTES,
         "sha256": PUBLIC_MANIFEST_SHA256,
     }:
-        fail("public adversarial v10 manifest identity drifted")
+        fail("public adversarial v11 manifest identity drifted")
     if manifest.get("schema") != PUBLIC_MANIFEST_SCHEMA:
-        fail("public adversarial v10 manifest schema drifted")
+        fail("public adversarial v11 manifest schema drifted")
     for key, expected in PUBLIC_MANIFEST_CONTRACT.items():
         if manifest.get(key) != expected:
-            fail(f"public adversarial v10 manifest field drifted: {key}")
+            fail(f"public adversarial v11 manifest field drifted: {key}")
     payloads = manifest.get("payloads")
     carriers = manifest.get("candidate_carriers")
     nondefault_carriers = manifest.get("nondefault_branch_carriers")
     release_asset_reviews = manifest.get("release_asset_reviews")
+    release_asset_metadata = manifest.get("release_asset_metadata")
     if not isinstance(payloads, list) or len(payloads) != PUBLIC_METRICS["payload_records"]:
-        fail("public adversarial v10 manifest payload count drifted")
+        fail("public adversarial v11 manifest payload count drifted")
     if not isinstance(carriers, list) or len(carriers) != PUBLIC_METRICS["candidate_carriers"]:
-        fail("public adversarial v10 candidate-carrier count drifted")
+        fail("public adversarial v11 candidate-carrier count drifted")
     if (
         not isinstance(nondefault_carriers, list)
         or len(nondefault_carriers)
         != PUBLIC_MANIFEST_CONTRACT["nondefault_branch_candidate_carriers"]
     ):
-        fail("public adversarial v10 non-default branch count drifted")
+        fail("public adversarial v11 non-default branch count drifted")
     if (
         not isinstance(release_asset_reviews, list)
         or len(release_asset_reviews)
         != PUBLIC_MANIFEST_CONTRACT["release_assets_reviewed"]
     ):
-        fail("public adversarial v10 Release asset review count drifted")
+        fail("public adversarial v11 Release asset review count drifted")
+    if (
+        not isinstance(release_asset_metadata, list)
+        or len(release_asset_metadata)
+        != PUBLIC_MANIFEST_CONTRACT["release_asset_metadata_records"]
+    ):
+        fail("public adversarial v11 Release asset metadata count drifted")
     return identity, manifest
 
 
@@ -1611,12 +1620,12 @@ def validate_development_public_report(
     if exact_keys(
         report["manifest"], {"bytes", "sha256"}, "public adversarial manifest"
     ) != manifest:
-        fail("public adversarial machine report does not bind the v10 manifest")
+        fail("public adversarial machine report does not bind the v11 manifest")
     metrics = exact_keys(
         report["metrics"], set(PUBLIC_METRICS), "public adversarial metrics"
     )
     if metrics != PUBLIC_METRICS:
-        fail("public adversarial metrics differ from the frozen v10 contract")
+        fail("public adversarial metrics differ from the frozen v11 contract")
     producer_log = validate_producer_log(report, log_path, "public adversarial")
     public_raw = regular_bytes(log_path, 262144)
     try:

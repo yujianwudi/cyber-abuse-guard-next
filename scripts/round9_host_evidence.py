@@ -92,7 +92,7 @@ DEBIAN_BASE = {
 }
 HOST_WORKFLOW_PATH = ".github/workflows/round9-host-validation.yml"
 RELEASE_WORKFLOW_PATH = ".github/workflows/round9-release-rc.yml"
-WORKFLOW_REPOSITORY = "yujianwudi/cyber-abuse-guard"
+WORKFLOW_REPOSITORY = "yujianwudi/cyber-abuse-guard-next"
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 RFC3339 = re.compile(

@@ -24,6 +24,7 @@ from round9_eval_core import (
     derive_counted_mock,
     ledger_namespace,
     ledger_ref,
+    merge_public_counted_mock,
     openssl_sign,
     openssl_verify,
     sha256_bytes,
@@ -33,10 +34,19 @@ from round9_eval_core import (
     validate_development_evidence,
     validate_ledger_proof,
     validate_metrics,
+    validate_public_counted_mock_transport,
+    validate_public_decision_audit,
     verify_signed_envelope,
     wilson_interval_95,
 )
-from round9_eval_test_fixtures import decision_audit, development_evidence, runtime_checks
+from round9_eval_test_fixtures import (
+    decision_audit,
+    development_evidence,
+    public_counted_mock,
+    public_counted_mock_transport,
+    public_decision_audit,
+    runtime_checks,
+)
 
 
 @unittest.skipUnless(shutil.which("openssl"), "OpenSSL is required for Ed25519 tests")
@@ -78,9 +88,9 @@ class Round9EvalCoreTest(unittest.TestCase):
                     "strict": "f" * 64,
                 },
                 "phase_route_executions": {
-                    "audit": 2761,
-                    "balanced": 2761,
-                    "strict": 2761,
+                    "audit": 2801,
+                    "balanced": 2801,
+                    "strict": 2801,
                 },
                 "mode_status_verified": {
                     "audit": True,
@@ -97,7 +107,7 @@ class Round9EvalCoreTest(unittest.TestCase):
                     "balanced": "b" * 64,
                     "strict": "c" * 64,
                 },
-                "route_executions": 8283,
+                "route_executions": 8403,
             },
             "route_histogram": {
                 "benign": {
@@ -130,6 +140,17 @@ class Round9EvalCoreTest(unittest.TestCase):
                         "usage_delta": 0 if mode == "strict" else 1,
                     }
                     for mode in ("audit", "balanced", "strict")
+                },
+                "public_development": {
+                    f"{mode}|openai_{protocol}|{stream}": {
+                        "executions": 10,
+                        "policy_blocked": 0 if mode == "audit" else 10,
+                        "upstream_delta": 10 if mode == "audit" else 0,
+                        "usage_delta": 10 if mode == "audit" else 0,
+                    }
+                    for mode in ("audit", "balanced", "strict")
+                    for protocol in ("chat", "responses")
+                    for stream in ("stream", "nonstream")
                 },
             },
             "benign": {
@@ -203,6 +224,7 @@ class Round9EvalCoreTest(unittest.TestCase):
             },
             "runtime_checks": runtime_checks(),
             "decision_audit": decision_audit(),
+            "public_counted_mock": public_counted_mock(),
         }
 
     def fixture(self) -> tuple[dict, dict, dict]:
@@ -228,7 +250,7 @@ class Round9EvalCoreTest(unittest.TestCase):
             "phase1_artifact_digest": "sha256:" + "a" * 64,
         }
         evaluator = {
-            "version": "cag-round9-external-evaluator-v2",
+            "version": "cag-round9-external-evaluator-v3",
             "sha256": "b" * 64,
             "core_sha256": "c" * 64,
             "broker_sha256": "d" * 64,
@@ -296,6 +318,7 @@ class Round9EvalCoreTest(unittest.TestCase):
             },
             "development_evidence": development,
             "counted_mock": counted_mock,
+            "public_counted_mock": metrics["public_counted_mock"],
             "metrics": metrics,
             "privacy": {
                 "raw_prompts_in_result": False,
@@ -319,6 +342,9 @@ class Round9EvalCoreTest(unittest.TestCase):
                 "execution": execution,
                 "development_evidence": development,
                 "counted_mock": counted_mock if event == "result" else None,
+                "public_counted_mock": (
+                    metrics["public_counted_mock"] if event == "result" else None
+                ),
                 "evaluation_envelope_sha256": evaluation_digest if event == "result" else None,
             }
             event_envelope = signed_envelope(event_payload, self.private, evaluator["key_id"])
@@ -361,6 +387,38 @@ class Round9EvalCoreTest(unittest.TestCase):
             payload["evaluator"]["key_id"],
             remote_loader=lambda _repository, ref: remote[ref],
         )
+
+    def test_public_transport_and_cpa_decisions_merge_without_trusting_cross_domain_counts(self) -> None:
+        transport = public_counted_mock_transport(hard_policy_blocked=7)
+        decisions = public_decision_audit()
+        validate_public_counted_mock_transport(transport)
+        validate_public_decision_audit(decisions)
+        merged = merge_public_counted_mock(transport, decisions)
+        self.assertEqual(merged["total"]["serialized_executions"], 120)
+        self.assertEqual(merged["total"]["local_blocked"], 80)
+        self.assertEqual(merged["total"]["upstream_delta"], 40)
+        self.assertEqual(merged["total"]["usage_delta"], 40)
+        self.assertEqual(merged["total"]["hard_policy_blocked"], 7)
+        self.assertEqual(
+            merged["total"]["decision_kind_counts"]["audit_eligible_malicious_text"],
+            40,
+        )
+        self.assertEqual(
+            merged["total"]["decision_kind_counts"]["block_malicious_text"],
+            80,
+        )
+
+        drifted_decisions = copy.deepcopy(decisions)
+        drifted_decisions["families"]["branch_head"]["corpus_role"] = (
+            "historical_default_payload"
+        )
+        with self.assertRaisesRegex(ContractError, "corpus role"):
+            merge_public_counted_mock(transport, drifted_decisions)
+
+        drifted_transport = copy.deepcopy(transport)
+        drifted_transport["families"]["branch_head"]["upstream_delta"] += 1
+        with self.assertRaisesRegex(ContractError, "accounting|frozen"):
+            merge_public_counted_mock(drifted_transport, decisions)
 
     def test_pinned_openssl_subprocess_receives_no_ambient_environment(self) -> None:
         environments: list[dict[str, str]] = []

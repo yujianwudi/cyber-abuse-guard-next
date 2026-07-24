@@ -10,7 +10,7 @@ release_require_commands make git jq sha256sum awk mktemp mv rm chmod
   release_die "Round6 clean candidates may only be produced by GitHub Actions"
 [[ "${GITHUB_EVENT_NAME:-}" == workflow_dispatch ]] || \
   release_die "Round6 clean candidates require the dedicated manual workflow"
-[[ "${GITHUB_REPOSITORY:-}" == yujianwudi/cyber-abuse-guard ]] || \
+[[ "${GITHUB_REPOSITORY:-}" == yujianwudi/cyber-abuse-guard-next ]] || \
   release_die "Round6 clean candidates require the canonical repository"
 [[ "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ ]] || \
   release_die "Round6 clean candidates require a numeric GitHub run ID"

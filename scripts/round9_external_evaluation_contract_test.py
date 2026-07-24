@@ -133,7 +133,7 @@ class ExternalEvaluationContractTest(unittest.TestCase):
             public_key=Path("evaluator.pub"),
             public_key_sha256="a" * 64,
             key_id="round9-evaluator-key-v1",
-            evaluator_version="cag-round9-external-evaluator-v2",
+            evaluator_version="cag-round9-external-evaluator-v3",
             evaluator_sha256="b" * 64,
             core_sha256="c" * 64,
             broker_sha256="d" * 64,

@@ -41,18 +41,24 @@ and a public RC do not authorize production Balanced mode.
 | Workflow SHA | exact candidate commit |
 | Protected environment | `round9-host-validation` |
 | Dedicated runner labels | `self-hosted`, `linux`, `x64`, `cag-round9-sandbox` |
-| External evaluator | `cag-round9-external-evaluator-v2` |
+| External evaluator | `cag-round9-external-evaluator-v3` |
 | Signed envelope | `round9-external-evaluation-signed-envelope/v1` |
-| Signed evaluation payload | `round9-external-evaluation/v2` |
-| Evaluator aggregate | `round9-external-evaluator-aggregate/v2` |
+| Signed evaluation payload | `round9-external-evaluation/v3` |
+| Evaluator aggregate | `round9-external-evaluator-aggregate/v3` |
 | Encrypted corpus bundle manifest | `round9-independent-corpus-bundle/v1` |
-| Ledger event | `round9-external-evaluation-ledger-event/v2` |
+| Ledger event | `round9-external-evaluation-ledger-event/v3` |
 | Ledger proof | `round9-protected-git-ledger-proof/v1` |
 | Counted-Mock evidence | `round9-external-counted-mock/v1` |
+| Public development counted-Mock evidence | `round9-public-counted-mock/v1` |
+| Public evaluator transport | `round9-public-counted-mock-transport/v1` |
+| Public CPA decision audit | `round9-public-cpa-decision-audit/v1` |
+| External decision audit | `round9-external-decision-audit/v3` |
+| CPA audit expectations | `round9-cpa-audit-expectations/v3` |
+| CPA finalize report | `round9-cpa-sandbox-finalize/v2` |
 | CPA runtime checks | `round9-external-cpa-runtime-checks/v1` |
 | CPA sandbox descriptor | `round9-external-cpa-sandbox/v2` |
 | Development evidence | `round9-development-evidence/v1` |
-| Current visible public corpus | `round9-public-adversarial-v10` / 183,752 bytes / `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d` |
+| Current visible public corpus | `round9-public-adversarial-v11` / 476,165 bytes / `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`; 199 Release assets are metadata/digest-only |
 | External evidence assets | `round9-external-evaluation.json`, `round9-external-ledger-proof.json` |
 
 The public adversarial corpus is visible development regression material, not
@@ -165,6 +171,17 @@ execution and metrics. It must be `state=PASS`, carry the complete runtime-check
 object, and have `not_observed=[]`. A bare, hand-filled `PASS`, a contradictory
 counter, or `PASS` with any required observation omitted is rejected.
 
+The same run also executes the ten manifest-bound public §13.25 payloads: eight
+historical defaults, one current branch head, and one unmerged candidate carrier.
+Every payload uses the fixed 12-route matrix. Expectations are frozen before the
+first candidate request: Audit must account for 40 allows/upstream/usage records,
+while Balanced and Strict must account for 80 local malicious-text blocks and
+zero upstream/usage records. The evaluator owns only HTTP/counting observations;
+the adapter owns only persisted CPA decisions. The broker validates and merges
+those two objects, so neither side can self-assert the other side's counters.
+The published object is development regression evidence, not an independent
+holdout, production approval, or proof of third-party provenance extraction.
+
 ## Signed evaluation and protected ledger
 
 The evaluator emits a privacy-bounded aggregate with only identities, counts,
@@ -175,7 +192,7 @@ binding:
 
 ```text
 candidate + evaluator + corpus + execution + ledger
-+ development_evidence + counted_mock + metrics + privacy
++ development_evidence + counted_mock + public_counted_mock + metrics + privacy
 ```
 
 The encrypted bundle SHA-256 selects one protected namespace:
@@ -208,7 +225,9 @@ The Host workflow attests and uploads exactly:
 private. The former Host-only 19-asset publication assembly is statically
 unreachable and has no contents-write permission or Release mutation API. The
 publish, publication-blocker, and legacy existing-Release verifier jobs are all
-fixed to `if: ${{ false }}`. Host run identity, artifact digest, challenge, a
+gated on `needs.admission.outputs.publication_permitted == 'true'`, while the
+admission job emits exactly one hard-coded `publication_permitted=false` and no
+workflow path can emit `true`. Host run identity, artifact digest, challenge, a
 counted-Mock `PASS`, or Release title/body text cannot enable any of them.
 
 The missing gate must review the exact prospective 19-asset candidate, not a
@@ -218,9 +237,10 @@ tag object, commit, and tree; the canonical manifest and allowlist; every asset
 name, byte length, and SHA-256; the required build/Host attestations; and fresh,
 non-replayed audit execution identity. Negative tests must reject Host-only or
 title-only approval, hand-filled status, asset substitution, signer drift,
-unknown fields, stale evidence, and digest drift. This contract is currently
-`NOT_IMPLEMENTED / NOT_PROVIDED`, so no new public `v0.16-rc.3` prerelease is
-authorized or creatable through the workflow.
+unknown fields, stale evidence, and digest drift. The verifier contract is
+currently `IMPLEMENTED_FAIL_CLOSED / INDEPENDENTLY_SIGNED_EVIDENCE_NOT_PROVIDED`,
+so no new public `v0.16-rc.3` prerelease is authorized or creatable through the
+workflow.
 
 Admission rejects every pre-existing `v0.16-rc.3` Release, including an exact
 non-draft immutable 19-asset object. The preserved read-only verifier is legacy,

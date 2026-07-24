@@ -16,6 +16,8 @@ const (
 	publicV9ManifestSHA256  = "dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38"
 	publicV10ManifestBytes  = 183752
 	publicV10ManifestSHA256 = "bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d"
+	publicV11ManifestBytes  = 476165
+	publicV11ManifestSHA256 = "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038"
 )
 
 type publicIdentityPayload struct {
@@ -36,6 +38,10 @@ type publicIdentityManifest struct {
 	NondefaultBranchCandidateCarriers int                     `json:"nondefault_branch_candidate_carriers"`
 	ReleaseAssetsReviewed             int                     `json:"release_assets_reviewed"`
 	ReleaseAssetsWithPromptEntries    int                     `json:"release_assets_with_prompt_entries"`
+	ThirdPartyRepositoryAccess        string                  `json:"third_party_repository_access"`
+	BinaryReleaseAssetsDownloaded     bool                    `json:"binary_release_assets_downloaded"`
+	BinaryReleaseAssetsOpened         bool                    `json:"binary_release_assets_opened"`
+	ReleaseAssetMetadataRecords       int                     `json:"release_asset_metadata_records"`
 	RefreshHistory                    []publicIdentityHistory `json:"refresh_history"`
 	Payloads                          []publicIdentityPayload `json:"payloads"`
 }
@@ -110,6 +116,54 @@ func TestRound9PublicCorpusV10Identity(t *testing.T) {
 		}
 		if !bytes.Equal(v9Encoded, v10Encoded) {
 			t.Fatalf("public payload index %d encoded bytes drifted", index)
+		}
+	}
+}
+
+func TestRound9PublicCorpusV11Identity(t *testing.T) {
+	t.Parallel()
+	root := round9CorpusRepositoryRoot(t)
+	v10 := loadPublicIdentityManifest(t, root, "round9-public-adversarial-v10", publicV10ManifestBytes, publicV10ManifestSHA256)
+	v11 := loadPublicIdentityManifest(t, root, "round9-public-adversarial-v11", publicV11ManifestBytes, publicV11ManifestSHA256)
+	if v11.Schema != "round9-public-adversarial-corpus/v11" || v11.Dataset != "round9-public-adversarial-v11" ||
+		!v11.DevelopmentOnly || v11.IndependentHoldout || v11.ThirdPartyCodeExecuted ||
+		v11.ThirdPartyRepositoryAccess != "github_api_text_and_metadata_read_only" ||
+		v11.BinaryReleaseAssetsDownloaded || v11.BinaryReleaseAssetsOpened ||
+		v11.UniqueFormalPayloads != 23 || v11.NondefaultBranchCandidateCarriers != 5 ||
+		v11.ReleaseAssetsReviewed != 16 || v11.ReleaseAssetsWithPromptEntries != 4 ||
+		v11.ReleaseAssetMetadataRecords != 199 {
+		t.Fatalf("unexpected v11 contract: %+v", v11)
+	}
+
+	matches := 0
+	for _, history := range v11.RefreshHistory {
+		if history.ManifestBytes == publicV10ManifestBytes && history.ManifestSHA256 == publicV10ManifestSHA256 {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("v11 refresh history contains v10 identity %d times, want 1", matches)
+	}
+
+	v10ByIndex := publicPayloadsByIndex(v10.Payloads)
+	v11ByIndex := publicPayloadsByIndex(v11.Payloads)
+	for index := 1; index <= 23; index++ {
+		before, beforeOK := v10ByIndex[index]
+		after, afterOK := v11ByIndex[index]
+		if !beforeOK || !afterOK || before.ID != after.ID || before.EncodedFile != after.EncodedFile ||
+			before.DecodedBytes != after.DecodedBytes || before.DecodedSHA256 != after.DecodedSHA256 {
+			t.Fatalf("public payload index %d identity drift from v10 to v11", index)
+		}
+		v10Encoded, err := os.ReadFile(filepath.Join(root, "testdata", "round9-public-adversarial-v10", filepath.FromSlash(before.EncodedFile)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		v11Encoded, err := os.ReadFile(filepath.Join(root, "testdata", "round9-public-adversarial-v11", filepath.FromSlash(after.EncodedFile)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(v10Encoded, v11Encoded) {
+			t.Fatalf("public payload index %d encoded bytes drifted from v10 to v11", index)
 		}
 	}
 }

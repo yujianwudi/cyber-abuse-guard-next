@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import copy
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,7 @@ from round9_eval_core import (
     canonical_bytes,
     sha256_file,
     signed_envelope,
+    validate_public_counted_mock_transport,
 )
 from round9_eval_test_fixtures import runtime_checks
 
@@ -47,6 +49,8 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
     mode = "audit"
     mode_switch_count = 0
     usage_queue_items: list[dict] = []
+    block_public = True
+    block_malicious = True
 
     def log_message(self, _format: str, *_args) -> None:
         return
@@ -138,10 +142,28 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
         if type(self).mode == "strict" and len(serialized.encode("utf-8")) > 16_384:
             self._json(403, {"error": {"type": "cyber_policy"}})
             return
-        if "synthetic malicious" in serialized and type(self).mode in {"balanced", "strict"}:
+        if (
+            "synthetic public attack" in serialized
+            and type(self).block_public
+            and type(self).mode in {"balanced", "strict"}
+        ):
             self._json(403, {"error": {"type": "cyber_policy"}})
             return
-        if "synthetic benign" not in serialized and "synthetic malicious" not in serialized:
+        if (
+            "synthetic malicious" in serialized
+            and type(self).block_malicious
+            and type(self).mode in {"balanced", "strict"}
+        ):
+            self._json(403, {"error": {"type": "cyber_policy"}})
+            return
+        if not any(
+            marker in serialized
+            for marker in (
+                "synthetic benign",
+                "synthetic malicious",
+                "synthetic public attack",
+            )
+        ):
             self._json(400, {"error": {"type": "unknown_fixture"}})
             return
         type(self).requests_seen += 1
@@ -195,6 +217,8 @@ class ExternalEvaluatorTest(unittest.TestCase):
         SyntheticCPAHandler.mode = "audit"
         SyntheticCPAHandler.mode_switch_count = 0
         SyntheticCPAHandler.usage_queue_items = []
+        SyntheticCPAHandler.block_public = True
+        SyntheticCPAHandler.block_malicious = True
         self.server = ThreadingHTTPServer(("127.0.0.1", 18394), SyntheticCPAHandler)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
@@ -284,6 +308,44 @@ class ExternalEvaluatorTest(unittest.TestCase):
         )
         return corpus, signed
 
+    @staticmethod
+    def public_identity() -> dict:
+        return {
+            "schema": "round9-public-adversarial-corpus/v11",
+            "dataset": "round9-public-adversarial-v11",
+            "bytes": 476_165,
+            "sha256": "d" * 64,
+        }
+
+    @staticmethod
+    def public_cases() -> list[dict[str, str]]:
+        cases = [
+            {
+                "id": f"historical-public-{index}",
+                "family": "historical_unique",
+                "corpus_role": "historical_default_payload",
+                "prompt": f"synthetic public attack historical {index}",
+            }
+            for index in range(8)
+        ]
+        cases.extend(
+            [
+                {
+                    "id": "branch-head-public-1",
+                    "family": "branch_head",
+                    "corpus_role": "branch_head_payload",
+                    "prompt": "synthetic public attack branch head",
+                },
+                {
+                    "id": "candidate-public-1",
+                    "family": "unmerged_candidate_carrier",
+                    "corpus_role": "unmerged_candidate_carrier",
+                    "prompt": "synthetic public attack candidate carrier",
+                },
+            ]
+        )
+        return cases
+
     def test_fake_cpa_black_box_routes_and_counted_mock_contract(self) -> None:
         corpus_root, signed = self.write_corpus()
         corpus, benign, malicious = load_corpus_bundle(
@@ -349,6 +411,8 @@ class ExternalEvaluatorTest(unittest.TestCase):
             descriptor,
             benign,
             malicious,
+            self.public_cases(),
+            self.public_identity(),
             challenge="f" * 64,
             timeout=5,
             audit_expectations=audit_expectations,
@@ -359,15 +423,31 @@ class ExternalEvaluatorTest(unittest.TestCase):
         self.assertEqual(metrics["malicious"]["passed_route_executions"], 16)
         self.assertEqual(metrics["malicious"]["audit_allowed_route_executions"], 8)
         self.assertEqual(metrics["malicious"]["audit_policy_blocked"], 0)
-        self.assertEqual(AUDIT_EXPECTATIONS_SCHEMA, "round9-cpa-audit-expectations/v2")
+        self.assertEqual(AUDIT_EXPECTATIONS_SCHEMA, "round9-cpa-audit-expectations/v3")
         benign_expectations = [
             item for item in audit_expectations if item["kind"] == "benign"
         ]
         required_expectations = [
-            item for item in audit_expectations if item["persistence"] == "required"
+            item
+            for item in audit_expectations
+            if item.get("persistence") == "required" or item.get("required") is True
+        ]
+        public_expectations = [
+            item for item in audit_expectations if item["kind"] == "public_development"
         ]
         self.assertEqual(len(benign_expectations), 24)
-        self.assertEqual(len(required_expectations), 27)
+        self.assertEqual(len(required_expectations), 147)
+        self.assertEqual(len(public_expectations), 120)
+        self.assertEqual(
+            sum(item["expected_local_block"] for item in public_expectations), 80
+        )
+        self.assertEqual(
+            sum(not item["expected_local_block"] for item in public_expectations), 40
+        )
+        self.assertEqual(
+            {item["expected_decision_kind"] for item in public_expectations},
+            {"audit_eligible_malicious_text", "block_malicious_text"},
+        )
         self.assertTrue(
             all(
                 item["persistence"] == "optional"
@@ -379,8 +459,8 @@ class ExternalEvaluatorTest(unittest.TestCase):
         self.assertTrue(
             all(item["kind"] != "benign" for item in required_expectations)
         )
-        self.assertEqual(SyntheticCPAHandler.requests_seen, 34)
-        self.assertEqual(SyntheticCPAHandler.usage_seen, 34)
+        self.assertEqual(SyntheticCPAHandler.requests_seen, 74)
+        self.assertEqual(SyntheticCPAHandler.usage_seen, 74)
         self.assertEqual(SyntheticCPAHandler.mode_switch_count, 2)
         self.assertEqual(
             metrics["route_order"]["phase_order"], ["audit", "balanced", "strict"]
@@ -401,7 +481,7 @@ class ExternalEvaluatorTest(unittest.TestCase):
         )
         self.assertEqual(
             SyntheticCPAHandler.request_modes,
-            ["audit"] * 17 + ["balanced"] * 17 + ["strict"] * 17,
+            ["audit"] * 57 + ["balanced"] * 57 + ["strict"] * 57,
         )
         self.assertIn("request_hmac_sha256", metrics["incomplete"])
         self.assertNotIn("request_sha256", metrics["incomplete"])
@@ -409,6 +489,22 @@ class ExternalEvaluatorTest(unittest.TestCase):
         self.assertNotIn('"request_hash"', public_metrics)
         for expectation in audit_expectations:
             self.assertNotIn(expectation["request_hash"], public_metrics)
+        expectation_json = json.dumps(audit_expectations, ensure_ascii=False, sort_keys=True)
+        for case in self.public_cases():
+            self.assertNotIn(case["id"], expectation_json)
+            self.assertNotIn(case["prompt"], expectation_json)
+            self.assertNotIn(case["id"], public_metrics)
+            self.assertNotIn(case["prompt"], public_metrics)
+        transport = metrics["public_counted_mock_transport"]
+        self.assertEqual(transport["total"]["unique_payloads"], 10)
+        self.assertEqual(transport["total"]["serialized_executions"], 120)
+        self.assertEqual(transport["total"]["local_blocked"], 80)
+        self.assertEqual(transport["total"]["upstream_delta"], 40)
+        self.assertEqual(transport["total"]["usage_delta"], 40)
+        drifted_transport = copy.deepcopy(transport)
+        drifted_transport["total"]["usage_delta"] += 1
+        with self.assertRaisesRegex(ContractError, "total usage_delta differs"):
+            validate_public_counted_mock_transport(drifted_transport)
         transmitted = "\n".join(SyntheticCPAHandler.bodies_seen).casefold()
         for forbidden in (
             "benign-case-en",
@@ -427,6 +523,149 @@ class ExternalEvaluatorTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "fixed CPA base URL"):
             validate_sandbox_descriptor(
                 changed, "b" * 64, enforce_root_ownership=False
+            )
+
+    def test_public_and_independent_all_allow_and_duplicate_identities_fail_closed(
+        self,
+    ) -> None:
+        _corpus_root, _signed = self.write_corpus()
+        token_file = self.root / "authorization.token"
+        token_file.write_text(SyntheticCPAHandler.token + "\n", encoding="utf-8")
+        management_file = self.root / "management.token"
+        management_file.write_text(
+            SyntheticCPAHandler.management_token + "\n", encoding="utf-8"
+        )
+        balanced_config = self.root / "balanced-plugin-config.json"
+        balanced_config.write_bytes(canonical_bytes(expected_plugin_config("balanced")))
+        strict_config = self.root / "strict-plugin-config.json"
+        strict_config.write_bytes(canonical_bytes(expected_plugin_config("strict")))
+        canary_file = self.root / "runtime-canary.txt"
+        canary_file.write_text("CAG_ROUND9_NORMAL_CANARY_SYNTHETIC\n", encoding="ascii")
+        descriptor = validate_sandbox_descriptor(
+            {
+                "schema": SANDBOX_SCHEMA,
+                "base_url": "http://127.0.0.1:18394",
+                "counter_url": "http://127.0.0.1:18394/counter",
+                "authorization_token_file": str(token_file),
+                "management_token_file": str(management_file),
+                "balanced_plugin_config_file": str(balanced_config),
+                "strict_plugin_config_file": str(strict_config),
+                "network_binding": dict(FIXED_NETWORK_BINDING),
+                "phase_protocol": dict(FIXED_PHASE_PROTOCOL),
+                "model": "gpt-5.4",
+                "scan_limit_bytes": 16_384,
+                "candidate_so_sha256": "b" * 64,
+                "cpa_version": "v7.2.95",
+                "cpa_commit": "f71ec0eb6776854457892452cf28c47f0d658251",
+                "cpa_image_id": "sha256:" + "d" * 64,
+                "counted_mock_image_id": "sha256:" + "e" * 64,
+                "sandbox_id": "synthetic-sandbox-v1",
+                "daemon_id": "synthetic-daemon-v1",
+                "probe_image_id": "sha256:" + "c" * 64,
+                "production_accessed": False,
+                "real_provider_contacted": False,
+                "runtime_checks": runtime_checks("preflight"),
+                "runtime_baseline": {
+                    "audit_event_count": 3,
+                    "raw_capture_count": 0,
+                    "subject_state_rows": 0,
+                    "restart_count": 0,
+                },
+                "runtime_canary_file": str(canary_file),
+            },
+            "b" * 64,
+            enforce_root_ownership=False,
+        )
+        benign = [
+            {"id": "benign", "category": "coding", "language": "en", "prompt": "synthetic benign"}
+        ]
+        malicious = [
+            {
+                "id": "malicious",
+                "category": "credential_theft",
+                "language": "en",
+                "prompt": "synthetic malicious",
+            }
+        ]
+        duplicate_cross_class = copy.deepcopy(malicious)
+        duplicate_cross_class[0]["prompt"] = benign[0]["prompt"]
+        with self.assertRaisesRegex(ContractError, "duplicate request identity"):
+            evaluate_cases(
+                descriptor,
+                benign,
+                duplicate_cross_class,
+                self.public_cases(),
+                self.public_identity(),
+                challenge="e" * 64,
+                timeout=5,
+                audit_expectations=[],
+            )
+        self.assertEqual(SyntheticCPAHandler.requests_seen, 0)
+
+        duplicate_id = self.public_cases()
+        duplicate_id[1]["id"] = duplicate_id[0]["id"]
+        with self.assertRaisesRegex(ContractError, "duplicate request identity"):
+            evaluate_cases(
+                descriptor,
+                benign,
+                malicious,
+                duplicate_id,
+                self.public_identity(),
+                challenge="e" * 64,
+                timeout=5,
+                audit_expectations=[],
+            )
+        self.assertEqual(SyntheticCPAHandler.requests_seen, 0)
+
+        duplicate_payload = self.public_cases()
+        duplicate_payload[1]["prompt"] = duplicate_payload[0]["prompt"]
+        with self.assertRaisesRegex(ContractError, "duplicate request identity"):
+            evaluate_cases(
+                descriptor,
+                benign,
+                malicious,
+                duplicate_payload,
+                self.public_identity(),
+                challenge="e" * 64,
+                timeout=5,
+                audit_expectations=[],
+            )
+        self.assertEqual(SyntheticCPAHandler.requests_seen, 0)
+
+        SyntheticCPAHandler.block_malicious = False
+        with self.assertRaisesRegex(
+            ContractError, "malicious CPA outcome differs from frozen ground truth"
+        ):
+            evaluate_cases(
+                descriptor,
+                benign,
+                malicious,
+                self.public_cases(),
+                self.public_identity(),
+                challenge="e" * 64,
+                timeout=5,
+                audit_expectations=[],
+            )
+
+        SyntheticCPAHandler.requests_seen = 0
+        SyntheticCPAHandler.usage_seen = 0
+        SyntheticCPAHandler.bodies_seen = []
+        SyntheticCPAHandler.request_modes = []
+        SyntheticCPAHandler.mode = "audit"
+        SyntheticCPAHandler.mode_switch_count = 0
+        SyntheticCPAHandler.usage_queue_items = []
+        SyntheticCPAHandler.block_malicious = True
+        SyntheticCPAHandler.block_public = False
+        with self.assertRaisesRegex(ContractError, "outcome differs from frozen ground truth"):
+            evaluate_cases(
+                descriptor,
+                benign,
+                malicious,
+                self.public_cases(),
+                self.public_identity(),
+                challenge="e" * 64,
+                timeout=5,
+                audit_expectations=[],
             )
 
     def test_loopback_client_bypasses_environment_proxy_and_rejects_redirects(self) -> None:
@@ -480,6 +719,10 @@ class ExternalEvaluatorTest(unittest.TestCase):
             "round9-author-key-v1",
             "--bundle-sha256",
             "a" * 64,
+            "--public-corpus-root",
+            str(self.root / "public-corpus"),
+            "--public-development-evidence",
+            str(self.root / "public-development-evidence.json"),
             "--sandbox-descriptor",
             str(self.root / "sandbox.json"),
             "--expected-candidate-so-sha256",
@@ -516,6 +759,10 @@ class ExternalEvaluatorTest(unittest.TestCase):
             "round9-author-key-v1",
             "--bundle-sha256",
             "a" * 64,
+            "--public-corpus-root",
+            str(self.root / "public-corpus"),
+            "--public-development-evidence",
+            str(self.root / "public-development-evidence.json"),
             "--sandbox-descriptor",
             str(self.root / "sandbox.json"),
             "--expected-candidate-so-sha256",

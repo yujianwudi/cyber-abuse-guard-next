@@ -13,7 +13,7 @@
   },
   "github": {
     "api_url": "https://api.github.com",
-    "ledger_ruleset_id": 19602252,
+    "ledger_ruleset_id": 19669641,
     "ledger_ruleset_name": "round9-eval-ledger-immutable",
     "token_file": "/etc/cag-round9-eval-broker/github-token"
   },
@@ -24,7 +24,7 @@
     "docker_sandbox_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
     "evaluator_key_id": "round9-evaluator-key-v1",
     "evaluator_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
-    "evaluator_version": "cag-round9-external-evaluator-v2",
+    "evaluator_version": "cag-round9-external-evaluator-v3",
     "sandbox_adapter_config_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
     "sandbox_adapter_sha256": "REPLACE_WITH_64_LOWERCASE_HEX"
   },
@@ -42,7 +42,7 @@
     "state_root": "/var/lib/cag-round9-eval-broker/state",
     "work_root": "/var/lib/cag-round9-eval-broker/work"
   },
-  "repository": "yujianwudi/cyber-abuse-guard",
+  "repository": "yujianwudi/cyber-abuse-guard-next",
   "sandbox": {
     "counted_mock_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
     "cpa_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",

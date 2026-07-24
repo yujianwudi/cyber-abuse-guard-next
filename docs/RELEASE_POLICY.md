@@ -42,16 +42,22 @@ current_rc_build_metadata_schema: 4
 current_audit_schema: 6
 current_raw_capture_schema: 4
 current_development_evidence_schema: round9-development-evidence/v1
-current_external_evaluation_schema: round9-external-evaluation/v2
-current_external_evaluator_aggregate_schema: round9-external-evaluator-aggregate/v2
-current_external_ledger_event_schema: round9-external-evaluation-ledger-event/v2
+current_external_evaluation_schema: round9-external-evaluation/v3
+current_external_evaluator_aggregate_schema: round9-external-evaluator-aggregate/v3
+current_external_ledger_event_schema: round9-external-evaluation-ledger-event/v3
 current_external_ledger_proof_schema: round9-protected-git-ledger-proof/v1
 current_independent_audit_evidence_schema: round9-independent-audit-evidence/v1
 current_independent_audit_ledger_event_schema: round9-independent-audit-ledger-event/v1
 current_independent_audit_ledger_proof_schema: round9-independent-audit-ledger-proof/v1
 current_counted_mock_schema: round9-external-counted-mock/v1
+current_public_counted_mock_schema: round9-public-counted-mock/v1
+current_public_counted_mock_transport_schema: round9-public-counted-mock-transport/v1
+current_public_decision_audit_schema: round9-public-cpa-decision-audit/v1
+current_external_decision_audit_schema: round9-external-decision-audit/v3
+current_cpa_audit_expectations_schema: round9-cpa-audit-expectations/v3
+current_cpa_sandbox_finalize_schema: round9-cpa-sandbox-finalize/v2
 current_cpa_sandbox_descriptor_schema: round9-external-cpa-sandbox/v2
-current_external_evaluator_identity: cag-round9-external-evaluator-v2
+current_external_evaluator_identity: cag-round9-external-evaluator-v3
 current_cpa_host_listener: 127.0.0.1:18394->8317/tcp
 current_external_evaluation_asset: round9-external-evaluation.json
 current_external_ledger_proof_asset: round9-external-ledger-proof.json
@@ -75,12 +81,13 @@ current_paired_label_audit_sha256: a2d34853f20ae1c0b18690a4f58f100fe0014c5323245
 current_paired_label_audit_status: PRE_EXECUTION_PASS_120_OF_120
 current_paired_source_report_schema: round9-development-paired-malicious-report/v3
 current_paired_machine_report_schema: round9-development-paired-malicious-machine-report/v1
-current_public_adversarial_corpus: round9-public-adversarial-v10
-current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v10
-current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v10
-current_public_adversarial_counts: payloads-24_formal-unique-23_historical-8_branch-head-1_prompt-like-14_unmerged-carriers-1_nondefault-branches-5_release-assets-16_release-assets-with-prompt-entries-4_executed-1_not-provided-0_scenario-payloads-24_serialized-routes-120_direct-blocked-12_direct-allowed-12
-current_public_adversarial_manifest_bytes: 183752
-current_public_adversarial_manifest_sha256: bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d
+current_public_adversarial_corpus: round9-public-adversarial-v11
+current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v11
+current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v11
+current_public_adversarial_counts: payloads-24_formal-unique-23_historical-8_branch-head-1_prompt-like-14_unmerged-carriers-1_nondefault-branches-5_release-assets-16_release-assets-with-prompt-entries-4_release-asset-metadata-records-199_executed-1_not-provided-0_scenario-payloads-24_serialized-routes-120_direct-blocked-12_direct-allowed-12
+current_public_adversarial_manifest_bytes: 476165
+current_public_adversarial_manifest_sha256: 297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038
+current_public_counted_mock_matrix: unique-10_routes-120_audit-allow-40_enforcement-block-80_upstream-40_usage-40
 current_independent_benign_requirement: 600-unique-zero-block-zero-hard-policy
 current_development_paired_recall_requirement: aggregate-and-each-category-exactly-10000-basis-points
 current_independent_malicious_recall_requirement: aggregate-and-each-category-at-least-9500-basis-points
@@ -168,7 +175,7 @@ fails closed.
 
 Manifest schema 6 binds `classifier-policy-v8`, ruleset `1.0.10`, audit schema
 v6, Raw Capture schema v4, canonical Phase 1 development evidence, paired-v3
-and public-v10 machine reports, independent benign zero-block/zero-hard-policy
+and public-v11 machine reports, independent benign zero-block/zero-hard-policy
 results, exact 100% visible-development paired recall, independent malicious
 aggregate and per-category recall of at least 95%, per-category Wilson
 intervals, the closed decision-kind set, the fixed loopback CPA listener, and
@@ -212,8 +219,8 @@ API. The current Safe Gate enforces both the verifier wiring and the fail-only,
 private-candidate boundary described above; it does not treat verifier source or
 tests as audit evidence.
 
-The current public adversarial corpus is development-only v10 evidence under
-`round9-public-adversarial-corpus/v10`. The original v8 manifest remains frozen
+The current public adversarial corpus is development-only v11 evidence under
+`round9-public-adversarial-corpus/v11`. The original v8 manifest remains frozen
 byte-for-byte as superseded invalid evidence at 105,299 bytes with SHA-256
 `5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f`.
 The rejected attempt to rebind corrected bytes to the same v8 identity is also
@@ -222,17 +229,19 @@ retained separately at 105,298 bytes with SHA-256
 The corrected corpus was admitted only under the new v9 dataset/schema; its
 manifest is exactly 105,888 bytes with SHA-256
 `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.
-V9 remains frozen byte-for-byte as the immediately preceding valid corpus. V10
-records the later MDX default-head deployment-only advance, separates Git
+V9 remains frozen byte-for-byte as valid history. V10 remains the immediately
+preceding valid corpus. V11 records the later Codex-X default-head advance,
+separates Git
 repository archive entries from GitHub Release asset entries, and records five
 active non-default branches without treating them as formal payload sources.
-Its manifest is exactly 183,752 bytes with SHA-256
-`bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`.
+Its manifest is exactly 476,165 bytes with SHA-256
+`297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`.
 It binds 24 payload records, 23 formal unique payloads (eight historical, one
 branch-head, and fourteen current prompt-like), one unmerged candidate carrier
 with one execution and zero `NOT_PROVIDED`, five behind non-default branch
-candidates, and 16 reviewed formal Release assets of which four contain prompt
-entries. It retains 24 scenario-payload executions and 120 serialized context
+candidates, 16 reviewed historical Release assets of which four contain prompt
+entries, and 199 GitHub Release asset metadata/digest records. No binary Release
+asset was downloaded or opened. It retains 24 scenario-payload executions and 120 serialized context
 routes. Direct-current-user ground truth remains split 12 block and 12
 allow/audit. Ground truth is enforced by the validator rather than inferred
 from candidate output. No third-party repository code is executed, and this

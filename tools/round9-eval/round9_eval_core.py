@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Shared, payload-free contracts for the external Round 9 evaluator.
+"""Shared contracts for the external Round 9 evaluator.
 
 This module is intentionally independent of the Guard Go module.  The installed
 broker and the public release verifier share only canonical JSON, signature,
-ledger, and aggregate-result validation.  Corpus prompt text is never accepted
-by any public evidence schema in this file.
+ledger, and aggregate-result validation.  Public development prompt bytes may
+be decoded only from a manifest-bound private work directory; no evidence
+schema accepts or emits prompt text.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import base64
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import stat
 import subprocess
@@ -22,16 +23,43 @@ from typing import Any, Callable
 
 
 SIGNED_ENVELOPE_SCHEMA = "round9-external-evaluation-signed-envelope/v1"
-EVALUATION_SCHEMA = "round9-external-evaluation/v2"
+EVALUATION_SCHEMA = "round9-external-evaluation/v3"
 CORPUS_BUNDLE_SCHEMA = "round9-independent-corpus-bundle/v1"
-EVALUATOR_AGGREGATE_SCHEMA = "round9-external-evaluator-aggregate/v2"
-LEDGER_EVENT_SCHEMA = "round9-external-evaluation-ledger-event/v2"
+EVALUATOR_AGGREGATE_SCHEMA = "round9-external-evaluator-aggregate/v3"
+LEDGER_EVENT_SCHEMA = "round9-external-evaluation-ledger-event/v3"
 LEDGER_PROOF_SCHEMA = "round9-protected-git-ledger-proof/v1"
 LEDGER_NAMESPACE_PREFIX = "round9-eval-ledger"
 DEVELOPMENT_EVIDENCE_SCHEMA = "round9-development-evidence/v1"
 COUNTED_MOCK_SCHEMA = "round9-external-counted-mock/v1"
 RUNTIME_CHECKS_SCHEMA = "round9-external-cpa-runtime-checks/v1"
-DECISION_AUDIT_SCHEMA = "round9-external-decision-audit/v2"
+DECISION_AUDIT_SCHEMA = "round9-external-decision-audit/v3"
+PUBLIC_COUNTED_MOCK_SCHEMA = "round9-public-counted-mock/v1"
+PUBLIC_COUNTED_MOCK_TRANSPORT_SCHEMA = "round9-public-counted-mock-transport/v1"
+PUBLIC_DECISION_AUDIT_SCHEMA = "round9-public-cpa-decision-audit/v1"
+PUBLIC_DEVELOPMENT_CORPUS = "round9-public-adversarial-v11"
+PUBLIC_DEVELOPMENT_REPORT_SCHEMA = "round9-public-adversarial-report/v11"
+PUBLIC_DEVELOPMENT_SUMMARY = {
+    "name": PUBLIC_DEVELOPMENT_CORPUS,
+    "development_only": True,
+    "independent_holdout": False,
+    "third_party_code_executed": False,
+    "payload_records": 24,
+    "candidate_carrier_executions": 1,
+    "candidate_carriers_not_provided": 0,
+    "scenario_payload_executions": 24,
+    "serialized_route_executions": 120,
+    "direct_active_blocked": 12,
+    "direct_active_allowed": 12,
+    "unique_historical_payloads": 8,
+    "unique_branch_head_payloads": 1,
+    "unique_current_prompt_like_payloads": 14,
+    "unique_formal_payloads": 23,
+    "unmerged_candidate_carriers": 1,
+    "nondefault_branch_candidate_carriers": 5,
+    "release_assets_reviewed": 16,
+    "release_assets_with_prompt_entries": 4,
+    "release_asset_metadata_records": 199,
+}
 
 FIXED_NETWORK_BINDING = {
     "host_ip": "127.0.0.1",
@@ -58,6 +86,61 @@ COUNTED_MOCK_CLAIM_BOUNDARY = (
     "no real Provider, production, or real-user traffic claim."
 )
 COUNTED_MOCK_NOT_OBSERVED: list[str] = []
+PUBLIC_COUNTED_MOCK_FAMILIES = {
+    "historical_unique": "historical_default_payload",
+    "branch_head": "branch_head_payload",
+    "unmerged_candidate_carrier": "unmerged_candidate_carrier",
+}
+PUBLIC_COUNTED_MOCK_DECISION_KINDS = {
+    "allow_clean",
+    "audit_ineligible_risk",
+    "audit_eligible_malicious_text",
+    "block_malicious_text",
+    "block_incomplete_inspection",
+    "block_opaque_media",
+    "block_subject_risk",
+}
+PUBLIC_COUNTED_MOCK_ROUTE_MATRIX = {
+    "modes": ["audit", "balanced", "strict"],
+    "protocols": ["openai_chat", "openai_responses"],
+    "streams": ["nonstream", "stream"],
+    "routes_per_payload": 12,
+}
+PUBLIC_COUNTED_MOCK_EXPECTED_FAMILIES = {
+    "historical_unique": {
+        "unique_payloads": 8,
+        "serialized_executions": 96,
+        "local_blocked": 64,
+        "upstream_delta": 32,
+        "usage_delta": 32,
+        "audit_eligible_malicious_text": 32,
+        "block_malicious_text": 64,
+    },
+    "branch_head": {
+        "unique_payloads": 1,
+        "serialized_executions": 12,
+        "local_blocked": 8,
+        "upstream_delta": 4,
+        "usage_delta": 4,
+        "audit_eligible_malicious_text": 4,
+        "block_malicious_text": 8,
+    },
+    "unmerged_candidate_carrier": {
+        "unique_payloads": 1,
+        "serialized_executions": 12,
+        "local_blocked": 8,
+        "upstream_delta": 4,
+        "usage_delta": 4,
+        "audit_eligible_malicious_text": 4,
+        "block_malicious_text": 8,
+    },
+}
+PUBLIC_COUNTED_MOCK_CLAIM_BOUNDARY = (
+    "Public, candidate-visible development regression payloads executed as exact decoded bytes "
+    "through loopback-only CPA counted-Mock routes; this is Host transport and decision evidence, "
+    "not independent holdout evidence or production approval. Candidate-owned manifest provenance "
+    "is format/hash checked but does not independently prove third-party source extraction."
+)
 
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -173,6 +256,786 @@ def require_literal(value: Any, expected: str, label: str) -> str:
     if value != expected:
         raise ContractError(f"{label} must be {expected}")
     return expected
+
+
+def _safe_public_relative_path(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value or "\\" in value or "\x00" in value:
+        raise ContractError(f"{label} is not a safe POSIX relative path")
+    path = PurePosixPath(value)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise ContractError(f"{label} is not a safe POSIX relative path")
+    return value
+
+
+def _validate_public_source(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ContractError(f"{label} must be an object")
+    source_kind = value.get("source_kind")
+    key_sets = {
+        "repository_file": {
+            "repository",
+            "ref_kind",
+            "ref",
+            "commit",
+            "path",
+            "bytes",
+            "sha256",
+            "git_blob_sha",
+            "source_kind",
+        },
+        "repository_archive_entry": {
+            "repository",
+            "ref_kind",
+            "ref",
+            "commit",
+            "path",
+            "archive_path",
+            "bytes",
+            "sha256",
+            "git_blob_sha",
+            "source_kind",
+        },
+        "release_asset_archive_entry": {
+            "repository",
+            "ref_kind",
+            "ref",
+            "commit",
+            "path",
+            "archive_path",
+            "bytes",
+            "sha256",
+            "release_id",
+            "release_asset_id",
+            "release_asset_digest",
+            "source_kind",
+        },
+    }
+    if source_kind not in key_sets:
+        raise ContractError(f"{label} source_kind is not closed")
+    source = exact_object(value, key_sets[source_kind], label)
+    require_pattern(source["repository"], REPOSITORY, f"{label} repository")
+    require_pattern(source["commit"], HEX40, f"{label} commit")
+    require_pattern(source["sha256"], HEX64, f"{label} sha256")
+    exact_int(source["bytes"], f"{label} bytes", minimum=1)
+    _safe_public_relative_path(source["path"], f"{label} path")
+    if source_kind != "repository_file":
+        _safe_public_relative_path(source["archive_path"], f"{label} archive_path")
+    if source_kind in {"repository_file", "repository_archive_entry"}:
+        require_pattern(source["git_blob_sha"], HEX40, f"{label} git blob sha")
+    else:
+        exact_int(source["release_id"], f"{label} release id", minimum=1)
+        exact_int(source["release_asset_id"], f"{label} release asset id", minimum=1)
+        require_pattern(
+            source["release_asset_digest"], SHA256_DIGEST, f"{label} release asset digest"
+        )
+    if source["ref_kind"] not in {
+        "commit",
+        "default_branch",
+        "pull_request_head",
+        "release_asset",
+        "tag",
+    }:
+        raise ContractError(f"{label} ref_kind is not closed")
+    for key in ("ref",):
+        if not isinstance(source[key], str) or not source[key] or len(source[key]) > 512:
+            raise ContractError(f"{label} {key} is invalid")
+    return source
+
+
+def load_public_counted_mock_corpus(
+    root: Path,
+    public_evidence_value: Any,
+) -> tuple[dict[str, Any], list[dict[str, str]]]:
+    """Validate and decode only the public §13.25 payload families.
+
+    The caller must first extract the manifest and encoded payload allowlist from
+    the attested source archive.  This function never imports or executes corpus
+    code and returns no provenance text beyond bounded public identifiers.
+    """
+
+    public_evidence = exact_object(
+        public_evidence_value,
+        set(PUBLIC_DEVELOPMENT_SUMMARY) | {"manifest"},
+        "public development evidence",
+    )
+    name = require_pattern(
+        public_evidence["name"],
+        re.compile(r"^round9-public-adversarial-v[1-9][0-9]*$"),
+        "public development corpus name",
+    )
+    exact_bool(public_evidence["development_only"], True, "public development_only")
+    exact_bool(public_evidence["independent_holdout"], False, "public independent_holdout")
+    exact_bool(
+        public_evidence["third_party_code_executed"],
+        False,
+        "public third_party_code_executed",
+    )
+    manifest_binding = exact_object(
+        public_evidence["manifest"], {"bytes", "sha256"}, "public manifest binding"
+    )
+    expected_manifest_bytes = exact_int(
+        manifest_binding["bytes"], "public manifest bytes", minimum=1
+    )
+    expected_manifest_sha256 = require_pattern(
+        manifest_binding["sha256"], HEX64, "public manifest sha256"
+    )
+    manifest_path = root / "manifest.json"
+    manifest_raw = read_bounded_file(manifest_path, "public manifest", maximum=1_048_576)
+    if (
+        len(manifest_raw) != expected_manifest_bytes
+        or sha256_bytes(manifest_raw) != expected_manifest_sha256
+    ):
+        raise ContractError("public manifest does not bind the Phase 1 development evidence")
+    manifest = exact_object(
+        load_json_bytes(manifest_raw, "public manifest"),
+        {
+            "schema",
+            "dataset",
+            "queried_at",
+            "refreshed_at",
+            "refresh_history",
+            "development_only",
+            "independent_holdout",
+            "third_party_code_executed",
+            "payload_encoding",
+            "unique_historical_payloads",
+            "unique_branch_head_payloads",
+            "unique_current_prompt_like_payloads",
+            "unique_formal_payloads",
+            "unmerged_candidate_carriers",
+            "serialized_contexts_per_scenario_payload",
+            "repositories",
+            "merged_pull_requests",
+            "prompt_like_delta_review",
+            "special_findings",
+            "candidate_carriers",
+            "payloads",
+            "nondefault_branch_candidate_carriers",
+            "nondefault_branch_carriers",
+            "release_assets_reviewed",
+            "release_assets_with_prompt_entries",
+            "release_asset_reviews",
+            "third_party_repository_access",
+            "binary_release_assets_downloaded",
+            "binary_release_assets_opened",
+            "release_asset_collection_scope",
+            "release_asset_metadata_records",
+            "release_asset_metadata",
+            "codexx_head_advance_review",
+        },
+        "public manifest",
+    )
+    version = name.rsplit("v", 1)[1]
+    require_literal(manifest["schema"], f"round9-public-adversarial-corpus/v{version}", "public schema")
+    require_literal(manifest["dataset"], name, "public dataset")
+    exact_bool(manifest["development_only"], True, "public manifest development_only")
+    exact_bool(manifest["independent_holdout"], False, "public manifest independent_holdout")
+    exact_bool(
+        manifest["third_party_code_executed"], False, "public manifest third_party_code_executed"
+    )
+    require_literal(
+        manifest["third_party_repository_access"],
+        "github_api_text_and_metadata_read_only",
+        "public third-party repository access",
+    )
+    exact_bool(
+        manifest["binary_release_assets_downloaded"],
+        False,
+        "public binary release assets downloaded",
+    )
+    exact_bool(
+        manifest["binary_release_assets_opened"],
+        False,
+        "public binary release assets opened",
+    )
+    require_literal(
+        manifest["release_asset_collection_scope"],
+        "all_releases_returned_by_authenticated_github_api",
+        "public release asset collection scope",
+    )
+    require_literal(manifest["payload_encoding"], "base64_exact_bytes", "public payload encoding")
+    count_bindings = {
+        "unique_historical_payloads": "unique_historical_payloads",
+        "unique_branch_head_payloads": "unique_branch_head_payloads",
+        "unique_current_prompt_like_payloads": "unique_current_prompt_like_payloads",
+        "unique_formal_payloads": "unique_formal_payloads",
+        "unmerged_candidate_carriers": "unmerged_candidate_carriers",
+        "nondefault_branch_candidate_carriers": "nondefault_branch_candidate_carriers",
+        "release_assets_reviewed": "release_assets_reviewed",
+        "release_assets_with_prompt_entries": "release_assets_with_prompt_entries",
+        "release_asset_metadata_records": "release_asset_metadata_records",
+    }
+    for manifest_key, evidence_key in count_bindings.items():
+        observed = exact_int(manifest[manifest_key], f"public manifest {manifest_key}")
+        expected = exact_int(public_evidence[evidence_key], f"public evidence {evidence_key}")
+        if observed != expected:
+            raise ContractError(f"public manifest {manifest_key} differs from development evidence")
+    release_asset_metadata = manifest["release_asset_metadata"]
+    if (
+        not isinstance(release_asset_metadata, list)
+        or len(release_asset_metadata)
+        != exact_int(
+            manifest["release_asset_metadata_records"],
+            "public release asset metadata records",
+        )
+    ):
+        raise ContractError("public release asset metadata count differs from manifest")
+    require_literal(
+        public_evidence["candidate_carriers_not_provided"],
+        0,
+        "public candidate carriers not provided",
+    )
+    exact_int(
+        manifest["serialized_contexts_per_scenario_payload"],
+        "public serialized contexts per scenario",
+        minimum=1,
+    )
+    payloads = manifest["payloads"]
+    if (
+        not isinstance(payloads, list)
+        or len(payloads) != exact_int(public_evidence["payload_records"], "public payload records")
+    ):
+        raise ContractError("public payload record count differs from development evidence")
+    cases: list[dict[str, str]] = []
+    identifiers: set[str] = set()
+    encoded_files: set[str] = set()
+    decoded_hashes: set[str] = set()
+    formal_indexes: set[int] = set()
+    family_counts = {family: 0 for family in PUBLIC_COUNTED_MOCK_FAMILIES}
+    role_to_family = {role: family for family, role in PUBLIC_COUNTED_MOCK_FAMILIES.items()}
+    payload_keys = {
+        "id",
+        "corpus_role",
+        "unique_payload_index",
+        "encoded_file",
+        "encoding",
+        "decoded_bytes",
+        "decoded_sha256",
+        "direct_current_user_ground_truth",
+        "quoted_or_analytical_ground_truth",
+        "sources",
+        "historical_assistant_ground_truth",
+        "system_context_ground_truth",
+        "tool_result_ground_truth",
+    }
+    allowed_roles = set(role_to_family) | {"current_default_prompt_like_payload"}
+    for index, item in enumerate(payloads):
+        payload = exact_object(item, payload_keys, f"public payload {index}")
+        identifier = require_pattern(payload["id"], IDENTIFIER, f"public payload {index} id")
+        if identifier in identifiers:
+            raise ContractError("public payload identifiers are not unique")
+        identifiers.add(identifier)
+        role = payload["corpus_role"]
+        if role not in allowed_roles:
+            raise ContractError("public payload corpus_role is not closed")
+        encoded_file = _safe_public_relative_path(
+            payload["encoded_file"], f"public payload {identifier} encoded_file"
+        )
+        encoded_path = PurePosixPath(encoded_file)
+        if (
+            len(encoded_path.parts) != 2
+            or encoded_path.parts[0] != "payloads"
+            or not encoded_path.name.endswith(".b64")
+            or encoded_file in encoded_files
+        ):
+            raise ContractError("public encoded payload allowlist is invalid")
+        encoded_files.add(encoded_file)
+        require_literal(payload["encoding"], "base64", f"public payload {identifier} encoding")
+        decoded_bytes = exact_int(
+            payload["decoded_bytes"], f"public payload {identifier} decoded bytes", minimum=1
+        )
+        if decoded_bytes > 131_072:
+            raise ContractError("public decoded payload exceeds the reviewed CPA request bound")
+        decoded_sha256 = require_pattern(
+            payload["decoded_sha256"], HEX64, f"public payload {identifier} decoded sha256"
+        )
+        if decoded_sha256 in decoded_hashes:
+            raise ContractError("public manifest contains duplicate decoded payload bytes")
+        decoded_hashes.add(decoded_sha256)
+        unique_index = payload["unique_payload_index"]
+        if role == "unmerged_candidate_carrier":
+            if unique_index is not None:
+                raise ContractError("unmerged candidate carrier must not claim a formal unique index")
+        else:
+            formal_index = exact_int(
+                unique_index, f"public payload {identifier} formal unique index", minimum=1
+            )
+            if formal_index in formal_indexes:
+                raise ContractError("public formal unique payload indexes are not unique")
+            formal_indexes.add(formal_index)
+        for key in (
+            "direct_current_user_ground_truth",
+            "quoted_or_analytical_ground_truth",
+            "historical_assistant_ground_truth",
+            "system_context_ground_truth",
+            "tool_result_ground_truth",
+        ):
+            if payload[key] not in {"allow_or_audit", "block_malicious_text"}:
+                raise ContractError(f"public payload {identifier} {key} is not closed")
+        sources = payload["sources"]
+        if not isinstance(sources, list) or not sources or len(sources) > 64:
+            raise ContractError("public payload sources are outside the reviewed bound")
+        for source_index, source in enumerate(sources):
+            # This candidate-owned provenance is bound by the exact v11
+            # manifest identity and is useful for audit traceability, but it is
+            # not independent proof that the third-party source was extracted
+            # correctly. Archive provenance intentionally describes both the
+            # container path and archive_path, so its bytes/hash need not equal
+            # the decoded prompt identity below.
+            _validate_public_source(source, f"public payload {identifier} source {source_index}")
+        payload_path = root.joinpath(*encoded_path.parts)
+        maximum_encoded = ((decoded_bytes + 2) // 3) * 4 + 1
+        encoded_raw = read_bounded_file(
+            payload_path,
+            f"public encoded payload {identifier}",
+            maximum=maximum_encoded,
+        )
+        try:
+            decoded = base64.b64decode(encoded_raw.rstrip(b"\n"), validate=True)
+        except (ValueError, TypeError) as exc:
+            raise ContractError("public payload is not canonical base64") from exc
+        if encoded_raw != base64.b64encode(decoded) + b"\n":
+            raise ContractError("public payload base64 encoding is not canonical")
+        if len(decoded) != decoded_bytes or sha256_bytes(decoded) != decoded_sha256:
+            raise ContractError("public decoded payload bytes/hash differ from the manifest")
+        try:
+            prompt = decoded.decode("utf-8", "strict")
+        except UnicodeDecodeError as exc:
+            raise ContractError("public decoded payload is not UTF-8 text") from exc
+        family = role_to_family.get(role)
+        if family is not None:
+            if payload["direct_current_user_ground_truth"] != "block_malicious_text":
+                raise ContractError("§13.25 public payload family lost its frozen direct ground truth")
+            family_counts[family] += 1
+            cases.append(
+                {
+                    "id": identifier,
+                    "family": family,
+                    "corpus_role": role,
+                    "prompt": prompt,
+                }
+            )
+    expected_formal = exact_int(
+        public_evidence["unique_formal_payloads"], "public formal unique payloads", minimum=1
+    )
+    if formal_indexes != set(range(1, expected_formal + 1)):
+        raise ContractError("public formal unique payload indexes are not contiguous")
+    expected_family_counts = {
+        "historical_unique": exact_int(
+            public_evidence["unique_historical_payloads"], "public historical payloads", minimum=1
+        ),
+        "branch_head": exact_int(
+            public_evidence["unique_branch_head_payloads"], "public branch-head payloads", minimum=1
+        ),
+        "unmerged_candidate_carrier": exact_int(
+            public_evidence["unmerged_candidate_carriers"],
+            "public unmerged candidate carriers",
+            minimum=1,
+        ),
+    }
+    if family_counts != expected_family_counts:
+        raise ContractError("public §13.25 family counts differ from development evidence")
+    if len(cases) != sum(expected_family_counts.values()):
+        raise ContractError("public §13.25 case count is contradictory")
+    identity = {
+        "schema": manifest["schema"],
+        "dataset": manifest["dataset"],
+        "bytes": len(manifest_raw),
+        "sha256": sha256_bytes(manifest_raw),
+    }
+    return identity, cases
+
+
+def _validate_public_transport_family(
+    value: Any,
+    family: str,
+    *,
+    with_decisions: bool,
+) -> dict[str, Any]:
+    keys = {
+        "corpus_role",
+        "unique_payloads",
+        "serialized_executions",
+        "local_blocked",
+        "upstream_delta",
+        "usage_delta",
+        "hard_policy_blocked",
+    }
+    if with_decisions:
+        keys.add("decision_kind_counts")
+    row = exact_object(value, keys, f"public counted-Mock family {family}")
+    require_literal(
+        row["corpus_role"], PUBLIC_COUNTED_MOCK_FAMILIES[family], f"public {family} corpus role"
+    )
+    unique = exact_int(row["unique_payloads"], f"public {family} unique payloads", minimum=1)
+    serialized = exact_int(
+        row["serialized_executions"], f"public {family} serialized executions", minimum=1
+    )
+    if serialized != unique * PUBLIC_COUNTED_MOCK_ROUTE_MATRIX["routes_per_payload"]:
+        raise ContractError(f"public {family} route count does not bind unique payloads")
+    blocked = exact_int(row["local_blocked"], f"public {family} local blocks")
+    upstream = exact_int(row["upstream_delta"], f"public {family} upstream delta")
+    usage = exact_int(row["usage_delta"], f"public {family} usage delta")
+    hard = exact_int(row["hard_policy_blocked"], f"public {family} hard-policy blocks")
+    if blocked + upstream != serialized or usage != upstream or hard > blocked:
+        raise ContractError(f"public {family} counted-Mock transport accounting is contradictory")
+    expected = PUBLIC_COUNTED_MOCK_EXPECTED_FAMILIES[family]
+    for key in (
+        "unique_payloads",
+        "serialized_executions",
+        "local_blocked",
+        "upstream_delta",
+        "usage_delta",
+    ):
+        if row[key] != expected[key]:
+            raise ContractError(f"public {family} {key} differs from the frozen §13.25 matrix")
+    if with_decisions:
+        decisions = exact_count_map(
+            row["decision_kind_counts"],
+            f"public {family} decision kinds",
+            expected_keys=PUBLIC_COUNTED_MOCK_DECISION_KINDS,
+            expected_total=serialized,
+        )
+        decision_blocks = sum(
+            decisions[key]
+            for key in (
+                "block_malicious_text",
+                "block_incomplete_inspection",
+                "block_opaque_media",
+                "block_subject_risk",
+            )
+        )
+        if decision_blocks != blocked or hard > decisions["block_malicious_text"]:
+            raise ContractError(f"public {family} decisions do not bind HTTP block outcomes")
+        expected_decisions = {
+            key: 0 for key in PUBLIC_COUNTED_MOCK_DECISION_KINDS
+        }
+        expected_decisions["audit_eligible_malicious_text"] = expected[
+            "audit_eligible_malicious_text"
+        ]
+        expected_decisions["block_malicious_text"] = expected["block_malicious_text"]
+        if decisions != expected_decisions:
+            raise ContractError(f"public {family} decision kinds differ from frozen ground truth")
+    return row
+
+
+def validate_public_counted_mock_transport(value: Any) -> dict[str, Any]:
+    transport = exact_object(
+        value,
+        {"schema", "manifest", "route_matrix", "families", "total"},
+        "public counted-Mock transport",
+    )
+    require_literal(
+        transport["schema"],
+        PUBLIC_COUNTED_MOCK_TRANSPORT_SCHEMA,
+        "public counted-Mock transport schema",
+    )
+    manifest = exact_object(
+        transport["manifest"], {"schema", "dataset", "bytes", "sha256"}, "public manifest identity"
+    )
+    require_pattern(
+        manifest["schema"], re.compile(r"^round9-public-adversarial-corpus/v[1-9][0-9]*$"), "public manifest schema"
+    )
+    require_pattern(
+        manifest["dataset"], re.compile(r"^round9-public-adversarial-v[1-9][0-9]*$"), "public manifest dataset"
+    )
+    if manifest["schema"].rsplit("/v", 1)[1] != manifest["dataset"].rsplit("-v", 1)[1]:
+        raise ContractError("public manifest schema and dataset versions differ")
+    exact_int(manifest["bytes"], "public manifest bytes", minimum=1)
+    require_pattern(manifest["sha256"], HEX64, "public manifest sha256")
+    if transport["route_matrix"] != PUBLIC_COUNTED_MOCK_ROUTE_MATRIX:
+        raise ContractError("public counted-Mock route matrix differs")
+    families = exact_object(
+        transport["families"], set(PUBLIC_COUNTED_MOCK_FAMILIES), "public counted-Mock families"
+    )
+    rows = {
+        family: _validate_public_transport_family(families[family], family, with_decisions=False)
+        for family in PUBLIC_COUNTED_MOCK_FAMILIES
+    }
+    total = exact_object(
+        transport["total"],
+        {
+            "unique_payloads",
+            "serialized_executions",
+            "local_blocked",
+            "upstream_delta",
+            "usage_delta",
+            "hard_policy_blocked",
+        },
+        "public counted-Mock transport total",
+    )
+    for key in total:
+        observed = exact_int(total[key], f"public counted-Mock total {key}")
+        if observed != sum(row[key] for row in rows.values()):
+            raise ContractError(f"public counted-Mock transport total {key} differs from families")
+    return transport
+
+
+def validate_public_decision_audit(value: Any) -> dict[str, Any]:
+    audit = exact_object(
+        value,
+        {"schema", "manifest", "route_matrix", "families", "total"},
+        "public CPA decision audit",
+    )
+    require_literal(audit["schema"], PUBLIC_DECISION_AUDIT_SCHEMA, "public decision audit schema")
+    manifest = exact_object(
+        audit["manifest"], {"schema", "dataset", "bytes", "sha256"}, "public decision manifest"
+    )
+    require_pattern(
+        manifest["schema"],
+        re.compile(r"^round9-public-adversarial-corpus/v[1-9][0-9]*$"),
+        "public decision manifest schema",
+    )
+    require_pattern(
+        manifest["dataset"],
+        re.compile(r"^round9-public-adversarial-v[1-9][0-9]*$"),
+        "public decision manifest dataset",
+    )
+    exact_int(manifest["bytes"], "public decision manifest bytes", minimum=1)
+    require_pattern(manifest["sha256"], HEX64, "public decision manifest sha256")
+    if audit["route_matrix"] != PUBLIC_COUNTED_MOCK_ROUTE_MATRIX:
+        raise ContractError("public decision audit route matrix differs")
+    families = exact_object(
+        audit["families"], set(PUBLIC_COUNTED_MOCK_FAMILIES), "public decision audit families"
+    )
+    family_rows: dict[str, dict[str, Any]] = {}
+    for family, row_value in families.items():
+        row = exact_object(
+            row_value,
+            {
+                "corpus_role",
+                "unique_payloads",
+                "serialized_executions",
+                "decision_kind_counts",
+            },
+            f"public decision family {family}",
+        )
+        require_literal(
+            row["corpus_role"],
+            PUBLIC_COUNTED_MOCK_FAMILIES[family],
+            f"public decision {family} corpus role",
+        )
+        expected = PUBLIC_COUNTED_MOCK_EXPECTED_FAMILIES[family]
+        if (
+            exact_int(row["unique_payloads"], f"public decision {family} unique", minimum=1)
+            != expected["unique_payloads"]
+            or exact_int(
+                row["serialized_executions"], f"public decision {family} executions", minimum=1
+            )
+            != expected["serialized_executions"]
+        ):
+            raise ContractError(f"public decision {family} counts differ from frozen matrix")
+        decisions = exact_count_map(
+            row["decision_kind_counts"],
+            f"public decision {family} kinds",
+            expected_keys=PUBLIC_COUNTED_MOCK_DECISION_KINDS,
+            expected_total=row["serialized_executions"],
+        )
+        expected_decisions = {key: 0 for key in PUBLIC_COUNTED_MOCK_DECISION_KINDS}
+        expected_decisions["audit_eligible_malicious_text"] = expected[
+            "audit_eligible_malicious_text"
+        ]
+        expected_decisions["block_malicious_text"] = expected["block_malicious_text"]
+        if decisions != expected_decisions:
+            raise ContractError(f"public decision {family} kinds differ from frozen ground truth")
+        family_rows[family] = row
+    total = exact_object(
+        audit["total"],
+        {"unique_payloads", "serialized_executions", "decision_kind_counts"},
+        "public decision audit total",
+    )
+    for key in ("unique_payloads", "serialized_executions"):
+        observed = exact_int(total[key], f"public decision total {key}", minimum=1)
+        if observed != sum(row[key] for row in family_rows.values()):
+            raise ContractError(f"public decision total {key} differs from families")
+    total_decisions = exact_count_map(
+        total["decision_kind_counts"],
+        "public decision total kinds",
+        expected_keys=PUBLIC_COUNTED_MOCK_DECISION_KINDS,
+        expected_total=total["serialized_executions"],
+    )
+    for decision in PUBLIC_COUNTED_MOCK_DECISION_KINDS:
+        if total_decisions[decision] != sum(
+            row["decision_kind_counts"][decision] for row in family_rows.values()
+        ):
+            raise ContractError("public decision totals differ from families")
+    return audit
+
+
+def merge_public_counted_mock(
+    transport_value: Any,
+    decision_value: Any,
+) -> dict[str, Any]:
+    transport = validate_public_counted_mock_transport(transport_value)
+    decisions = validate_public_decision_audit(decision_value)
+    if (
+        transport["manifest"] != decisions["manifest"]
+        or transport["route_matrix"] != decisions["route_matrix"]
+    ):
+        raise ContractError("public transport and decision audit identities differ")
+    families: dict[str, dict[str, Any]] = {}
+    for family in PUBLIC_COUNTED_MOCK_FAMILIES:
+        transport_row = transport["families"][family]
+        decision_row = decisions["families"][family]
+        if (
+            transport_row["unique_payloads"] != decision_row["unique_payloads"]
+            or transport_row["serialized_executions"] != decision_row["serialized_executions"]
+        ):
+            raise ContractError("public transport and decision family counts differ")
+        families[family] = {
+            **transport_row,
+            "decision_kind_counts": dict(decision_row["decision_kind_counts"]),
+        }
+    counted = {
+        "schema": PUBLIC_COUNTED_MOCK_SCHEMA,
+        "state": "PASS",
+        "development_only": True,
+        "independent_holdout": False,
+        "third_party_code_executed": False,
+        "manifest": dict(transport["manifest"]),
+        "route_matrix": {
+            key: list(value) if isinstance(value, list) else value
+            for key, value in transport["route_matrix"].items()
+        },
+        "families": families,
+        "total": {
+            **transport["total"],
+            "decision_kind_counts": dict(decisions["total"]["decision_kind_counts"]),
+        },
+        "claim_boundary": PUBLIC_COUNTED_MOCK_CLAIM_BOUNDARY,
+    }
+    return validate_public_counted_mock(
+        counted,
+        expected_transport=transport,
+        expected_manifest=transport["manifest"],
+    )
+
+
+def public_transport_from_counted_mock(value: Any) -> dict[str, Any]:
+    counted = validate_public_counted_mock(value)
+    family_keys = {
+        "corpus_role",
+        "unique_payloads",
+        "serialized_executions",
+        "local_blocked",
+        "upstream_delta",
+        "usage_delta",
+        "hard_policy_blocked",
+    }
+    total_keys = family_keys - {"corpus_role"}
+    return validate_public_counted_mock_transport(
+        {
+            "schema": PUBLIC_COUNTED_MOCK_TRANSPORT_SCHEMA,
+            "manifest": dict(counted["manifest"]),
+            "route_matrix": {
+                key: list(item) if isinstance(item, list) else item
+                for key, item in counted["route_matrix"].items()
+            },
+            "families": {
+                family: {key: row[key] for key in family_keys}
+                for family, row in counted["families"].items()
+            },
+            "total": {key: counted["total"][key] for key in total_keys},
+        }
+    )
+
+
+def validate_public_counted_mock(
+    value: Any,
+    *,
+    expected_manifest: dict[str, Any] | None = None,
+    expected_transport: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    counted = exact_object(
+        value,
+        {
+            "schema",
+            "state",
+            "development_only",
+            "independent_holdout",
+            "third_party_code_executed",
+            "manifest",
+            "route_matrix",
+            "families",
+            "total",
+            "claim_boundary",
+        },
+        "public counted-Mock evidence",
+    )
+    require_literal(counted["schema"], PUBLIC_COUNTED_MOCK_SCHEMA, "public counted-Mock schema")
+    require_literal(counted["state"], "PASS", "public counted-Mock state")
+    exact_bool(counted["development_only"], True, "public counted-Mock development_only")
+    exact_bool(counted["independent_holdout"], False, "public counted-Mock independent_holdout")
+    exact_bool(
+        counted["third_party_code_executed"], False, "public counted-Mock third_party_code_executed"
+    )
+    require_literal(
+        counted["claim_boundary"], PUBLIC_COUNTED_MOCK_CLAIM_BOUNDARY, "public counted-Mock claim boundary"
+    )
+    manifest = exact_object(
+        counted["manifest"], {"schema", "dataset", "bytes", "sha256"}, "public manifest identity"
+    )
+    require_pattern(
+        manifest["schema"], re.compile(r"^round9-public-adversarial-corpus/v[1-9][0-9]*$"), "public manifest schema"
+    )
+    require_pattern(
+        manifest["dataset"], re.compile(r"^round9-public-adversarial-v[1-9][0-9]*$"), "public manifest dataset"
+    )
+    exact_int(manifest["bytes"], "public manifest bytes", minimum=1)
+    require_pattern(manifest["sha256"], HEX64, "public manifest sha256")
+    if expected_manifest is not None and manifest != expected_manifest:
+        raise ContractError("public counted-Mock manifest differs from Phase 1 development evidence")
+    if counted["route_matrix"] != PUBLIC_COUNTED_MOCK_ROUTE_MATRIX:
+        raise ContractError("public counted-Mock route matrix differs")
+    families = exact_object(
+        counted["families"], set(PUBLIC_COUNTED_MOCK_FAMILIES), "public counted-Mock families"
+    )
+    rows = {
+        family: _validate_public_transport_family(families[family], family, with_decisions=True)
+        for family in PUBLIC_COUNTED_MOCK_FAMILIES
+    }
+    total = exact_object(
+        counted["total"],
+        {
+            "unique_payloads",
+            "serialized_executions",
+            "local_blocked",
+            "upstream_delta",
+            "usage_delta",
+            "hard_policy_blocked",
+            "decision_kind_counts",
+        },
+        "public counted-Mock total",
+    )
+    for key in (
+        "unique_payloads",
+        "serialized_executions",
+        "local_blocked",
+        "upstream_delta",
+        "usage_delta",
+        "hard_policy_blocked",
+    ):
+        observed = exact_int(total[key], f"public counted-Mock total {key}")
+        if observed != sum(row[key] for row in rows.values()):
+            raise ContractError(f"public counted-Mock total {key} differs from families")
+    total_decisions = exact_count_map(
+        total["decision_kind_counts"],
+        "public counted-Mock total decision kinds",
+        expected_keys=PUBLIC_COUNTED_MOCK_DECISION_KINDS,
+        expected_total=total["serialized_executions"],
+    )
+    for decision in PUBLIC_COUNTED_MOCK_DECISION_KINDS:
+        if total_decisions[decision] != sum(
+            row["decision_kind_counts"][decision] for row in rows.values()
+        ):
+            raise ContractError("public counted-Mock decision totals differ from families")
+    if total_decisions["block_subject_risk"] != 0:
+        raise ContractError("public counted-Mock observed subject-risk blocking with subject control disabled")
+    if expected_transport is not None:
+        validate_public_counted_mock_transport(expected_transport)
+        if public_transport_from_counted_mock(counted) != expected_transport:
+            raise ContractError("public counted-Mock evidence differs from evaluator transport observations")
+    return counted
 
 
 def openssl_subprocess_env() -> dict[str, str]:
@@ -586,11 +1449,7 @@ def validate_development_evidence(
             "unique_semantic_samples",
             "semantic_blocked",
             "serialized_route_executions",
-            "enforcement_route_executions",
-            "audit_route_executions",
             "passed_route_executions",
-            "audit_allowed_route_executions",
-            "audit_policy_blocked",
             "recall_basis_points",
             "per_category",
         },
@@ -617,31 +1476,13 @@ def validate_development_evidence(
     samples = exact_int(paired["unique_semantic_samples"], "paired malicious samples")
     blocked = exact_int(paired["semantic_blocked"], "paired malicious blocked")
     routes = exact_int(paired["serialized_route_executions"], "paired malicious routes")
-    enforcement_routes = exact_int(
-        paired["enforcement_route_executions"],
-        "paired malicious enforcement routes",
-    )
-    audit_routes = exact_int(
-        paired["audit_route_executions"], "paired malicious Audit routes"
-    )
     passed_routes = exact_int(paired["passed_route_executions"], "paired malicious passed routes")
-    audit_allowed = exact_int(
-        paired["audit_allowed_route_executions"],
-        "paired malicious Audit allowed routes",
-    )
-    audit_blocked = exact_int(
-        paired["audit_policy_blocked"], "paired malicious Audit policy blocks"
-    )
     recall = exact_int(paired["recall_basis_points"], "paired malicious recall")
     if (
         samples != 120
         or blocked > samples
         or routes != 960
-        or enforcement_routes != routes
-        or audit_routes != 0
-        or passed_routes != enforcement_routes
-        or audit_allowed != 0
-        or audit_blocked != 0
+        or passed_routes != routes
         or recall != blocked * 10_000 // samples
         or recall != 10_000
     ):
@@ -685,41 +1526,25 @@ def validate_development_evidence(
 
     public = exact_object(
         corpus["public_adversarial"],
-        {
-            "name",
-            "manifest",
-            "development_only",
-            "independent_holdout",
-            "third_party_code_executed",
-            "metrics",
-        },
+        set(PUBLIC_DEVELOPMENT_SUMMARY) | {"manifest"},
         "public adversarial development evidence",
     )
-    require_literal(public["name"], "round9-public-adversarial-v5", "public corpus name")
+    require_literal(public["name"], PUBLIC_DEVELOPMENT_CORPUS, "public corpus name")
     validate_digest_binding(public["manifest"], "public corpus manifest")
     exact_bool(public["development_only"], True, "public corpus development_only")
     exact_bool(public["independent_holdout"], False, "public corpus independent_holdout")
     exact_bool(public["third_party_code_executed"], False, "public corpus third_party_code_executed")
-    expected_public_metrics = {
-        "payload_records": 24,
-        "formal_unique_payloads": 23,
-        "candidate_carriers": 1,
-        "candidate_executions": 1,
-        "not_provided": 0,
-        "scenario_payload_executions": 24,
-        "serialized_route_executions": 120,
-        "direct_blocked": 12,
-        "direct_allowed": 12,
-        "quoted_blocked": 0,
-        "historical_blocked": 0,
-        "system_blocked": 0,
-        "tool_blocked": 0,
-    }
-    public_metrics = exact_object(
-        public["metrics"], set(expected_public_metrics), "public adversarial metrics"
-    )
-    if public_metrics != expected_public_metrics:
-        raise ContractError("public adversarial development metrics differ")
+    for key, expected in PUBLIC_DEVELOPMENT_SUMMARY.items():
+        if key in {
+            "name",
+            "development_only",
+            "independent_holdout",
+            "third_party_code_executed",
+        }:
+            continue
+        observed = exact_int(public[key], f"public adversarial {key}")
+        if observed != expected:
+            raise ContractError(f"public adversarial {key} differs from the frozen v11 contract")
 
     audit = exact_object(
         evidence["audit_contract"],
@@ -766,7 +1591,7 @@ def validate_development_evidence(
     report_schemas = {
         "development_benign": ("round9-development-benign-corpus-report/v1", 4_194_304),
         "paired_malicious": ("round9-development-paired-malicious-machine-report/v1", 4_194_304),
-        "public_adversarial": ("round9-public-adversarial-report/v5", 262_144),
+        "public_adversarial": (PUBLIC_DEVELOPMENT_REPORT_SCHEMA, 262_144),
         "audit_contract": ("round9-audit-contract-report/v1", 262_144),
     }
     for name, (schema, maximum) in report_schemas.items():
@@ -1143,12 +1968,7 @@ def validate_decision_audit(value: Any) -> dict[str, Any]:
     decisions = exact_count_map(
         audit["decision_kind_counts"],
         "decision audit decision kinds",
-        expected_keys={
-            "audit_eligible_malicious_text",
-            "audit_ineligible_risk",
-            "block_malicious_text",
-            "block_incomplete_inspection",
-        },
+        expected_keys=PUBLIC_COUNTED_MOCK_DECISION_KINDS,
         expected_total=matched_count,
     )
     groups = exact_count_map(
@@ -1160,18 +1980,18 @@ def validate_decision_audit(value: Any) -> dict[str, Any]:
             "malicious_enforcement",
             "incomplete_non_strict",
             "strict_incomplete",
+            "public_development",
         },
         expected_total=matched_count,
     )
     if groups["incomplete_non_strict"] != 2 or groups["strict_incomplete"] != 1:
         raise ContractError("decision audit incomplete groups differ from the fixed phase matrix")
-    if (
-        decisions["audit_ineligible_risk"] != 2 + optional_persisted
-        or decisions["block_incomplete_inspection"] != 1
-    ):
+    if decisions["block_incomplete_inspection"] < 1:
         raise ContractError("decision audit incomplete/optional decision kinds differ")
-    if groups["benign"] != optional_persisted:
-        raise ContractError("decision audit benign group does not bind optional persistence")
+    if decisions["allow_clean"] != 0:
+        raise ContractError("clean allows must be represented by optional missing audit rows")
+    if decisions["block_subject_risk"] != 0 or decisions["block_opaque_media"] != 0:
+        raise ContractError("external text evaluation observed an unrelated block decision kind")
     for key, label in (
         ("subject_state_rows", "decision audit subject state"),
         ("incomplete_malicious_category_count", "decision audit incomplete malicious category"),
@@ -1224,6 +2044,7 @@ def validate_metrics(value: Any) -> dict[str, Any]:
             "benign",
             "malicious",
             "incomplete",
+            "public_counted_mock",
             "runtime_checks",
             "decision_audit",
         },
@@ -1663,9 +2484,17 @@ def validate_metrics(value: Any) -> dict[str, Any]:
         or exact_int(strict_incomplete["usage_delta"], "strict incomplete usage") != 0
     ):
         raise ContractError("incomplete counted-Mock disposition accounting failed")
+    public_counted = validate_public_counted_mock(metrics["public_counted_mock"])
+    public_total = public_counted["total"]
+    public_samples = public_total["unique_payloads"]
+    public_routes = public_total["serialized_executions"]
+    public_blocked = public_total["local_blocked"]
+    public_upstream = public_total["upstream_delta"]
+    public_usage = public_total["usage_delta"]
+    public_decisions = public_total["decision_kind_counts"]
     histogram = exact_object(
         metrics["route_histogram"],
-        {"benign", "malicious", "incomplete"},
+        {"benign", "malicious", "incomplete", "public_development"},
         "route histogram",
     )
     full_route_keys = {
@@ -1718,6 +2547,12 @@ def validate_metrics(value: Any) -> dict[str, Any]:
         incomplete_route_keys,
         1,
     )
+    public_hist = validate_route_rows(
+        histogram["public_development"],
+        "public development route histogram",
+        full_route_keys,
+        public_samples,
+    )
     if benign_hist != (benign_routes, benign_cag, benign_upstream, benign_usage):
         raise ContractError("benign route histogram does not bind the aggregate")
     if malicious_hist != (
@@ -1729,9 +2564,11 @@ def validate_metrics(value: Any) -> dict[str, Any]:
         raise ContractError("malicious route histogram does not bind the aggregate")
     if incomplete_hist != (3, 1, 2, 2):
         raise ContractError("incomplete route histogram does not bind the three phase outcomes")
-    if route_order_total != benign_routes + malicious_routes + 3:
+    if public_hist != (public_routes, public_blocked, public_upstream, public_usage):
+        raise ContractError("public development route histogram does not bind the aggregate")
+    if route_order_total != benign_routes + malicious_routes + public_routes + 3:
         raise ContractError("route-order execution count does not bind all external requests")
-    expected_phase_routes = benign_samples * 4 + malicious_samples * 4 + 1
+    expected_phase_routes = benign_samples * 4 + malicious_samples * 4 + public_samples * 4 + 1
     for mode in ("audit", "balanced", "strict"):
         if (
             exact_int(
@@ -1745,33 +2582,48 @@ def validate_metrics(value: Any) -> dict[str, Any]:
     runtime = validate_runtime_checks(metrics["runtime_checks"])
     require_literal(runtime["phase"], "post_evaluation", "runtime checks phase")
     decision_audit = validate_decision_audit(metrics["decision_audit"])
-    optional_persisted = decision_audit["optional_persisted_count"]
+    group_counts = decision_audit["group_counts"]
+    benign_optional_persisted = group_counts["benign"]
+    public_required = public_routes
+    public_persisted = public_routes
     expected_decisions = {
-        "audit_eligible_malicious_text": malicious_routes - malicious_cag,
-        "audit_ineligible_risk": 2 + optional_persisted,
-        "block_malicious_text": malicious_cag,
-        "block_incomplete_inspection": 1,
+        "allow_clean": 0,
+        "audit_eligible_malicious_text": malicious_routes - malicious_cag
+        + public_decisions["audit_eligible_malicious_text"],
+        "audit_ineligible_risk": 2
+        + benign_optional_persisted
+        + public_decisions["audit_ineligible_risk"],
+        "block_malicious_text": malicious_cag
+        + public_decisions["block_malicious_text"],
+        "block_incomplete_inspection": 1
+        + public_decisions["block_incomplete_inspection"],
+        "block_opaque_media": public_decisions["block_opaque_media"],
+        "block_subject_risk": public_decisions["block_subject_risk"],
     }
     expected_groups = {
-        "benign": optional_persisted,
+        "benign": benign_optional_persisted,
         "malicious_audit": audit_routes,
         "malicious_enforcement": enforcement_routes,
         "incomplete_non_strict": 2,
         "strict_incomplete": 1,
+        "public_development": public_persisted,
     }
     if (
         decision_audit["decision_kind_counts"] != expected_decisions
         or decision_audit["group_counts"] != expected_groups
         or decision_audit["expectation_count"] != route_order_total
-        or decision_audit["required_expectation_count"] != malicious_routes + 3
+        or decision_audit["required_expectation_count"]
+        != malicious_routes + 3 + public_required
         or decision_audit["optional_expectation_count"] != benign_routes
-        or decision_audit["optional_missing_count"] != benign_routes - optional_persisted
+        or decision_audit["optional_persisted_count"] != benign_optional_persisted
+        or decision_audit["optional_missing_count"]
+        != benign_routes - benign_optional_persisted
         or runtime["audit_database"]["evaluation_event_delta"]
         != decision_audit["matched_count"]
         or runtime["usage_queue"]["evaluation_allowed_delta"]
-        != benign_upstream + malicious_upstream + 2
+        != benign_upstream + malicious_upstream + public_upstream + 2
         or runtime["usage_queue"]["evaluation_blocked_delta"]
-        != benign_cag + malicious_cag + 1
+        != benign_cag + malicious_cag + public_blocked + 1
     ):
         raise ContractError("decision/runtime evidence does not mechanically bind route outcomes")
     return metrics
@@ -1940,6 +2792,7 @@ def validate_evaluation_payload(
             "ledger",
             "development_evidence",
             "counted_mock",
+            "public_counted_mock",
             "metrics",
             "privacy",
         },
@@ -1956,11 +2809,36 @@ def validate_evaluation_payload(
     if challenge is not None and execution["challenge_sha256"] != challenge_sha256(challenge):
         raise ContractError("external evaluation challenge binding differs")
     validate_ledger_binding(value["ledger"], corpus)
-    validate_development_evidence(value["development_evidence"], expected_candidate=candidate)
+    development = validate_development_evidence(
+        value["development_evidence"], expected_candidate=candidate
+    )
     metrics = validate_metrics(value["metrics"])
     if metrics["route_order"]["seed_sha256"] != execution["route_order_seed_sha256"]:
         raise ContractError("route-order metrics do not bind the execution challenge")
     validate_counted_mock(value["counted_mock"], metrics, execution)
+    public_evidence = development["corpus"]["public_adversarial"]
+    public_name = public_evidence["name"]
+    expected_public_manifest = {
+        "schema": "round9-public-adversarial-corpus/v" + public_name.rsplit("v", 1)[1],
+        "dataset": public_name,
+        "bytes": public_evidence["manifest"]["bytes"],
+        "sha256": public_evidence["manifest"]["sha256"],
+    }
+    public_counted = validate_public_counted_mock(
+        value["public_counted_mock"], expected_manifest=expected_public_manifest
+    )
+    if public_counted != metrics["public_counted_mock"]:
+        raise ContractError("public counted-Mock top-level/metrics binding differs")
+    expected_public_counts = {
+        "historical_unique": public_evidence["unique_historical_payloads"],
+        "branch_head": public_evidence["unique_branch_head_payloads"],
+        "unmerged_candidate_carrier": public_evidence["unmerged_candidate_carriers"],
+    }
+    if {
+        family: public_counted["families"][family]["unique_payloads"]
+        for family in PUBLIC_COUNTED_MOCK_FAMILIES
+    } != expected_public_counts:
+        raise ContractError("public counted-Mock family counts differ from development evidence")
     validate_privacy(value["privacy"])
     if evaluator["key_id"] == corpus["author_key_id"]:
         raise ContractError("corpus author and evaluator execution keys must be distinct")
@@ -1981,6 +2859,7 @@ def validate_ledger_event_payload(value: Any, event: str) -> dict[str, Any]:
             "execution",
             "development_evidence",
             "counted_mock",
+            "public_counted_mock",
             "evaluation_envelope_sha256",
         },
         f"ledger {event} payload",
@@ -2000,10 +2879,13 @@ def validate_ledger_event_payload(value: Any, event: str) -> dict[str, Any]:
         require_pattern(digest, HEX64, "result evaluation envelope sha256")
         if not isinstance(payload["counted_mock"], dict):
             raise ContractError("result ledger event must bind counted Mock evidence")
+        validate_public_counted_mock(payload["public_counted_mock"])
     elif digest is not None:
         raise ContractError("non-result ledger event cannot bind an evaluation envelope")
     elif payload["counted_mock"] is not None:
         raise ContractError("non-result ledger event cannot bind counted Mock evidence")
+    elif payload["public_counted_mock"] is not None:
+        raise ContractError("non-result ledger event cannot bind public counted-Mock evidence")
     _ = candidate, execution
     return payload
 
@@ -2051,6 +2933,8 @@ def validate_ledger_proof(
             != evaluation_payload["development_evidence"]
             or event_payload["counted_mock"]
             != (evaluation_payload["counted_mock"] if event == "result" else None)
+            or event_payload["public_counted_mock"]
+            != (evaluation_payload["public_counted_mock"] if event == "result" else None)
         ):
             raise ContractError(f"ledger {event} event binding differs from evaluation")
         message = canonical_bytes(entry["envelope"])

@@ -6,16 +6,23 @@ import argparse
 from contextlib import ExitStack
 import copy
 from email.message import Message
+import hashlib
 import io
 import json
 from pathlib import Path
+import stat
+import subprocess
+import tarfile
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import warnings
+import zipfile
 
 from cag_round9_eval_broker import (
     ARTIFACT_NAMES,
+    CORPUS_ARCHIVE_NAMES,
     HOST_WORKFLOW,
     HOST_WORKFLOW_NAME,
     PHASE1_WORKFLOW_NAME,
@@ -26,6 +33,7 @@ from cag_round9_eval_broker import (
     apply_candidate_identity_input,
     abort_verified_partial_ledger,
     candidate_identity,
+    canonical_ed25519_public_spki,
     evaluator_identity,
     execution_identity,
     evaluate_once,
@@ -34,16 +42,30 @@ from cag_round9_eval_broker import (
     minimal_subprocess_env,
     parser as broker_parser,
     run_external_evaluator,
+    safe_extract_corpus,
+    safe_extract_public_development_corpus,
+    safe_extract_zip,
     validate_external_aggregate,
     validate_dispatch,
     validate_phase1_build_metadata,
     validate_phase1_release_manifest,
     validate_phase1_ruleset_manifest,
+    validate_signing_key_material,
     verify_ledger_ruleset,
     verify_remote_identity,
 )
-from round9_eval_core import FIXED_NETWORK_BINDING, FIXED_PHASE_PROTOCOL
-from round9_eval_test_fixtures import decision_audit, development_evidence, runtime_checks
+from round9_eval_core import (
+    FIXED_NETWORK_BINDING,
+    FIXED_PHASE_PROTOCOL,
+    canonical_bytes,
+    sha256_file,
+)
+from round9_eval_test_fixtures import (
+    decision_audit,
+    development_evidence,
+    public_counted_mock,
+    runtime_checks,
+)
 
 
 class FakeHTTPResponse:
@@ -93,6 +115,333 @@ class BrokerIdentityContractTest(unittest.TestCase):
             ),
             workflow_sha="2" * 40,
         )
+
+    @staticmethod
+    def public_corpus_root() -> Path:
+        return Path(__file__).resolve().parents[2] / "testdata/round9-public-adversarial-v11"
+
+    def public_evidence(self, manifest_raw: bytes | None = None) -> dict:
+        evidence = copy.deepcopy(development_evidence()["corpus"]["public_adversarial"])
+        raw = manifest_raw
+        if raw is None:
+            raw = (self.public_corpus_root() / "manifest.json").read_bytes()
+        evidence["manifest"] = {
+            "bytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(),
+        }
+        return evidence
+
+    def write_public_source_tar(
+        self,
+        archive_path: Path,
+        *,
+        overrides: dict[str, bytes] | None = None,
+        omitted: set[str] | None = None,
+        extra: list[tuple[tarfile.TarInfo, bytes | None]] | None = None,
+    ) -> None:
+        source = self.public_corpus_root()
+        prefix = "cyber-abuse-guard-v0.16-rc.3"
+        corpus_prefix = prefix + "/testdata/round9-public-adversarial-v11"
+        overrides = overrides or {}
+        omitted = omitted or set()
+        entries: list[tuple[tarfile.TarInfo, bytes | None]] = []
+
+        for name in (prefix, prefix + "/testdata", corpus_prefix, corpus_prefix + "/payloads"):
+            info = tarfile.TarInfo(name)
+            info.type = tarfile.DIRTYPE
+            info.mode = 0o755
+            entries.append((info, None))
+        for path in sorted(source.rglob("*")):
+            if not path.is_file():
+                continue
+            relative = path.relative_to(source).as_posix()
+            if relative in omitted:
+                continue
+            raw = overrides.get(relative, path.read_bytes())
+            info = tarfile.TarInfo(corpus_prefix + "/" + relative)
+            info.size = len(raw)
+            info.mode = 0o644
+            entries.append((info, raw))
+        entries.extend(extra or [])
+
+        with tarfile.open(archive_path, mode="w:gz") as archive:
+            for info, raw in entries:
+                archive.addfile(info, None if raw is None else io.BytesIO(raw))
+
+    @staticmethod
+    def phase1_zip_bytes(
+        *,
+        duplicate_name: str | None = None,
+        symlink_name: str | None = None,
+        traversal: bool = False,
+    ) -> bytes:
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name in sorted(ARTIFACT_NAMES):
+                if name == symlink_name:
+                    info = zipfile.ZipInfo(name)
+                    info.create_system = 3
+                    info.external_attr = (stat.S_IFLNK | 0o777) << 16
+                    archive.writestr(info, b"target")
+                else:
+                    archive.writestr(name, (name + "\n").encode("ascii"))
+            if duplicate_name is not None:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    archive.writestr(duplicate_name, b"duplicate\n")
+            if traversal:
+                archive.writestr("../escape", b"escape\n")
+        return output.getvalue()
+
+    @staticmethod
+    def patch_zip_central_file_size(raw: bytes, name: str, size: int) -> bytes:
+        """Change one central-directory size without allocating the claimed bytes."""
+
+        value = bytearray(raw)
+        end = value.rfind(b"PK\x05\x06")
+        if end < 0:
+            raise AssertionError("test ZIP lacks an end-of-central-directory record")
+        position = int.from_bytes(value[end + 16 : end + 20], "little")
+        while value[position : position + 4] == b"PK\x01\x02":
+            name_length = int.from_bytes(value[position + 28 : position + 30], "little")
+            extra_length = int.from_bytes(value[position + 30 : position + 32], "little")
+            comment_length = int.from_bytes(value[position + 32 : position + 34], "little")
+            member_name = bytes(value[position + 46 : position + 46 + name_length]).decode(
+                "ascii"
+            )
+            if member_name == name:
+                value[position + 24 : position + 28] = size.to_bytes(4, "little")
+                return bytes(value)
+            position += 46 + name_length + extra_length + comment_length
+        raise AssertionError(f"test ZIP central directory lacks {name}")
+
+    @staticmethod
+    def write_corpus_tar(
+        archive_path: Path,
+        *,
+        duplicate: bool = False,
+        link_type: bytes | None = None,
+        traversal: bool = False,
+    ) -> None:
+        names = sorted(CORPUS_ARCHIVE_NAMES)
+        replacement = names[0]
+        with tarfile.open(archive_path, mode="w") as archive:
+            for name in names:
+                info = tarfile.TarInfo(name)
+                if name == replacement and link_type is not None:
+                    info.type = link_type
+                    info.linkname = names[1]
+                    archive.addfile(info)
+                else:
+                    raw = (name + "\n").encode("ascii")
+                    info.size = len(raw)
+                    archive.addfile(info, io.BytesIO(raw))
+            if duplicate:
+                raw = b"duplicate\n"
+                info = tarfile.TarInfo(replacement)
+                info.size = len(raw)
+                archive.addfile(info, io.BytesIO(raw))
+            if traversal:
+                raw = b"escape\n"
+                info = tarfile.TarInfo("../escape")
+                info.size = len(raw)
+                archive.addfile(info, io.BytesIO(raw))
+
+    def test_public_source_tar_extraction_is_manifest_bound_and_fail_closed(self) -> None:
+        manifest_raw = (self.public_corpus_root() / "manifest.json").read_bytes()
+        evidence = self.public_evidence(manifest_raw)
+        expected_identity = {
+            "schema": "round9-public-adversarial-corpus/v11",
+            "dataset": "round9-public-adversarial-v11",
+            "bytes": 476_165,
+            "sha256": "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            valid = root / "valid.tar.gz"
+            self.write_public_source_tar(valid)
+            output = root / "valid-output"
+            self.assertEqual(
+                safe_extract_public_development_corpus(valid, output, evidence),
+                expected_identity,
+            )
+            self.assertEqual(
+                {path.relative_to(output).as_posix() for path in output.rglob("*")},
+                {
+                    "manifest.json",
+                    "payloads",
+                    *{
+                        "payloads/" + path.name
+                        for path in (self.public_corpus_root() / "payloads").iterdir()
+                    },
+                },
+            )
+
+            def reject(
+                name: str,
+                pattern: str,
+                *,
+                overrides: dict[str, bytes] | None = None,
+                omitted: set[str] | None = None,
+                extra: list[tuple[tarfile.TarInfo, bytes | None]] | None = None,
+                changed_evidence: dict | None = None,
+            ) -> None:
+                archive = root / f"{name}.tar.gz"
+                self.write_public_source_tar(
+                    archive,
+                    overrides=overrides,
+                    omitted=omitted,
+                    extra=extra,
+                )
+                with self.assertRaisesRegex(ContractError, pattern):
+                    safe_extract_public_development_corpus(
+                        archive,
+                        root / f"{name}-output",
+                        changed_evidence or evidence,
+                    )
+
+            traversal = tarfile.TarInfo(
+                "cyber-abuse-guard-v0.16-rc.3/testdata/../../escape"
+            )
+            traversal.size = 1
+            reject("traversal", "invalid path|outside its fixed prefix", extra=[(traversal, b"x")])
+
+            for kind, link_type in (("symlink", tarfile.SYMTYPE), ("hardlink", tarfile.LNKTYPE)):
+                link = tarfile.TarInfo(f"cyber-abuse-guard-v0.16-rc.3/{kind}")
+                link.type = link_type
+                link.linkname = "cyber-abuse-guard-v0.16-rc.3/testdata"
+                reject(kind, "link or special file", extra=[(link, None)])
+
+            duplicate = tarfile.TarInfo(
+                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v11/manifest.json"
+            )
+            duplicate.size = len(manifest_raw)
+            reject(
+                "duplicate",
+                "duplicate normalized paths",
+                extra=[(duplicate, manifest_raw)],
+            )
+
+            extra_corpus = tarfile.TarInfo(
+                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v11/extra.txt"
+            )
+            extra_corpus.size = 1
+            reject(
+                "extra-corpus",
+                "extra or missing entry",
+                extra=[(extra_corpus, b"x")],
+            )
+            reject(
+                "missing-corpus",
+                "extra or missing entry",
+                omitted={"README.md"},
+            )
+
+            drifted_manifest = manifest_raw.replace(b'"queried_at"', b'"queried_ax"', 1)
+            self.assertEqual(len(drifted_manifest), len(manifest_raw))
+            reject(
+                "manifest-drift",
+                "manifest digest differs",
+                overrides={"manifest.json": drifted_manifest},
+            )
+
+            payload_name = next(
+                path.name for path in sorted((self.public_corpus_root() / "payloads").iterdir())
+            )
+            payload_raw = (self.public_corpus_root() / "payloads" / payload_name).read_bytes()
+            replacement = (b"A" if payload_raw[:1] != b"A" else b"B") + payload_raw[1:]
+            reject(
+                "payload-drift",
+                "payload|base64",
+                overrides={"payloads/" + payload_name: replacement},
+            )
+
+            unsafe_manifest = json.loads(manifest_raw)
+            unsafe_manifest["payloads"][0]["encoded_file"] = "payloads/../escape.b64"
+            unsafe_raw = canonical_bytes(unsafe_manifest)
+            reject(
+                "unsafe-encoded-path",
+                "encoded path is invalid",
+                overrides={"manifest.json": unsafe_raw},
+                changed_evidence=self.public_evidence(unsafe_raw),
+            )
+
+    def test_phase1_zip_rejects_duplicate_link_traversal_and_oversize(self) -> None:
+        target = sorted(ARTIFACT_NAMES)[0]
+        valid = self.phase1_zip_bytes()
+        oversized = self.patch_zip_central_file_size(valid, target, 536_870_913)
+        cases = {
+            "duplicate": (
+                self.phase1_zip_bytes(duplicate_name=target),
+                "exact 17 assets",
+            ),
+            "symlink": (
+                self.phase1_zip_bytes(symlink_name=target),
+                "unsafe entry",
+            ),
+            "traversal": (
+                self.phase1_zip_bytes(traversal=True),
+                "exact 17 assets",
+            ),
+            "oversize": (oversized, "unsafe entry|reviewed bound"),
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "valid-output"
+            output.mkdir()
+            safe_extract_zip(valid, output)
+            self.assertEqual({path.name for path in output.iterdir()}, ARTIFACT_NAMES)
+
+        for name, (raw, pattern) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                output = root / "output"
+                output.mkdir()
+                with self.assertRaisesRegex(ContractError, pattern):
+                    safe_extract_zip(raw, output)
+                self.assertFalse((root / "escape").exists())
+
+    def test_decrypted_corpus_tar_rejects_duplicate_links_traversal_and_oversize(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "valid.tar"
+            self.write_corpus_tar(archive)
+            output = root / "valid-output"
+            safe_extract_corpus(archive, output)
+            self.assertEqual({path.name for path in output.iterdir()}, CORPUS_ARCHIVE_NAMES)
+
+        cases = {
+            "duplicate": {"duplicate": True},
+            "symlink": {"link_type": tarfile.SYMTYPE},
+            "hardlink": {"link_type": tarfile.LNKTYPE},
+            "traversal": {"traversal": True},
+        }
+        for name, options in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                archive = root / f"{name}.tar"
+                self.write_corpus_tar(archive, **options)
+                with self.assertRaisesRegex(ContractError, "entries are not exact|unsafe entry"):
+                    safe_extract_corpus(archive, root / "output")
+                self.assertFalse((root / "escape").exists())
+
+        members: list[tarfile.TarInfo] = []
+        for index, name in enumerate(sorted(CORPUS_ARCHIVE_NAMES)):
+            info = tarfile.TarInfo(name)
+            info.size = 268_435_457 if index == 0 else 1
+            members.append(info)
+        fake_archive = mock.MagicMock()
+        fake_archive.__enter__.return_value = fake_archive
+        fake_archive.getmembers.return_value = members
+        with tempfile.TemporaryDirectory() as directory, mock.patch(
+            "cag_round9_eval_broker.tarfile.open", return_value=fake_archive
+        ):
+            root = Path(directory)
+            with self.assertRaisesRegex(ContractError, "unsafe entry|reviewed bound"):
+                safe_extract_corpus(root / "oversize.tar", root / "output")
+        fake_archive.extractfile.assert_not_called()
 
     def test_dispatch_identity_is_bound_to_exact_tag_and_workflow_source(self) -> None:
         validate_dispatch(self.args, self.args.repository)
@@ -367,7 +716,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
     def test_evaluator_and_execution_include_every_pinned_component(self) -> None:
         config = {
             "identities": {
-                "evaluator_version": "cag-round9-external-evaluator-v2",
+                "evaluator_version": "cag-round9-external-evaluator-v3",
                 "evaluator_sha256": "1" * 64,
                 "core_sha256": "2" * 64,
                 "broker_sha256": "3" * 64,
@@ -395,6 +744,124 @@ class BrokerIdentityContractTest(unittest.TestCase):
         self.assertEqual(execution["model"], "gpt-5.4")
         self.assertEqual(execution["network_binding"], FIXED_NETWORK_BINDING)
         self.assertEqual(execution["phase_protocol"], FIXED_PHASE_PROTOCOL)
+
+    def test_openssl_canonicalizes_private_and_public_ed25519_keys_to_der_spki(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            private_key = root / "evaluator-private.pem"
+            public_key = root / "evaluator-public.pem"
+            private_key.write_text("private test fixture\n", encoding="utf-8")
+            public_key.write_text("public test fixture\n", encoding="utf-8")
+            spki = bytes.fromhex("302a300506032b6570032100") + b"e" * 32
+            calls: list[list[str]] = []
+
+            def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+                calls.append(command)
+                self.assertIs(kwargs["stdin"], subprocess.DEVNULL)
+                self.assertEqual(kwargs["env"], minimal_subprocess_env())
+                self.assertEqual(kwargs["timeout"], 30)
+                return SimpleNamespace(returncode=0, stdout=spki, stderr=b"")
+
+            with mock.patch("cag_round9_eval_broker.subprocess.run", side_effect=fake_run):
+                self.assertEqual(
+                    canonical_ed25519_public_spki(
+                        private_key, private_key=True, openssl="/usr/bin/openssl"
+                    ),
+                    spki,
+                )
+                self.assertEqual(
+                    canonical_ed25519_public_spki(
+                        public_key, private_key=False, openssl="/usr/bin/openssl"
+                    ),
+                    spki,
+                )
+            self.assertEqual(
+                calls,
+                [
+                    [
+                        "/usr/bin/openssl",
+                        "pkey",
+                        "-in",
+                        str(private_key),
+                        "-pubout",
+                        "-outform",
+                        "DER",
+                    ],
+                    [
+                        "/usr/bin/openssl",
+                        "pkey",
+                        "-pubin",
+                        "-in",
+                        str(public_key),
+                        "-pubout",
+                        "-outform",
+                        "DER",
+                    ],
+                ],
+            )
+
+            with mock.patch(
+                "cag_round9_eval_broker.subprocess.run",
+                return_value=SimpleNamespace(returncode=1, stdout=b"", stderr=b"rejected"),
+            ):
+                with self.assertRaisesRegex(ContractError, "failed to canonicalize"):
+                    canonical_ed25519_public_spki(
+                        public_key, private_key=False, openssl="/usr/bin/openssl"
+                    )
+            with mock.patch(
+                "cag_round9_eval_broker.subprocess.run",
+                return_value=SimpleNamespace(
+                    returncode=0, stdout=b"not-ed25519-spki", stderr=b""
+                ),
+            ):
+                with self.assertRaisesRegex(ContractError, "not canonical Ed25519"):
+                    canonical_ed25519_public_spki(
+                        public_key, private_key=False, openssl="/usr/bin/openssl"
+                    )
+
+    def test_signing_key_material_requires_matching_evaluator_pair_and_distinct_author(self) -> None:
+        evaluator_private = Path("/root/evaluator-private.pem")
+        evaluator_public = Path("/root/evaluator-public.pem")
+        author_public = Path("/root/author-public.pem")
+        evaluator_spki = bytes.fromhex("302a300506032b6570032100") + b"e" * 32
+        author_spki = bytes.fromhex("302a300506032b6570032100") + b"a" * 32
+
+        with mock.patch(
+            "cag_round9_eval_broker.canonical_ed25519_public_spki",
+            side_effect=[evaluator_spki, evaluator_spki, author_spki],
+        ):
+            validate_signing_key_material(
+                evaluator_private,
+                evaluator_public,
+                author_public,
+                openssl="/usr/bin/openssl",
+            )
+
+        with mock.patch(
+            "cag_round9_eval_broker.canonical_ed25519_public_spki",
+            side_effect=[evaluator_spki, author_spki],
+        ):
+            with self.assertRaisesRegex(ContractError, "private/public.*do not match"):
+                validate_signing_key_material(
+                    evaluator_private,
+                    evaluator_public,
+                    author_public,
+                    openssl="/usr/bin/openssl",
+                )
+
+        # Key IDs are intentionally absent here: differently encoded PEM files or
+        # different IDs cannot make identical canonical key material distinct.
+        with mock.patch(
+            "cag_round9_eval_broker.canonical_ed25519_public_spki",
+            side_effect=[evaluator_spki, evaluator_spki, evaluator_spki],
+        ):
+            with self.assertRaisesRegex(ContractError, "key material must be distinct"):
+                validate_signing_key_material(
+                    evaluator_private,
+                    evaluator_public,
+                    author_public,
+                    openssl="/usr/bin/openssl",
+                )
 
     def test_github_redirect_and_artifact_download_never_forward_pat(self) -> None:
         client = GitHubClient("https://api.github.com", "root-secret-pat")
@@ -705,7 +1172,15 @@ class BrokerIdentityContractTest(unittest.TestCase):
                 candidate = {"commit": self.args.commit}
                 evaluator = {"version": "external-v1"}
                 execution = {"challenge_sha256": "b" * 64}
-                development = {"schema": "synthetic-development"}
+                development = development_evidence(
+                    tag_object_sha=self.args.tag_object_sha,
+                    commit=self.args.commit,
+                    tree=self.args.tree,
+                    classifier_version=self.args.classifier_policy_version,
+                    classifier_sha256=self.args.classifier_policy_sha256,
+                    ruleset_version=self.args.ruleset_version,
+                    ruleset_sha256=self.args.ruleset_sha256,
+                )
                 asset_identity = {"so_sha256": self.args.so_sha256}
 
                 def ruleset_side_effect(*_args: object, **_kwargs: object) -> None:
@@ -741,16 +1216,28 @@ class BrokerIdentityContractTest(unittest.TestCase):
                     ),
                     mock.patch("cag_round9_eval_broker.candidate_identity", return_value=candidate),
                     mock.patch("cag_round9_eval_broker.validate_development_evidence"),
+                    mock.patch(
+                        "cag_round9_eval_broker.safe_extract_public_development_corpus",
+                        return_value=public_counted_mock()["manifest"],
+                    ),
                     mock.patch("cag_round9_eval_broker.evaluator_identity", return_value=evaluator),
                     mock.patch("cag_round9_eval_broker.execution_identity", return_value=execution),
                     mock.patch("cag_round9_eval_broker.abort_verified_partial_ledger", return_value=False),
                     mock.patch("cag_round9_eval_broker.create_event", side_effect=fake_create_event),
                     mock.patch(
                         "cag_round9_eval_broker.run_external_evaluator",
-                        return_value={"metrics": {"synthetic": True}, "privacy": {"synthetic": True}},
+                        return_value={
+                            "metrics": {"synthetic": True},
+                            "public_counted_mock": public_counted_mock(),
+                            "privacy": {"synthetic": True},
+                        },
                     ),
                     mock.patch("cag_round9_eval_broker.derive_counted_mock", return_value={"synthetic": True}),
                     mock.patch("cag_round9_eval_broker.validate_counted_mock"),
+                    mock.patch(
+                        "cag_round9_eval_broker.validate_public_counted_mock",
+                        side_effect=lambda value, **_kwargs: value,
+                    ),
                     mock.patch(
                         "cag_round9_eval_broker.validate_evaluation_payload",
                         side_effect=lambda value, **_kwargs: value,
@@ -843,6 +1330,11 @@ class BrokerIdentityContractTest(unittest.TestCase):
                 "bundle_sha256": "4" * 64,
                 "bundle_manifest_sha256": "5" * 64,
             }
+            public_root = root / "public-corpus"
+            public_root.mkdir()
+            public_evidence_path = root / "public-development-evidence.json"
+            public_evidence_path.write_text("{}\n", encoding="utf-8")
+            public_identity = public_counted_mock()["manifest"]
 
             def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
                 calls.append([str(item) for item in command])
@@ -875,6 +1367,9 @@ class BrokerIdentityContractTest(unittest.TestCase):
                         candidate,
                         corpus,
                         {},
+                        public_root,
+                        public_evidence_path,
+                        public_identity,
                         work,
                     )
 
@@ -907,9 +1402,9 @@ class BrokerIdentityContractTest(unittest.TestCase):
             "phase_protocol": dict(FIXED_PHASE_PROTOCOL),
         }
         aggregate = {
-            "schema": "round9-external-evaluator-aggregate/v2",
+            "schema": "round9-external-evaluator-aggregate/v3",
             "evaluator": {
-                "version": "cag-round9-external-evaluator-v2",
+                "version": "cag-round9-external-evaluator-v3",
                 "sha256": "4" * 64,
                 "core_sha256": "5" * 64,
                 "execution_mode": "EXTERNAL_ROOT_OWNED_BLACK_BOX_CPA",
@@ -931,7 +1426,12 @@ class BrokerIdentityContractTest(unittest.TestCase):
                 "runtime_checks": checks,
                 "decision_audit": decisions,
             },
-            "metrics": {"runtime_checks": checks, "decision_audit": decisions},
+            "metrics": {
+                "runtime_checks": checks,
+                "decision_audit": decisions,
+                "public_counted_mock": public_counted_mock(),
+            },
+            "public_counted_mock": public_counted_mock(),
             "privacy": {"synthetic": True},
         }
         config = {
@@ -947,7 +1447,11 @@ class BrokerIdentityContractTest(unittest.TestCase):
             ),
             mock.patch(
                 "cag_round9_eval_broker.validate_metrics",
-                return_value={"runtime_checks": checks, "decision_audit": decisions},
+                return_value={
+                    "runtime_checks": checks,
+                    "decision_audit": decisions,
+                    "public_counted_mock": public_counted_mock(),
+                },
             ),
             mock.patch("cag_round9_eval_broker.validate_runtime_checks"),
             mock.patch("cag_round9_eval_broker.validate_decision_audit"),
@@ -1254,8 +1758,17 @@ class BrokerIdentityContractTest(unittest.TestCase):
             evaluator = {"version": "evaluator"}
             corpus = {"bundle_sha256": "a" * 64}
             execution = {"identity": "execution"}
-            development = {"identity": "development"}
+            development = development_evidence(
+                tag_object_sha=self.args.tag_object_sha,
+                commit=self.args.commit,
+                tree=self.args.tree,
+                classifier_version=self.args.classifier_policy_version,
+                classifier_sha256=self.args.classifier_policy_sha256,
+                ruleset_version=self.args.ruleset_version,
+                ruleset_sha256=self.args.ruleset_sha256,
+            )
             counted = {"identity": "counted"}
+            public_counted = public_counted_mock()
             ledger = {
                 "repository": self.args.repository,
                 "namespace": "round9-eval-ledger/" + "a" * 64,
@@ -1271,6 +1784,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
                 "ledger": ledger,
                 "development_evidence": development,
                 "counted_mock": counted,
+                "public_counted_mock": public_counted,
                 "metrics": {"identity": "metrics"},
             }
 
@@ -1300,7 +1814,11 @@ class BrokerIdentityContractTest(unittest.TestCase):
                 "build_metadata_sha256": self.args.build_metadata_sha256,
                 "release_manifest_sha256": self.args.release_manifest_sha256,
             }
-            for field in ("development_evidence", "counted_mock"):
+            for field in (
+                "development_evidence",
+                "counted_mock",
+                "public_counted_mock",
+            ):
                 payload = copy.deepcopy(base_payload)
                 payload[field] = {"identity": "drifted"}
                 with (
@@ -1318,6 +1836,10 @@ class BrokerIdentityContractTest(unittest.TestCase):
                     mock.patch("cag_round9_eval_broker.execution_identity", return_value=execution),
                     mock.patch("cag_round9_eval_broker.validate_development_evidence"),
                     mock.patch(
+                        "cag_round9_eval_broker.safe_extract_public_development_corpus",
+                        return_value=public_counted["manifest"],
+                    ),
+                    mock.patch(
                         "cag_round9_eval_broker.load_canonical_json",
                         side_effect=lambda path, _label: {"payload": payload}
                         if path.name == "round9-external-evaluation.json"
@@ -1331,6 +1853,10 @@ class BrokerIdentityContractTest(unittest.TestCase):
                     mock.patch(
                         "cag_round9_eval_broker.derive_counted_mock",
                         return_value=counted,
+                    ),
+                    mock.patch(
+                        "cag_round9_eval_broker.validate_public_counted_mock",
+                        return_value=public_counted,
                     ),
                 ):
                     with self.assertRaisesRegex(ContractError, "stored completed"):

@@ -94,10 +94,13 @@ jobs:
           HOST_ARTIFACT_ID: ${{ inputs.host_artifact_id }}
           HOST_ARTIFACT_DIGEST: ${{ inputs.host_artifact_digest }}
           HOST_CHALLENGE: ${{ inputs.host_challenge }}
+          ROUND8_LANE_RETIRED: 'true'
         run: |
           set -euo pipefail
-          printf '%s\n' 'Round 8 RC lane is retired: read-only historical verification only; use round9-release-rc.yml' >&2
-          exit 1
+          if [[ "$ROUND8_LANE_RETIRED" == true ]]; then
+            printf '%s\n' 'Round 8 RC lane is retired: read-only historical verification only; use round9-release-rc.yml' >&2
+            exit 1
+          fi
           [[ "$CI_RUN" =~ ^([1-9][0-9]*):([1-9][0-9]*)$ ]]
           CI_RUN_ID="${BASH_REMATCH[1]}"
           CI_RUN_ATTEMPT="${BASH_REMATCH[2]}"

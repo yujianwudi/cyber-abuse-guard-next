@@ -222,7 +222,12 @@ if adapter_config.get("docker_sandbox_sha256") != identities["docker_sandbox_sha
 for key in ("sandbox_id", "daemon_id", "probe_image_id", "cpa_image_id", "counted_mock_image_id", "model", "scan_limit_bytes"):
     if adapter_config.get(key) != config["sandbox"].get(key):
         raise SystemExit(f"adapter/broker sandbox identity differs at {key}")
-if config["github"].get("ledger_ruleset_id") != 19602252 or config["github"].get("ledger_ruleset_name") != "round9-eval-ledger-immutable":
+if config.get("repository") != "yujianwudi/cyber-abuse-guard-next":
+    raise SystemExit("broker configuration does not bind the successor repository")
+ruleset_id = config["github"].get("ledger_ruleset_id")
+if type(ruleset_id) is not int or ruleset_id <= 0:
+    raise SystemExit("broker configuration ledger ruleset ID must be a positive integer")
+if config["github"].get("ledger_ruleset_name") != "round9-eval-ledger-immutable":
     raise SystemExit("broker configuration does not bind the live protected ledger ruleset")
 PY
 

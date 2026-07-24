@@ -1,0 +1,260 @@
+{
+  "schema": "round9-malicious-text-producer-inventory/v1",
+  "claim_boundary": "static_source_closure_not_runtime_audit",
+  "scan_roots": [
+    "cmd",
+    "internal"
+  ],
+  "block_capable_calls": [
+    "actionFor",
+    "candidateActionFor"
+  ],
+  "gates": [
+    {
+      "id": "classifier-action-source",
+      "path": "internal/classifier/classifier.go",
+      "function": "actionFor",
+      "contract": "raw ActionBlock source; every call edge is inventoried",
+      "function_ast_sha256": "e0caad7980eecc09ef1fd7d1a17dd17a40a4002c1530ea7c9ddf28ae721e785e"
+    },
+    {
+      "id": "classifier-candidate-eligibility",
+      "path": "internal/classifier/eligibility.go",
+      "function": "candidateActionFor",
+      "contract": "actionFor is reachable with candidate score only under eligibility.Eligible",
+      "function_ast_sha256": "e99dba44f130efb9b94a202b295af534b8c3d62a2fec5187dc331faecda3c8fb"
+    },
+    {
+      "id": "plugin-eligible-malicious-winner",
+      "path": "internal/plugin/disposition.go",
+      "function": "eligibleMaliciousWinner",
+      "contract": "plugin requires CandidateBlockEligibility and closed winner proof",
+      "function_ast_sha256": "29017066edda368cd134864c9149aedc0dd2c20781999874fa3ec73ed784d572"
+    },
+    {
+      "id": "plugin-inspection-disposition",
+      "path": "internal/plugin/disposition.go",
+      "function": "inspectionDisposition",
+      "contract": "ineligible ActionBlock is downgraded before block_malicious_text",
+      "function_ast_sha256": "d7b2d45432932bbb293ee1cf3e3d4e1fe97752989afdebe86492a39f33d66ef3"
+    },
+    {
+      "id": "plugin-management-transport-projection",
+      "path": "internal/plugin/management.go",
+      "function": "(*Plugin).managementTest",
+      "contract": "management ActionBlock only projects the already typed inspection decision",
+      "function_ast_sha256": "5d1d3ebf36585ba5c874c3a4909a4793e0988f9c233ea168614466ba0289c326"
+    }
+  ],
+  "sites": [
+    {
+      "id": "action-001-action-for-strict",
+      "path": "internal/classifier/classifier.go",
+      "function": "actionFor",
+      "kind": "direct_return",
+      "symbol": "ActionBlock",
+      "ordinal": 1,
+      "node_ast_sha256": "889e1539e50bffe698999deec0d31d72a616575ef84291ffae92e7633eecc761",
+      "gate_id": "classifier-action-source",
+      "gate_relation": "raw_threshold_source_closed_by_registered_callers"
+    },
+    {
+      "id": "action-002-action-for-balanced",
+      "path": "internal/classifier/classifier.go",
+      "function": "actionFor",
+      "kind": "direct_return",
+      "symbol": "ActionBlock",
+      "ordinal": 2,
+      "node_ast_sha256": "889e1539e50bffe698999deec0d31d72a616575ef84291ffae92e7633eecc761",
+      "gate_id": "classifier-action-source",
+      "gate_relation": "raw_threshold_source_closed_by_registered_callers"
+    },
+    {
+      "id": "action-003-classify-zero-score-first",
+      "path": "internal/classifier/classifier.go",
+      "function": "(*Classifier).classifyWithPolicyCaptured",
+      "kind": "block_capable_call",
+      "symbol": "actionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "5d265f0d0191c462210d7461835490ddc34fa294a570fbab27235a1f8b6512d7",
+      "gate_id": "plugin-eligible-malicious-winner",
+      "gate_relation": "neutral_zero_score_result_requires_plugin_winner"
+    },
+    {
+      "id": "action-004-classify-zero-score-second",
+      "path": "internal/classifier/classifier.go",
+      "function": "(*Classifier).classifyWithPolicyCaptured",
+      "kind": "block_capable_call",
+      "symbol": "actionFor",
+      "ordinal": 2,
+      "node_ast_sha256": "5d265f0d0191c462210d7461835490ddc34fa294a570fbab27235a1f8b6512d7",
+      "gate_id": "plugin-eligible-malicious-winner",
+      "gate_relation": "neutral_zero_score_result_requires_plugin_winner"
+    },
+    {
+      "id": "action-005-classify-inert-candidate",
+      "path": "internal/classifier/classifier.go",
+      "function": "(*Classifier).classifyWithPolicyCaptured",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-006-classify-winner-candidate",
+      "path": "internal/classifier/classifier.go",
+      "function": "(*Classifier).classifyWithPolicyCaptured",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 2,
+      "node_ast_sha256": "4d492dc974cda4434525a23dd3dd7c3596d105379cb834cb0f4177a9c303bb61",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-007-adjacent-negation-candidate",
+      "path": "internal/classifier/classifier.go",
+      "function": "(*Classifier).adjacentNegationReversalResult",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-008-bind-identity-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "bindResultCandidateIdentity",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-009-enforce-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "enforceResultCandidateEligibility",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-010-bind-actor-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "bindResultCandidateActor",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-011-inactive-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "markResultCandidateInactive",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-012-cross-scope-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "markResultCandidateCrossScopeAmbiguous",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-013-evidence-ambiguous-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "markResultCandidateEvidenceAmbiguous",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-014-referent-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "markResultReferentActivated",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-015-direct-carrier-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "markResultDirectCarrierActivated",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-016-role-aware-candidate",
+      "path": "internal/classifier/roles.go",
+      "function": "withRoleAwareFindingOrigin",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "4ca50eb83054f12a25882f530eccc28df60a9d20f19dcc8302f909be11157825",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
+    },
+    {
+      "id": "action-017-candidate-delegation",
+      "path": "internal/classifier/eligibility.go",
+      "function": "candidateActionFor",
+      "kind": "block_capable_call",
+      "symbol": "actionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "fd5cf8bf473eef7d5e13915c2dfef6b5d22aebe44399cdf4c3104aa3867ab2e3",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "eligible_branch_delegation"
+    },
+    {
+      "id": "action-018-malicious-decision",
+      "path": "internal/plugin/disposition.go",
+      "function": "inspectionDisposition",
+      "kind": "direct_assignment",
+      "symbol": "decisionBlockMaliciousText",
+      "ordinal": 1,
+      "node_ast_sha256": "a9484a223fc2bf5e439f86ca2f0472a158f4a57b9ea4a9db3d1fe6d9c8adfe0c",
+      "gate_id": "plugin-inspection-disposition",
+      "gate_relation": "eligible_winner_guarded_malicious_decision"
+    },
+    {
+      "id": "action-019-management-transport-projection",
+      "path": "internal/plugin/management.go",
+      "function": "(*Plugin).managementTest",
+      "kind": "direct_assignment",
+      "symbol": "ActionBlock",
+      "ordinal": 1,
+      "node_ast_sha256": "8102c559cc1fe00ba8fcf3e51bbea519396bd6b61d6a122c85c10e3f28befbcc",
+      "gate_id": "plugin-management-transport-projection",
+      "gate_relation": "transport_projection_preserves_separate_decision_kind"
+    }
+  ]
+}

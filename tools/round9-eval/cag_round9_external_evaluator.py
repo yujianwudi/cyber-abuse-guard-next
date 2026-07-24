@@ -31,6 +31,9 @@ from round9_eval_core import (  # noqa: E402
     EVALUATOR_AGGREGATE_SCHEMA,
     FIXED_NETWORK_BINDING,
     FIXED_PHASE_PROTOCOL,
+    PUBLIC_COUNTED_MOCK_FAMILIES,
+    PUBLIC_COUNTED_MOCK_ROUTE_MATRIX,
+    PUBLIC_COUNTED_MOCK_TRANSPORT_SCHEMA,
     ContractError,
     HEX64,
     IDENTIFIER,
@@ -41,6 +44,7 @@ from round9_eval_core import (  # noqa: E402
     exact_object,
     load_canonical_json,
     load_json_bytes,
+    load_public_counted_mock_corpus,
     require_literal,
     require_pattern,
     require_root_owned_regular,
@@ -48,6 +52,7 @@ from round9_eval_core import (  # noqa: E402
     sha256_file,
     validate_runtime_checks,
     validate_metrics,
+    validate_public_counted_mock_transport,
     verify_signed_envelope,
     wilson_interval_95,
 )
@@ -56,7 +61,7 @@ from round9_eval_core import (  # noqa: E402
 BENIGN_MANIFEST_SCHEMA = "round9-independent-benign-manifest/v1"
 MALICIOUS_MANIFEST_SCHEMA = "round9-independent-malicious-manifest/v1"
 SANDBOX_SCHEMA = "round9-external-cpa-sandbox/v2"
-AUDIT_EXPECTATIONS_SCHEMA = "round9-cpa-audit-expectations/v2"
+AUDIT_EXPECTATIONS_SCHEMA = "round9-cpa-audit-expectations/v3"
 CPA_VERSION = "v7.2.95"
 CPA_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
 MAX_PROMPT_BYTES = 131_072
@@ -82,6 +87,7 @@ ENFORCEMENT_MODES = ("balanced", "strict")
 MALICIOUS_ENFORCEMENT_ROUTES = tuple(
     route for route in MALICIOUS_ROUTES if route[0] in ENFORCEMENT_MODES
 )
+PUBLIC_DEVELOPMENT_ROUTES = BENIGN_ROUTES
 
 
 class _NoRedirect(request.HTTPRedirectHandler):
@@ -866,6 +872,8 @@ def evaluate_cases(
     descriptor: dict[str, Any],
     benign_cases: Iterable[dict[str, str]],
     malicious_cases: Iterable[dict[str, str]],
+    public_cases: Iterable[dict[str, str]],
+    public_identity: dict[str, Any],
     *,
     challenge: str,
     timeout: float = 20.0,
@@ -876,6 +884,9 @@ def evaluate_cases(
     seed_sha256 = challenge_sha256(challenge)
     benign = list(benign_cases)
     malicious = list(malicious_cases)
+    public = list(public_cases)
+    if not public:
+        fail("public development counted-Mock corpus is empty")
     client = CPAClient(descriptor, timeout=timeout)
     benign_categories = Counter(item["category"] for item in benign)
     benign_languages = Counter(item["language"] for item in benign)
@@ -891,27 +902,37 @@ def evaluate_cases(
     for kind, cases, routes in (
         ("benign", benign, BENIGN_ROUTES),
         ("malicious", malicious, MALICIOUS_ROUTES),
+        ("public_development", public, PUBLIC_DEVELOPMENT_ROUTES),
     ):
         for case in cases:
             for mode, protocol, stream in routes:
-                phase_tasks[mode].append(
-                    {
-                        "kind": kind,
-                        "case": case,
-                        "mode": mode,
-                        "protocol": protocol,
-                        "stream": stream,
-                        "opaque": "\0".join(
-                            (kind, case["id"], mode, protocol, str(stream).lower())
-                        ),
-                    }
+                task = {
+                    "kind": kind,
+                    "case": case,
+                    "mode": mode,
+                    "protocol": protocol,
+                    "stream": stream,
+                    "opaque": "\0".join(
+                        (kind, case["id"], mode, protocol, str(stream).lower())
+                    ),
+                }
+                # Freeze the exact request bytes before any status probe or
+                # candidate request.  Audit expectations and route outcomes
+                # below are derived only from these bytes, the signed case
+                # class and the fixed mode matrix.
+                task["body"] = canonical_bytes(
+                    client._body(protocol, case["prompt"], stream)
                 )
-                protocol_counter = benign_protocols if kind == "benign" else malicious_protocols
-                stream_counter = benign_streams if kind == "benign" else malicious_streams
-                mode_counter = benign_modes if kind == "benign" else malicious_modes
-                protocol_counter[f"openai_{protocol}"] += 1
-                stream_counter["stream" if stream else "nonstream"] += 1
-                mode_counter[mode] += 1
+                phase_tasks[mode].append(task)
+                if kind != "public_development":
+                    protocol_counter = (
+                        benign_protocols if kind == "benign" else malicious_protocols
+                    )
+                    stream_counter = benign_streams if kind == "benign" else malicious_streams
+                    mode_counter = benign_modes if kind == "benign" else malicious_modes
+                    protocol_counter[f"openai_{protocol}"] += 1
+                    stream_counter["stream" if stream else "nonstream"] += 1
+                    mode_counter[mode] += 1
 
     scan_limit = exact_int(descriptor["scan_limit_bytes"], "sandbox scan limit", minimum=4096)
     if scan_limit + 4096 > MAX_PROMPT_BYTES:
@@ -975,8 +996,27 @@ def evaluate_cases(
         "benign": {},
         "malicious": {},
         "incomplete": {},
+        "public_development": {},
+    }
+    public_family_counts = Counter(item["family"] for item in public)
+    if set(public_family_counts) != set(PUBLIC_COUNTED_MOCK_FAMILIES):
+        fail("public development cases do not contain the three closed provenance families")
+    public_family_results: dict[str, dict[str, Any]] = {
+        family: {
+            "corpus_role": role,
+            "unique_payloads": public_family_counts[family],
+            "serialized_executions": 0,
+            "local_blocked": 0,
+            "upstream_delta": 0,
+            "usage_delta": 0,
+            "hard_policy_blocked": 0,
+        }
+        for family, role in PUBLIC_COUNTED_MOCK_FAMILIES.items()
     }
     expectation_keys: set[tuple[str, str]] = set()
+    expectation_request_ids: set[str] = set()
+    frozen_expectations: list[dict[str, Any]] = []
+    frozen_outcomes: dict[str, dict[str, Any]] = {}
 
     def record_route(kind: str, task: dict[str, Any], outcome: dict[str, Any]) -> None:
         key = "|".join(
@@ -995,16 +1035,62 @@ def evaluate_cases(
         row["upstream_delta"] += outcome["upstream_delta"]
         row["usage_delta"] += outcome["usage_delta"]
 
-    def record_expectation(task: dict[str, Any], body: bytes, outcome: dict[str, Any]) -> None:
-        if audit_expectations is None:
-            return
+    def freeze_expectation(task: dict[str, Any]) -> None:
         kind = task["kind"]
         mode = task["mode"]
+        body = task["body"]
         request_hash = audit_request_hash(body)
         key = (request_hash, mode)
-        if key in expectation_keys:
-            fail("external corpus produced a duplicate request-hash/mode audit identity")
+        request_id = hmac.new(
+            seed,
+            b"audit-request-id-v1\0" + task["opaque"].encode("utf-8"),
+            hashlib.sha256,
+        ).hexdigest()
+        if key in expectation_keys or request_id in expectation_request_ids:
+            fail("external corpus produced a duplicate request identity")
         expectation_keys.add(key)
+        expectation_request_ids.add(request_id)
+
+        if kind == "public_development":
+            audit_mode = mode == "audit"
+            expected = {
+                "request_id_hmac_sha256": request_id,
+                "request_hash": request_hash,
+                "request_hash_hmac_sha256": hmac.new(
+                    seed,
+                    b"audit-request-hash-v1\0" + request_hash.encode("ascii"),
+                    hashlib.sha256,
+                ).hexdigest(),
+                "mode": mode,
+                "kind": kind,
+                "public_family": task["case"]["family"],
+                "public_payload_hmac_sha256": hmac.new(
+                    seed,
+                    b"public-payload-id-v1\0" + task["case"]["id"].encode("utf-8"),
+                    hashlib.sha256,
+                ).hexdigest(),
+                "protocol": "openai_" + task["protocol"],
+                "stream": "stream" if task["stream"] else "nonstream",
+                "required": True,
+                "expected_decision_kind": (
+                    "audit_eligible_malicious_text"
+                    if audit_mode
+                    else "block_malicious_text"
+                ),
+                "expected_local_block": not audit_mode,
+                "expected_upstream_delta": int(audit_mode),
+                "expected_usage_delta": int(audit_mode),
+                "expected_hard_policy": False if audit_mode else None,
+            }
+            frozen_outcomes[task["opaque"]] = {
+                "policy_blocked": expected["expected_local_block"],
+                "upstream_delta": expected["expected_upstream_delta"],
+                "usage_delta": expected["expected_usage_delta"],
+                "hard_policy_blocked": expected["expected_hard_policy"],
+            }
+            frozen_expectations.append(expected)
+            return
+
         if kind == "benign":
             # A clean allow does not enter the per-request audit queue.  A
             # benign request can still produce a bounded, non-blocking
@@ -1018,7 +1104,7 @@ def evaluate_cases(
             persistence = "required"
             expected_persisted_decision_kind = (
                 "block_malicious_text"
-                if outcome["policy_blocked"]
+                if mode in ENFORCEMENT_MODES
                 else "audit_eligible_malicious_text"
             )
             category = task["case"]["category"]
@@ -1030,26 +1116,58 @@ def evaluate_cases(
             persistence = "required"
             expected_persisted_decision_kind = "audit_ineligible_risk"
             category = ""
-        audit_expectations.append(
-            {
-                "request_id_hmac_sha256": hmac.new(
-                    seed,
-                    b"audit-request-id-v1\0" + task["opaque"].encode("utf-8"),
-                    hashlib.sha256,
-                ).hexdigest(),
-                "request_hash": request_hash,
-                "request_hash_hmac_sha256": hmac.new(
-                    seed,
-                    b"audit-request-hash-v1\0" + request_hash.encode("ascii"),
-                    hashlib.sha256,
-                ).hexdigest(),
-                "mode": mode,
-                "kind": kind,
-                "persistence": persistence,
-                "expected_persisted_decision_kind": expected_persisted_decision_kind,
-                "expected_category": category,
-            }
+        expected = {
+            "request_id_hmac_sha256": request_id,
+            "request_hash": request_hash,
+            "request_hash_hmac_sha256": hmac.new(
+                seed,
+                b"audit-request-hash-v1\0" + request_hash.encode("ascii"),
+                hashlib.sha256,
+            ).hexdigest(),
+            "mode": mode,
+            "kind": kind,
+            "persistence": persistence,
+            "expected_persisted_decision_kind": expected_persisted_decision_kind,
+            "expected_category": category,
+        }
+        expected_local_block = (
+            False
+            if kind == "benign"
+            else mode in ENFORCEMENT_MODES
+            if kind == "malicious"
+            else mode == "strict"
         )
+        frozen_outcomes[task["opaque"]] = {
+            "policy_blocked": expected_local_block,
+            "upstream_delta": int(not expected_local_block),
+            "usage_delta": int(not expected_local_block),
+            "hard_policy_blocked": (
+                None if kind == "malicious" and expected_local_block else False
+            ),
+        }
+        frozen_expectations.append(expected)
+
+    # Freeze every request, DB expectation, correlation identity and expected
+    # transport outcome before even the first candidate status request.  No
+    # candidate outcome can define or rewrite ground truth.
+    if audit_expectations is not None and audit_expectations:
+        fail("CPA audit expectations output must start empty")
+    for mode in FIXED_PHASE_PROTOCOL["phase_order"]:
+        for task in phase_tasks[mode]:
+            freeze_expectation(task)
+    public_expectation_count = sum(
+        int(task["kind"] == "public_development")
+        for mode in FIXED_PHASE_PROTOCOL["phase_order"]
+        for task in phase_tasks[mode]
+    )
+    if public_expectation_count != 120:
+        fail("public development expectations must freeze exactly 120 required routes")
+    if len(frozen_outcomes) != sum(phase_route_executions.values()):
+        fail("external ground truth did not freeze every route")
+    if len(frozen_expectations) != len(frozen_outcomes):
+        fail("CPA audit expectations did not freeze every route")
+    if audit_expectations is not None:
+        audit_expectations.extend(frozen_expectations)
 
     client.verify_mode("audit")
     for mode in FIXED_PHASE_PROTOCOL["phase_order"]:
@@ -1061,8 +1179,16 @@ def evaluate_cases(
             if task["kind"] == "incomplete":
                 body = task["body"]
                 outcome = client.execute_body(body, task["mode"], task["protocol"])
+                expected = frozen_outcomes.get(task["opaque"])
+                if expected is None or any(
+                    outcome[key] is not value
+                    if isinstance(value, bool)
+                    else outcome[key] != value
+                    for key, value in expected.items()
+                    if value is not None
+                ):
+                    fail("incomplete CPA outcome differs from frozen ground truth")
                 record_route("incomplete", task, outcome)
-                record_expectation(task, body, outcome)
                 incomplete_observations[task["mode"]] = {
                     "policy_blocked": outcome["policy_blocked"],
                     "upstream_delta": outcome["upstream_delta"],
@@ -1070,18 +1196,26 @@ def evaluate_cases(
                 }
                 continue
             case = task["case"]
-            body = canonical_bytes(
-                client._body(task["protocol"], case["prompt"], task["stream"])
-            )
+            body = task["body"]
             outcome = client.execute_body(body, task["mode"], task["protocol"])
+            expected = frozen_outcomes.get(task["opaque"])
+            if expected is None or any(
+                outcome[key] is not value
+                if isinstance(value, bool)
+                else outcome[key] != value
+                for key, value in expected.items()
+                if value is not None
+            ):
+                fail(f"{task['kind']} CPA outcome differs from frozen ground truth")
+            if outcome["hard_policy_blocked"] and not outcome["policy_blocked"]:
+                fail("CPA hard-policy outcome is not a local policy block")
             record_route(task["kind"], task, outcome)
-            record_expectation(task, body, outcome)
             if task["kind"] == "benign":
                 benign_blocked += int(outcome["policy_blocked"])
                 benign_hard_blocked += int(outcome["hard_policy_blocked"])
                 benign_upstream += outcome["upstream_delta"]
                 benign_usage += outcome["usage_delta"]
-            else:
+            elif task["kind"] == "malicious":
                 malicious_upstream += outcome["upstream_delta"]
                 malicious_usage += outcome["usage_delta"]
                 if mode == "audit":
@@ -1091,6 +1225,14 @@ def evaluate_cases(
                     passed_routes += int(outcome["policy_blocked"])
                     if outcome["policy_blocked"]:
                         passed_per_malicious[case["id"]] += 1
+            else:
+                family = case["family"]
+                row = public_family_results[family]
+                row["serialized_executions"] += 1
+                row["local_blocked"] += int(outcome["policy_blocked"])
+                row["upstream_delta"] += outcome["upstream_delta"]
+                row["usage_delta"] += outcome["usage_delta"]
+                row["hard_policy_blocked"] += int(outcome["hard_policy_blocked"])
 
     semantic_blocked = 0
     failures: list[str] = []
@@ -1130,6 +1272,30 @@ def evaluate_cases(
     malicious_lower, malicious_upper = wilson_interval_95(
         semantic_blocked, malicious_samples
     )
+    public_transport = {
+        "schema": PUBLIC_COUNTED_MOCK_TRANSPORT_SCHEMA,
+        "manifest": dict(public_identity),
+        "route_matrix": {
+            key: list(value) if isinstance(value, list) else value
+            for key, value in PUBLIC_COUNTED_MOCK_ROUTE_MATRIX.items()
+        },
+        "families": {
+            family: dict(public_family_results[family])
+            for family in PUBLIC_COUNTED_MOCK_FAMILIES
+        },
+        "total": {
+            key: sum(row[key] for row in public_family_results.values())
+            for key in (
+                "unique_payloads",
+                "serialized_executions",
+                "local_blocked",
+                "upstream_delta",
+                "usage_delta",
+                "hard_policy_blocked",
+            )
+        },
+    }
+    validate_public_counted_mock_transport(public_transport)
     return {
         "route_order": {
             "algorithm": "hmac_sha256_challenge_sequential_phase_order_v3",
@@ -1211,6 +1377,7 @@ def evaluate_cases(
             "strict": incomplete_observations["strict"],
         },
         "runtime_checks": descriptor["runtime_checks"],
+        "public_counted_mock_transport": public_transport,
     }
 
 
@@ -1230,19 +1397,33 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         author_key_id=args.author_key_id,
         bundle_sha256=args.bundle_sha256,
     )
+    public_evidence = load_canonical_json(
+        args.public_development_evidence,
+        "public development evidence",
+        maximum=262_144,
+    )
+    public_identity, public_cases = load_public_counted_mock_corpus(
+        args.public_corpus_root,
+        public_evidence,
+    )
     audit_expectations: list[dict[str, Any]] = []
     metrics = evaluate_cases(
         descriptor,
         benign,
         malicious,
+        public_cases,
+        public_identity,
         challenge=args.challenge,
         timeout=args.timeout,
         audit_expectations=audit_expectations,
     )
+    public_transport = metrics.pop("public_counted_mock_transport")
+    validate_public_counted_mock_transport(public_transport)
     expectations_payload = {
         "schema": AUDIT_EXPECTATIONS_SCHEMA,
         "challenge_sha256": challenge_sha256(args.challenge),
         "malicious_categories": sorted({item["category"] for item in malicious}),
+        "public_manifest": public_identity,
         "requests": audit_expectations,
     }
     raw_expectations = canonical_bytes(expectations_payload)
@@ -1259,7 +1440,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "schema": EVALUATOR_AGGREGATE_SCHEMA,
         "evaluator": {
-            "version": "cag-round9-external-evaluator-v2",
+            "version": "cag-round9-external-evaluator-v3",
             "sha256": sha256_file(Path(__file__).resolve()),
             "core_sha256": args.expected_core_sha256,
             "execution_mode": "EXTERNAL_ROOT_OWNED_BLACK_BOX_CPA",
@@ -1284,6 +1465,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             )
         },
         "metrics": metrics,
+        "public_counted_mock_transport": public_transport,
         "privacy": {
             "raw_prompts_in_result": False,
             "raw_responses_in_result": False,
@@ -1300,6 +1482,8 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--author-public-key", required=True, type=Path)
     result.add_argument("--author-key-id", required=True)
     result.add_argument("--bundle-sha256", required=True)
+    result.add_argument("--public-corpus-root", required=True, type=Path)
+    result.add_argument("--public-development-evidence", required=True, type=Path)
     result.add_argument("--sandbox-descriptor", required=True, type=Path)
     result.add_argument("--expected-candidate-so-sha256", required=True)
     result.add_argument("--expected-core-sha256", required=True)

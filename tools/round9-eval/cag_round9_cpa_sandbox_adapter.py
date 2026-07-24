@@ -32,6 +32,10 @@ from urllib import error, parse, request
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from round9_eval_core import (  # noqa: E402
+    DECISION_AUDIT_SCHEMA,
+    PUBLIC_COUNTED_MOCK_DECISION_KINDS,
+    PUBLIC_COUNTED_MOCK_FAMILIES,
+    PUBLIC_COUNTED_MOCK_ROUTE_MATRIX,
     RUNTIME_CHECKS_SCHEMA,
     ContractError as CoreContractError,
     validate_runtime_checks as validate_core_runtime_checks,
@@ -45,8 +49,16 @@ CPA_VERSION = "v7.2.95"
 CPA_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
 CPA_SOURCE = "https://github.com/router-for-me/CLIProxyAPI"
 MOCK_CONTRACT = "round9-counted-mock/v1"
-FINALIZE_REPORT_SCHEMA = "round9-cpa-sandbox-finalize/v1"
-AUDIT_EXPECTATIONS_SCHEMA = "round9-cpa-audit-expectations/v2"
+FINALIZE_REPORT_SCHEMA = "round9-cpa-sandbox-finalize/v2"
+AUDIT_EXPECTATIONS_SCHEMA = "round9-cpa-audit-expectations/v3"
+PUBLIC_DECISION_AUDIT_SCHEMA = "round9-public-cpa-decision-audit/v1"
+PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v11"
+PUBLIC_MANIFEST_DATASET = "round9-public-adversarial-v11"
+PUBLIC_FAMILY_UNIQUE_PAYLOADS = {
+    "historical_unique": 8,
+    "branch_head": 1,
+    "unmerged_candidate_carrier": 1,
+}
 SCAN_LIMIT_BYTES = 16 * 1024
 CPA_PORT = 8317
 CPA_HOST_PORT = 18394
@@ -1303,11 +1315,52 @@ def load_state(work: Path) -> dict[str, Any] | None:
     return state
 
 
+STANDARD_AUDIT_EXPECTATION_KEYS = {
+    "request_id_hmac_sha256",
+    "request_hash",
+    "request_hash_hmac_sha256",
+    "mode",
+    "kind",
+    "persistence",
+    "expected_persisted_decision_kind",
+    "expected_category",
+}
+PUBLIC_AUDIT_EXPECTATION_KEYS = {
+    "request_id_hmac_sha256",
+    "request_hash",
+    "request_hash_hmac_sha256",
+    "mode",
+    "kind",
+    "public_family",
+    "public_payload_hmac_sha256",
+    "protocol",
+    "stream",
+    "required",
+    "expected_decision_kind",
+    "expected_local_block",
+    "expected_upstream_delta",
+    "expected_usage_delta",
+    "expected_hard_policy",
+}
+PUBLIC_ROUTES = {
+    (mode, protocol, stream)
+    for mode in ("audit", "balanced", "strict")
+    for protocol in ("openai_chat", "openai_responses")
+    for stream in ("nonstream", "stream")
+}
+
+
 def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
     raw = read_bounded(path, "CPA audit expectations", 4_194_304)
     value = exact_object(
         parse_json_bytes(raw, "CPA audit expectations"),
-        {"schema", "challenge_sha256", "malicious_categories", "requests"},
+        {
+            "schema",
+            "challenge_sha256",
+            "malicious_categories",
+            "public_manifest",
+            "requests",
+        },
         "CPA audit expectations",
     )
     if canonical_bytes(value) != raw or value["schema"] != AUDIT_EXPECTATIONS_SCHEMA:
@@ -1316,6 +1369,20 @@ def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
         value["challenge_sha256"]
     ) is None:
         fail("CPA audit expectations challenge identity is invalid")
+    public_manifest = exact_object(
+        value["public_manifest"],
+        {"schema", "dataset", "bytes", "sha256"},
+        "CPA audit expectations public manifest",
+    )
+    if (
+        public_manifest["schema"] != PUBLIC_MANIFEST_SCHEMA
+        or public_manifest["dataset"] != PUBLIC_MANIFEST_DATASET
+        or type(public_manifest["bytes"]) is not int
+        or not 1 <= public_manifest["bytes"] <= 1_048_576
+        or not isinstance(public_manifest["sha256"], str)
+        or HEX64.fullmatch(public_manifest["sha256"]) is None
+    ):
+        fail("CPA audit expectations do not bind the exact v11 public manifest")
     categories = value["malicious_categories"]
     if (
         not isinstance(categories, list)
@@ -1329,25 +1396,29 @@ def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
     ):
         fail("CPA audit expectations malicious categories are invalid")
     requests = value["requests"]
-    if not isinstance(requests, list) or not 2 <= len(requests) <= 10_000:
+    if not isinstance(requests, list) or not 122 <= len(requests) <= 10_000:
         fail("CPA audit expectations request count is outside the reviewed bound")
     identities: set[tuple[str, str]] = set()
     request_ids: set[str] = set()
+    request_hmac_by_hash: dict[str, str] = {}
+    request_hash_by_hmac: dict[str, str] = {}
+    public_payload_family: dict[str, str] = {}
+    public_payloads_by_family = {
+        family: set() for family in PUBLIC_COUNTED_MOCK_FAMILIES
+    }
+    public_routes_by_payload: dict[str, set[tuple[str, str, str]]] = {}
+    public_request_by_payload_route: dict[tuple[str, str, str], tuple[str, str]] = {}
+    public_count = 0
     for index, item in enumerate(requests):
-        row = exact_object(
-            item,
-            {
-                "request_id_hmac_sha256",
-                "request_hash",
-                "request_hash_hmac_sha256",
-                "mode",
-                "kind",
-                "persistence",
-                "expected_persisted_decision_kind",
-                "expected_category",
-            },
-            f"CPA audit expectation {index}",
+        if not isinstance(item, dict):
+            fail(f"CPA audit expectation {index} is not an object")
+        kind = item.get("kind")
+        keys = (
+            PUBLIC_AUDIT_EXPECTATION_KEYS
+            if kind == "public_development"
+            else STANDARD_AUDIT_EXPECTATION_KEYS
         )
+        row = exact_object(item, keys, f"CPA audit expectation {index}")
         request_id = row["request_id_hmac_sha256"]
         if not isinstance(request_id, str) or HEX64.fullmatch(request_id) is None:
             fail("CPA audit expectation request id is invalid")
@@ -1357,14 +1428,75 @@ def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
             or re.fullmatch(r"sha256:[0-9a-f]{64}", request_hash) is None
         ):
             fail("CPA audit expectation request hash is invalid")
-        if (
-            not isinstance(row["request_hash_hmac_sha256"], str)
-            or HEX64.fullmatch(row["request_hash_hmac_sha256"]) is None
-        ):
+        request_hash_hmac = row["request_hash_hmac_sha256"]
+        if not isinstance(request_hash_hmac, str) or HEX64.fullmatch(request_hash_hmac) is None:
             fail("CPA audit expectation keyed request correlation is invalid")
-        if row["mode"] not in {"audit", "balanced", "strict"}:
+        previous_hmac = request_hmac_by_hash.setdefault(request_hash, request_hash_hmac)
+        previous_hash = request_hash_by_hmac.setdefault(request_hash_hmac, request_hash)
+        if previous_hmac != request_hash_hmac or previous_hash != request_hash:
+            fail("CPA audit expectations contain a contradictory request HMAC binding")
+        mode = row["mode"]
+        if mode not in {"audit", "balanced", "strict"}:
             fail("CPA audit expectation mode is invalid")
-        if row["kind"] not in {"benign", "malicious", "incomplete"}:
+        identity = (request_hash, mode)
+        if identity in identities or request_id in request_ids:
+            fail("CPA audit expectations contain duplicate correlation identities")
+        identities.add(identity)
+        request_ids.add(request_id)
+
+        if kind == "public_development":
+            public_count += 1
+            family = row["public_family"]
+            payload_hmac = row["public_payload_hmac_sha256"]
+            protocol = row["protocol"]
+            stream = row["stream"]
+            route = (mode, protocol, stream)
+            if family not in PUBLIC_COUNTED_MOCK_FAMILIES:
+                fail("public CPA audit expectation family is invalid")
+            if not isinstance(payload_hmac, str) or HEX64.fullmatch(payload_hmac) is None:
+                fail("public CPA audit expectation payload HMAC is invalid")
+            if protocol not in {"openai_chat", "openai_responses"}:
+                fail("public CPA audit expectation protocol is invalid")
+            if stream not in {"nonstream", "stream"} or route not in PUBLIC_ROUTES:
+                fail("public CPA audit expectation stream/route is invalid")
+            if row["required"] is not True:
+                fail("public CPA audit expectation must be required")
+            audit_mode = mode == "audit"
+            wanted_decision = (
+                "audit_eligible_malicious_text" if audit_mode else "block_malicious_text"
+            )
+            if (
+                row["expected_decision_kind"] != wanted_decision
+                or row["expected_local_block"] is not (not audit_mode)
+                or type(row["expected_upstream_delta"]) is not int
+                or row["expected_upstream_delta"] != int(audit_mode)
+                or type(row["expected_usage_delta"]) is not int
+                or row["expected_usage_delta"] != int(audit_mode)
+                or (
+                    row["expected_hard_policy"] is not False
+                    if audit_mode
+                    else row["expected_hard_policy"] is not None
+                )
+            ):
+                fail("public CPA audit expectation lost its frozen mode decision contract")
+            previous_family = public_payload_family.setdefault(payload_hmac, family)
+            if previous_family != family:
+                fail("public CPA audit expectation payload HMAC crosses families")
+            public_payloads_by_family[family].add(payload_hmac)
+            routes = public_routes_by_payload.setdefault(payload_hmac, set())
+            if route in routes:
+                fail("public CPA audit expectations contain a duplicate payload route")
+            routes.add(route)
+            payload_route = (payload_hmac, protocol, stream)
+            correlation = (request_hash, request_hash_hmac)
+            previous_correlation = public_request_by_payload_route.setdefault(
+                payload_route, correlation
+            )
+            if previous_correlation != correlation:
+                fail("public CPA audit expectation payload route has contradictory HMACs")
+            continue
+
+        if kind not in {"benign", "malicious", "incomplete"}:
             fail("CPA audit expectation kind is invalid")
         if row["persistence"] not in {"optional", "required"}:
             fail("CPA audit expectation persistence is invalid")
@@ -1381,8 +1513,6 @@ def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}", category) is None
         ):
             fail("CPA audit expectation category is invalid")
-        kind = row["kind"]
-        mode = row["mode"]
         if kind == "benign":
             if (
                 row["persistence"] != "optional"
@@ -1410,11 +1540,17 @@ def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
                 or category != ""
             ):
                 fail("incomplete CPA audit expectation is semantically inconsistent")
-        identity = (request_hash, row["mode"])
-        if identity in identities or request_id in request_ids:
-            fail("CPA audit expectations contain duplicate correlation identities")
-        identities.add(identity)
-        request_ids.add(request_id)
+
+    if public_count != 120 or set(public_payload_family) != set(public_routes_by_payload):
+        fail("public CPA audit expectations must contain exactly 120 closed routes")
+    for family, expected_unique in PUBLIC_FAMILY_UNIQUE_PAYLOADS.items():
+        payloads = public_payloads_by_family[family]
+        if len(payloads) != expected_unique:
+            fail("public CPA audit expectation family payload cardinality differs")
+        if sum(len(public_routes_by_payload[item]) for item in payloads) != expected_unique * 12:
+            fail("public CPA audit expectation family route cardinality differs")
+    if any(routes != PUBLIC_ROUTES for routes in public_routes_by_payload.values()):
+        fail("public CPA audit expectation payload lost the exact 12-route matrix")
     return value, hashlib.sha256(raw).hexdigest()
 
 
@@ -1578,11 +1714,37 @@ ELIGIBILITY_REASON_KNOWN_MASK = (1 << 10) - 1
 ELIGIBILITY_REASON_EXPLICIT_MALICE = 1 << 9
 
 
+def expectation_is_required(expected: dict[str, Any]) -> bool:
+    if expected.get("kind") == "public_development":
+        return expected.get("required") is True
+    return expected.get("persistence") == "required"
+
+
+def expectation_decision_kind(expected: dict[str, Any]) -> str:
+    if expected.get("kind") == "public_development":
+        value = expected.get("expected_decision_kind")
+    else:
+        value = expected.get("expected_persisted_decision_kind")
+    if not isinstance(value, str):
+        fail("CPA audit expectation decision kind is missing")
+    return value
+
+
 def expected_persisted_decision(expected: dict[str, Any]) -> tuple[str, str, str, str]:
     """Return action, disposition, explanation schema and explanation kind."""
 
     kind = expected["kind"]
     mode = expected["mode"]
+    if kind == "public_development":
+        decision_kind = expected.get("expected_decision_kind")
+        wanted_kind = (
+            "audit_eligible_malicious_text" if mode == "audit" else "block_malicious_text"
+        )
+        if expected.get("required") is not True or decision_kind != wanted_kind:
+            fail("public audit expectation has an inconsistent decision kind")
+        if mode == "audit":
+            return "audit", "audit_malicious_text", "decision-explanation-v2", "malicious"
+        return "block", "block_malicious_text", "decision-explanation-v2", "malicious"
     decision_kind = expected["expected_persisted_decision_kind"]
     if kind == "benign":
         if expected.get("persistence") != "optional" or decision_kind != "audit_ineligible_risk":
@@ -1853,7 +2015,7 @@ def finalize_evaluation(
     event_delta = total_events - descriptor["runtime_baseline"]["audit_event_count"]
     expected_requests = expectations["requests"]
     required_expectation_count = sum(
-        int(expected["persistence"] == "required") for expected in expected_requests
+        int(expectation_is_required(expected)) for expected in expected_requests
     )
     optional_expectation_count = len(expected_requests) - required_expectation_count
     if (
@@ -1874,13 +2036,32 @@ def finalize_evaluation(
     }
     if set(actual_by_identity) - expected_identities:
         fail("post-evaluation audit contains an unexpected request identity")
-    decision_counts: dict[str, int] = {}
+    decision_counts = {key: 0 for key in PUBLIC_COUNTED_MOCK_DECISION_KINDS}
     group_counts = {
         "benign": 0,
         "malicious_audit": 0,
         "malicious_enforcement": 0,
         "incomplete_non_strict": 0,
         "strict_incomplete": 0,
+        "public_development": 0,
+    }
+    public_decisions = {
+        family: {
+            "corpus_role": role,
+            "unique_payloads": len(
+                {
+                    expected["public_payload_hmac_sha256"]
+                    for expected in expected_requests
+                    if expected["kind"] == "public_development"
+                    and expected["public_family"] == family
+                }
+            ),
+            "serialized_executions": 0,
+            "decision_kind_counts": {
+                key: 0 for key in PUBLIC_COUNTED_MOCK_DECISION_KINDS
+            },
+        }
+        for family, role in PUBLIC_COUNTED_MOCK_FAMILIES.items()
     }
     correlations: list[dict[str, Any]] = []
     blocked_total = 0
@@ -1892,11 +2073,11 @@ def finalize_evaluation(
         identity = (expected["request_hash"], expected["mode"])
         row = actual_by_identity.pop(identity, None)
         if row is None:
-            if expected["persistence"] == "optional" and expected["kind"] == "benign":
+            if not expectation_is_required(expected) and expected["kind"] == "benign":
                 optional_missing_count += 1
                 continue
             fail("post-evaluation required audit row is missing for an expected request identity")
-        if expected["persistence"] == "optional":
+        if not expectation_is_required(expected):
             optional_persisted_count += 1
         (
             event_id,
@@ -1913,7 +2094,7 @@ def finalize_evaluation(
             disposition,
             explanation_schema,
         ) = row
-        if decision_kind != expected["expected_persisted_decision_kind"]:
+        if decision_kind != expectation_decision_kind(expected):
             fail("post-evaluation audit decision_kind differs from the request expectation")
         try:
             rule_ids = parse_json_bytes(rule_ids_raw.encode("utf-8"), "audit rule IDs")
@@ -1961,7 +2142,11 @@ def finalize_evaluation(
             explanation,
             explanation_schema,
             explanation_kind,
-            category if kind == "benign" else expected["expected_category"],
+            (
+                category
+                if kind in {"benign", "public_development"}
+                else expected["expected_category"]
+            ),
             incomplete_reason,
             rule_ids,
         )
@@ -1986,7 +2171,7 @@ def finalize_evaluation(
                 or rule_ids.count(explanation.get("winning_rule_id")) != 1
             ):
                 fail("malicious audit row lacks the exact eligible winner metadata")
-        else:
+        elif kind == "incomplete":
             group = "strict_incomplete" if mode == "strict" else "incomplete_non_strict"
             group_counts[group] += 1
             if (
@@ -1998,7 +2183,24 @@ def finalize_evaluation(
                 or explanation.get("winning_rule_id")
             ):
                 fail("incomplete audit row accumulated malicious winner/category metadata")
-        decision_counts[decision_kind] = decision_counts.get(decision_kind, 0) + 1
+        else:
+            group_counts["public_development"] += 1
+            if (
+                coverage != "complete"
+                or incomplete_reason != ""
+                or not isinstance(category, str)
+                or not category
+                or explanation.get("winning_category") != category
+                or rule_ids.count(explanation.get("winning_rule_id")) != 1
+            ):
+                fail("public development audit row lacks the exact eligible winner metadata")
+            family = expected["public_family"]
+            family_row = public_decisions[family]
+            family_row["serialized_executions"] += 1
+            family_row["decision_kind_counts"][decision_kind] += 1
+        if decision_kind not in decision_counts:
+            fail("post-evaluation audit contains an unrelated decision kind")
+        decision_counts[decision_kind] += 1
         blocked_total += int(decision_kind.startswith("block_"))
         correlations.append(
             {
@@ -2013,9 +2215,20 @@ def finalize_evaluation(
         fail("post-evaluation audit contains unexpected request identities")
     if incomplete_malicious_category_count or incomplete_winner_count:
         fail("incomplete audit rows retained malicious category or winner metadata")
+    for family, unique_payloads in PUBLIC_FAMILY_UNIQUE_PAYLOADS.items():
+        family_row = public_decisions[family]
+        expected_decisions = {key: 0 for key in PUBLIC_COUNTED_MOCK_DECISION_KINDS}
+        expected_decisions["audit_eligible_malicious_text"] = unique_payloads * 4
+        expected_decisions["block_malicious_text"] = unique_payloads * 8
+        if (
+            family_row["unique_payloads"] != unique_payloads
+            or family_row["serialized_executions"] != unique_payloads * 12
+            or family_row["decision_kind_counts"] != expected_decisions
+        ):
+            fail("public development persisted decisions differ from the frozen family matrix")
     correlations.sort(key=lambda item: item["request_id_hmac_sha256"])
     decision_audit = {
-        "schema": "round9-external-decision-audit/v2",
+        "schema": DECISION_AUDIT_SCHEMA,
         "state": "PASS",
         "observed": True,
         "expectations_sha256": expectations_sha256,
@@ -2033,6 +2246,36 @@ def finalize_evaluation(
         "incomplete_winner_count": incomplete_winner_count,
         "correlation_sha256": hashlib.sha256(canonical_bytes(correlations)).hexdigest(),
         "correlation_samples": correlations[:16],
+    }
+    public_total_decisions = {key: 0 for key in PUBLIC_COUNTED_MOCK_DECISION_KINDS}
+    for family_row in public_decisions.values():
+        for key, count in family_row["decision_kind_counts"].items():
+            public_total_decisions[key] += count
+    public_decision_audit = {
+        "schema": PUBLIC_DECISION_AUDIT_SCHEMA,
+        "manifest": dict(expectations["public_manifest"]),
+        "route_matrix": {
+            key: list(value) if isinstance(value, list) else value
+            for key, value in PUBLIC_COUNTED_MOCK_ROUTE_MATRIX.items()
+        },
+        "families": {
+            family: {
+                "corpus_role": row["corpus_role"],
+                "unique_payloads": row["unique_payloads"],
+                "serialized_executions": row["serialized_executions"],
+                "decision_kind_counts": dict(sorted(row["decision_kind_counts"].items())),
+            }
+            for family, row in public_decisions.items()
+        },
+        "total": {
+            "unique_payloads": sum(
+                row["unique_payloads"] for row in public_decisions.values()
+            ),
+            "serialized_executions": sum(
+                row["serialized_executions"] for row in public_decisions.values()
+            ),
+            "decision_kind_counts": dict(sorted(public_total_decisions.items())),
+        },
     }
     allowed_total = len(expected_requests) - blocked_total
     preflight = descriptor["runtime_checks"]
@@ -2091,9 +2334,81 @@ def finalize_evaluation(
         "expectations_sha256": expectations_sha256,
         "runtime_checks": checks,
         "decision_audit": decision_audit,
+        "public_decision_audit": public_decision_audit,
     }
     atomic_write(output, canonical_bytes(report), 0o600)
     return report
+
+
+def verify_cleanup_daemon(
+    config: dict[str, Any], *, runner: CommandRunner = subprocess.run
+) -> None:
+    health = docker(
+        config,
+        ["info", "--format", "{{json .ServerVersion}}"],
+        "verify Docker daemon health for cleanup",
+        check=False,
+        runner=runner,
+    )
+    if health.returncode != 0:
+        fail("Docker daemon health is unavailable during cleanup")
+    version = parse_json_bytes(health.stdout, "Docker daemon cleanup health")
+    if (
+        not isinstance(version, str)
+        or not version
+        or len(version) > 128
+        or any(ord(character) < 0x20 for character in version)
+    ):
+        fail("Docker daemon cleanup health response is ambiguous")
+
+
+def cleanup_exact_name_absent(
+    config: dict[str, Any],
+    name: str,
+    resource: str,
+    *,
+    runner: CommandRunner = subprocess.run,
+) -> bool:
+    """Prove absence after an inconclusive inspect without trusting stderr text."""
+
+    verify_cleanup_daemon(config, runner=runner)
+    if resource == "container":
+        arguments = [
+            "container",
+            "ls",
+            "--all",
+            "--filter",
+            f"name=^/{name}$",
+            "--format",
+            "{{.Names}}",
+        ]
+    elif resource == "network":
+        arguments = [
+            "network",
+            "ls",
+            "--filter",
+            f"name=^{name}$",
+            "--format",
+            "{{.Name}}",
+        ]
+    else:
+        fail("cleanup exact-name resource type is invalid")
+    listed = docker(
+        config,
+        arguments,
+        f"list exact cleanup {resource} name",
+        check=False,
+        runner=runner,
+    )
+    if listed.returncode != 0:
+        fail(f"Docker {resource} exact-name cleanup list is unavailable")
+    try:
+        names = listed.stdout.decode("utf-8", "strict").splitlines()
+    except UnicodeDecodeError as exc:
+        raise AdapterError(f"Docker {resource} exact-name cleanup list is invalid") from exc
+    if any(item != name for item in names) or len(names) > 1:
+        fail(f"Docker {resource} exact-name cleanup list is ambiguous")
+    return not names
 
 
 def cleanup(
@@ -2112,9 +2427,22 @@ def cleanup(
             check=False,
             runner=runner,
         )
+        if inspect.returncode != 0:
+            if not cleanup_exact_name_absent(
+                config, name, "container", runner=runner
+            ):
+                failures.append(name + ":inspect-ambiguous")
+            continue
         if inspect.returncode == 0:
             payload = parse_json_bytes(inspect.stdout, f"inspect {name} for cleanup")
-            labels = (((payload[0] if isinstance(payload, list) and payload else {}).get("Config") or {}).get("Labels") or {})
+            if (
+                not isinstance(payload, list)
+                or len(payload) != 1
+                or not isinstance(payload[0], dict)
+            ):
+                failures.append(name + ":inspect-payload")
+                continue
+            labels = (((payload[0].get("Config") or {}).get("Labels") or {}))
             if labels.get("io.cyber-abuse-guard.external-eval") != execution_id:
                 failures.append(name + ":ownership")
                 continue
@@ -2127,14 +2455,18 @@ def cleanup(
             )
             if removed.returncode != 0:
                 failures.append(name + ":remove")
-            elif docker(
-                config,
-                ["inspect", name],
-                f"verify {name} removal",
-                check=False,
-                runner=runner,
-            ).returncode == 0:
-                failures.append(name + ":still-present")
+            else:
+                verified = docker(
+                    config,
+                    ["inspect", name],
+                    f"verify {name} removal",
+                    check=False,
+                    runner=runner,
+                )
+                if verified.returncode == 0 or not cleanup_exact_name_absent(
+                    config, name, "container", runner=runner
+                ):
+                    failures.append(name + ":still-present")
     network = state["network"]
     inspected = docker(
         config,
@@ -2143,9 +2475,21 @@ def cleanup(
         check=False,
         runner=runner,
     )
-    if inspected.returncode == 0:
+    if inspected.returncode != 0:
+        if not cleanup_exact_name_absent(
+            config, network, "network", runner=runner
+        ):
+            failures.append(network + ":inspect-ambiguous")
+    else:
         payload = parse_json_bytes(inspected.stdout, "inspect sandbox network for cleanup")
-        labels = (payload[0] if isinstance(payload, list) and payload else {}).get("Labels") or {}
+        if (
+            not isinstance(payload, list)
+            or len(payload) != 1
+            or not isinstance(payload[0], dict)
+        ):
+            failures.append(network + ":inspect-payload")
+            payload = []
+        labels = (payload[0].get("Labels") or {}) if payload else {}
         if labels.get("io.cyber-abuse-guard.external-eval") != execution_id:
             failures.append(network + ":ownership")
         else:
@@ -2158,14 +2502,18 @@ def cleanup(
             )
             if removed.returncode != 0:
                 failures.append(network + ":remove")
-            elif docker(
-                config,
-                ["network", "inspect", network],
-                "verify sandbox network removal",
-                check=False,
-                runner=runner,
-            ).returncode == 0:
-                failures.append(network + ":still-present")
+            else:
+                verified = docker(
+                    config,
+                    ["network", "inspect", network],
+                    "verify sandbox network removal",
+                    check=False,
+                    runner=runner,
+                )
+                if verified.returncode == 0 or not cleanup_exact_name_absent(
+                    config, network, "network", runner=runner
+                ):
+                    failures.append(network + ":still-present")
     if failures:
         fail("sandbox cleanup failed for owned resources")
     (work / "adapter-state.json").unlink(missing_ok=True)

@@ -16,9 +16,9 @@ source checkout，只把候选与 Phase 1 的不可变身份交给预装的 root
 CPA 只允许 `127.0.0.1:18394 -> 8317/tcp` 的隔离 counted-Mock 绑定；不得接触
 真实 Provider、真实账号池、生产数据库或生产流量。
 
-当前机器合同为 `round9-external-evaluation/v2`、
-`round9-external-evaluator-aggregate/v2`、
-`round9-external-evaluation-ledger-event/v2`、
+当前机器合同为 `round9-external-evaluation/v3`、
+`round9-external-evaluator-aggregate/v3`、
+`round9-external-evaluation-ledger-event/v3`、
 `round9-protected-git-ledger-proof/v1`、
 `round9-external-counted-mock/v1` 和 `round9-external-cpa-sandbox/v2`。
 可发布结果必须机械绑定 Audit→Balanced→Strict、模式状态、SQLite v6
@@ -41,8 +41,8 @@ ownership/referent chain。评分与 hard floor 只能在候选通过
 日志和测试夹具在资格无法证明时必须 allow + audit。
 
 当前工作树仍是开发候选。可见开发语料的活动身份是
-`round9-public-adversarial-v10`（183752 bytes，SHA-256
-`bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`）；
+`round9-public-adversarial-v11`（476165 bytes，SHA-256
+`297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`）；
 它不是独立 holdout，也不执行第三方仓库代码。v9 以 105888 bytes /
 `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`
 原样保留为上一份有效冻结历史。精确公布的 v8 以 105299 bytes /

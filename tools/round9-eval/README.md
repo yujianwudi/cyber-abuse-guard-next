@@ -55,7 +55,11 @@ The encrypted tar contains exactly:
     malicious-cases.jsonl
 
 The signed bundle manifest is an Ed25519 envelope whose author key is different
-from the evaluator execution key. It binds every file byte length and SHA-256,
+from the evaluator execution key. At broker startup, the pinned OpenSSL binary
+canonicalizes all three configured keys to DER SPKI, proves that the evaluator
+private key matches its public key, and rejects identical author/evaluator key
+material even when key IDs or PEM encodings differ. The envelope binds every
+file byte length and SHA-256,
 the frozen category/language counts, the pre-candidate ground-truth declaration
 and plaintext_in_repository=false. JSON and JSONL are canonical and duplicate
 keys are rejected.
@@ -114,7 +118,7 @@ checks make PASS publication fail closed. Cleanup still tears down only the
 adapter-owned containers and network.
 
 Before cleanup, the evaluator writes a mode-bound, root-private audit
-expectations file beside its private work directory. It contains the original
+expectations v3 file beside its private work directory. It contains the original
 audit request hashes needed to query the isolated CPA database, plus
 execution-scoped HMAC correlations and the expected `decision_kind`. The
 adapter's mandatory `finalize` command then stops the same CPA container and
@@ -126,6 +130,18 @@ zero subject-state accumulation, Raw Capture zero, plaintext-canary absence and
 a quiet usage queue. Only keyed request correlations and hashed event IDs enter
 the public signed result; original request hashes remain confined to the
 root-private temporary work directory, which normal completion removes.
+
+The evaluator also runs the manifest-bound public-v11 §13.25 regression subset:
+8 historical payloads, 1 branch-head payload, and 1 unmerged candidate carrier,
+each over Audit/Balanced/Strict, Chat/Responses, and stream/non-stream routes.
+All 120 expectations are frozen before the first candidate request. Audit is
+fixed to 40 allow/upstream/usage outcomes; Balanced and Strict are fixed to 80
+local `block_malicious_text` outcomes with no upstream or usage delta. The
+evaluator emits only `round9-public-counted-mock-transport/v1`; the adapter emits
+only `round9-public-cpa-decision-audit/v1`. The broker mechanically merges both
+into `round9-public-counted-mock/v1`, rejects identity/count drift, and includes
+the merged object in metrics, the signed result, and the result-ledger event.
+No payload text or raw public payload ID is emitted.
 
 ### Dedicated-host trust boundary
 

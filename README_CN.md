@@ -42,11 +42,12 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 |---|---|
 | 源码版本 / RC 目标 | `0.16` / 仅 `v0.16-rc.3` 预发行；精确 tag、commit、tree 和产物 hash 必须由未来 clean release run 生成 |
 | 历史候选 | `v0.16-rc.1` 与不可变的第八轮 `v0.16-rc.2` 身份仅保留为历史证据，不得覆盖、改名或冒充第九轮产物 |
-| GitHub 发布 | 当前分支不声称已创建第九轮 tag 或 Release；`round9-release-rc.yml` 只能在 exact-main 与受保护外部评估门禁通过后发布 non-latest prerelease |
+| GitHub 发布 | 当前没有第九轮 tag 或 Release；`round9-release-rc.yml` 目前只能生成私有 17 资产 Actions 候选，公共预发行写入保持硬阻断，必须由独立证据通过后的单独审查变更恢复 |
+| 新仓 main 快照 | `98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35` / tree `77c496e8f4fd1771fc54ed11e8e82970ba3c56b8`；Round 9 gate 与 CodeQL 已通过，完整 CI `30073551084` 在 unit/race/vet/fuzz 通过后因 workflow lint 失败 |
 | CPA 源码/编译目标 | `v7.2.95`（`f71ec0eb6776854457892452cf28c47f0d658251`） |
-| 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v2 与账本证明 |
-| 外部证据合同 | evaluator aggregate v2、ledger event v2、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
-| 公开对抗语料 | 当前为 `round9-public-adversarial-v10` / 183,752 bytes / SHA-256 `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`；v9 作为上一份有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
+| 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
+| 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
+| 公开对抗语料 | 当前为 `round9-public-adversarial-v11` / 476,165 bytes / SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
 | 独立审计 | **REQUIRED / NOT PROVIDED**；开发自测不能替代独立审计 |
 | 生产批准 | **NOT GRANTED**；不存在稳定版 `v0.16`，也不能自动重新准入 Balanced |
 | v0.16 工作流 | `round9-gate.yml`、无 checkout 的 `round9-host-validation.yml`、`round9-release-rc.yml` 是当前第九轮链；第八轮与 v0.15 流程只读保留为历史证据 |
@@ -56,8 +57,8 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | CPA 固定目标 | 仅 v7.2.95；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 独立审计 | `NOT_RUN / NOT_PROVIDED`，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | `classifier-policy-v8`；最终 SHA-256 等待精确源码冻结与发行 commit 绑定 |
-| 内嵌 YAML ruleset | `1.0.10`；最终 SHA-256 等待精确源码冻结与发行 commit 绑定 |
+| Classifier policy | 当前 main 快照为 `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`；最终候选绑定仍待完成 |
+| 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 
 ## 历史 v0.15 发布记录
