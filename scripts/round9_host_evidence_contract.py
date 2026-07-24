@@ -46,11 +46,11 @@ POLICY_VERSION = re.compile(
 POLICY_SHA256 = re.compile(
     r'^const ClassifierPolicySHA256 = "([0-9a-f]{64})"$', re.MULTILINE
 )
-PUBLIC_DEVELOPMENT_CORPUS = "round9-public-adversarial-v11"
-PUBLIC_DEVELOPMENT_REPORT_SCHEMA = "round9-public-adversarial-report/v11"
+PUBLIC_DEVELOPMENT_CORPUS = "round9-public-adversarial-v13"
+PUBLIC_DEVELOPMENT_REPORT_SCHEMA = "round9-public-adversarial-report/v13"
 PUBLIC_DEVELOPMENT_MANIFEST = {
-    "bytes": 476165,
-    "sha256": "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038",
+    "bytes": 481448,
+    "sha256": "91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6",
 }
 PUBLIC_DEVELOPMENT_METRICS = {
     "payload_records": 24,
@@ -518,10 +518,10 @@ def validate_contract(value: Any, policy: dict[str, str], ruleset: dict[str, str
         public["manifest_sha256"], "public_adversarial.manifest_sha256"
     )
     if manifest_sha256 != PUBLIC_DEVELOPMENT_MANIFEST["sha256"]:
-        fail("public_adversarial manifest differs from the frozen v11 contract")
+        fail("public_adversarial manifest differs from the frozen v13 contract")
     for key, expected in PUBLIC_HOST_CONTRACT.items():
         if exact_int(public[key], f"public_adversarial.{key}") != expected:
-            fail(f"public_adversarial.{key} differs from the frozen v11 contract")
+            fail(f"public_adversarial.{key} differs from the frozen v13 contract")
     for key in ("quoted_allowed", "historical_allowed", "system_allowed", "tool_allowed"):
         if public[key] != public["scenario_payload_executions"]:
             fail(f"every executed public payload must pass the {key} carrier gate")
@@ -1229,7 +1229,7 @@ def validate_public_report(
     validate_report_candidate(report["candidate"], expected_candidate, "public_adversarial")
     manifest = validate_file_identity(report["manifest"], "public_adversarial.manifest")
     if manifest != PUBLIC_DEVELOPMENT_MANIFEST:
-        fail("public adversarial report does not bind the frozen v11 manifest")
+        fail("public adversarial report does not bind the frozen v13 manifest")
     validate_log_binding(report, log_path, "public_adversarial")
     metrics = exact_keys(
         report["metrics"],
@@ -1251,7 +1251,7 @@ def validate_public_report(
         "public_adversarial.metrics",
     )
     if metrics != PUBLIC_DEVELOPMENT_METRICS:
-        fail("public adversarial machine report differs from the frozen v11 contract")
+        fail("public adversarial machine report differs from the frozen v13 contract")
     return {
         "manifest_sha256": manifest["sha256"],
         **PUBLIC_HOST_CONTRACT,

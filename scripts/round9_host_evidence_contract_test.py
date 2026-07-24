@@ -587,7 +587,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         with self.assertRaisesRegex(contract.ContractError, "producer log"):
             contract.assemble(self.assemble_args())
 
-    def test_public_pre_v11_report_and_count_drift_are_rejected(self):
+    def test_public_pre_v13_report_and_count_drift_are_rejected(self):
         value = self.public_report()
         value["schema"] = "round9-public-adversarial-report/v9"
         self.rewrite(self.public, value)
@@ -597,7 +597,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         value = self.public_report()
         value["manifest"]["sha256"] = "f" * 64
         self.rewrite(self.public, value)
-        with self.assertRaisesRegex(contract.ContractError, "frozen v11 manifest"):
+        with self.assertRaisesRegex(contract.ContractError, "frozen v13 manifest"):
             contract.assemble(self.assemble_args())
 
         value = self.public_report()
@@ -606,7 +606,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         value["metrics"]["serialized_route_executions"] = 121
         value["metrics"]["direct_blocked"] = 13
         self.rewrite(self.public, value)
-        with self.assertRaisesRegex(contract.ContractError, "frozen v11 contract"):
+        with self.assertRaisesRegex(contract.ContractError, "frozen v13 contract"):
             contract.assemble(self.assemble_args())
 
     def test_paired_per_category_wilson_drift_is_rejected(self):

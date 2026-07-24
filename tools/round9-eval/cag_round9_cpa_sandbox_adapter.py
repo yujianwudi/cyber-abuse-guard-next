@@ -52,8 +52,8 @@ MOCK_CONTRACT = "round9-counted-mock/v1"
 FINALIZE_REPORT_SCHEMA = "round9-cpa-sandbox-finalize/v2"
 AUDIT_EXPECTATIONS_SCHEMA = "round9-cpa-audit-expectations/v3"
 PUBLIC_DECISION_AUDIT_SCHEMA = "round9-public-cpa-decision-audit/v1"
-PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v11"
-PUBLIC_MANIFEST_DATASET = "round9-public-adversarial-v11"
+PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v13"
+PUBLIC_MANIFEST_DATASET = "round9-public-adversarial-v13"
 PUBLIC_FAMILY_UNIQUE_PAYLOADS = {
     "historical_unique": 8,
     "branch_head": 1,
@@ -1382,7 +1382,7 @@ def load_audit_expectations(path: Path) -> tuple[dict[str, Any], str]:
         or not isinstance(public_manifest["sha256"], str)
         or HEX64.fullmatch(public_manifest["sha256"]) is None
     ):
-        fail("CPA audit expectations do not bind the exact v11 public manifest")
+        fail("CPA audit expectations do not bind the exact v13 public manifest")
     categories = value["malicious_categories"]
     if (
         not isinstance(categories, list)

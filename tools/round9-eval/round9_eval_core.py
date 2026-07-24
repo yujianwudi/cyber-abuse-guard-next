@@ -36,8 +36,8 @@ DECISION_AUDIT_SCHEMA = "round9-external-decision-audit/v3"
 PUBLIC_COUNTED_MOCK_SCHEMA = "round9-public-counted-mock/v1"
 PUBLIC_COUNTED_MOCK_TRANSPORT_SCHEMA = "round9-public-counted-mock-transport/v1"
 PUBLIC_DECISION_AUDIT_SCHEMA = "round9-public-cpa-decision-audit/v1"
-PUBLIC_DEVELOPMENT_CORPUS = "round9-public-adversarial-v11"
-PUBLIC_DEVELOPMENT_REPORT_SCHEMA = "round9-public-adversarial-report/v11"
+PUBLIC_DEVELOPMENT_CORPUS = "round9-public-adversarial-v13"
+PUBLIC_DEVELOPMENT_REPORT_SCHEMA = "round9-public-adversarial-report/v13"
 PUBLIC_DEVELOPMENT_SUMMARY = {
     "name": PUBLIC_DEVELOPMENT_CORPUS,
     "development_only": True,
@@ -576,7 +576,7 @@ def load_public_counted_mock_corpus(
         if not isinstance(sources, list) or not sources or len(sources) > 64:
             raise ContractError("public payload sources are outside the reviewed bound")
         for source_index, source in enumerate(sources):
-            # This candidate-owned provenance is bound by the exact v11
+            # This candidate-owned provenance is bound by the exact v13
             # manifest identity and is useful for audit traceability, but it is
             # not independent proof that the third-party source was extracted
             # correctly. Archive provenance intentionally describes both the
@@ -1544,7 +1544,7 @@ def validate_development_evidence(
             continue
         observed = exact_int(public[key], f"public adversarial {key}")
         if observed != expected:
-            raise ContractError(f"public adversarial {key} differs from the frozen v11 contract")
+            raise ContractError(f"public adversarial {key} differs from the frozen v13 contract")
 
     audit = exact_object(
         evidence["audit_contract"],

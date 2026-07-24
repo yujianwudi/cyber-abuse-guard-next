@@ -118,7 +118,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
 
     @staticmethod
     def public_corpus_root() -> Path:
-        return Path(__file__).resolve().parents[2] / "testdata/round9-public-adversarial-v11"
+        return Path(__file__).resolve().parents[2] / "testdata/round9-public-adversarial-v13"
 
     def public_evidence(self, manifest_raw: bytes | None = None) -> dict:
         evidence = copy.deepcopy(development_evidence()["corpus"]["public_adversarial"])
@@ -141,7 +141,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
     ) -> None:
         source = self.public_corpus_root()
         prefix = "cyber-abuse-guard-v0.16-rc.3"
-        corpus_prefix = prefix + "/testdata/round9-public-adversarial-v11"
+        corpus_prefix = prefix + "/testdata/round9-public-adversarial-v13"
         overrides = overrides or {}
         omitted = omitted or set()
         entries: list[tuple[tarfile.TarInfo, bytes | None]] = []
@@ -251,10 +251,10 @@ class BrokerIdentityContractTest(unittest.TestCase):
         manifest_raw = (self.public_corpus_root() / "manifest.json").read_bytes()
         evidence = self.public_evidence(manifest_raw)
         expected_identity = {
-            "schema": "round9-public-adversarial-corpus/v11",
-            "dataset": "round9-public-adversarial-v11",
-            "bytes": 476_165,
-            "sha256": "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038",
+            "schema": "round9-public-adversarial-corpus/v13",
+            "dataset": "round9-public-adversarial-v13",
+            "bytes": 481_448,
+            "sha256": "91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6",
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -313,7 +313,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
                 reject(kind, "link or special file", extra=[(link, None)])
 
             duplicate = tarfile.TarInfo(
-                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v11/manifest.json"
+                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v13/manifest.json"
             )
             duplicate.size = len(manifest_raw)
             reject(
@@ -323,7 +323,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
             )
 
             extra_corpus = tarfile.TarInfo(
-                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v11/extra.txt"
+                "cyber-abuse-guard-v0.16-rc.3/testdata/round9-public-adversarial-v13/extra.txt"
             )
             extra_corpus.size = 1
             reject(

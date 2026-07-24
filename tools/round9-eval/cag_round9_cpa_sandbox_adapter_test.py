@@ -424,8 +424,8 @@ class SandboxAdapterContractTest(unittest.TestCase):
             "challenge_sha256": "1" * 64,
             "malicious_categories": categories,
             "public_manifest": {
-                "schema": "round9-public-adversarial-corpus/v11",
-                "dataset": "round9-public-adversarial-v11",
+                "schema": "round9-public-adversarial-corpus/v13",
+                "dataset": "round9-public-adversarial-v13",
                 "bytes": 4096,
                 "sha256": "8" * 64,
             },
@@ -732,7 +732,7 @@ class SandboxAdapterContractTest(unittest.TestCase):
         fixture = self.finalize_fixture("expectations-v3")
         value, digest = load_audit_expectations(fixture["expectations_path"])
         self.assertEqual(value["schema"], "round9-cpa-audit-expectations/v3")
-        self.assertEqual(value["public_manifest"]["dataset"], "round9-public-adversarial-v11")
+        self.assertEqual(value["public_manifest"]["dataset"], "round9-public-adversarial-v13")
         self.assertEqual(len([row for row in value["requests"] if row["kind"] == "public_development"]), 120)
         self.assertEqual(len(digest), 64)
 

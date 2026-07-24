@@ -129,7 +129,7 @@ class Fixture:
                 "release": {
                     "tag": contract.TAG,
                     "title": contract.RELEASE_TITLE,
-                    "body": "Public adversarial v11; latest=false; independent audit required",
+                    "body": "Public adversarial v13; latest=false; independent audit required",
                     "publication_permitted": True,
                     "draft": False,
                     "prerelease": True,

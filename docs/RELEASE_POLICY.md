@@ -81,12 +81,12 @@ current_paired_label_audit_sha256: a2d34853f20ae1c0b18690a4f58f100fe0014c5323245
 current_paired_label_audit_status: PRE_EXECUTION_PASS_120_OF_120
 current_paired_source_report_schema: round9-development-paired-malicious-report/v3
 current_paired_machine_report_schema: round9-development-paired-malicious-machine-report/v1
-current_public_adversarial_corpus: round9-public-adversarial-v11
-current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v11
-current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v11
+current_public_adversarial_corpus: round9-public-adversarial-v13
+current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v13
+current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v13
 current_public_adversarial_counts: payloads-24_formal-unique-23_historical-8_branch-head-1_prompt-like-14_unmerged-carriers-1_nondefault-branches-5_release-assets-16_release-assets-with-prompt-entries-4_release-asset-metadata-records-199_executed-1_not-provided-0_scenario-payloads-24_serialized-routes-120_direct-blocked-12_direct-allowed-12
-current_public_adversarial_manifest_bytes: 476165
-current_public_adversarial_manifest_sha256: 297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038
+current_public_adversarial_manifest_bytes: 481448
+current_public_adversarial_manifest_sha256: 91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6
 current_public_counted_mock_matrix: unique-10_routes-120_audit-allow-40_enforcement-block-80_upstream-40_usage-40
 current_independent_benign_requirement: 600-unique-zero-block-zero-hard-policy
 current_development_paired_recall_requirement: aggregate-and-each-category-exactly-10000-basis-points
@@ -175,7 +175,7 @@ fails closed.
 
 Manifest schema 6 binds `classifier-policy-v8`, ruleset `1.0.10`, audit schema
 v6, Raw Capture schema v4, canonical Phase 1 development evidence, paired-v3
-and public-v11 machine reports, independent benign zero-block/zero-hard-policy
+and public-v13 machine reports, independent benign zero-block/zero-hard-policy
 results, exact 100% visible-development paired recall, independent malicious
 aggregate and per-category recall of at least 95%, per-category Wilson
 intervals, the closed decision-kind set, the fixed loopback CPA listener, and
@@ -219,8 +219,8 @@ API. The current Safe Gate enforces both the verifier wiring and the fail-only,
 private-candidate boundary described above; it does not treat verifier source or
 tests as audit evidence.
 
-The current public adversarial corpus is development-only v11 evidence under
-`round9-public-adversarial-corpus/v11`. The original v8 manifest remains frozen
+The current public adversarial corpus is development-only v13 evidence under
+`round9-public-adversarial-corpus/v13`. The original v8 manifest remains frozen
 byte-for-byte as superseded invalid evidence at 105,299 bytes with SHA-256
 `5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f`.
 The rejected attempt to rebind corrected bytes to the same v8 identity is also
@@ -229,13 +229,27 @@ retained separately at 105,298 bytes with SHA-256
 The corrected corpus was admitted only under the new v9 dataset/schema; its
 manifest is exactly 105,888 bytes with SHA-256
 `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.
-V9 remains frozen byte-for-byte as valid history. V10 remains the immediately
-preceding valid corpus. V11 records the later Codex-X default-head advance,
+V9 remains frozen byte-for-byte as valid history. V10, v11, and v12 remain valid
+immutable history. V11 records the later Codex-X default-head advance,
 separates Git
 repository archive entries from GitHub Release asset entries, and records five
 active non-default branches without treating them as formal payload sources.
 Its manifest is exactly 476,165 bytes with SHA-256
 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`.
+V12 records the later MDX default-head advance from
+`334f8cd2ec132aa4317b62bd2a3228ed827cbb87` to
+`cccbfae8a75c948bde22407dd07de7af88731d9b`. Its eight changed-or-added
+files are classified as documentation, workflow configuration, maintenance
+source, or test source; no standalone prompt payload changed. The v12 manifest
+is exactly 485,221 bytes with SHA-256
+`eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387`.
+V13 records the subsequent MDX default-head advance from
+`cccbfae8a75c948bde22407dd07de7af88731d9b` to
+`61feb6a1940bd1d58163c2550869a0a9aed2ddc1`. Five changed-or-added Star
+History data/source/workflow/test files are classified as non-payload material;
+two removed source paths are recorded path-only. The v13 manifest is exactly
+481,448 bytes with SHA-256
+`91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`.
 It binds 24 payload records, 23 formal unique payloads (eight historical, one
 branch-head, and fourteen current prompt-like), one unmerged candidate carrier
 with one execution and zero `NOT_PROVIDED`, five behind non-default branch

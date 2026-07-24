@@ -60,7 +60,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             root / "rules",
             root / "testdata/round9-development-benign-v1",
             root / "testdata/round9-development-paired-malicious-v3",
-            root / "testdata/round9-public-adversarial-v11",
+            root / "testdata/round9-public-adversarial-v13",
         ):
             directory.mkdir(parents=True)
         (root / "internal/classifier/policy_identity.go").write_text(
@@ -112,8 +112,8 @@ class Round9MachineReportsTest(unittest.TestCase):
             encoding="utf-8",
         )
         shutil.copyfile(
-            REPOSITORY_ROOT / "testdata/round9-public-adversarial-v11/manifest.json",
-            root / "testdata/round9-public-adversarial-v11/manifest.json",
+            REPOSITORY_ROOT / "testdata/round9-public-adversarial-v13/manifest.json",
+            root / "testdata/round9-public-adversarial-v13/manifest.json",
         )
 
         self.git(root.parent, "init", "-q", str(root))
@@ -292,7 +292,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "schema": reports.PUBLIC_REPORT_SCHEMA,
             "candidate": candidate,
             "manifest": self.identity(
-                root / "testdata/round9-public-adversarial-v11/manifest.json"
+                root / "testdata/round9-public-adversarial-v13/manifest.json"
             ),
             "producer_log": self.identity(public_log),
             "metrics": reports.PUBLIC_METRICS,
@@ -465,14 +465,14 @@ class Round9MachineReportsTest(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertIsNone(reports.PUBLIC_RESULT.fullmatch(line + "operator_override=PASS\n"))
 
-    def test_public_report_is_v11_and_binds_the_frozen_manifest(self) -> None:
+    def test_public_report_is_v13_and_binds_the_frozen_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
-            corpus_root = root / "testdata/round9-public-adversarial-v11"
+            corpus_root = root / "testdata/round9-public-adversarial-v13"
             corpus_root.mkdir(parents=True)
             manifest_path = corpus_root / "manifest.json"
             shutil.copyfile(
-                REPOSITORY_ROOT / "testdata/round9-public-adversarial-v11/manifest.json",
+                REPOSITORY_ROOT / "testdata/round9-public-adversarial-v13/manifest.json",
                 manifest_path,
             )
             output = Path(temporary) / "public.json"
@@ -1031,7 +1031,7 @@ class Round9MachineReportsTest(unittest.TestCase):
                 )
         with tempfile.TemporaryDirectory() as temporary:
             root, _, args, candidate = self.development_fixture(temporary)
-            manifest = root / "testdata/round9-public-adversarial-v11/manifest.json"
+            manifest = root / "testdata/round9-public-adversarial-v13/manifest.json"
             manifest.write_bytes(manifest.read_bytes() + b"\n")
             with self.assertRaisesRegex(reports.ReportError, "manifest identity drifted"):
                 reports.validate_development_public_report(

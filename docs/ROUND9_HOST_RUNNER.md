@@ -58,7 +58,7 @@ and a public RC do not authorize production Balanced mode.
 | CPA runtime checks | `round9-external-cpa-runtime-checks/v1` |
 | CPA sandbox descriptor | `round9-external-cpa-sandbox/v2` |
 | Development evidence | `round9-development-evidence/v1` |
-| Current visible public corpus | `round9-public-adversarial-v11` / 476,165 bytes / `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`; 199 Release assets are metadata/digest-only |
+| Current visible public corpus | `round9-public-adversarial-v13` / 481,448 bytes / `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; 199 Release assets are metadata/digest-only |
 | External evidence assets | `round9-external-evaluation.json`, `round9-external-ledger-proof.json` |
 
 The public adversarial corpus is visible development regression material, not

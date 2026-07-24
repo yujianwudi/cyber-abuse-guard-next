@@ -18,6 +18,10 @@ const (
 	publicV10ManifestSHA256 = "bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d"
 	publicV11ManifestBytes  = 476165
 	publicV11ManifestSHA256 = "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038"
+	publicV12ManifestBytes  = 485221
+	publicV12ManifestSHA256 = "eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387"
+	publicV13ManifestBytes  = 481448
+	publicV13ManifestSHA256 = "91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6"
 )
 
 type publicIdentityPayload struct {
@@ -164,6 +168,111 @@ func TestRound9PublicCorpusV11Identity(t *testing.T) {
 		}
 		if !bytes.Equal(v10Encoded, v11Encoded) {
 			t.Fatalf("public payload index %d encoded bytes drifted from v10 to v11", index)
+		}
+	}
+}
+
+func TestRound9PublicCorpusV12Identity(t *testing.T) {
+	t.Parallel()
+	root := round9CorpusRepositoryRoot(t)
+	v11 := loadPublicIdentityManifest(t, root, "round9-public-adversarial-v11", publicV11ManifestBytes, publicV11ManifestSHA256)
+	v12 := loadPublicIdentityManifest(t, root, "round9-public-adversarial-v12", publicV12ManifestBytes, publicV12ManifestSHA256)
+	if v12.Schema != "round9-public-adversarial-corpus/v12" || v12.Dataset != "round9-public-adversarial-v12" ||
+		!v12.DevelopmentOnly || v12.IndependentHoldout || v12.ThirdPartyCodeExecuted ||
+		v12.ThirdPartyRepositoryAccess != "github_api_text_and_metadata_read_only" ||
+		v12.BinaryReleaseAssetsDownloaded || v12.BinaryReleaseAssetsOpened ||
+		v12.UniqueFormalPayloads != 23 || v12.NondefaultBranchCandidateCarriers != 5 ||
+		v12.ReleaseAssetsReviewed != 16 || v12.ReleaseAssetsWithPromptEntries != 4 ||
+		v12.ReleaseAssetMetadataRecords != 199 {
+		t.Fatalf("unexpected v12 contract: %+v", v12)
+	}
+
+	matches := 0
+	for _, history := range v12.RefreshHistory {
+		if history.ManifestBytes == publicV11ManifestBytes && history.ManifestSHA256 == publicV11ManifestSHA256 {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("v12 refresh history contains v11 identity %d times, want 1", matches)
+	}
+
+	v11ByIndex := publicPayloadsByIndex(v11.Payloads)
+	v12ByIndex := publicPayloadsByIndex(v12.Payloads)
+	for index := 1; index <= 23; index++ {
+		before, beforeOK := v11ByIndex[index]
+		after, afterOK := v12ByIndex[index]
+		if !beforeOK || !afterOK || before.ID != after.ID || before.EncodedFile != after.EncodedFile ||
+			before.DecodedBytes != after.DecodedBytes || before.DecodedSHA256 != after.DecodedSHA256 {
+			t.Fatalf("public payload index %d identity drift from v11 to v12", index)
+		}
+		v11Encoded, err := os.ReadFile(filepath.Join(root, "testdata", "round9-public-adversarial-v11", filepath.FromSlash(before.EncodedFile)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		v12Encoded, err := os.ReadFile(filepath.Join(root, "testdata", "round9-public-adversarial-v12", filepath.FromSlash(after.EncodedFile)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(v11Encoded, v12Encoded) {
+			t.Fatalf("public payload index %d encoded bytes drifted from v11 to v12", index)
+		}
+	}
+}
+
+func TestRound9PublicCorpusV13Identity(t *testing.T) {
+	t.Parallel()
+	root := round9CorpusRepositoryRoot(t)
+	v12 := loadPublicIdentityManifest(t, root, "round9-public-adversarial-v12", publicV12ManifestBytes, publicV12ManifestSHA256)
+	v13 := loadPublicIdentityManifest(t, root, "round9-public-adversarial-v13", publicV13ManifestBytes, publicV13ManifestSHA256)
+	if v13.Schema != "round9-public-adversarial-corpus/v13" || v13.Dataset != "round9-public-adversarial-v13" ||
+		!v13.DevelopmentOnly || v13.IndependentHoldout || v13.ThirdPartyCodeExecuted ||
+		v13.ThirdPartyRepositoryAccess != "github_api_text_and_metadata_read_only" ||
+		v13.BinaryReleaseAssetsDownloaded || v13.BinaryReleaseAssetsOpened ||
+		v13.UniqueFormalPayloads != 23 || v13.NondefaultBranchCandidateCarriers != 5 ||
+		v13.ReleaseAssetsReviewed != 16 || v13.ReleaseAssetsWithPromptEntries != 4 ||
+		v13.ReleaseAssetMetadataRecords != 199 {
+		t.Fatalf("unexpected v13 contract: %+v", v13)
+	}
+
+	matches := 0
+	for _, history := range v13.RefreshHistory {
+		if history.ManifestBytes == publicV12ManifestBytes && history.ManifestSHA256 == publicV12ManifestSHA256 {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Fatalf("v13 refresh history contains v12 identity %d times, want 1", matches)
+	}
+
+	if len(v12.Payloads) != len(v13.Payloads) {
+		t.Fatalf("public payload record count drift from v12 to v13: before=%d after=%d", len(v12.Payloads), len(v13.Payloads))
+	}
+	v13ByID := make(map[string]publicIdentityPayload, len(v13.Payloads))
+	for _, payload := range v13.Payloads {
+		if _, duplicate := v13ByID[payload.ID]; duplicate {
+			t.Fatalf("v13 public payload id %q is duplicated", payload.ID)
+		}
+		v13ByID[payload.ID] = payload
+	}
+	for _, before := range v12.Payloads {
+		after, afterOK := v13ByID[before.ID]
+		sameIndex := before.UniquePayloadIndex == nil && after.UniquePayloadIndex == nil ||
+			before.UniquePayloadIndex != nil && after.UniquePayloadIndex != nil && *before.UniquePayloadIndex == *after.UniquePayloadIndex
+		if !afterOK || !sameIndex || before.EncodedFile != after.EncodedFile ||
+			before.DecodedBytes != after.DecodedBytes || before.DecodedSHA256 != after.DecodedSHA256 {
+			t.Fatalf("public payload %q identity drift from v12 to v13", before.ID)
+		}
+		v12Encoded, err := os.ReadFile(filepath.Join(root, "testdata", "round9-public-adversarial-v12", filepath.FromSlash(before.EncodedFile)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		v13Encoded, err := os.ReadFile(filepath.Join(root, "testdata", "round9-public-adversarial-v13", filepath.FromSlash(after.EncodedFile)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(v12Encoded, v13Encoded) {
+			t.Fatalf("public payload %q encoded bytes drifted from v12 to v13", before.ID)
 		}
 	}
 }

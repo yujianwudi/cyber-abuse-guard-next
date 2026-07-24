@@ -41,14 +41,14 @@ ownership/referent chain。评分与 hard floor 只能在候选通过
 日志和测试夹具在资格无法证明时必须 allow + audit。
 
 当前工作树仍是开发候选。可见开发语料的活动身份是
-`round9-public-adversarial-v11`（476165 bytes，SHA-256
-`297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`）；
-它不是独立 holdout，也不执行第三方仓库代码。v9 以 105888 bytes /
-`dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`
-原样保留为上一份有效冻结历史。精确公布的 v8 以 105299 bytes /
+`round9-public-adversarial-v13`（481448 bytes，SHA-256
+`91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`）；
+它不是独立 holdout，也不执行第三方仓库代码。v12 以 485221 bytes /
+`eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387`
+原样保留为上一份有效冻结历史，v11/v10/v9 继续保留为更早有效历史。精确公布的 v8 以 105299 bytes /
 `5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f`
 作为 immutable-invalid 历史保留；105298-byte / `2f953da4…` 的原位修正 v8
-作为 rejected rebind 单独保留。v7 仍是上一份有效冻结历史，v6 仍是较早的
+作为 rejected rebind 单独保留。v7 仍是更早有效冻结历史，v6 仍是较早的
 frozen-invalid review-digest 历史。
 当前可见开发自检在性能修复后的工作树身份下记录为：正常语料 0/1200
 semantic、0/7200 route blocks（166 audit、7034 allow，stream/nonstream 各

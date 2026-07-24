@@ -75,11 +75,11 @@ DEVELOPMENT_PLATFORM = "linux/amd64"
 DEVELOPMENT_SCHEMA = "round9-development-evidence/v1"
 DEVELOPMENT_PAIRED_RECALL_BASIS_POINTS = 10_000
 INDEPENDENT_MALICIOUS_RECALL_BASIS_POINTS = 9_500
-PUBLIC_CORPUS = "round9-public-adversarial-v11"
-PUBLIC_REPORT_SCHEMA = "round9-public-adversarial-report/v11"
-PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v11"
-PUBLIC_MANIFEST_BYTES = 476165
-PUBLIC_MANIFEST_SHA256 = "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038"
+PUBLIC_CORPUS = "round9-public-adversarial-v13"
+PUBLIC_REPORT_SCHEMA = "round9-public-adversarial-report/v13"
+PUBLIC_MANIFEST_SCHEMA = "round9-public-adversarial-corpus/v13"
+PUBLIC_MANIFEST_BYTES = 481448
+PUBLIC_MANIFEST_SHA256 = "91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6"
 PUBLIC_METRICS = {
     "payload_records": 24,
     "formal_unique_payloads": 23,
@@ -462,7 +462,7 @@ def public_manifest_identity(root: Path) -> tuple[dict[str, Any], dict[str, Any]
     manifest, raw = read_json_document(
         path,
         maximum=524288,
-        label="public adversarial v11 manifest",
+        label="public adversarial v13 manifest",
         canonical=False,
     )
     identity = bytes_identity(raw)
@@ -470,39 +470,39 @@ def public_manifest_identity(root: Path) -> tuple[dict[str, Any], dict[str, Any]
         "bytes": PUBLIC_MANIFEST_BYTES,
         "sha256": PUBLIC_MANIFEST_SHA256,
     }:
-        fail("public adversarial v11 manifest identity drifted")
+        fail("public adversarial v13 manifest identity drifted")
     if manifest.get("schema") != PUBLIC_MANIFEST_SCHEMA:
-        fail("public adversarial v11 manifest schema drifted")
+        fail("public adversarial v13 manifest schema drifted")
     for key, expected in PUBLIC_MANIFEST_CONTRACT.items():
         if manifest.get(key) != expected:
-            fail(f"public adversarial v11 manifest field drifted: {key}")
+            fail(f"public adversarial v13 manifest field drifted: {key}")
     payloads = manifest.get("payloads")
     carriers = manifest.get("candidate_carriers")
     nondefault_carriers = manifest.get("nondefault_branch_carriers")
     release_asset_reviews = manifest.get("release_asset_reviews")
     release_asset_metadata = manifest.get("release_asset_metadata")
     if not isinstance(payloads, list) or len(payloads) != PUBLIC_METRICS["payload_records"]:
-        fail("public adversarial v11 manifest payload count drifted")
+        fail("public adversarial v13 manifest payload count drifted")
     if not isinstance(carriers, list) or len(carriers) != PUBLIC_METRICS["candidate_carriers"]:
-        fail("public adversarial v11 candidate-carrier count drifted")
+        fail("public adversarial v13 candidate-carrier count drifted")
     if (
         not isinstance(nondefault_carriers, list)
         or len(nondefault_carriers)
         != PUBLIC_MANIFEST_CONTRACT["nondefault_branch_candidate_carriers"]
     ):
-        fail("public adversarial v11 non-default branch count drifted")
+        fail("public adversarial v13 non-default branch count drifted")
     if (
         not isinstance(release_asset_reviews, list)
         or len(release_asset_reviews)
         != PUBLIC_MANIFEST_CONTRACT["release_assets_reviewed"]
     ):
-        fail("public adversarial v11 Release asset review count drifted")
+        fail("public adversarial v13 Release asset review count drifted")
     if (
         not isinstance(release_asset_metadata, list)
         or len(release_asset_metadata)
         != PUBLIC_MANIFEST_CONTRACT["release_asset_metadata_records"]
     ):
-        fail("public adversarial v11 Release asset metadata count drifted")
+        fail("public adversarial v13 Release asset metadata count drifted")
     return identity, manifest
 
 
@@ -1620,12 +1620,12 @@ def validate_development_public_report(
     if exact_keys(
         report["manifest"], {"bytes", "sha256"}, "public adversarial manifest"
     ) != manifest:
-        fail("public adversarial machine report does not bind the v11 manifest")
+        fail("public adversarial machine report does not bind the v13 manifest")
     metrics = exact_keys(
         report["metrics"], set(PUBLIC_METRICS), "public adversarial metrics"
     )
     if metrics != PUBLIC_METRICS:
-        fail("public adversarial metrics differ from the frozen v11 contract")
+        fail("public adversarial metrics differ from the frozen v13 contract")
     producer_log = validate_producer_log(report, log_path, "public adversarial")
     public_raw = regular_bytes(log_path, 262144)
     try:

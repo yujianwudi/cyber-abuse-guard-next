@@ -24,7 +24,7 @@ round8_ruleset: 1.0.9
 round9_classifier: classifier-policy-v8 / b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde / PREDECESSOR_WORKING_TREE_DEVELOPMENT_IDENTITY
 round9_ruleset: 1.0.10 / e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0 / PREDECESSOR_WORKING_TREE_DEVELOPMENT_IDENTITY
 
-round9_public_adversarial: v11 / 476165 bytes / 297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038
+round9_public_adversarial: v13 / 481448 bytes / 91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6
 round9_candidate: v0.16-rc.3 (confirmed unoccupied by tag and Release API at start)
 final_source_commit: PENDING_FINAL_SOURCE_FREEZE
 exact_candidate_independent_audit_evidence_status: NOT_PROVIDED
@@ -133,8 +133,8 @@ are not presented as the current final result after subsequent classifier edits.
 | Unique semantic samples separated from route executions | Round 9 corpus runner/report schema | `internal/round9corpus`, machine-report tests | Runner/report source and final commit/tree not frozen | Benign report SHA-256 `607b751defeebd9681170a558528aa1a4827c1c176bce2886a1929b59193af01`; paired report SHA-256 `ba9733503985195204c0bc1eef95f936951ab8947c67ce4d316abcb8c6ab3276` | Development accounting records 1200 vs 7200 and 120 vs 960 separately; benign stream false/true 3600/3600 and malicious stream false/true 480/480 | `DEVELOPMENT_SELF_CHECK_PASS / PENDING_FINAL_SOURCE_FREEZE` |
 | 600 independently authored benign holdout requests | External encrypted root-owned bundle only | Protected external evaluator | No candidate freeze; no admissible bundle/result identity in this record | No signed external evaluation | Zero-block result and Wilson upper bound absent | `NOT_PROVIDED` |
 | Independent malicious ground truth, paired/independent recall, and per-category Wilson intervals | External bundle/evaluator plus frozen paired v3 development set | Protected evaluator and development runner | No exact candidate freeze | No signed independent result | Independent malicious evidence absent | `NOT_PROVIDED` |
-| Four public repositories frozen by repo/ref/commit/path/bytes/SHA-256 | `testdata/round9-public-adversarial-v11/manifest.json`, public corpus validator | `cmd/round9-public-corpus-validator`, `internal/round9corpus` static identity tests | V11 manifest frozen; validator source not final | 476165 bytes; SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038` | 2026-07-24 live rechecked; Codex-X default head advanced without adding a standalone prompt payload; five behind branches and 16 historical Release assets remain separated from formal prompt provenance; all 199 Release assets are metadata/digest-only and were neither downloaded nor opened; no third-party code executed; final static validator rerun pending | `PENDING_RERUN` |
-| Public-v11 classifier scenarios and per-payload counted-Mock | classifier plus public corpus runner/Host boundary | public scenario tests and counted-Mock runner | Classifier/candidate not frozen | No final scenario log; no counted-Mock asset | Static identity does not prove classification or upstream counters | `PENDING_RERUN` / `NOT_PROVIDED` |
+| Four public repositories frozen by repo/ref/commit/path/bytes/SHA-256 | `testdata/round9-public-adversarial-v13/manifest.json`, public corpus validator | `cmd/round9-public-corpus-validator`, `internal/round9corpus` static identity tests | V13 manifest frozen; validator source not final | 481448 bytes; SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6` | 2026-07-24 23:47 +08 live freeze with 2026-07-25 00:00 +08 metadata recheck; MDX default-head commit provenance advanced while all 19 frozen payload-source paths retained the same bytes/SHA-256/Git blob; five changed-or-added files are excluded as non-payload data/source/workflow/test material and two removals are path-only; the other three repository snapshots and all 199 metadata-only Release asset records remain unchanged; no third-party code executed; final Linux validator rerun pending | `PENDING_LINUX_RERUN` |
+| Public-v13 classifier scenarios and per-payload counted-Mock | classifier plus public corpus runner/Host boundary | public scenario tests and counted-Mock runner | Classifier/candidate not frozen | No final scenario log; no counted-Mock asset | Static identity does not prove classification or upstream counters | `PENDING_LINUX_RERUN` / `NOT_PROVIDED` |
 | Repository-local counted-Mock | `integration/round9countedmock`, local isolated runner | Exact-candidate Audit→Balanced→Strict matrix | No exact candidate freeze | No admissible result asset | Not run as final evidence | `NOT_PROVIDED` |
 | Tencent Cloud #2 isolated counted-Mock | `scripts/round9-host-evidence*`, isolated operator sandbox contract | Exact-candidate Host/runtime matrix | No exact candidate freeze | No admissible result asset; 2026-07-24 read-only connectivity/preflight metadata is not counted-Mock evidence | SSH preflight succeeded, but the root-owned broker and independent bundle are absent; no CPA/container/runtime test was performed | `NOT_PROVIDED` |
 | Protected external CPA/count-Mock evaluation | root-owned broker contract, external evaluator/adapter contracts | Signed external evaluation v3 admission and runtime checks | No exact candidate freeze | No signed evaluation/counts | No protected external run | `NOT_PROVIDED` |
@@ -542,6 +542,30 @@ are not presented as the current final result after subsequent classifier edits.
   Its Codex-X delta review records no standalone prompt payload, five behind
   non-default branches remain separate candidates, and all 199 Release assets
   are retained as metadata/digest-only records; none was downloaded or opened.
+- A later authenticated read-only recheck at `2026-07-24T22:49:00+08:00`
+  found that MDX main had advanced from `334f8cd2ec132aa4317b62bd2a3228ed827cbb87`
+  to `cccbfae8a75c948bde22407dd07de7af88731d9b`. Per the immutable-corpus
+  rule, this produced v12 rather than modifying v11. V12 is 485221 bytes with
+  SHA-256 `eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387`.
+  All 19 frozen MDX payload-source paths retain the same bytes/SHA-256/Git blob
+  while commit provenance moves to the v12 head; all 24 encoded payload files
+  are byte-identical to v11. Eight changed-or-added documentation, workflow,
+  maintenance-source, and test files are recorded as excluded non-payloads with
+  review digest `913889465add03bbe2980dceb6e059b67f9113cbc3d4752f4347e60e1d706028`;
+  the other three repository snapshots and 199 metadata-only Release assets did
+  not drift. No third-party code or Release asset was executed or opened.
+- The final pre-commit recheck found another direct MDX main advance from
+  `cccbfae8a75c948bde22407dd07de7af88731d9b` to
+  `61feb6a1940bd1d58163c2550869a0a9aed2ddc1`, so v12 remained immutable and
+  v13 was created. V13 is 481448 bytes with SHA-256
+  `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`.
+  The 19 MDX payload-source paths retain the same bytes/SHA-256/Git blob while
+  commit provenance moves to the v13 head; all 24 encoded payload files remain
+  byte-identical to v12. Five changed-or-added Star History data/source/workflow/
+  test blobs are excluded as non-payloads with review digest
+  `56d4bfcdfa4bfa0b4b74b4229b4dd7d71fa6b0ebef58cd4417438209f45dd1cd`;
+  two removed source paths are recorded path-only. A second full metadata check
+  at `2026-07-25T00:00:54+08:00` remained exact-equal to the v13 manifest.
 - Documentation now separates repository-local counted-Mock, Tencent Cloud #2
   isolated counted-Mock, and protected external evaluation/one-shot-ledger
   evidence. All three remain `NOT_PROVIDED`.

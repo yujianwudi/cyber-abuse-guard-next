@@ -47,7 +47,7 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | CPA 源码/编译目标 | `v7.2.95`（`f71ec0eb6776854457892452cf28c47f0d658251`） |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
-| 公开对抗语料 | 当前为 `round9-public-adversarial-v11` / 476,165 bytes / SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
+| 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
 | 独立审计 | **REQUIRED / NOT PROVIDED**；开发自测不能替代独立审计 |
 | 生产批准 | **NOT GRANTED**；不存在稳定版 `v0.16`，也不能自动重新准入 Balanced |
 | v0.16 工作流 | `round9-gate.yml`、无 checkout 的 `round9-host-validation.yml`、`round9-release-rc.yml` 是当前第九轮链；第八轮与 v0.15 流程只读保留为历史证据 |

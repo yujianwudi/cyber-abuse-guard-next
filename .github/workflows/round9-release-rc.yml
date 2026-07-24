@@ -483,7 +483,7 @@ jobs:
             .round9.machine_reports.paired_malicious.schema ==
               "round9-development-paired-malicious-machine-report/v1" and
             .round9.machine_reports.public_adversarial.schema ==
-                "round9-public-adversarial-report/v11" and
+              "round9-public-adversarial-report/v13" and
             .round9.machine_reports.audit_contract.schema ==
               "round9-audit-contract-report/v1" and
             .round9.counted_mock == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
@@ -1008,7 +1008,7 @@ jobs:
             .round9.corpus.public_adversarial.direct_active_blocked == 12 and
             .round9.corpus.public_adversarial.direct_active_allowed == 12 and
             .round9.machine_reports.paired_malicious.schema == "round9-development-paired-malicious-machine-report/v1" and
-                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v11" and
+            .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v13" and
             .round9.external_evaluation.schema == "round9-external-evaluation/v3" and
             .round9.external_evaluation.state == "PASS" and
             .round9.external_evaluation.public_counted_mock.schema ==
@@ -1018,9 +1018,9 @@ jobs:
             .round9.external_evaluation.public_counted_mock.independent_holdout == false and
             .round9.external_evaluation.public_counted_mock.third_party_code_executed == false and
             .round9.external_evaluation.public_counted_mock.manifest.schema ==
-              "round9-public-adversarial-corpus/v11" and
+              "round9-public-adversarial-corpus/v13" and
             .round9.external_evaluation.public_counted_mock.manifest.dataset ==
-              "round9-public-adversarial-v11" and
+              "round9-public-adversarial-v13" and
             .round9.external_evaluation.public_counted_mock.route_matrix == {
               modes:["audit","balanced","strict"],
               protocols:["openai_chat","openai_responses"],
@@ -1139,7 +1139,7 @@ jobs:
             (.artifacts.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
             .round9.release.tag == "v0.16-rc.3" and
             .round9.release.title == "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required" and
-            (.round9.release.body | type == "string" and contains("Public adversarial v11") and
+            (.round9.release.body | type == "string" and contains("Public adversarial v13") and
               contains("latest=false") and contains("independent audit")) and
             .round9.release.publication_permitted == true and
             .round9.release.draft == false and .round9.release.prerelease == true and
@@ -1407,7 +1407,7 @@ jobs:
             .round9.corpus.public_adversarial.serialized_route_executions == 120 and
             .round9.corpus.public_adversarial.direct_active_blocked == 12 and
             .round9.corpus.public_adversarial.direct_active_allowed == 12 and
-                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v11" and
+            .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v13" and
             .round9.external_evaluation.schema == "round9-external-evaluation/v3" and
             .round9.external_evaluation.state == "PASS" and
             .round9.external_evaluation.public_counted_mock.schema ==
@@ -1417,9 +1417,9 @@ jobs:
             .round9.external_evaluation.public_counted_mock.independent_holdout == false and
             .round9.external_evaluation.public_counted_mock.third_party_code_executed == false and
             .round9.external_evaluation.public_counted_mock.manifest.schema ==
-              "round9-public-adversarial-corpus/v11" and
+              "round9-public-adversarial-corpus/v13" and
             .round9.external_evaluation.public_counted_mock.manifest.dataset ==
-              "round9-public-adversarial-v11" and
+              "round9-public-adversarial-v13" and
             .round9.external_evaluation.public_counted_mock.route_matrix == {
               modes:["audit","balanced","strict"],
               protocols:["openai_chat","openai_responses"],

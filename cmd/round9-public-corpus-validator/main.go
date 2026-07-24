@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	datasetName                = "round9-public-adversarial-v11"
-	manifestSchema             = "round9-public-adversarial-corpus/v11"
+	datasetName                = "round9-public-adversarial-v13"
+	manifestSchema             = "round9-public-adversarial-corpus/v13"
 	expectedPayloads           = 24
 	expectedFormalPayloads     = 23
 	expectedPromptLikePayloads = 14
@@ -36,7 +36,7 @@ const (
 	expectedReleaseAssets      = 16
 	expectedPromptAssets       = 4
 	expectedAssetMetadata      = 199
-	expectedDeltaReviewSHA256  = "df42c7480dfb1fb48f50459df8fd27eb8ab6c391dc2d305b4f22fc3cc8ca2579"
+	expectedDeltaReviewSHA256  = "56d4bfcdfa4bfa0b4b74b4229b4dd7d71fa6b0ebef58cd4417438209f45dd1cd"
 	expectedCodexXReviewSHA256 = "b1c092270c92bb808411d3c5e2e6499642b4f5313df090c5c5cfe5eef549158c"
 	groundTruthBlockMalicious  = "block_malicious_text"
 	groundTruthAllowOrAudit    = "allow_or_audit"
@@ -565,6 +565,8 @@ func validateManifest(manifest publicManifest) error {
 		"5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f": 105299,
 		"dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38": 105888,
 		"bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d": 183752,
+		"297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038": 476165,
+		"eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387": 485221,
 	}
 	if len(manifest.RefreshHistory) != len(expectedHistory) {
 		return errors.New("public corpus refresh history count drift")
@@ -596,7 +598,7 @@ func validateManifest(manifest publicManifest) error {
 			head: "700f1be22446af4dc2c362080cbde669e215094d", branches: 5, pulls: 0, tags: 2, releases: 2,
 		},
 		"MDX-Tom/gpt-5.6-instruct": {
-			head: "334f8cd2ec132aa4317b62bd2a3228ed827cbb87", branches: 1, pulls: 0, tags: 2, releases: 2,
+			head: "61feb6a1940bd1d58163c2550869a0a9aed2ddc1", branches: 1, pulls: 0, tags: 2, releases: 2,
 		},
 		"yynxxxxx/Codex-X": {
 			head: "e8b0e5b73c508484cfb636339c82d70360487442", branches: 2, pulls: 0, tags: 37, releases: 36,
@@ -818,10 +820,10 @@ func validatePromptLikeDeltaReview(
 	payloads []publicPayload,
 ) error {
 	if review.Repository != "MDX-Tom/gpt-5.6-instruct" ||
-		review.BaseCommit != "b32eb0dd7078a092d7dd5d28137d3bc95aa9b705" ||
-		review.ChangedOrAddedBlobPaths != 2 ||
+		review.BaseCommit != "cccbfae8a75c948bde22407dd07de7af88731d9b" ||
+		review.ChangedOrAddedBlobPaths != 5 ||
 		review.IncludedPromptLikePayloads != 0 ||
-		review.ExcludedNonPayloadPaths != 2 || len(review.ExcludedSources) != 2 ||
+		review.ExcludedNonPayloadPaths != 5 || len(review.ExcludedSources) != 5 ||
 		review.ReviewSHA256 != expectedDeltaReviewSHA256 {
 		return errors.New("prompt-like delta review identity drift")
 	}
@@ -910,7 +912,7 @@ func promptLikeReviewSHA256(entries []excludedPromptLikeSource) string {
 
 // promptLikeReviewSHA256Legacy preserves the v6-v9 review-digest algorithm.
 // Those immutable historical manifests predate per-file SHA-256 inclusion in
-// the digest input. V10 and v11 intentionally use promptLikeReviewSHA256
+// the digest input. V10 through v13 intentionally use promptLikeReviewSHA256
 // instead; the two functions must not be merged or selected from mutable
 // manifest data.
 func promptLikeReviewSHA256Legacy(entries []excludedPromptLikeSource) string {

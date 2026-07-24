@@ -180,8 +180,8 @@ def public_counted_mock(*, hard_policy_blocked: int = 0) -> dict[str, Any]:
         "independent_holdout": False,
         "third_party_code_executed": False,
         "manifest": {
-            "schema": "round9-public-adversarial-corpus/v11",
-            "dataset": "round9-public-adversarial-v11",
+            "schema": "round9-public-adversarial-corpus/v13",
+            "dataset": "round9-public-adversarial-v13",
             "bytes": 1024,
             "sha256": "d" * 64,
         },
@@ -324,7 +324,7 @@ def development_evidence(
                 },
             },
             "public_adversarial": {
-                "name": "round9-public-adversarial-v11",
+                "name": "round9-public-adversarial-v13",
                 "manifest": _binding("d"),
                 "development_only": True,
                 "independent_holdout": False,
@@ -370,7 +370,7 @@ def development_evidence(
                 "f", schema="round9-development-paired-malicious-machine-report/v1"
             ),
             "public_adversarial": _binding(
-                "1", schema="round9-public-adversarial-report/v11"
+                "1", schema="round9-public-adversarial-report/v13"
             ),
             "audit_contract": _binding("2", schema="round9-audit-contract-report/v1"),
         },

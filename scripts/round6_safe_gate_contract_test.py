@@ -4421,8 +4421,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace(
-                "round9-public-adversarial-report/v11",
-                "round9-public-adversarial-report/v10",
+                "round9-public-adversarial-report/v13",
+                "round9-public-adversarial-report/v12",
                 1,
             ),
             original.replace(
@@ -4659,7 +4659,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace("      docs/ROUND9_HOST_RUNNER.md\n", "", 1),
-            original.replace("Public adversarial v11", "Public adversarial v10", 1),
+            original.replace("Public adversarial v13", "Public adversarial v12", 1),
             original.replace('initial_mode: "audit"', 'initial_mode: "balanced"', 1),
             original.replace(
                 "round9-external-cpa-runtime-checks/v1",

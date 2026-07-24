@@ -131,7 +131,7 @@ a quiet usage queue. Only keyed request correlations and hashed event IDs enter
 the public signed result; original request hashes remain confined to the
 root-private temporary work directory, which normal completion removes.
 
-The evaluator also runs the manifest-bound public-v11 §13.25 regression subset:
+The evaluator also runs the manifest-bound public-v13 §13.25 regression subset:
 8 historical payloads, 1 branch-head payload, and 1 unmerged candidate carrier,
 each over Audit/Balanced/Strict, Chat/Responses, and stream/non-stream routes.
 All 120 expectations are frozen before the first candidate request. Audit is

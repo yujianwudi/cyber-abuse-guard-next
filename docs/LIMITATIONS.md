@@ -355,17 +355,18 @@ for any of the three missing runtime evidence classes.
 
 41. **Visible Round 9 development corpora are not independent evidence.** The
     1,200-case development-benign corpus, paired-malicious v3 corpus, and
-    `testdata/round9-public-adversarial-v11` are visible to development and may
+    `testdata/round9-public-adversarial-v13` are visible to development and may
     prove only their frozen identity, schema, static contracts, and named
-    development regressions. The public v11 manifest is 476165 bytes with
+    development regressions. The public v13 manifest is 481448 bytes with
     SHA-256
-    `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`,
+    `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`,
     declares `development_only=true`, `independent_holdout=false`, and records
     `third_party_code_executed=false`; all 199 Release assets are metadata-only
     records, and no binary Release asset was downloaded or opened. No case or derived wording may be
     relabeled as independent holdout. The protected independent evaluation is
-    separately `NOT_PROVIDED`. The v9 manifest remains immutable history at
-    105888 bytes / `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.
+    separately `NOT_PROVIDED`. The v12 manifest remains immutable history at
+    485221 bytes / `eb72fd7b88c052c6af98c97636c18aba96f499597741bcba262dda59de3c2387`;
+    v11/v10/v9 and earlier identities also remain frozen history.
 
 42. **Synthetic Store tests cannot close the artifact lifecycle.** Authorized
     CI must require the real `.so`, Store ZIP, metadata, and checksums; use
