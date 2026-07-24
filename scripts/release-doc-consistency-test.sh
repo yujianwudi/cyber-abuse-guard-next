@@ -114,16 +114,22 @@ make_fixture() {
         'current_audit_schema: 6' \
         'current_raw_capture_schema: 4' \
         'current_development_evidence_schema: round9-development-evidence/v1' \
-        'current_external_evaluation_schema: round9-external-evaluation/v2' \
-        'current_external_evaluator_aggregate_schema: round9-external-evaluator-aggregate/v2' \
-        'current_external_ledger_event_schema: round9-external-evaluation-ledger-event/v2' \
+        'current_external_evaluation_schema: round9-external-evaluation/v3' \
+        'current_external_evaluator_aggregate_schema: round9-external-evaluator-aggregate/v3' \
+        'current_external_ledger_event_schema: round9-external-evaluation-ledger-event/v3' \
         'current_external_ledger_proof_schema: round9-protected-git-ledger-proof/v1' \
         'current_independent_audit_evidence_schema: round9-independent-audit-evidence/v1' \
         'current_independent_audit_ledger_event_schema: round9-independent-audit-ledger-event/v1' \
         'current_independent_audit_ledger_proof_schema: round9-independent-audit-ledger-proof/v1' \
         'current_counted_mock_schema: round9-external-counted-mock/v1' \
+        'current_public_counted_mock_schema: round9-public-counted-mock/v1' \
+        'current_public_counted_mock_transport_schema: round9-public-counted-mock-transport/v1' \
+        'current_public_decision_audit_schema: round9-public-cpa-decision-audit/v1' \
+        'current_external_decision_audit_schema: round9-external-decision-audit/v3' \
+        'current_cpa_audit_expectations_schema: round9-cpa-audit-expectations/v3' \
+        'current_cpa_sandbox_finalize_schema: round9-cpa-sandbox-finalize/v2' \
         'current_cpa_sandbox_descriptor_schema: round9-external-cpa-sandbox/v2' \
-        'current_external_evaluator_identity: cag-round9-external-evaluator-v2' \
+        'current_external_evaluator_identity: cag-round9-external-evaluator-v3' \
         'current_cpa_host_listener: 127.0.0.1:18394->8317/tcp' \
         'current_external_evaluation_asset: round9-external-evaluation.json' \
         'current_external_ledger_proof_asset: round9-external-ledger-proof.json' \
@@ -140,12 +146,13 @@ make_fixture() {
         'current_publication_write_permission: absent' \
         'current_round9_gate_admission: workflow=Round 9 policy gate,path=.github/workflows/round9-gate.yml,event=push,branch=main,exact-commit,completed-success' \
         'current_historical_workflow_disable_requirement: 315644586:release-rc.yml=disabled_manually,318443961:round8-host-validation.yml=disabled_manually' \
-        'current_public_adversarial_corpus: round9-public-adversarial-v10' \
-        'current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v10' \
-        'current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v10' \
-        'current_public_adversarial_counts: payloads-24_formal-unique-23_historical-8_branch-head-1_prompt-like-14_unmerged-carriers-1_nondefault-branches-5_release-assets-16_release-assets-with-prompt-entries-4_executed-1_not-provided-0_scenario-payloads-24_serialized-routes-120_direct-blocked-12_direct-allowed-12' \
-  'current_public_adversarial_manifest_bytes: 183752' \
-  'current_public_adversarial_manifest_sha256: bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d' \
+        'current_public_adversarial_corpus: round9-public-adversarial-v11' \
+        'current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v11' \
+        'current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v11' \
+        'current_public_adversarial_counts: payloads-24_formal-unique-23_historical-8_branch-head-1_prompt-like-14_unmerged-carriers-1_nondefault-branches-5_release-assets-16_release-assets-with-prompt-entries-4_release-asset-metadata-records-199_executed-1_not-provided-0_scenario-payloads-24_serialized-routes-120_direct-blocked-12_direct-allowed-12' \
+  'current_public_adversarial_manifest_bytes: 476165' \
+  'current_public_adversarial_manifest_sha256: 297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038' \
+  'current_public_counted_mock_matrix: unique-10_routes-120_audit-allow-40_enforcement-block-80_upstream-40_usage-40' \
         'current_development_paired_recall_requirement: aggregate-and-each-category-exactly-10000-basis-points' \
         'current_independent_malicious_recall_requirement: aggregate-and-each-category-at-least-9500-basis-points' \
         'current_release_kind: private-candidate-only-public-prerelease-blocked' \
@@ -163,7 +170,7 @@ make_fixture() {
         'current_release_mismatch_policy: fail-only-no-automatic-repair' \
         'current_independent_audit_status: NOT_PROVIDED' \
         'current_production_approval_status: NOT_GRANTED' \
-        'The current public adversarial corpus is development-only v10 evidence under round9-public-adversarial-corpus/v10.' \
+        'The current public adversarial corpus is development-only v11 evidence under round9-public-adversarial-corpus/v11.' \
         'The original v8 manifest remains frozen as superseded invalid evidence.' \
         'The rejected attempt to rebind corrected bytes to the same v8 identity is retained separately.' \
         'The disabled legacy verifier documents the prospective signer split.' \
@@ -457,7 +464,7 @@ policy_values=(
   cag-round9-sandbox
   6
   6
-  round9-external-evaluation/v2
+  round9-external-evaluation/v3
   round9-independent-audit-evidence/v1
   round9-independent-audit-ledger-event/v1
   round9-independent-audit-ledger-proof/v1
@@ -465,9 +472,9 @@ policy_values=(
   '127.0.0.1:18394->8317/tcp'
   round9-external-evaluation.json
   round9-external-ledger-proof.json
-  round9-public-adversarial-v10
-  round9-public-adversarial-corpus/v10
-  round9-public-adversarial-report/v10
+  round9-public-adversarial-v11
+  round9-public-adversarial-corpus/v11
+  round9-public-adversarial-report/v11
   17
   actions-only-17-assets
   build-attest-upload-actions-only
@@ -574,19 +581,19 @@ cp -a "$work/pass" "$work/missing-split-attestation-prose"
 sed -i 's/The disabled legacy verifier documents the prospective signer split/The disabled legacy verifier drops the prospective signer split/' \
   "$work/missing-split-attestation-prose/docs/RELEASE_POLICY.md"
 must_fail missing-split-attestation-prose "$work/missing-split-attestation-prose" \
-  'docs/RELEASE_POLICY.md is missing the active public-v10/release-attestation contract: The disabled legacy verifier documents the prospective signer split'
+  'docs/RELEASE_POLICY.md is missing the active public-v11/release-attestation contract: The disabled legacy verifier documents the prospective signer split'
 
 cp -a "$work/pass" "$work/host-only-publication-prose"
 sed -i 's/The Host result is necessary evaluation evidence, but it is not sufficient/The Host result alone is sufficient/' \
   "$work/host-only-publication-prose/docs/RELEASE_POLICY.md"
 must_fail host-only-publication-prose "$work/host-only-publication-prose" \
-  'docs/RELEASE_POLICY.md is missing the active public-v10/release-attestation contract: The Host result is necessary evaluation evidence, but it is not sufficient'
+  'docs/RELEASE_POLICY.md is missing the active public-v11/release-attestation contract: The Host result is necessary evaluation evidence, but it is not sufficient'
 
 cp -a "$work/pass" "$work/title-only-publication-prose"
 sed -i 's/Release title\/body text such as `independent audit required` is also not evidence/Release title text authorizes publication/' \
   "$work/title-only-publication-prose/docs/RELEASE_POLICY.md"
 must_fail title-only-publication-prose "$work/title-only-publication-prose" \
-  'docs/RELEASE_POLICY.md is missing the active public-v10/release-attestation contract: Release title/body text such as `independent audit required` is also not evidence'
+  'docs/RELEASE_POLICY.md is missing the active public-v11/release-attestation contract: Release title/body text such as `independent audit required` is also not evidence'
 
 retired_round9_host_keys=(
   current_host_evidence_schema

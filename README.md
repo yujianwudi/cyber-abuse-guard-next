@@ -52,11 +52,12 @@ classifier.
 |---|---|
 | Source version / RC target | `0.16` / `v0.16-rc.3` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
 | Historical candidates | `v0.16-rc.1` and the immutable Round 8 `v0.16-rc.2` identity are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
-| GitHub publication | No Round 9 tag or Release is claimed by this branch; `round9-release-rc.yml` may publish only a non-latest prerelease after exact-main and the protected external-evaluation gate pass |
+| GitHub publication | No Round 9 tag or Release exists; `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
+| Successor main snapshot | `98b32ab5d9e7d1fdd4a5bd457cbf3dfb3dc29c35` / tree `77c496e8f4fd1771fc54ed11e8e82970ba3c56b8`; Round 9 gate and CodeQL passed, while full CI run `30073551084` failed at workflow lint after unit/race/vet/fuzz passed |
 | CPA source/compile target | `v7.2.95` (`f71ec0eb6776854457892452cf28c47f0d658251`) |
-| Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v2 plus ledger proof |
-| External evidence contracts | evaluator aggregate v2; ledger event v2; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
-| Public adversarial corpus | `round9-public-adversarial-v10` / 183,752 bytes / SHA-256 `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`; visible development regression only. Valid v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
+| Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
+| External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
+| Public adversarial corpus | `round9-public-adversarial-v11` / 476,165 bytes / SHA-256 `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
 | Independent audit | **REQUIRED / NOT PROVIDED**; development self-tests do not satisfy this gate |
 | Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
 | v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
@@ -66,8 +67,8 @@ classifier.
 | CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | `classifier-policy-v8`; final SHA-256 remains pending the exact source freeze and release commit |
-| Embedded YAML ruleset | `1.0.10`; final SHA-256 remains pending the exact source freeze and release commit |
+| Classifier policy | Current main snapshot: `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`; final candidate binding remains pending |
+| Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |
 
@@ -249,10 +250,12 @@ policy.
   freeze. The exact announced v8 is immutable-invalid at 105,299 bytes /
   SHA-256 `5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f`;
   the corrected in-place 105,298-byte / `2f953da4…` v8 rebind is retained only
-as rejected evidence. Active evidence is `round9-public-adversarial-v10` at
-183,752 bytes / SHA-256
-`bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`;
-v9 remains immutable history at 105,888 bytes / SHA-256
+as rejected evidence. Active evidence is `round9-public-adversarial-v11` at
+476,165 bytes / SHA-256
+`297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`;
+its 199 GitHub Release assets are metadata/digest records only and no binary
+asset was downloaded or opened. V10 and v9 remain immutable history; v9 is
+105,888 bytes / SHA-256
 `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.
   This visible corpus is not an independent holdout or production approval.
 - CPA can still fail open in Host conditions outside the plugin's control,

@@ -63,11 +63,14 @@ jobs:
           TAG: ${{ inputs.tag }}
           EXPECTED_COMMIT: ${{ inputs.expected_commit }}
           EXPECTED_TREE: ${{ inputs.expected_tree }}
+          ROUND8_LANE_RETIRED: 'true'
         shell: bash
         run: |
           set -euo pipefail
-          printf '%s\n' 'Round 8 Host lane is retired: no new evidence may be produced; use round9-host-validation.yml' >&2
-          exit 1
+          if [[ "$ROUND8_LANE_RETIRED" == true ]]; then
+            printf '%s\n' 'Round 8 Host lane is retired: no new evidence may be produced; use round9-host-validation.yml' >&2
+            exit 1
+          fi
           [[ "$TAG" == v0.16-rc.2 ]]
           [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]

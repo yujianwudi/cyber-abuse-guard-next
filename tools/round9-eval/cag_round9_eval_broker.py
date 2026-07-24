@@ -50,6 +50,8 @@ from round9_eval_core import (  # noqa: E402
     load_canonical_json,
     load_json,
     load_json_bytes,
+    load_public_counted_mock_corpus,
+    merge_public_counted_mock,
     require_literal,
     require_pattern,
     require_root_owned_regular,
@@ -68,6 +70,8 @@ from round9_eval_core import (  # noqa: E402
     validate_ledger_event_payload,
     validate_metrics,
     validate_privacy,
+    validate_public_counted_mock,
+    validate_public_counted_mock_transport,
     validate_runtime_checks,
     verify_signed_envelope,
 )
@@ -215,6 +219,55 @@ def require_fixed_file(path: Path, digest: str, label: str) -> Path:
     if sha256_file(path) != require_pattern(digest, HEX64, f"{label} sha256"):
         fail(f"{label} differs from the root-pinned SHA-256")
     return path.resolve()
+
+
+def canonical_ed25519_public_spki(
+    key_path: Path, *, private_key: bool, openssl: str
+) -> bytes:
+    """Return the OpenSSL-canonical DER SPKI for one Ed25519 key."""
+
+    command = [openssl, "pkey"]
+    if not private_key:
+        command.append("-pubin")
+    command.extend(["-in", str(key_path), "-pubout", "-outform", "DER"])
+    completed = subprocess.run(
+        command,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        env=minimal_subprocess_env(),
+        check=False,
+        timeout=30,
+    )
+    if completed.returncode != 0:
+        fail("OpenSSL failed to canonicalize an evaluation signing key")
+    der = completed.stdout
+    # RFC 8410 Ed25519 SubjectPublicKeyInfo: SEQUENCE(AlgorithmIdentifier
+    # id-Ed25519, BIT STRING containing the 32-byte public key).
+    if len(der) != 44 or not der.startswith(bytes.fromhex("302a300506032b6570032100")):
+        fail("evaluation signing key is not canonical Ed25519 SPKI")
+    return der
+
+
+def validate_signing_key_material(
+    evaluator_private_key: Path,
+    evaluator_public_key: Path,
+    author_public_key: Path,
+    *,
+    openssl: str,
+) -> None:
+    evaluator_from_private = canonical_ed25519_public_spki(
+        evaluator_private_key, private_key=True, openssl=openssl
+    )
+    evaluator_public = canonical_ed25519_public_spki(
+        evaluator_public_key, private_key=False, openssl=openssl
+    )
+    if evaluator_from_private != evaluator_public:
+        fail("evaluator private/public signing keys do not match")
+    author_public = canonical_ed25519_public_spki(
+        author_public_key, private_key=False, openssl=openssl
+    )
+    if sha256_bytes(author_public) == sha256_bytes(evaluator_public):
+        fail("corpus author and evaluator signing key material must be distinct")
 
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
@@ -406,6 +459,12 @@ def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
         (corpus["author_public_key"], "corpus author public key"),
     ):
         require_root_owned_regular(Path(raw), label, mode_mask=0o077 if "public" not in label else 0o022)
+    validate_signing_key_material(
+        Path(signing["private_key"]),
+        Path(signing["public_key"]),
+        Path(corpus["author_public_key"]),
+        openssl=str(config["_openssl"]),
+    )
     if sha256_file(Path(corpus["encrypted_bundle"])) != corpus["encrypted_bundle_sha256"]:
         fail("encrypted independent corpus differs from the root-pinned SHA-256")
     adapter_config_path = Path(paths["sandbox_adapter_config"])
@@ -802,6 +861,164 @@ def safe_extract_zip(raw: bytes, output: Path) -> None:
             with archive.open(info, "r") as source, target.open("xb") as destination:
                 shutil.copyfileobj(source, destination, length=1024 * 1024)
             os.chmod(target, 0o600)
+
+
+def safe_extract_public_development_corpus(
+    archive_path: Path,
+    output: Path,
+    public_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    """Extract only manifest-bound public text bytes from the attested source tar.
+
+    No source file outside the selected public corpus is opened, and no archive
+    entry is executed.  The full archive namespace is still checked so a
+    traversal, duplicate, link, special file, or prefix drift fails closed.
+    """
+
+    if output.exists() or output.is_symlink():
+        fail("public development extraction output must be absent")
+    source_info = archive_path.lstat()
+    if not archive_path.is_file() or archive_path.is_symlink() or source_info.st_size > 536_870_912:
+        fail("Phase 1 source archive is not a bounded regular file")
+    name = public_evidence.get("name")
+    if (
+        not isinstance(name, str)
+        or re.fullmatch(r"round9-public-adversarial-v[1-9][0-9]*", name) is None
+    ):
+        fail("public development evidence corpus name is invalid")
+    manifest_binding = exact_object(
+        public_evidence.get("manifest"),
+        {"bytes", "sha256"},
+        "public development manifest binding",
+    )
+    manifest_size = exact_int(
+        manifest_binding["bytes"], "public development manifest bytes", minimum=1
+    )
+    if manifest_size > 1_048_576:
+        fail("public development manifest exceeds the reviewed bound")
+    manifest_sha256 = require_pattern(
+        manifest_binding["sha256"], HEX64, "public development manifest sha256"
+    )
+    archive_prefix = f"cyber-abuse-guard-v{TAG.removeprefix('v')}/"
+    corpus_prefix = archive_prefix + f"testdata/{name}/"
+
+    def normalized_member_name(member: tarfile.TarInfo) -> str:
+        raw_name = member.name
+        if not raw_name or "\\" in raw_name or "\x00" in raw_name:
+            fail("Phase 1 source archive contains an invalid path")
+        stripped = raw_name.rstrip("/")
+        path = PurePosixPath(stripped)
+        if (
+            path.is_absolute()
+            or any(part in {"", ".", ".."} for part in path.parts)
+            or str(path) != stripped
+            or (
+                not stripped.startswith(archive_prefix.rstrip("/") + "/")
+                and stripped != archive_prefix.rstrip("/")
+            )
+        ):
+            fail("Phase 1 source archive contains an entry outside its fixed prefix")
+        return stripped
+
+    try:
+        with tarfile.open(archive_path, mode="r:gz") as archive:
+            members = archive.getmembers()
+            if not members or len(members) > 20_000:
+                fail("Phase 1 source archive member count is outside the reviewed bound")
+            normalized: dict[str, tarfile.TarInfo] = {}
+            expanded = 0
+            for member in members:
+                member_name = normalized_member_name(member)
+                if member_name in normalized:
+                    fail("Phase 1 source archive contains duplicate normalized paths")
+                normalized[member_name] = member
+                if not (member.isfile() or member.isdir()):
+                    fail("Phase 1 source archive contains a link or special file")
+                if member.size < 0 or member.size > 134_217_728:
+                    fail("Phase 1 source archive member exceeds the reviewed bound")
+                expanded += member.size
+                if expanded > 536_870_912:
+                    fail("Phase 1 source archive expands beyond the reviewed bound")
+
+            manifest_name = corpus_prefix + "manifest.json"
+            manifest_member = normalized.get(manifest_name)
+            if manifest_member is None or not manifest_member.isfile() or manifest_member.size != manifest_size:
+                fail("Phase 1 source archive lacks the exact public manifest")
+
+            def read_member(member: tarfile.TarInfo, maximum: int, label: str) -> bytes:
+                if not member.isfile() or member.size <= 0 or member.size > maximum:
+                    fail(f"{label} size or type is outside the reviewed bound")
+                source = archive.extractfile(member)
+                if source is None:
+                    fail(f"{label} could not be opened")
+                with source:
+                    raw = source.read(maximum + 1)
+                if len(raw) != member.size or len(raw) > maximum:
+                    fail(f"{label} changed size while being read")
+                return raw
+
+            manifest_raw = read_member(manifest_member, 1_048_576, "public manifest")
+            if sha256_bytes(manifest_raw) != manifest_sha256:
+                fail("Phase 1 source archive public manifest digest differs")
+            manifest = load_json_bytes(manifest_raw, "public development manifest")
+            payload_rows = manifest.get("payloads") if isinstance(manifest, dict) else None
+            if not isinstance(payload_rows, list) or not payload_rows or len(payload_rows) > 256:
+                fail("public development manifest payload list is invalid")
+            encoded_files: list[str] = []
+            for index, payload in enumerate(payload_rows):
+                encoded = payload.get("encoded_file") if isinstance(payload, dict) else None
+                if (
+                    not isinstance(encoded, str)
+                    or re.fullmatch(r"payloads/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.b64", encoded)
+                    is None
+                    or encoded in encoded_files
+                ):
+                    fail(f"public development payload {index} encoded path is invalid")
+                encoded_files.append(encoded)
+            allowed_under_corpus = {
+                corpus_prefix.rstrip("/"),
+                corpus_prefix + "README.md",
+                manifest_name,
+                corpus_prefix + "payloads",
+                *(corpus_prefix + encoded for encoded in encoded_files),
+            }
+            observed_under_corpus = {
+                member_name
+                for member_name in normalized
+                if member_name == corpus_prefix.rstrip("/")
+                or member_name.startswith(corpus_prefix)
+            }
+            if observed_under_corpus != allowed_under_corpus:
+                fail("Phase 1 source archive public corpus contains an extra or missing entry")
+
+            output.mkdir(mode=0o700)
+            payload_output = output / "payloads"
+            payload_output.mkdir(mode=0o700)
+            atomic_write(output / "manifest.json", manifest_raw, mode=0o400)
+            for encoded in encoded_files:
+                member_name = corpus_prefix + encoded
+                member = normalized.get(member_name)
+                if member is None:
+                    fail("Phase 1 source archive lacks a manifest-listed public payload")
+                decoded_bytes = next(
+                    row.get("decoded_bytes")
+                    for row in payload_rows
+                    if isinstance(row, dict) and row.get("encoded_file") == encoded
+                )
+                decoded_size = exact_int(
+                    decoded_bytes, f"public payload {encoded} decoded bytes", minimum=1
+                )
+                maximum_encoded = ((decoded_size + 2) // 3) * 4 + 1
+                encoded_raw = read_member(member, maximum_encoded, f"public payload {encoded}")
+                target = output.joinpath(*PurePosixPath(encoded).parts)
+                atomic_write(target, encoded_raw, mode=0o400)
+    except (tarfile.TarError, OSError) as exc:
+        raise ContractError("Phase 1 source archive could not be safely inspected") from exc
+
+    identity, cases = load_public_counted_mock_corpus(output, public_evidence)
+    if not cases:
+        fail("public development corpus contains no §13.25 cases")
+    return identity
 
 
 def sidecar_digest(path: Path, target_name: str) -> str:
@@ -1383,6 +1600,7 @@ def ledger_event_payload(
     execution: dict[str, Any],
     development_evidence: dict[str, Any],
     counted_mock: dict[str, Any] | None = None,
+    public_counted_mock: dict[str, Any] | None = None,
     evaluation_digest: str | None = None,
 ) -> dict[str, Any]:
     return {
@@ -1396,6 +1614,7 @@ def ledger_event_payload(
         "execution": execution,
         "development_evidence": development_evidence,
         "counted_mock": counted_mock,
+        "public_counted_mock": public_counted_mock,
         "evaluation_envelope_sha256": evaluation_digest,
     }
 
@@ -1480,7 +1699,15 @@ def validate_external_aggregate(
 ) -> dict[str, Any]:
     aggregate = exact_object(
         aggregate_value,
-        {"schema", "evaluator", "corpus", "sandbox", "metrics", "privacy"},
+        {
+            "schema",
+            "evaluator",
+            "corpus",
+            "sandbox",
+            "metrics",
+            "public_counted_mock",
+            "privacy",
+        },
         "external evaluator aggregate",
     )
     require_literal(
@@ -1536,6 +1763,9 @@ def validate_external_aggregate(
     ):
         fail("external evaluator sandbox binding differs")
     metrics = validate_metrics(aggregate["metrics"])
+    public_counted = validate_public_counted_mock(aggregate["public_counted_mock"])
+    if public_counted != metrics["public_counted_mock"]:
+        fail("external evaluator public counted-Mock aggregate/metrics binding differs")
     validate_runtime_checks(sandbox["runtime_checks"])
     if sandbox["runtime_checks"] != metrics["runtime_checks"]:
         fail("external evaluator sandbox/runtime metrics binding differs")
@@ -1553,6 +1783,9 @@ def run_external_evaluator(
     candidate: dict[str, Any],
     corpus: dict[str, Any],
     execution: dict[str, Any],
+    public_root: Path,
+    public_evidence_path: Path,
+    public_identity: dict[str, Any],
     work: Path,
 ) -> dict[str, Any]:
     encrypted = Path(config["corpus"]["encrypted_bundle"])
@@ -1631,6 +1864,10 @@ def run_external_evaluator(
             config["identities"]["author_key_id"],
             "--bundle-sha256",
             corpus["bundle_sha256"],
+            "--public-corpus-root",
+            str(public_root),
+            "--public-development-evidence",
+            str(public_evidence_path),
             "--sandbox-descriptor",
             str(descriptor),
             "--expected-candidate-so-sha256",
@@ -1682,11 +1919,17 @@ def run_external_evaluator(
         aggregate_value = load_json(aggregate_path, "external evaluator aggregate")
         report = exact_object(
             load_json(finalize_path, "sandbox post-evaluation finalize report"),
-            {"schema", "expectations_sha256", "runtime_checks", "decision_audit"},
+            {
+                "schema",
+                "expectations_sha256",
+                "runtime_checks",
+                "decision_audit",
+                "public_decision_audit",
+            },
             "sandbox post-evaluation finalize report",
         )
         require_literal(
-            report["schema"], "round9-cpa-sandbox-finalize/v1", "sandbox finalize schema"
+            report["schema"], "round9-cpa-sandbox-finalize/v2", "sandbox finalize schema"
         )
         validate_runtime_checks(report["runtime_checks"])
         validate_decision_audit(report["decision_audit"])
@@ -1694,12 +1937,34 @@ def run_external_evaluator(
             fail("sandbox finalize expectations binding differs")
         if not isinstance(aggregate_value, dict):
             fail("external evaluator aggregate must be an object")
+        exact_object(
+            aggregate_value,
+            {
+                "schema",
+                "evaluator",
+                "corpus",
+                "sandbox",
+                "metrics",
+                "public_counted_mock_transport",
+                "privacy",
+            },
+            "provisional external evaluator aggregate",
+        )
         metrics = aggregate_value.get("metrics")
         sandbox = aggregate_value.get("sandbox")
         if not isinstance(metrics, dict) or not isinstance(sandbox, dict):
             fail("external evaluator aggregate metrics/sandbox are invalid")
         metrics["runtime_checks"] = report["runtime_checks"]
         metrics["decision_audit"] = report["decision_audit"]
+        public_transport = aggregate_value.pop("public_counted_mock_transport")
+        validate_public_counted_mock_transport(public_transport)
+        public_counted = merge_public_counted_mock(
+            public_transport,
+            report["public_decision_audit"],
+        )
+        validate_public_counted_mock(public_counted, expected_manifest=public_identity)
+        metrics["public_counted_mock"] = public_counted
+        aggregate_value["public_counted_mock"] = public_counted
         sandbox["runtime_checks"] = report["runtime_checks"]
         sandbox["decision_audit"] = report["decision_audit"]
     finally:
@@ -1881,6 +2146,19 @@ def evaluate_once(config: dict[str, Any], args: argparse.Namespace) -> tuple[dic
         )
         candidate = candidate_identity(args, asset_identity)
         validate_development_evidence(development_evidence, expected_candidate=candidate)
+        public_evidence = development_evidence["corpus"]["public_adversarial"]
+        public_root = work / "public-development-corpus"
+        public_identity = safe_extract_public_development_corpus(
+            assets / "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
+            public_root,
+            public_evidence,
+        )
+        public_evidence_path = work / "public-development-evidence.json"
+        atomic_write(
+            public_evidence_path,
+            canonical_bytes(public_evidence),
+            mode=0o400,
+        )
         evaluator = evaluator_identity(config)
         execution = execution_identity(config, args)
         ledger = {
@@ -1921,6 +2199,10 @@ def evaluate_once(config: dict[str, Any], args: argparse.Namespace) -> tuple[dic
                 or payload["development_evidence"] != development_evidence
                 or payload["counted_mock"]
                 != derive_counted_mock(payload["metrics"], execution)
+                or validate_public_counted_mock(
+                    payload["public_counted_mock"], expected_manifest=public_identity
+                )
+                != payload["public_counted_mock"]
             ):
                 fail("stored completed evaluation identity differs")
             if proof_path.exists():
@@ -1965,10 +2247,22 @@ def evaluate_once(config: dict[str, Any], args: argparse.Namespace) -> tuple[dic
                 args.commit,
             )
             aggregate = run_external_evaluator(
-                config, args, candidate_so, candidate, corpus, execution, work
+                config,
+                args,
+                candidate_so,
+                candidate,
+                corpus,
+                execution,
+                public_root,
+                public_evidence_path,
+                public_identity,
+                work,
             )
             counted_mock = derive_counted_mock(aggregate["metrics"], execution)
             validate_counted_mock(counted_mock, aggregate["metrics"], execution)
+            public_counted_mock = validate_public_counted_mock(
+                aggregate["public_counted_mock"], expected_manifest=public_identity
+            )
             payload = validate_evaluation_payload(
                 {
                     "schema": EVALUATION_SCHEMA,
@@ -1980,6 +2274,7 @@ def evaluate_once(config: dict[str, Any], args: argparse.Namespace) -> tuple[dic
                     "ledger": ledger,
                     "development_evidence": development_evidence,
                     "counted_mock": counted_mock,
+                    "public_counted_mock": public_counted_mock,
                     "metrics": aggregate["metrics"],
                     "privacy": aggregate["privacy"],
                 },
@@ -2008,6 +2303,7 @@ def evaluate_once(config: dict[str, Any], args: argparse.Namespace) -> tuple[dic
                     "result",
                     **base,
                     counted_mock=counted_mock,
+                    public_counted_mock=public_counted_mock,
                     evaluation_digest=evaluation_digest,
                 ),
                 args.commit,

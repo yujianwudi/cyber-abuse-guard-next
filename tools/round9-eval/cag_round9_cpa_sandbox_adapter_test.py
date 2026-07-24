@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -20,9 +22,11 @@ from cag_round9_cpa_sandbox_adapter import (
     CPA_SOURCE,
     CPA_VERSION,
     DESCRIPTOR_SCHEMA,
+    FINALIZE_REPORT_SCHEMA,
     MOCK_CONTRACT,
     NETWORK_BINDING,
     PHASE_PROTOCOL,
+    PUBLIC_DECISION_AUDIT_SCHEMA,
     SCAN_LIMIT_BYTES,
     STATE_SCHEMA,
     canonical_bytes,
@@ -30,7 +34,9 @@ from cag_round9_cpa_sandbox_adapter import (
     expected_persisted_decision,
     finalize_evaluation,
     http_request,
+    load_audit_expectations,
     load_json,
+    main as adapter_main,
     plugin_config,
     published_port,
     read_bounded,
@@ -51,6 +57,10 @@ from round9_eval_core import (
 
 def completed(command: list[str], code: int = 0, stdout: bytes = b"") -> subprocess.CompletedProcess[bytes]:
     return subprocess.CompletedProcess(command, code, stdout=stdout, stderr=b"")
+
+
+def sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
 class SandboxAdapterContractTest(unittest.TestCase):
@@ -366,10 +376,59 @@ class SandboxAdapterContractTest(unittest.TestCase):
             "service_disruption",
             "prompt_injection",
         ]
+        public_requests = []
+        public_families = {
+            "historical_unique": 8,
+            "branch_head": 1,
+            "unmerged_candidate_carrier": 1,
+        }
+        for family, unique_payloads in public_families.items():
+            for payload_index in range(unique_payloads):
+                payload_hmac = sha256_text(f"public-payload:{family}:{payload_index}")
+                for mode in ("audit", "balanced", "strict"):
+                    for protocol in ("openai_chat", "openai_responses"):
+                        for stream in ("nonstream", "stream"):
+                            request_digest = sha256_text(
+                                f"public-request:{payload_hmac}:{protocol}:{stream}"
+                            )
+                            audit_mode = mode == "audit"
+                            public_requests.append(
+                                {
+                                    "request_id_hmac_sha256": sha256_text(
+                                        f"public-id:{payload_hmac}:{mode}:{protocol}:{stream}"
+                                    ),
+                                    "request_hash": "sha256:" + request_digest,
+                                    "request_hash_hmac_sha256": sha256_text(
+                                        "public-request-hmac:" + request_digest
+                                    ),
+                                    "mode": mode,
+                                    "kind": "public_development",
+                                    "public_family": family,
+                                    "public_payload_hmac_sha256": payload_hmac,
+                                    "protocol": protocol,
+                                    "stream": stream,
+                                    "required": True,
+                                    "expected_decision_kind": (
+                                        "audit_eligible_malicious_text"
+                                        if audit_mode
+                                        else "block_malicious_text"
+                                    ),
+                                    "expected_local_block": not audit_mode,
+                                    "expected_upstream_delta": int(audit_mode),
+                                    "expected_usage_delta": int(audit_mode),
+                                    "expected_hard_policy": False if audit_mode else None,
+                                }
+                            )
         expectations = {
-            "schema": "round9-cpa-audit-expectations/v2",
+            "schema": "round9-cpa-audit-expectations/v3",
             "challenge_sha256": "1" * 64,
             "malicious_categories": categories,
+            "public_manifest": {
+                "schema": "round9-public-adversarial-corpus/v11",
+                "dataset": "round9-public-adversarial-v11",
+                "bytes": 4096,
+                "sha256": "8" * 64,
+            },
             "requests": [
                 {
                     "request_id_hmac_sha256": "2" * 64,
@@ -391,6 +450,7 @@ class SandboxAdapterContractTest(unittest.TestCase):
                     "expected_persisted_decision_kind": "block_malicious_text",
                     "expected_category": "credential_theft",
                 },
+                *public_requests,
             ],
         }
         expectations_path = root / "audit-expectations.json"
@@ -492,6 +552,29 @@ class SandboxAdapterContractTest(unittest.TestCase):
                     "decision-explanation-v2",
                 ),
             ]
+            explanation_json = json.dumps(
+                malicious_explanation, sort_keys=True, separators=(",", ":")
+            )
+            for event_index, public in enumerate(public_requests, start=5):
+                audit_mode = public["mode"] == "audit"
+                evaluated.append(
+                    (
+                        "evaluated-public-" + public["request_id_hmac_sha256"],
+                        event_index,
+                        "audit" if audit_mode else "block",
+                        public["mode"],
+                        "credential_theft",
+                        '["CRED-001"]',
+                        public["request_hash"],
+                        "",
+                        public["expected_decision_kind"],
+                        "complete",
+                        "",
+                        explanation_json,
+                        "audit_malicious_text" if audit_mode else "block_malicious_text",
+                        "decision-explanation-v2",
+                    )
+                )
             database.executemany(
                 "INSERT INTO audit_events VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 baseline + evaluated,
@@ -506,6 +589,7 @@ class SandboxAdapterContractTest(unittest.TestCase):
             "descriptor": descriptor,
             "descriptor_path": descriptor_path,
             "expectations_path": expectations_path,
+            "public_requests": public_requests,
             "database_path": database_path,
             "output": root / "sandbox-finalize.json",
         }
@@ -644,23 +728,184 @@ class SandboxAdapterContractTest(unittest.TestCase):
         finally:
             database.close()
 
+    def test_audit_expectations_v3_closes_public_manifest_routes_and_outcomes(self) -> None:
+        fixture = self.finalize_fixture("expectations-v3")
+        value, digest = load_audit_expectations(fixture["expectations_path"])
+        self.assertEqual(value["schema"], "round9-cpa-audit-expectations/v3")
+        self.assertEqual(value["public_manifest"]["dataset"], "round9-public-adversarial-v11")
+        self.assertEqual(len([row for row in value["requests"] if row["kind"] == "public_development"]), 120)
+        self.assertEqual(len(digest), 64)
+
+        for name in (
+            "manifest-version",
+            "optional",
+            "audit-decision",
+            "audit-hard",
+            "enforcement-local-block",
+            "enforcement-upstream",
+            "blocked-usage",
+            "enforcement-hard",
+            "family-cardinality",
+            "duplicate-route",
+            "duplicate-request-id",
+            "duplicate-request-hmac",
+            "cross-family-payload-hmac",
+        ):
+            with self.subTest(name=name):
+                changed = json.loads(json.dumps(value))
+                public = [
+                    row for row in changed["requests"] if row["kind"] == "public_development"
+                ]
+                audit = next(row for row in public if row["mode"] == "audit")
+                enforcement = next(row for row in public if row["mode"] == "balanced")
+                if name == "manifest-version":
+                    changed["public_manifest"]["schema"] = "round9-public-adversarial-corpus/v10"
+                elif name == "optional":
+                    enforcement["required"] = False
+                elif name == "audit-decision":
+                    audit["expected_decision_kind"] = "block_malicious_text"
+                elif name == "audit-hard":
+                    audit["expected_hard_policy"] = True
+                elif name == "enforcement-local-block":
+                    enforcement["expected_local_block"] = False
+                elif name == "enforcement-upstream":
+                    enforcement["expected_upstream_delta"] = 1
+                elif name == "blocked-usage":
+                    enforcement["expected_usage_delta"] = 1
+                elif name == "enforcement-hard":
+                    enforcement["expected_hard_policy"] = False
+                elif name == "family-cardinality":
+                    branch = next(row for row in public if row["public_family"] == "branch_head")
+                    branch["public_family"] = "historical_unique"
+                elif name == "duplicate-route":
+                    same_payload = [
+                        row
+                        for row in public
+                        if row["public_payload_hmac_sha256"]
+                        == public[0]["public_payload_hmac_sha256"]
+                    ]
+                    same_payload[1]["mode"] = same_payload[0]["mode"]
+                    same_payload[1]["protocol"] = same_payload[0]["protocol"]
+                    same_payload[1]["stream"] = same_payload[0]["stream"]
+                elif name == "duplicate-request-id":
+                    public[1]["request_id_hmac_sha256"] = public[0][
+                        "request_id_hmac_sha256"
+                    ]
+                elif name == "duplicate-request-hmac":
+                    public[1]["request_hash_hmac_sha256"] = public[0][
+                        "request_hash_hmac_sha256"
+                    ]
+                elif name == "cross-family-payload-hmac":
+                    branch = next(row for row in public if row["public_family"] == "branch_head")
+                    branch["public_payload_hmac_sha256"] = public[0][
+                        "public_payload_hmac_sha256"
+                    ]
+                fixture["expectations_path"].write_bytes(canonical_bytes(changed))
+                with self.assertRaises(AdapterError):
+                    load_audit_expectations(fixture["expectations_path"])
+
+    def test_finalize_rejects_public_db_decision_missing_and_duplicate_rows(self) -> None:
+        for name in ("db-decision", "all-allowed", "missing", "duplicate"):
+            with self.subTest(name=name):
+                fixture = self.finalize_fixture("finalize-public-" + name)
+                database = sqlite3.connect(fixture["database_path"])
+                try:
+                    if name == "db-decision":
+                        target = next(
+                            row
+                            for row in fixture["public_requests"]
+                            if row["mode"] == "balanced"
+                        )
+                        database.execute(
+                            "UPDATE audit_events SET decision='audit_eligible_malicious_text' WHERE request_hash=? AND mode='balanced'",
+                            (target["request_hash"],),
+                        )
+                    elif name == "all-allowed":
+                        database.execute(
+                            """UPDATE audit_events
+                                  SET decision='audit_eligible_malicious_text',
+                                      action='audit', disposition='audit_malicious_text'
+                                WHERE id LIKE 'evaluated-public-%'"""
+                        )
+                    elif name == "missing":
+                        database.execute(
+                            "DELETE FROM audit_events WHERE id=(SELECT id FROM audit_events WHERE id LIKE 'evaluated-public-%' LIMIT 1)"
+                        )
+                    else:
+                        database.execute(
+                            """INSERT INTO audit_events
+                               SELECT id || '-duplicate', timestamp_ns + 1000, action, mode,
+                                      category, rule_ids, request_hash, subject_hash, decision,
+                                      coverage, incomplete_reason, decision_explanation,
+                                      disposition, explanation_schema
+                                 FROM audit_events
+                                WHERE id LIKE 'evaluated-public-%'
+                                LIMIT 1"""
+                        )
+                    database.commit()
+                finally:
+                    database.close()
+                with self.assertRaises(AdapterError):
+                    self.run_finalize_fixture(fixture)
+
     def test_finalize_binds_decisions_correlations_and_post_run_state(self) -> None:
         fixture = self.finalize_fixture("finalize-success")
         report = self.run_finalize_fixture(fixture)
-        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 1)
+        self.assertEqual(report["schema"], FINALIZE_REPORT_SCHEMA)
+        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 121)
         self.assertEqual(
-            report["decision_audit"]["decision_kind_counts"],
-            {"block_malicious_text": 1},
+            report["decision_audit"]["decision_kind_counts"][
+                "audit_eligible_malicious_text"
+            ],
+            40,
         )
-        self.assertEqual(report["decision_audit"]["schema"], "round9-external-decision-audit/v2")
-        self.assertEqual(report["decision_audit"]["required_expectation_count"], 1)
+        self.assertEqual(
+            report["decision_audit"]["decision_kind_counts"]["block_malicious_text"],
+            81,
+        )
+        self.assertEqual(report["decision_audit"]["schema"], "round9-external-decision-audit/v3")
+        self.assertEqual(report["decision_audit"]["required_expectation_count"], 121)
         self.assertEqual(report["decision_audit"]["optional_expectation_count"], 1)
-        self.assertEqual(report["decision_audit"]["matched_count"], 1)
+        self.assertEqual(report["decision_audit"]["matched_count"], 121)
         self.assertEqual(report["decision_audit"]["optional_persisted_count"], 0)
         self.assertEqual(report["decision_audit"]["optional_missing_count"], 1)
+        self.assertEqual(report["decision_audit"]["group_counts"]["public_development"], 120)
         self.assertEqual(report["decision_audit"]["subject_state_rows"], 0)
+        public_audit = report["public_decision_audit"]
+        self.assertEqual(public_audit["schema"], PUBLIC_DECISION_AUDIT_SCHEMA)
+        self.assertEqual(
+            set(public_audit), {"schema", "manifest", "route_matrix", "families", "total"}
+        )
+        self.assertEqual(public_audit["total"]["unique_payloads"], 10)
+        self.assertEqual(public_audit["total"]["serialized_executions"], 120)
+        self.assertEqual(
+            public_audit["total"]["decision_kind_counts"][
+                "audit_eligible_malicious_text"
+            ],
+            40,
+        )
+        self.assertEqual(
+            public_audit["total"]["decision_kind_counts"]["block_malicious_text"],
+            80,
+        )
+        self.assertEqual(
+            public_audit["families"]["historical_unique"]["serialized_executions"],
+            96,
+        )
+        self.assertEqual(
+            public_audit["families"]["branch_head"]["serialized_executions"], 12
+        )
+        self.assertEqual(
+            public_audit["families"]["unmerged_candidate_carrier"][
+                "serialized_executions"
+            ],
+            12,
+        )
         public = json.dumps(report, sort_keys=True, separators=(",", ":"))
         self.assertNotIn('"request_hash"', public)
+        self.assertNotIn("public_payload_hmac_sha256", public)
+        self.assertNotIn("expected_upstream_delta", public)
+        self.assertNotIn("expected_hard_policy", public)
         self.assertNotIn("sha256:" + "3" * 64, public)
         self.assertNotIn("sha256:" + "6" * 64, public)
 
@@ -668,13 +913,12 @@ class SandboxAdapterContractTest(unittest.TestCase):
         fixture = self.finalize_fixture("finalize-optional-benign-persisted")
         self.add_optional_benign_ineligible_event(fixture)
         report = self.run_finalize_fixture(fixture)
-        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 2)
-        self.assertEqual(report["decision_audit"]["matched_count"], 2)
+        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 122)
+        self.assertEqual(report["decision_audit"]["matched_count"], 122)
         self.assertEqual(report["decision_audit"]["optional_persisted_count"], 1)
         self.assertEqual(report["decision_audit"]["optional_missing_count"], 0)
         self.assertEqual(
-            report["decision_audit"]["decision_kind_counts"],
-            {"audit_ineligible_risk": 1, "block_malicious_text": 1},
+            report["decision_audit"]["decision_kind_counts"]["audit_ineligible_risk"], 1
         )
 
     def test_finalize_rejects_arbitrary_nonempty_incomplete_category(self) -> None:
@@ -689,8 +933,8 @@ class SandboxAdapterContractTest(unittest.TestCase):
         fixture = self.finalize_fixture("finalize-incomplete-reason-category")
         self.make_first_event_balanced_incomplete(fixture, category="scan_limit")
         report = self.run_finalize_fixture(fixture)
-        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 2)
-        self.assertEqual(report["decision_audit"]["matched_count"], 2)
+        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 122)
+        self.assertEqual(report["decision_audit"]["matched_count"], 122)
         self.assertEqual(report["decision_audit"]["incomplete_malicious_category_count"], 0)
 
     def test_finalize_rejects_open_incomplete_reason_and_coverage_values(self) -> None:
@@ -719,6 +963,8 @@ class SandboxAdapterContractTest(unittest.TestCase):
             ({"kind": "incomplete", "mode": "audit", "persistence": "required", "expected_persisted_decision_kind": "audit_ineligible_risk"}, ("audit", "audit_incomplete_inspection", "none", "")),
             ({"kind": "incomplete", "mode": "balanced", "persistence": "required", "expected_persisted_decision_kind": "audit_ineligible_risk"}, ("audit", "allow_due_to_incomplete_inspection", "none", "")),
             ({"kind": "incomplete", "mode": "strict", "persistence": "required", "expected_persisted_decision_kind": "block_incomplete_inspection"}, ("block", "block_due_to_incomplete_inspection", "decision-explanation-v2", "incomplete")),
+            ({"kind": "public_development", "mode": "audit", "required": True, "expected_decision_kind": "audit_eligible_malicious_text"}, ("audit", "audit_malicious_text", "decision-explanation-v2", "malicious")),
+            ({"kind": "public_development", "mode": "balanced", "required": True, "expected_decision_kind": "block_malicious_text"}, ("block", "block_malicious_text", "decision-explanation-v2", "malicious")),
         )
         for expected, wanted in cases:
             with self.subTest(expected=expected):
@@ -955,6 +1201,8 @@ class SandboxAdapterContractTest(unittest.TestCase):
         removed: list[str] = []
 
         def runner(command, **_kwargs):
+            if command[1] == "info":
+                return completed(command, stdout=b'"28.0.0"\n')
             if command[1] == "inspect":
                 if command[-1] in removed:
                     return completed(command, code=1)
@@ -969,6 +1217,10 @@ class SandboxAdapterContractTest(unittest.TestCase):
                     [{"Labels": {"io.cyber-abuse-guard.external-eval": state["execution_id"]}}]
                 ).encode()
                 return completed(command, stdout=raw)
+            if command[1:3] == ["container", "ls"]:
+                return completed(command)
+            if command[1:3] == ["network", "ls"]:
+                return completed(command)
             if command[1] == "rm" or command[1:3] == ["network", "rm"]:
                 removed.append(command[-1])
                 return completed(command)
@@ -982,6 +1234,8 @@ class SandboxAdapterContractTest(unittest.TestCase):
         self.write_state()
 
         def runner(command, **_kwargs):
+            if command[1] == "info":
+                return completed(command, stdout=b'"28.0.0"\n')
             if command[1] == "inspect":
                 return completed(
                     command,
@@ -989,11 +1243,89 @@ class SandboxAdapterContractTest(unittest.TestCase):
                 )
             if command[1:3] == ["network", "inspect"]:
                 return completed(command, code=1)
+            if command[1:3] == ["network", "ls"]:
+                return completed(command)
             return completed(command)
 
         with self.assertRaisesRegex(AdapterError, "cleanup failed"):
             cleanup(self.config, self.root, runner=runner)
         self.assertTrue((self.root / "adapter-state.json").exists())
+
+    def test_cleanup_accepts_absent_resources_only_after_exact_name_proof(self) -> None:
+        self.write_state()
+        commands: list[list[str]] = []
+
+        def runner(command, **_kwargs):
+            commands.append(list(command))
+            if command[1] == "info":
+                return completed(command, stdout=b'"28.0.0"\n')
+            if command[1] == "inspect" or command[1:3] == ["network", "inspect"]:
+                return completed(command, code=1)
+            if command[1:3] in (["container", "ls"], ["network", "ls"]):
+                return completed(command)
+            raise AssertionError(f"unexpected cleanup command: {command}")
+
+        cleanup(self.config, self.root, runner=runner)
+        self.assertFalse((self.root / "adapter-state.json").exists())
+        self.assertEqual(sum(command[1] == "info" for command in commands), 3)
+        self.assertEqual(
+            sum(command[1:3] == ["container", "ls"] for command in commands), 2
+        )
+        self.assertEqual(
+            sum(command[1:3] == ["network", "ls"] for command in commands), 1
+        )
+        self.assertFalse(
+            any(
+                command[1] == "rm" or command[1:3] == ["network", "rm"]
+                for command in commands
+            )
+        )
+
+    def test_cleanup_daemon_unavailable_preserves_state_and_stop_never_prints_clean(self) -> None:
+        self.write_state()
+        commands: list[list[str]] = []
+
+        def runner(command, **_kwargs):
+            commands.append(list(command))
+            if command[1] == "inspect":
+                return completed(command, code=1)
+            if command[1] == "info":
+                return completed(command, code=1)
+            raise AssertionError(f"cleanup continued after unavailable daemon: {command}")
+
+        with self.assertRaisesRegex(AdapterError, "daemon health is unavailable"):
+            cleanup(self.config, self.root, runner=runner)
+        self.assertTrue((self.root / "adapter-state.json").exists())
+        self.assertEqual([command[1] for command in commands], ["inspect", "info"])
+
+        output = io.StringIO()
+        error = io.StringIO()
+        with (
+            mock.patch("cag_round9_cpa_sandbox_adapter.os.geteuid", return_value=0),
+            mock.patch(
+                "cag_round9_cpa_sandbox_adapter.load_config", return_value=self.config
+            ),
+            mock.patch(
+                "cag_round9_cpa_sandbox_adapter.cleanup",
+                side_effect=AdapterError("Docker daemon health is unavailable during cleanup"),
+            ),
+            mock.patch("cag_round9_cpa_sandbox_adapter.sys.stdout", output),
+            mock.patch("cag_round9_cpa_sandbox_adapter.sys.stderr", error),
+        ):
+            self.assertEqual(
+                adapter_main(
+                    [
+                        "stop",
+                        "--config",
+                        str(self.root / "adapter-config.json"),
+                        "--work",
+                        str(self.root),
+                    ]
+                ),
+                1,
+            )
+        self.assertNotIn("CLEAN", output.getvalue())
+        self.assertIn("FAIL", error.getvalue())
 
 
 if __name__ == "__main__":

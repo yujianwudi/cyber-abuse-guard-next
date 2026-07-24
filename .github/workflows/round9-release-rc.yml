@@ -298,7 +298,12 @@ jobs:
           [[ -z "$(git status --porcelain)" ]]
           grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v8"' internal/classifier/policy_identity.go
           grep -E '^const ClassifierPolicySHA256 = "[0-9a-f]{64}"$' internal/classifier/policy_identity.go
-          ! grep -F 'ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d' internal/classifier/policy_identity.go
+          if grep -F 'ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d' internal/classifier/policy_identity.go; then
+            exit 1
+          else
+            grep_status=$?
+            [[ "$grep_status" -eq 1 ]] || exit "$grep_status"
+          fi
           grep -Fx 'version: "1.0.10"' rules/manifest.yaml
 
       - name: Install bounded build and supply-chain dependencies
@@ -316,8 +321,8 @@ jobs:
           printf '%s  %s\n' "$GH_CLI_LINUX_AMD64_SHA256" "$archive" | sha256sum -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP" "gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
           install -m 0755 "$root/bin/gh" /usr/local/bin/gh
-          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
-          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
+          GOBIN="$RUNNER_TEMP/bin" go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}"
+          GOBIN="$RUNNER_TEMP/bin" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
 
       - name: Run complete Round 9 Linux gates
@@ -334,7 +339,7 @@ jobs:
           make development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus
           make round6-benchmark round6-vulncheck cpa-latest-compat
           (cd integration/round9countedmock && go test ./...)
-          make ARTIFACT_VERSION=${RC_VERSION} integration-test
+          make "ARTIFACT_VERSION=${RC_VERSION}" integration-test
           make clean-tree-check
 
       - name: Write canonical Round 9 gate summary
@@ -470,6 +475,7 @@ jobs:
             .round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5 and
             .round9.corpus.public_adversarial.release_assets_reviewed == 16 and
             .round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4 and
+            .round9.corpus.public_adversarial.release_asset_metadata_records == 199 and
             .round9.audit_contract.schema_version == 6 and
             .round9.audit_contract.raw_capture_schema_version == 4 and
             .round9.machine_reports.development_benign.schema ==
@@ -477,7 +483,7 @@ jobs:
             .round9.machine_reports.paired_malicious.schema ==
               "round9-development-paired-malicious-machine-report/v1" and
             .round9.machine_reports.public_adversarial.schema ==
-                "round9-public-adversarial-report/v10" and
+                "round9-public-adversarial-report/v11" and
             .round9.machine_reports.audit_contract.schema ==
               "round9-audit-contract-report/v1" and
             .round9.counted_mock == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
@@ -597,7 +603,7 @@ jobs:
           printf '%s  %s\n' "$GH_CLI_LINUX_AMD64_SHA256" "$archive" | sha256sum -c -
           tar -xzf "$archive" -C "$RUNNER_TEMP" "gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
           install -m 0755 "$root/bin/gh" /usr/local/bin/gh
-          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
+          GOBIN="$RUNNER_TEMP/bin" go install "github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}"
           echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
 
       - name: Download, attest, and verify signed external evaluation and ledger
@@ -994,6 +1000,7 @@ jobs:
             .round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5 and
             .round9.corpus.public_adversarial.release_assets_reviewed == 16 and
             .round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4 and
+            .round9.corpus.public_adversarial.release_asset_metadata_records == 199 and
             .round9.corpus.public_adversarial.candidate_carrier_executions == 1 and
             .round9.corpus.public_adversarial.candidate_carriers_not_provided == 0 and
             .round9.corpus.public_adversarial.scenario_payload_executions == 24 and
@@ -1001,9 +1008,38 @@ jobs:
             .round9.corpus.public_adversarial.direct_active_blocked == 12 and
             .round9.corpus.public_adversarial.direct_active_allowed == 12 and
             .round9.machine_reports.paired_malicious.schema == "round9-development-paired-malicious-machine-report/v1" and
-                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v10" and
-            .round9.external_evaluation.schema == "round9-external-evaluation/v2" and
+                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v11" and
+            .round9.external_evaluation.schema == "round9-external-evaluation/v3" and
             .round9.external_evaluation.state == "PASS" and
+            .round9.external_evaluation.public_counted_mock.schema ==
+              "round9-public-counted-mock/v1" and
+            .round9.external_evaluation.public_counted_mock.state == "PASS" and
+            .round9.external_evaluation.public_counted_mock.development_only == true and
+            .round9.external_evaluation.public_counted_mock.independent_holdout == false and
+            .round9.external_evaluation.public_counted_mock.third_party_code_executed == false and
+            .round9.external_evaluation.public_counted_mock.manifest.schema ==
+              "round9-public-adversarial-corpus/v11" and
+            .round9.external_evaluation.public_counted_mock.manifest.dataset ==
+              "round9-public-adversarial-v11" and
+            .round9.external_evaluation.public_counted_mock.route_matrix == {
+              modes:["audit","balanced","strict"],
+              protocols:["openai_chat","openai_responses"],
+              streams:["nonstream","stream"],routes_per_payload:12
+            } and
+            .round9.external_evaluation.public_counted_mock.families.historical_unique.unique_payloads == 8 and
+            .round9.external_evaluation.public_counted_mock.families.branch_head.unique_payloads == 1 and
+            .round9.external_evaluation.public_counted_mock.families.unmerged_candidate_carrier.unique_payloads == 1 and
+            .round9.external_evaluation.public_counted_mock.total.unique_payloads == 10 and
+            .round9.external_evaluation.public_counted_mock.total.serialized_executions == 120 and
+            .round9.external_evaluation.public_counted_mock.total.local_blocked == 80 and
+            .round9.external_evaluation.public_counted_mock.total.upstream_delta == 40 and
+            .round9.external_evaluation.public_counted_mock.total.usage_delta == 40 and
+            (.round9.external_evaluation.public_counted_mock.total.hard_policy_blocked >= 0 and
+              .round9.external_evaluation.public_counted_mock.total.hard_policy_blocked <= 80) and
+            .round9.external_evaluation.public_counted_mock.total.decision_kind_counts.audit_eligible_malicious_text == 40 and
+            .round9.external_evaluation.public_counted_mock.total.decision_kind_counts.block_malicious_text == 80 and
+            .round9.external_evaluation.metrics.public_counted_mock ==
+              .round9.external_evaluation.public_counted_mock and
             .round9.external_evaluation.development_evidence ==
               .round9.development_evidence and
             .round9.external_evaluation.candidate.tag == "v0.16-rc.3" and
@@ -1103,7 +1139,7 @@ jobs:
             (.artifacts.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
             .round9.release.tag == "v0.16-rc.3" and
             .round9.release.title == "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required" and
-            (.round9.release.body | type == "string" and contains("Public adversarial v10") and
+            (.round9.release.body | type == "string" and contains("Public adversarial v11") and
               contains("latest=false") and contains("independent audit")) and
             .round9.release.publication_permitted == true and
             .round9.release.draft == false and .round9.release.prerelease == true and
@@ -1364,15 +1400,45 @@ jobs:
             .round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5 and
             .round9.corpus.public_adversarial.release_assets_reviewed == 16 and
             .round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4 and
+            .round9.corpus.public_adversarial.release_asset_metadata_records == 199 and
             .round9.corpus.public_adversarial.candidate_carrier_executions == 1 and
             .round9.corpus.public_adversarial.candidate_carriers_not_provided == 0 and
             .round9.corpus.public_adversarial.scenario_payload_executions == 24 and
             .round9.corpus.public_adversarial.serialized_route_executions == 120 and
             .round9.corpus.public_adversarial.direct_active_blocked == 12 and
             .round9.corpus.public_adversarial.direct_active_allowed == 12 and
-                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v10" and
-            .round9.external_evaluation.schema == "round9-external-evaluation/v2" and
+                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v11" and
+            .round9.external_evaluation.schema == "round9-external-evaluation/v3" and
             .round9.external_evaluation.state == "PASS" and
+            .round9.external_evaluation.public_counted_mock.schema ==
+              "round9-public-counted-mock/v1" and
+            .round9.external_evaluation.public_counted_mock.state == "PASS" and
+            .round9.external_evaluation.public_counted_mock.development_only == true and
+            .round9.external_evaluation.public_counted_mock.independent_holdout == false and
+            .round9.external_evaluation.public_counted_mock.third_party_code_executed == false and
+            .round9.external_evaluation.public_counted_mock.manifest.schema ==
+              "round9-public-adversarial-corpus/v11" and
+            .round9.external_evaluation.public_counted_mock.manifest.dataset ==
+              "round9-public-adversarial-v11" and
+            .round9.external_evaluation.public_counted_mock.route_matrix == {
+              modes:["audit","balanced","strict"],
+              protocols:["openai_chat","openai_responses"],
+              streams:["nonstream","stream"],routes_per_payload:12
+            } and
+            .round9.external_evaluation.public_counted_mock.families.historical_unique.unique_payloads == 8 and
+            .round9.external_evaluation.public_counted_mock.families.branch_head.unique_payloads == 1 and
+            .round9.external_evaluation.public_counted_mock.families.unmerged_candidate_carrier.unique_payloads == 1 and
+            .round9.external_evaluation.public_counted_mock.total.unique_payloads == 10 and
+            .round9.external_evaluation.public_counted_mock.total.serialized_executions == 120 and
+            .round9.external_evaluation.public_counted_mock.total.local_blocked == 80 and
+            .round9.external_evaluation.public_counted_mock.total.upstream_delta == 40 and
+            .round9.external_evaluation.public_counted_mock.total.usage_delta == 40 and
+            (.round9.external_evaluation.public_counted_mock.total.hard_policy_blocked >= 0 and
+              .round9.external_evaluation.public_counted_mock.total.hard_policy_blocked <= 80) and
+            .round9.external_evaluation.public_counted_mock.total.decision_kind_counts.audit_eligible_malicious_text == 40 and
+            .round9.external_evaluation.public_counted_mock.total.decision_kind_counts.block_malicious_text == 80 and
+            .round9.external_evaluation.metrics.public_counted_mock ==
+              .round9.external_evaluation.public_counted_mock and
             .round9.external_evaluation.development_evidence ==
               .round9.development_evidence and
             .round9.external_evaluation.candidate.commit == $commit and

@@ -28,7 +28,7 @@ CPA_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
 CPA_HOST_IP = "127.0.0.1"
 CPA_HOST_PORT = 18394
 CPA_CONTAINER_PORT = 8317
-REPOSITORY = "yujianwudi/cyber-abuse-guard"
+REPOSITORY = "yujianwudi/cyber-abuse-guard-next"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
 HOST_WORKFLOW = ".github/workflows/round9-host-validation.yml"
 HEX40 = re.compile(r"[0-9a-f]{40}")
@@ -46,6 +46,49 @@ POLICY_VERSION = re.compile(
 POLICY_SHA256 = re.compile(
     r'^const ClassifierPolicySHA256 = "([0-9a-f]{64})"$', re.MULTILINE
 )
+PUBLIC_DEVELOPMENT_CORPUS = "round9-public-adversarial-v11"
+PUBLIC_DEVELOPMENT_REPORT_SCHEMA = "round9-public-adversarial-report/v11"
+PUBLIC_DEVELOPMENT_MANIFEST = {
+    "bytes": 476165,
+    "sha256": "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038",
+}
+PUBLIC_DEVELOPMENT_METRICS = {
+    "payload_records": 24,
+    "formal_unique_payloads": 23,
+    "candidate_carriers": 1,
+    "candidate_executions": 1,
+    "not_provided": 0,
+    "scenario_payload_executions": 24,
+    "serialized_route_executions": 120,
+    "direct_blocked": 12,
+    "direct_allowed": 12,
+    "quoted_blocked": 0,
+    "historical_blocked": 0,
+    "system_blocked": 0,
+    "tool_blocked": 0,
+}
+PUBLIC_HOST_CONTRACT = {
+    "payload_records": 24,
+    "unique_historical_payloads": 8,
+    "unique_branch_head_payloads": 1,
+    "unique_current_prompt_like_payloads": 14,
+    "unique_formal_payloads": 23,
+    "unmerged_candidate_carriers": 1,
+    "nondefault_branch_candidate_carriers": 5,
+    "release_assets_reviewed": 16,
+    "release_assets_with_prompt_entries": 4,
+    "release_asset_metadata_records": 199,
+    "candidate_carrier_executions": 1,
+    "candidate_carriers_not_provided": 0,
+    "scenario_payload_executions": 24,
+    "serialized_route_executions": 120,
+    "direct_active_blocked": 12,
+    "direct_active_allowed": 12,
+    "quoted_allowed": 24,
+    "historical_allowed": 24,
+    "system_allowed": 24,
+    "tool_allowed": 24,
+}
 
 
 class ContractError(RuntimeError):
@@ -468,49 +511,17 @@ def validate_contract(value: Any, policy: dict[str, str], ruleset: dict[str, str
     )
     public = exact_keys(
         contract["public_adversarial"],
-        {
-            "manifest_sha256",
-            "payload_records",
-            "unique_historical_payloads",
-            "unique_branch_head_payloads",
-            "unique_current_prompt_like_payloads",
-            "unique_formal_payloads",
-            "unmerged_candidate_carriers",
-            "candidate_carrier_executions",
-            "candidate_carriers_not_provided",
-            "scenario_payload_executions",
-            "serialized_route_executions",
-            "direct_active_blocked",
-            "direct_active_allowed",
-            "quoted_allowed",
-            "historical_allowed",
-            "system_allowed",
-            "tool_allowed",
-        },
+        set(PUBLIC_HOST_CONTRACT) | {"manifest_sha256"},
         "public_adversarial",
     )
-    require_hex(public["manifest_sha256"], "public_adversarial.manifest_sha256")
-    expected_public = {
-        "payload_records": 22,
-        "unique_historical_payloads": 8,
-        "unique_branch_head_payloads": 1,
-        "unique_current_prompt_like_payloads": 12,
-        "unique_formal_payloads": 21,
-        "unmerged_candidate_carriers": 1,
-        "candidate_carrier_executions": 1,
-        "candidate_carriers_not_provided": 0,
-        "scenario_payload_executions": 22,
-        "serialized_route_executions": 110,
-        "direct_active_blocked": 10,
-        "direct_active_allowed": 12,
-        "quoted_allowed": 22,
-        "historical_allowed": 22,
-        "system_allowed": 22,
-        "tool_allowed": 22,
-    }
-    for key, expected in expected_public.items():
+    manifest_sha256 = require_hex(
+        public["manifest_sha256"], "public_adversarial.manifest_sha256"
+    )
+    if manifest_sha256 != PUBLIC_DEVELOPMENT_MANIFEST["sha256"]:
+        fail("public_adversarial manifest differs from the frozen v11 contract")
+    for key, expected in PUBLIC_HOST_CONTRACT.items():
         if exact_int(public[key], f"public_adversarial.{key}") != expected:
-            fail(f"public_adversarial.{key} differs from the frozen v4 contract")
+            fail(f"public_adversarial.{key} differs from the frozen v11 contract")
     for key in ("quoted_allowed", "historical_allowed", "system_allowed", "tool_allowed"):
         if public[key] != public["scenario_payload_executions"]:
             fail(f"every executed public payload must pass the {key} carrier gate")
@@ -1207,7 +1218,7 @@ def validate_public_report(
     report, binding = file_report(
         path,
         maximum=262144,
-        schema="round9-public-adversarial-report/v4",
+        schema=PUBLIC_DEVELOPMENT_REPORT_SCHEMA,
         canonical=True,
     )
     exact_keys(
@@ -1216,7 +1227,9 @@ def validate_public_report(
         "public adversarial report",
     )
     validate_report_candidate(report["candidate"], expected_candidate, "public_adversarial")
-    validate_file_identity(report["manifest"], "public_adversarial.manifest")
+    manifest = validate_file_identity(report["manifest"], "public_adversarial.manifest")
+    if manifest != PUBLIC_DEVELOPMENT_MANIFEST:
+        fail("public adversarial report does not bind the frozen v11 manifest")
     validate_log_binding(report, log_path, "public_adversarial")
     metrics = exact_keys(
         report["metrics"],
@@ -1237,41 +1250,11 @@ def validate_public_report(
         },
         "public_adversarial.metrics",
     )
-    expected = {
-        "payload_records": 22,
-        "formal_unique_payloads": 21,
-        "candidate_carriers": 1,
-        "candidate_executions": 1,
-        "not_provided": 0,
-        "scenario_payload_executions": 22,
-        "serialized_route_executions": 110,
-        "direct_blocked": 10,
-        "direct_allowed": 12,
-        "quoted_blocked": 0,
-        "historical_blocked": 0,
-        "system_blocked": 0,
-        "tool_blocked": 0,
-    }
-    if metrics != expected:
-        fail("public adversarial machine report differs from the frozen contract")
+    if metrics != PUBLIC_DEVELOPMENT_METRICS:
+        fail("public adversarial machine report differs from the frozen v11 contract")
     return {
-        "manifest_sha256": report["manifest"]["sha256"],
-        "payload_records": 22,
-        "unique_historical_payloads": 8,
-        "unique_branch_head_payloads": 1,
-        "unique_current_prompt_like_payloads": 12,
-        "unique_formal_payloads": 21,
-        "unmerged_candidate_carriers": 1,
-        "candidate_carrier_executions": 1,
-        "candidate_carriers_not_provided": 0,
-        "scenario_payload_executions": 22,
-        "serialized_route_executions": 110,
-        "direct_active_blocked": 10,
-        "direct_active_allowed": 12,
-        "quoted_allowed": 22,
-        "historical_allowed": 22,
-        "system_allowed": 22,
-        "tool_allowed": 22,
+        "manifest_sha256": manifest["sha256"],
+        **PUBLIC_HOST_CONTRACT,
     }, binding
 
 
@@ -1644,7 +1627,7 @@ def validate_machine_report_bindings(value: Any) -> None:
         "independent_benign": "round9-benign-corpus-report/v1",
         "paired_malicious": "round9-development-paired-malicious-machine-report/v1",
         "independent_malicious": "round9-independent-malicious-report/v1",
-        "public_adversarial": "round9-public-adversarial-report/v4",
+        "public_adversarial": PUBLIC_DEVELOPMENT_REPORT_SCHEMA,
         "audit_contract": "round9-audit-contract-report/v1",
     }
     for name, schema in expected_schemas.items():

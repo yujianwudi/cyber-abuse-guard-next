@@ -24,8 +24,8 @@ import (
 )
 
 const (
-	datasetName                = "round9-public-adversarial-v10"
-	manifestSchema             = "round9-public-adversarial-corpus/v10"
+	datasetName                = "round9-public-adversarial-v11"
+	manifestSchema             = "round9-public-adversarial-corpus/v11"
 	expectedPayloads           = 24
 	expectedFormalPayloads     = 23
 	expectedPromptLikePayloads = 14
@@ -35,7 +35,9 @@ const (
 	expectedNondefaultBranches = 5
 	expectedReleaseAssets      = 16
 	expectedPromptAssets       = 4
-	expectedDeltaReviewSHA256  = "4294a296c33ca5a0d6fb923cef2bd68ef3e4bc7e92356b1641d09c2dcbd559a4"
+	expectedAssetMetadata      = 199
+	expectedDeltaReviewSHA256  = "df42c7480dfb1fb48f50459df8fd27eb8ab6c391dc2d305b4f22fc3cc8ca2579"
+	expectedCodexXReviewSHA256 = "b1c092270c92bb808411d3c5e2e6499642b4f5313df090c5c5cfe5eef549158c"
 	groundTruthBlockMalicious  = "block_malicious_text"
 	groundTruthAllowOrAudit    = "allow_or_audit"
 )
@@ -233,6 +235,56 @@ type releaseAssetReview struct {
 	Reason               string   `json:"reason"`
 }
 
+type releaseAssetMetadata struct {
+	Repository      string `json:"repository"`
+	TagName         string `json:"tag_name"`
+	TagCommit       string `json:"tag_commit"`
+	ReleaseID       int64  `json:"release_id"`
+	AssetID         int64  `json:"asset_id"`
+	Name            string `json:"name"`
+	Bytes           int64  `json:"bytes"`
+	SHA256          string `json:"sha256"`
+	Digest          string `json:"digest"`
+	ContentType     string `json:"content_type"`
+	State           string `json:"state"`
+	CreatedAt       string `json:"created_at"`
+	UpdatedAt       string `json:"updated_at"`
+	InspectionScope string `json:"inspection_scope"`
+}
+
+type changedPathMetadata struct {
+	Path       string `json:"path"`
+	Status     string `json:"status"`
+	Bytes      int64  `json:"bytes"`
+	GitBlobSHA string `json:"git_blob_sha"`
+	Additions  int    `json:"additions"`
+	Deletions  int    `json:"deletions"`
+	Changes    int    `json:"changes"`
+}
+
+type reviewedPromptNamedTextSource struct {
+	Path                 string `json:"path"`
+	Bytes                int    `json:"bytes"`
+	SHA256               string `json:"sha256"`
+	GitBlobSHA           string `json:"git_blob_sha"`
+	ReviewClassification string `json:"review_classification"`
+	Reason               string `json:"reason"`
+}
+
+type codexXHeadAdvanceReview struct {
+	Repository                     string                          `json:"repository"`
+	BaseCommit                     string                          `json:"base_commit"`
+	HeadCommit                     string                          `json:"head_commit"`
+	TotalCommits                   int                             `json:"total_commits"`
+	ChangedPaths                   []changedPathMetadata           `json:"changed_paths"`
+	ChangedPathCount               int                             `json:"changed_path_count"`
+	PromptPayloadPathChanges       int                             `json:"prompt_payload_path_changes"`
+	ReviewedPromptNamedTextSources []reviewedPromptNamedTextSource `json:"reviewed_prompt_named_text_sources"`
+	LatestReleaseTag               string                          `json:"latest_release_tag"`
+	LatestReleaseTagCommit         string                          `json:"latest_release_tag_commit"`
+	ReviewSHA256                   string                          `json:"review_sha256"`
+}
+
 type publicManifest struct {
 	Schema                               string                    `json:"schema"`
 	Dataset                              string                    `json:"dataset"`
@@ -260,6 +312,13 @@ type publicManifest struct {
 	NondefaultBranchCarriers             []nondefaultBranchCarrier `json:"nondefault_branch_carriers"`
 	ReleaseAssetReviews                  []releaseAssetReview      `json:"release_asset_reviews"`
 	Payloads                             []publicPayload           `json:"payloads"`
+	ThirdPartyRepositoryAccess           string                    `json:"third_party_repository_access"`
+	BinaryReleaseAssetsDownloaded        bool                      `json:"binary_release_assets_downloaded"`
+	BinaryReleaseAssetsOpened            bool                      `json:"binary_release_assets_opened"`
+	ReleaseAssetCollectionScope          string                    `json:"release_asset_collection_scope"`
+	ReleaseAssetMetadataRecords          int                       `json:"release_asset_metadata_records"`
+	ReleaseAssetMetadata                 []releaseAssetMetadata    `json:"release_asset_metadata"`
+	CodexXHeadAdvanceReview              codexXHeadAdvanceReview   `json:"codexx_head_advance_review"`
 }
 
 type validationMetrics struct {
@@ -477,6 +536,9 @@ func validateManifest(manifest publicManifest) error {
 	}
 	if strings.TrimSpace(manifest.QueriedAt) == "" || strings.TrimSpace(manifest.RefreshedAt) == "" ||
 		manifest.PayloadEncoding != "base64_exact_bytes" ||
+		manifest.ThirdPartyRepositoryAccess != "github_api_text_and_metadata_read_only" ||
+		manifest.BinaryReleaseAssetsDownloaded || manifest.BinaryReleaseAssetsOpened ||
+		manifest.ReleaseAssetCollectionScope != "all_releases_returned_by_authenticated_github_api" ||
 		manifest.UniqueHistoricalPayloads != 8 || manifest.UniqueBranchHeadPayloads != 1 ||
 		manifest.UniqueCurrentPromptLikePayloads != expectedPromptLikePayloads ||
 		manifest.UniqueFormalPayloads != expectedFormalPayloads ||
@@ -484,10 +546,12 @@ func validateManifest(manifest publicManifest) error {
 		manifest.NondefaultBranchCandidateCarriers != expectedNondefaultBranches ||
 		manifest.ReleaseAssetsReviewed != expectedReleaseAssets ||
 		manifest.ReleaseAssetsWithPromptEntries != expectedPromptAssets ||
+		manifest.ReleaseAssetMetadataRecords != expectedAssetMetadata ||
 		manifest.SerializedContextsPerScenarioPayload != expectedContextsPerPayload ||
 		len(manifest.CandidateCarriers) != expectedCandidateCarriers ||
 		len(manifest.NondefaultBranchCarriers) != expectedNondefaultBranches ||
-		len(manifest.ReleaseAssetReviews) != expectedReleaseAssets || len(manifest.Payloads) != expectedPayloads {
+		len(manifest.ReleaseAssetReviews) != expectedReleaseAssets ||
+		len(manifest.ReleaseAssetMetadata) != expectedAssetMetadata || len(manifest.Payloads) != expectedPayloads {
 		return errors.New("public corpus count or encoding drift")
 	}
 	expectedHistory := map[string]int{
@@ -500,6 +564,7 @@ func validateManifest(manifest publicManifest) error {
 		"74716fd006490b7f2b57448ac1c87922d2c91f1eaabfb929fac15acaf184f500": 101925,
 		"5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f": 105299,
 		"dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38": 105888,
+		"bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d": 183752,
 	}
 	if len(manifest.RefreshHistory) != len(expectedHistory) {
 		return errors.New("public corpus refresh history count drift")
@@ -522,11 +587,35 @@ func validateManifest(manifest publicManifest) error {
 	if len(manifest.Repositories) != len(expectedRepositories) {
 		return errors.New("repository snapshot count drift")
 	}
+	type repositoryIdentity struct {
+		head                            string
+		branches, pulls, tags, releases int
+	}
+	expectedRepositoryIdentities := map[string]repositoryIdentity{
+		"Jia-Ethan/codex-keysmith": {
+			head: "700f1be22446af4dc2c362080cbde669e215094d", branches: 5, pulls: 0, tags: 2, releases: 2,
+		},
+		"MDX-Tom/gpt-5.6-instruct": {
+			head: "334f8cd2ec132aa4317b62bd2a3228ed827cbb87", branches: 1, pulls: 0, tags: 2, releases: 2,
+		},
+		"yynxxxxx/Codex-X": {
+			head: "e8b0e5b73c508484cfb636339c82d70360487442", branches: 2, pulls: 0, tags: 37, releases: 36,
+		},
+		"yynxxxxx/Codex-5.5-codex-instruct-5.5": {
+			head: "ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d", branches: 1, pulls: 1, tags: 0, releases: 0,
+		},
+	}
 	for _, repository := range manifest.Repositories {
 		if _, ok := expectedRepositories[repository.Repository]; !ok {
 			return fmt.Errorf("unexpected repository snapshot %q", repository.Repository)
 		}
 		delete(expectedRepositories, repository.Repository)
+		identity := expectedRepositoryIdentities[repository.Repository]
+		if repository.DefaultHead != identity.head || len(repository.Branches) != identity.branches ||
+			len(repository.OpenPRs) != identity.pulls || len(repository.Tags) != identity.tags ||
+			len(repository.Releases) != identity.releases {
+			return fmt.Errorf("repository %q live snapshot identity drift", repository.Repository)
+		}
 		if repository.DefaultBranch == "" || !gitSHAPattern.MatchString(repository.DefaultHead) || len(repository.Branches) == 0 {
 			return fmt.Errorf("repository %q default identity is incomplete", repository.Repository)
 		}
@@ -570,6 +659,12 @@ func validateManifest(manifest publicManifest) error {
 	if err := validateReleaseAssetReviews(manifest.ReleaseAssetReviews, repositoryIndex(manifest.Repositories), manifest.Payloads); err != nil {
 		return err
 	}
+	if err := validateReleaseAssetMetadata(manifest.ReleaseAssetMetadata, repositoryIndex(manifest.Repositories)); err != nil {
+		return err
+	}
+	if err := validateCodexXHeadAdvanceReview(manifest.CodexXHeadAdvanceReview, repositoryIndex(manifest.Repositories), manifest.Payloads); err != nil {
+		return err
+	}
 	if err := validateFormalReleaseProvenance(manifest, repositoryIndex(manifest.Repositories)); err != nil {
 		return err
 	}
@@ -602,6 +697,10 @@ func validateMergedPullRequests(pulls []mergedPullRequest) error {
 		"MDX-Tom/gpt-5.6-instruct#17": {
 			mergeCommit: "d1face34885e3c24972d7b959e120e9acc546202",
 			headSHA:     "38802664b336f3c0e1c25c9763b68dd28d757215",
+		},
+		"MDX-Tom/gpt-5.6-instruct#19": {
+			mergeCommit: "334f8cd2ec132aa4317b62bd2a3228ed827cbb87",
+			headSHA:     "71d1a7893c5e363ef4e2c84096985d4869d4fc13",
 		},
 	}
 	if len(pulls) != len(expected) {
@@ -719,10 +818,10 @@ func validatePromptLikeDeltaReview(
 	payloads []publicPayload,
 ) error {
 	if review.Repository != "MDX-Tom/gpt-5.6-instruct" ||
-		review.BaseCommit != "a2476cd2ba6fac605348f06b621e5e1d7d4f74fe" ||
-		review.ChangedOrAddedBlobPaths != 8 ||
+		review.BaseCommit != "b32eb0dd7078a092d7dd5d28137d3bc95aa9b705" ||
+		review.ChangedOrAddedBlobPaths != 2 ||
 		review.IncludedPromptLikePayloads != 0 ||
-		review.ExcludedNonPayloadPaths != 8 || len(review.ExcludedSources) != 8 ||
+		review.ExcludedNonPayloadPaths != 2 || len(review.ExcludedSources) != 2 ||
 		review.ReviewSHA256 != expectedDeltaReviewSHA256 {
 		return errors.New("prompt-like delta review identity drift")
 	}
@@ -736,7 +835,6 @@ func validatePromptLikeDeltaReview(
 	allowedClassifications := map[string]bool{
 		"workflow_configuration": true, "repository_configuration": true,
 		"executable_source_code": true, "test_source_code": true,
-		"executable_source_archive": true, "binary_or_visual_asset": true,
 		"diagram_source": true, "repository_documentation": true,
 		"non_payload_repository_file": true,
 	}
@@ -812,8 +910,9 @@ func promptLikeReviewSHA256(entries []excludedPromptLikeSource) string {
 
 // promptLikeReviewSHA256Legacy preserves the v6-v9 review-digest algorithm.
 // Those immutable historical manifests predate per-file SHA-256 inclusion in
-// the digest input. V10 intentionally uses promptLikeReviewSHA256 instead; the
-// two functions must not be merged or selected from mutable manifest data.
+// the digest input. V10 and v11 intentionally use promptLikeReviewSHA256
+// instead; the two functions must not be merged or selected from mutable
+// manifest data.
 func promptLikeReviewSHA256Legacy(entries []excludedPromptLikeSource) string {
 	ordered := append([]excludedPromptLikeSource(nil), entries...)
 	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
@@ -1168,7 +1267,7 @@ func validateNondefaultBranchCarriers(
 		},
 		"codexx-refactor-modules": {
 			repository: "yynxxxxx/Codex-X", ref: "codex/refactor-modules",
-			commit: "bffeca53cca6ae1c3f98d88ea5c1a9aa65362c82", behind: 5,
+			commit: "bffeca53cca6ae1c3f98d88ea5c1a9aa65362c82", behind: 8,
 			payloadIDs: []string{"codexx-gpt56", "codexx-gpt54", "codexx-gpt55", "codexx-jeli", "codexx-seagull3"},
 		},
 	}
@@ -1355,6 +1454,188 @@ func validateReleaseAssetReviews(
 	return nil
 }
 
+func validateReleaseAssetMetadata(
+	metadata []releaseAssetMetadata,
+	repositories map[string]repositorySnapshot,
+) error {
+	expectedCounts := map[string]int{
+		"Jia-Ethan/codex-keysmith":              8,
+		"MDX-Tom/gpt-5.6-instruct":              2,
+		"yynxxxxx/Codex-X":                      189,
+		"yynxxxxx/Codex-5.5-codex-instruct-5.5": 0,
+	}
+	actualCounts := make(map[string]int, len(expectedCounts))
+	seenAssets := make(map[int64]struct{}, len(metadata))
+	for _, asset := range metadata {
+		repository, ok := repositories[asset.Repository]
+		if !ok {
+			return fmt.Errorf("Release asset metadata %d repository is absent", asset.AssetID)
+		}
+		if asset.ReleaseID <= 0 || asset.AssetID <= 0 || asset.Name == "" || asset.Bytes <= 0 ||
+			!gitSHAPattern.MatchString(asset.TagCommit) || !sha256Pattern.MatchString(asset.SHA256) ||
+			asset.Digest != "sha256:"+asset.SHA256 || asset.ContentType == "" || asset.State != "uploaded" ||
+			asset.CreatedAt == "" || asset.UpdatedAt == "" || asset.InspectionScope != "metadata_only" {
+			return fmt.Errorf("Release asset metadata %d is malformed", asset.AssetID)
+		}
+		if _, duplicate := seenAssets[asset.AssetID]; duplicate {
+			return fmt.Errorf("Release asset metadata %d is duplicated", asset.AssetID)
+		}
+		seenAssets[asset.AssetID] = struct{}{}
+		foundTag := false
+		for _, tag := range repository.Tags {
+			if tag.Name == asset.TagName && tag.Commit == asset.TagCommit {
+				foundTag = true
+				break
+			}
+		}
+		if !foundTag {
+			return fmt.Errorf("Release asset metadata %d tag identity drift", asset.AssetID)
+		}
+		foundRelease := false
+		for _, release := range repository.Releases {
+			if release.TagName == asset.TagName {
+				foundRelease = true
+				break
+			}
+		}
+		if !foundRelease {
+			return fmt.Errorf("Release asset metadata %d release identity drift", asset.AssetID)
+		}
+		actualCounts[asset.Repository]++
+	}
+	for repository, expected := range expectedCounts {
+		if actualCounts[repository] != expected {
+			return fmt.Errorf("Release asset metadata count for %s=%d want %d", repository, actualCounts[repository], expected)
+		}
+	}
+	return nil
+}
+
+func validateCodexXHeadAdvanceReview(
+	review codexXHeadAdvanceReview,
+	repositories map[string]repositorySnapshot,
+	payloads []publicPayload,
+) error {
+	const (
+		repositoryName = "yynxxxxx/Codex-X"
+		baseCommit     = "7d0e0064d54f860d4bf12b557fd9f8c489043a35"
+		headCommit     = "e8b0e5b73c508484cfb636339c82d70360487442"
+		releaseTag     = "v0.3.1"
+		tagCommit      = "5b6655754d578a4b303bea3df0844d8c932e0f4e"
+	)
+	if review.Repository != repositoryName || review.BaseCommit != baseCommit || review.HeadCommit != headCommit ||
+		review.TotalCommits != 3 || review.ChangedPathCount != 59 || len(review.ChangedPaths) != 59 ||
+		review.PromptPayloadPathChanges != 0 || len(review.ReviewedPromptNamedTextSources) != 6 ||
+		review.LatestReleaseTag != releaseTag || review.LatestReleaseTagCommit != tagCommit ||
+		review.ReviewSHA256 != expectedCodexXReviewSHA256 {
+		return errors.New("Codex-X head-advance review identity drift")
+	}
+	repository, ok := repositories[repositoryName]
+	if !ok || repository.DefaultHead != headCommit {
+		return errors.New("Codex-X head-advance review does not bind the default head")
+	}
+	foundTag := false
+	for _, tag := range repository.Tags {
+		if tag.Name == releaseTag && tag.Commit == tagCommit {
+			foundTag = true
+			break
+		}
+	}
+	if !foundTag {
+		return errors.New("Codex-X head-advance review does not bind the v0.3.1 tag")
+	}
+	if computed := codexXHeadAdvanceReviewSHA256(review); computed != review.ReviewSHA256 {
+		return fmt.Errorf("Codex-X head-advance digest drift: computed=%s manifest=%s", computed, review.ReviewSHA256)
+	}
+
+	changed := make(map[string]changedPathMetadata, len(review.ChangedPaths))
+	for _, entry := range review.ChangedPaths {
+		if entry.Path == "" || filepath.IsAbs(entry.Path) || filepath.ToSlash(filepath.Clean(entry.Path)) != entry.Path ||
+			strings.Contains(entry.Path, "..") || strings.HasPrefix(entry.Path, "examples/") ||
+			(entry.Status != "added" && entry.Status != "modified") || entry.Bytes <= 0 ||
+			!gitSHAPattern.MatchString(entry.GitBlobSHA) || entry.Additions < 0 || entry.Deletions < 0 ||
+			entry.Changes != entry.Additions+entry.Deletions {
+			return fmt.Errorf("Codex-X changed path %q is malformed", entry.Path)
+		}
+		if _, duplicate := changed[entry.Path]; duplicate {
+			return fmt.Errorf("Codex-X changed path %q is duplicated", entry.Path)
+		}
+		changed[entry.Path] = entry
+	}
+	for _, payload := range payloads {
+		for _, source := range payload.Sources {
+			if source.Repository != repositoryName || source.RefKind != "default_branch" || source.Commit != headCommit {
+				continue
+			}
+			if _, modified := changed[source.Path]; modified {
+				return fmt.Errorf("Codex-X frozen payload source %q appears in the head advance", source.Path)
+			}
+		}
+	}
+
+	type expectedTextIdentity struct {
+		classification, sha256, blob string
+		bytes                        int
+	}
+	expectedText := map[string]expectedTextIdentity{
+		"README.md": {
+			classification: "repository_documentation", bytes: 17450,
+			sha256: "2d19e0b187bd1a744af4ad8b444beef16da4010d0c6d063dd19b60c07a50cf8f", blob: "f4a39b54ae7055a05035485006cc29e8c188d87e",
+		},
+		"README.en.md": {
+			classification: "repository_documentation", bytes: 17937,
+			sha256: "3d43eb4468aa3b7612665136838d5c9e6f8d82ae844c61a6b54085a4d3f6dd5e", blob: "2684f96c1be577071fa00674cd5fb6a5df5c28fb",
+		},
+		"CHANGELOG.md": {
+			classification: "repository_documentation", bytes: 27351,
+			sha256: "bcd5f9971241d7d3b234ca0cb2a43d93b24aa5e34fabe51014f50b8ff00fd880", blob: "269a7384be9f9f82f5338adedfe800dd114ba0c1",
+		},
+		"apps/desktop/src/components/PromptCategoryManager.tsx": {
+			classification: "executable_source_code", bytes: 14039,
+			sha256: "b2023eeba2217e4cb82184029702180a2f230185194613fbed7628350adc835e", blob: "658a5264c94f08beb7e84cfc053ace65c57ba199",
+		},
+		"apps/desktop/src/promptCategories.ts": {
+			classification: "executable_source_code", bytes: 8578,
+			sha256: "ac2d49fa24d81fbdfc0341e3ed636dc8cb3b089c8133a2df3dee7ba48aa875a5", blob: "79797ffaad77373fbdb820aa7a9d2b6ebbee36d7",
+		},
+		"apps/desktop/src/styles/skills-prompts-pages.css": {
+			classification: "style_sheet", bytes: 27873,
+			sha256: "a6944f618808dfe9854c2a5d01ca1129bd0023ad7df0da6a12a133f8add78667", blob: "4f83c37dadad2138d4c9a0da5f32cb1de42705dd",
+		},
+	}
+	seenText := make(map[string]struct{}, len(expectedText))
+	for _, source := range review.ReviewedPromptNamedTextSources {
+		want, expected := expectedText[source.Path]
+		entry, wasChanged := changed[source.Path]
+		if !expected || !wasChanged || source.Bytes != want.bytes || source.SHA256 != want.sha256 ||
+			source.GitBlobSHA != want.blob || source.ReviewClassification != want.classification ||
+			int64(source.Bytes) != entry.Bytes || source.GitBlobSHA != entry.GitBlobSHA ||
+			len(strings.TrimSpace(source.Reason)) < 48 {
+			return fmt.Errorf("Codex-X reviewed prompt-named text %q identity drift", source.Path)
+		}
+		if _, duplicate := seenText[source.Path]; duplicate {
+			return fmt.Errorf("Codex-X reviewed prompt-named text %q is duplicated", source.Path)
+		}
+		seenText[source.Path] = struct{}{}
+	}
+	if len(seenText) != len(expectedText) {
+		return errors.New("Codex-X reviewed prompt-named text coverage drift")
+	}
+	return nil
+}
+
+func codexXHeadAdvanceReviewSHA256(review codexXHeadAdvanceReview) string {
+	ordered := append([]changedPathMetadata(nil), review.ChangedPaths...)
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Path < ordered[j].Path })
+	hash := sha256.New()
+	for _, entry := range ordered {
+		fmt.Fprintf(hash, "%s\x00%s\x00%s\x00%s\x00%s\x00%d\x00%s\x00%d\x00%d\x00%d\n",
+			review.Repository, review.BaseCommit, review.HeadCommit, entry.Path, entry.Status,
+			entry.Bytes, entry.GitBlobSHA, entry.Additions, entry.Deletions, entry.Changes)
+	}
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
 func validateFormalReleaseProvenance(manifest publicManifest, repositories map[string]repositorySnapshot) error {
 	payloads := make(map[string]publicPayload, len(manifest.Payloads))
 	for _, payload := range manifest.Payloads {
@@ -1368,7 +1649,7 @@ func validateFormalReleaseProvenance(manifest publicManifest, repositories map[s
 		}
 	}
 	for _, payloadID := range []string{"codexx-gpt56", "codexx-gpt54", "codexx-gpt55", "codexx-jeli", "codexx-seagull3"} {
-		if err := requireMirroredTagSources(payloads[payloadID], "yynxxxxx/Codex-X", "v0.3.0", "752078b2cfb0d8d84d0047e4151fbae54360a37d"); err != nil {
+		if err := requireMirroredTagSources(payloads[payloadID], "yynxxxxx/Codex-X", "v0.3.1", "5b6655754d578a4b303bea3df0844d8c932e0f4e"); err != nil {
 			return err
 		}
 	}

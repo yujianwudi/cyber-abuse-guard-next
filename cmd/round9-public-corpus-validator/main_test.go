@@ -14,7 +14,7 @@ import (
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
 )
 
-func TestRound9PublicCorpusV10RetainsV1ThroughV9UniquePayloads(t *testing.T) {
+func TestRound9PublicCorpusV11RetainsV1ThroughV10UniquePayloads(t *testing.T) {
 	t.Parallel()
 	root := publicCorpusRepositoryRoot(t)
 	historical := []struct {
@@ -31,6 +31,7 @@ func TestRound9PublicCorpusV10RetainsV1ThroughV9UniquePayloads(t *testing.T) {
 		{dataset: "round9-public-adversarial-v7", bytes: 101925, sha256: "74716fd006490b7f2b57448ac1c87922d2c91f1eaabfb929fac15acaf184f500"},
 		{dataset: "round9-public-adversarial-v8", bytes: 105299, sha256: "5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f"},
 		{dataset: "round9-public-adversarial-v9", bytes: 105888, sha256: "dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38"},
+		{dataset: "round9-public-adversarial-v10", bytes: 183752, sha256: "bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d"},
 	}
 	for _, identity := range historical {
 		data, err := os.ReadFile(filepath.Join(root, "testdata", identity.dataset, "manifest.json"))
@@ -43,7 +44,7 @@ func TestRound9PublicCorpusV10RetainsV1ThroughV9UniquePayloads(t *testing.T) {
 		}
 	}
 
-	previousDirectory := filepath.Join(root, "testdata", "round9-public-adversarial-v9")
+	previousDirectory := filepath.Join(root, "testdata", "round9-public-adversarial-v10")
 	previousManifestData, err := os.ReadFile(filepath.Join(previousDirectory, "manifest.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +57,7 @@ func TestRound9PublicCorpusV10RetainsV1ThroughV9UniquePayloads(t *testing.T) {
 	if err := json.Unmarshal(previousManifestData, &previous); err != nil {
 		t.Fatal(err)
 	}
-	if previous.Schema != "round9-public-adversarial-corpus/v9" || previous.Dataset != "round9-public-adversarial-v9" {
+	if previous.Schema != "round9-public-adversarial-corpus/v10" || previous.Dataset != "round9-public-adversarial-v10" {
 		t.Fatalf("unexpected prior corpus identity: schema=%q dataset=%q", previous.Schema, previous.Dataset)
 	}
 
@@ -81,7 +82,7 @@ func TestRound9PublicCorpusV10RetainsV1ThroughV9UniquePayloads(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(previousEncoded, currentEncoded) {
-			t.Fatalf("unique payload index %d encoded bytes differ from frozen v9", index)
+			t.Fatalf("unique payload index %d encoded bytes differ from frozen v10", index)
 		}
 	}
 }
@@ -199,7 +200,7 @@ func TestRound9PublicCorpusV8RejectedRebindRetention(t *testing.T) {
 	for _, before := range rejected.Payloads {
 		after, ok := activePayloads[before.ID]
 		if !ok || before.EncodedFile != after.EncodedFile || before.DecodedBytes != after.DecodedBytes || before.DecodedSHA256 != after.DecodedSHA256 {
-			t.Fatalf("payload %q identity differs between rejected v8 rebind and active v10", before.ID)
+			t.Fatalf("payload %q identity differs between rejected v8 rebind and active v11", before.ID)
 		}
 		beforeEncoded, err := os.ReadFile(filepath.Join(rejectedDirectory, filepath.FromSlash(before.EncodedFile)))
 		if err != nil {
@@ -210,12 +211,12 @@ func TestRound9PublicCorpusV8RejectedRebindRetention(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !bytes.Equal(beforeEncoded, afterEncoded) {
-			t.Fatalf("payload %q encoded bytes differ between rejected v8 rebind and active v10", before.ID)
+			t.Fatalf("payload %q encoded bytes differ between rejected v8 rebind and active v11", before.ID)
 		}
 	}
 }
 
-func TestRound9PublicCorpusV10Identity(t *testing.T) {
+func TestRound9PublicCorpusV11Identity(t *testing.T) {
 	t.Parallel()
 	root := publicCorpusRepositoryRoot(t)
 	manifestData, err := os.ReadFile(filepath.Join(root, "testdata", datasetName, "manifest.json"))
@@ -223,8 +224,8 @@ func TestRound9PublicCorpusV10Identity(t *testing.T) {
 		t.Fatal(err)
 	}
 	manifestSum := sha256.Sum256(manifestData)
-	if len(manifestData) != 183752 || fmt.Sprintf("%x", manifestSum) != "bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d" {
-		t.Fatalf("round9 public v10 manifest identity drift: bytes=%d sha256=%x", len(manifestData), manifestSum)
+	if len(manifestData) != 476165 || fmt.Sprintf("%x", manifestSum) != "297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038" {
+		t.Fatalf("round9 public v11 manifest identity drift: bytes=%d sha256=%x", len(manifestData), manifestSum)
 	}
 	var manifest publicManifest
 	if err := decodeStrictJSON(manifestData, &manifest); err != nil {
@@ -234,14 +235,16 @@ func TestRound9PublicCorpusV10Identity(t *testing.T) {
 		manifest.NondefaultBranchCandidateCarriers != expectedNondefaultBranches ||
 		manifest.ReleaseAssetsReviewed != expectedReleaseAssets ||
 		manifest.ReleaseAssetsWithPromptEntries != expectedPromptAssets ||
+		manifest.ReleaseAssetMetadataRecords != expectedAssetMetadata ||
 		promptLikeReviewSHA256(manifest.PromptLikeDeltaReview.ExcludedSources) != expectedDeltaReviewSHA256 {
 		t.Fatalf(
-			"round9 public v10 structural identity drift: schema=%q dataset=%q branches=%d assets=%d prompt_assets=%d review=%q",
+			"round9 public v11 structural identity drift: schema=%q dataset=%q branches=%d assets=%d prompt_assets=%d metadata_assets=%d review=%q",
 			manifest.Schema,
 			manifest.Dataset,
 			manifest.NondefaultBranchCandidateCarriers,
 			manifest.ReleaseAssetsReviewed,
 			manifest.ReleaseAssetsWithPromptEntries,
+			manifest.ReleaseAssetMetadataRecords,
 			manifest.PromptLikeDeltaReview.ReviewSHA256,
 		)
 	}
@@ -256,7 +259,7 @@ func TestRound9PublicCorpusV10Identity(t *testing.T) {
 	}
 }
 
-func TestRound9PublicCorpusV10ClassifierScenarios(t *testing.T) {
+func TestRound9PublicCorpusV11ClassifierScenarios(t *testing.T) {
 	metrics, err := validatePublicCorpus(publicCorpusRepositoryRoot(t), true)
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +271,7 @@ func TestRound9PublicCorpusV10ClassifierScenarios(t *testing.T) {
 	}
 }
 
-func TestRound9PublicCorpusV10PromptLikeDefensiveScenarios(t *testing.T) {
+func TestRound9PublicCorpusV11PromptLikeDefensiveScenarios(t *testing.T) {
 	root := publicCorpusRepositoryRoot(t)
 	manifest := loadPublicManifest(t)
 	directory := filepath.Join(root, "testdata", datasetName)
@@ -342,7 +345,7 @@ func TestRound9PublicCorpusRejectsCarrierSourceAndReviewProvenanceDrift(t *testi
 	manifest = loadPublicManifest(t)
 	manifest.PromptLikeDeltaReview.ExcludedSources[0].SHA256 = strings.Repeat("0", 64)
 	if err := validatePromptLikeDeltaReview(manifest.PromptLikeDeltaReview, repositoryIndex(manifest.Repositories), manifest.Payloads); err == nil {
-		t.Fatal("mutated v10 excluded-source file digest was accepted")
+		t.Fatal("mutated v11 excluded-source file digest was accepted")
 	}
 }
 
@@ -400,6 +403,39 @@ func TestRound9PublicCorpusRejectsReleaseAssetProvenanceDrift(t *testing.T) {
 	}
 	if err := validatePayloadSchema(mutatedPayload, map[int]string{}, map[string]string{}, repositoryIndex(manifest.Repositories)); err == nil {
 		t.Fatal("Release asset archive entry was accepted as Git repository archive provenance")
+	}
+}
+
+func TestRound9PublicCorpusRejectsMetadataOnlyAssetDrift(t *testing.T) {
+	t.Parallel()
+	manifest := loadPublicManifest(t)
+	if len(manifest.ReleaseAssetMetadata) != expectedAssetMetadata ||
+		manifest.BinaryReleaseAssetsDownloaded || manifest.BinaryReleaseAssetsOpened {
+		t.Fatalf("unexpected metadata-only asset boundary: records=%d downloaded=%t opened=%t",
+			len(manifest.ReleaseAssetMetadata),
+			manifest.BinaryReleaseAssetsDownloaded,
+			manifest.BinaryReleaseAssetsOpened,
+		)
+	}
+	manifest.ReleaseAssetMetadata[0].Digest = "sha256:" + strings.Repeat("0", 64)
+	if err := validateReleaseAssetMetadata(manifest.ReleaseAssetMetadata, repositoryIndex(manifest.Repositories)); err == nil {
+		t.Fatal("mutated metadata-only Release asset digest was accepted")
+	}
+}
+
+func TestRound9PublicCorpusRejectsCodexXHeadAdvanceDrift(t *testing.T) {
+	t.Parallel()
+	manifest := loadPublicManifest(t)
+	if computed := codexXHeadAdvanceReviewSHA256(manifest.CodexXHeadAdvanceReview); computed != expectedCodexXReviewSHA256 {
+		t.Fatalf("Codex-X head-advance review digest=%s want %s", computed, expectedCodexXReviewSHA256)
+	}
+	manifest.CodexXHeadAdvanceReview.ChangedPaths[0].GitBlobSHA = strings.Repeat("0", 40)
+	if err := validateCodexXHeadAdvanceReview(
+		manifest.CodexXHeadAdvanceReview,
+		repositoryIndex(manifest.Repositories),
+		manifest.Payloads,
+	); err == nil {
+		t.Fatal("mutated Codex-X head-advance provenance was accepted")
 	}
 }
 

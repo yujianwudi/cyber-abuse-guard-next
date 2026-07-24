@@ -355,13 +355,14 @@ for any of the three missing runtime evidence classes.
 
 41. **Visible Round 9 development corpora are not independent evidence.** The
     1,200-case development-benign corpus, paired-malicious v3 corpus, and
-    `testdata/round9-public-adversarial-v10` are visible to development and may
+    `testdata/round9-public-adversarial-v11` are visible to development and may
     prove only their frozen identity, schema, static contracts, and named
-    development regressions. The public v10 manifest is 183752 bytes with
+    development regressions. The public v11 manifest is 476165 bytes with
     SHA-256
-    `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`,
+    `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`,
     declares `development_only=true`, `independent_holdout=false`, and records
-    `third_party_code_executed=false`. No case or derived wording may be
+    `third_party_code_executed=false`; all 199 Release assets are metadata-only
+    records, and no binary Release asset was downloaded or opened. No case or derived wording may be
     relabeled as independent holdout. The protected independent evaluation is
     separately `NOT_PROVIDED`. The v9 manifest remains immutable history at
     105888 bytes / `dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.

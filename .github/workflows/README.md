@@ -102,16 +102,19 @@ The active machine contracts are:
 
 | Evidence object | Exact identity |
 |---|---|
-| Signed evaluation payload | `round9-external-evaluation/v2` |
-| Evaluator aggregate | `round9-external-evaluator-aggregate/v2` |
-| Protected ledger event | `round9-external-evaluation-ledger-event/v2` |
+| Signed evaluation payload | `round9-external-evaluation/v3` |
+| Evaluator aggregate | `round9-external-evaluator-aggregate/v3` |
+| Protected ledger event | `round9-external-evaluation-ledger-event/v3` |
 | Protected ledger proof | `round9-protected-git-ledger-proof/v1` |
 | Mechanically derived counted-Mock evidence | `round9-external-counted-mock/v1` |
+| Public development counted-Mock evidence | `round9-public-counted-mock/v1` |
+| Public evaluator transport | `round9-public-counted-mock-transport/v1` |
+| Public CPA decision audit | `round9-public-cpa-decision-audit/v1` |
 | CPA sandbox descriptor | `round9-external-cpa-sandbox/v2` |
 | Independent-audit signed evidence | `round9-independent-audit-evidence/v1` |
 | Independent-audit ledger event | `round9-independent-audit-ledger-event/v1` |
 | Independent-audit ledger proof | `round9-independent-audit-ledger-proof/v1` |
-| Visible development-only public corpus | `round9-public-adversarial-v10` / 183,752 bytes / `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d` |
+| Visible development-only public corpus | `round9-public-adversarial-v11` / 476,165 bytes / `297c01072eb8bea3c6102b957c741722e621860c1116b65450b68a8704e75038`; 199 Release assets recorded as metadata/digests only |
 
 The Host workflow attests and uploads exactly
 `round9-external-evaluation.json` and

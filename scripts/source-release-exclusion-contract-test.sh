@@ -4,11 +4,15 @@ set -euo pipefail
 root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 # shellcheck source=release-common.sh
 source "$root/scripts/release-common.sh"
-release_require_commands git tar grep mktemp rm mkdir
+release_require_commands git tar grep sha256sum awk mktemp rm mkdir
 
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 archive="$work/source.tar"
+verifier_path='scripts/round9_external_evaluation_contract.py'
+verifier_sha256='4c330ece27ce5e000f13ebc06bff6dbcaa2f18b5b62f73f940e78591051fae7e'
+verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
+verifier_test_sha256='f42625714cb46b89a4bc32a1ec52c2352d6f9c67f5f782ea117d08e7650c43c9'
 
 tracked_independent="$(git -C "$root" ls-files -- \
   ':(glob)testdata/round9-independent-*/**')"
@@ -64,6 +68,19 @@ git -C "$root" archive --worktree-attributes --format=tar \
   --output="$archive" HEAD
 listing="$(tar -tf "$archive")"
 
+if [[ "$(grep -Fxc "$verifier_path" <<<"$listing")" != 1 ]] ||
+  [[ "$(grep -Fxc "$verifier_test_path" <<<"$listing")" != 1 ]]; then
+  release_die "source archive lost the exact reviewed external-evaluation verifier sources"
+fi
+verifier_sha="$(tar -xOf "$archive" "$verifier_path" | sha256sum | awk '{print $1}')"
+verifier_test_sha="$(tar -xOf "$archive" "$verifier_test_path" | sha256sum | awk '{print $1}')"
+[[ "$verifier_sha" == "$verifier_sha256" ]] ||
+  release_die "source archive external-evaluation verifier source identity differs"
+[[ "$verifier_test_sha" == "$verifier_test_sha256" ]] ||
+  release_die "source archive external-evaluation verifier test identity differs"
+restricted_listing="$(awk -v verifier="$verifier_path" -v verifier_test="$verifier_test_path" \
+  '$0 != verifier && $0 != verifier_test { print }' <<<"$listing")"
+
 grep -Fxq README.md <<<"$listing" || \
   release_die "source archive exclusion fixture lost a required public source file"
 grep -Fxq Dockerfile.test <<<"$listing" || \
@@ -78,7 +95,7 @@ grep -Fq '[Round 9 Linux Host runner and counted-Mock contract](ROUND9_HOST_RUNN
 grep -Fq '`docs/ROUND9_HOST_RUNNER.md`' \
   "$root/integration/round9countedmock/README.md" || \
   release_die "Round 9 counted-Mock README lost its Host contract link"
-if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)' <<<"$listing"; then
+if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)' <<<"$restricted_listing"; then
   release_die "source archive export-ignore contract exposed restricted material"
 fi
 if grep -Eiq '(^|/)testdata/round9-independent-[^/]+(/|$)' <<<"$listing"; then

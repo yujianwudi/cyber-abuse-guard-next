@@ -20,6 +20,13 @@ assert SPEC and SPEC.loader
 reports = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(reports)
 REPOSITORY_ROOT = SOURCE.parent.parent
+EVALUATION_CORE_SOURCE = REPOSITORY_ROOT / "tools/round9-eval/round9_eval_core.py"
+EVALUATION_CORE_SPEC = importlib.util.spec_from_file_location(
+    "round9_eval_core_cross_contract", EVALUATION_CORE_SOURCE
+)
+assert EVALUATION_CORE_SPEC and EVALUATION_CORE_SPEC.loader
+evaluation_core = importlib.util.module_from_spec(EVALUATION_CORE_SPEC)
+EVALUATION_CORE_SPEC.loader.exec_module(evaluation_core)
 
 
 class Round9MachineReportsTest(unittest.TestCase):
@@ -53,7 +60,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             root / "rules",
             root / "testdata/round9-development-benign-v1",
             root / "testdata/round9-development-paired-malicious-v3",
-            root / "testdata/round9-public-adversarial-v10",
+            root / "testdata/round9-public-adversarial-v11",
         ):
             directory.mkdir(parents=True)
         (root / "internal/classifier/policy_identity.go").write_text(
@@ -105,8 +112,8 @@ class Round9MachineReportsTest(unittest.TestCase):
             encoding="utf-8",
         )
         shutil.copyfile(
-            REPOSITORY_ROOT / "testdata/round9-public-adversarial-v10/manifest.json",
-            root / "testdata/round9-public-adversarial-v10/manifest.json",
+            REPOSITORY_ROOT / "testdata/round9-public-adversarial-v11/manifest.json",
+            root / "testdata/round9-public-adversarial-v11/manifest.json",
         )
 
         self.git(root.parent, "init", "-q", str(root))
@@ -285,7 +292,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "schema": reports.PUBLIC_REPORT_SCHEMA,
             "candidate": candidate,
             "manifest": self.identity(
-                root / "testdata/round9-public-adversarial-v10/manifest.json"
+                root / "testdata/round9-public-adversarial-v11/manifest.json"
             ),
             "producer_log": self.identity(public_log),
             "metrics": reports.PUBLIC_METRICS,
@@ -458,14 +465,14 @@ class Round9MachineReportsTest(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertIsNone(reports.PUBLIC_RESULT.fullmatch(line + "operator_override=PASS\n"))
 
-    def test_public_report_is_v10_and_binds_the_frozen_manifest(self) -> None:
+    def test_public_report_is_v11_and_binds_the_frozen_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "repo"
-            corpus_root = root / "testdata/round9-public-adversarial-v10"
+            corpus_root = root / "testdata/round9-public-adversarial-v11"
             corpus_root.mkdir(parents=True)
             manifest_path = corpus_root / "manifest.json"
             shutil.copyfile(
-                REPOSITORY_ROOT / "testdata/round9-public-adversarial-v10/manifest.json",
+                REPOSITORY_ROOT / "testdata/round9-public-adversarial-v11/manifest.json",
                 manifest_path,
             )
             output = Path(temporary) / "public.json"
@@ -578,6 +585,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             self.assertEqual(public["nondefault_branch_candidate_carriers"], 5)
             self.assertEqual(public["release_assets_reviewed"], 16)
             self.assertEqual(public["release_assets_with_prompt_entries"], 4)
+            self.assertEqual(public["release_asset_metadata_records"], 199)
             self.assertEqual(public["candidate_carrier_executions"], 1)
             self.assertEqual(public["candidate_carriers_not_provided"], 0)
             self.assertEqual(public["scenario_payload_executions"], 24)
@@ -603,6 +611,55 @@ class Round9MachineReportsTest(unittest.TestCase):
             )
             self.assertFalse(hasattr(validate_args, "runtime"))
             reports.validate_development_report(validate_args)
+
+    def test_real_development_evidence_crosses_active_external_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            _, _, args, _ = self.development_fixture(temporary)
+            reports.development_report(args)
+            value = json.loads(Path(args.output).read_text(encoding="utf-8"))
+            candidate = value["candidate"]
+            expected_candidate = {
+                "tag": candidate["tag"],
+                "tag_object_sha": candidate["tag_object_sha"],
+                "source_version": "0.16",
+                "commit": candidate["commit"],
+                "tree": candidate["tree"],
+                "so_sha256": "6" * 64,
+                "cpa_version": "v7.2.95",
+                "cpa_commit": "f71ec0eb6776854457892452cf28c47f0d658251",
+                "classifier_policy_version": candidate["classifier"]["version"],
+                "classifier_policy_sha256": candidate["classifier"]["sha256"],
+                "ruleset_version": candidate["ruleset"]["version"],
+                "ruleset_sha256": candidate["ruleset"]["sha256"],
+                "ruleset_manifest_sha256": "7" * 64,
+                "build_metadata_sha256": "8" * 64,
+                "release_manifest_sha256": "9" * 64,
+                "phase1_run_id": 101,
+                "phase1_run_attempt": 1,
+                "phase1_artifact_id": 202,
+                "phase1_artifact_digest": "sha256:" + "a" * 64,
+            }
+            self.assertEqual(
+                evaluation_core.validate_development_evidence(
+                    value, expected_candidate=expected_candidate
+                ),
+                value,
+            )
+
+            stale = copy.deepcopy(value)
+            stale_public = stale["corpus"]["public_adversarial"]
+            stale_public["name"] = "round9-public-adversarial-v5"
+            with self.assertRaisesRegex(
+                evaluation_core.ContractError, "public corpus name"
+            ):
+                evaluation_core.validate_development_evidence(stale)
+
+            nested = copy.deepcopy(value)
+            nested["corpus"]["public_adversarial"]["metrics"] = {}
+            with self.assertRaisesRegex(
+                evaluation_core.ContractError, "keys are not exact"
+            ):
+                evaluation_core.validate_development_evidence(nested)
 
     def test_development_evidence_rejects_95_percent_paired_recall(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -712,13 +769,16 @@ class Round9MachineReportsTest(unittest.TestCase):
             "BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE"
         )
         blocked_job = "  publication_blocked:\n"
-        disabled_job = "    if: ${{ false }}\n"
+        disabled_job = (
+            "    if: ${{ needs.admission.outputs.publication_permitted == 'true' }}\n"
+        )
+        forced_false_output = "            printf 'publication_permitted=false\\n'\n"
         existing_release_gate = (
             '[.[][] | select(.tag_name == $tag)] | length == 0'
         )
         existing_release_failure = (
             "an existing Round 9 Release is fail-only until exact-candidate "
-            "independent-audit verification is implemented"
+            "independent-audit evidence passes mechanical verification"
         )
         historical_workflow_state = '.state == "disabled_manually"'
         workflow = (
@@ -743,7 +803,8 @@ class Round9MachineReportsTest(unittest.TestCase):
             "aggregate-and-each-category-at-least-9500-basis-points",
             "current_release_latest_stable: v0.15",
             "current_new_public_prerelease_creation: BLOCKED_FAIL_CLOSED",
-            "current_exact_candidate_independent_audit_mechanical_gate: NOT_IMPLEMENTED",
+            "current_exact_candidate_independent_audit_mechanical_gate: "
+            "IMPLEMENTED_FAIL_CLOSED_EVIDENCE_NOT_PROVIDED",
             "current_publication_write_permission: absent",
         )
         stale_active_recovery = (
@@ -757,6 +818,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             self.assertEqual(workflow_text.count(publication_block), 1)
             self.assertEqual(workflow_text.count(blocked_job), 1)
             self.assertEqual(workflow_text.count(disabled_job), 3)
+            self.assertEqual(workflow_text.count(forced_false_output), 1)
             self.assertEqual(workflow_text.count(existing_release_gate), 1)
             self.assertEqual(workflow_text.count(existing_release_failure), 1)
             self.assertEqual(workflow_text.count(historical_workflow_state), 2)
@@ -969,7 +1031,7 @@ class Round9MachineReportsTest(unittest.TestCase):
                 )
         with tempfile.TemporaryDirectory() as temporary:
             root, _, args, candidate = self.development_fixture(temporary)
-            manifest = root / "testdata/round9-public-adversarial-v10/manifest.json"
+            manifest = root / "testdata/round9-public-adversarial-v11/manifest.json"
             manifest.write_bytes(manifest.read_bytes() + b"\n")
             with self.assertRaisesRegex(reports.ReportError, "manifest identity drifted"):
                 reports.validate_development_public_report(

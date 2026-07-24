@@ -405,25 +405,11 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
 
     def public_report(self) -> dict[str, object]:
         return {
-            "schema": "round9-public-adversarial-report/v4",
+            "schema": contract.PUBLIC_DEVELOPMENT_REPORT_SCHEMA,
             "candidate": self.candidate(),
-            "manifest": self.file_identity("c"),
+            "manifest": dict(contract.PUBLIC_DEVELOPMENT_MANIFEST),
             "producer_log": self.binding(self.public_log),
-            "metrics": {
-                "payload_records": 22,
-                "formal_unique_payloads": 21,
-                "candidate_carriers": 1,
-                "candidate_executions": 1,
-                "not_provided": 0,
-                "scenario_payload_executions": 22,
-                "serialized_route_executions": 110,
-                "direct_blocked": 10,
-                "direct_allowed": 12,
-                "quoted_blocked": 0,
-                "historical_blocked": 0,
-                "system_blocked": 0,
-                "tool_blocked": 0,
-            },
+            "metrics": dict(contract.PUBLIC_DEVELOPMENT_METRICS),
             "claim_boundary": "public development regression",
         }
 
@@ -601,20 +587,26 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         with self.assertRaisesRegex(contract.ContractError, "producer log"):
             contract.assemble(self.assemble_args())
 
-    def test_public_pre_v4_report_and_count_drift_are_rejected(self):
+    def test_public_pre_v11_report_and_count_drift_are_rejected(self):
         value = self.public_report()
-        value["schema"] = "round9-public-adversarial-report/v3"
+        value["schema"] = "round9-public-adversarial-report/v9"
         self.rewrite(self.public, value)
         with self.assertRaisesRegex(contract.ContractError, "schema"):
             contract.assemble(self.assemble_args())
 
         value = self.public_report()
+        value["manifest"]["sha256"] = "f" * 64
+        self.rewrite(self.public, value)
+        with self.assertRaisesRegex(contract.ContractError, "frozen v11 manifest"):
+            contract.assemble(self.assemble_args())
+
+        value = self.public_report()
         value["metrics"]["candidate_carriers"] = 2
         value["metrics"]["candidate_executions"] = 2
-        value["metrics"]["serialized_route_executions"] = 111
-        value["metrics"]["direct_blocked"] = 11
+        value["metrics"]["serialized_route_executions"] = 121
+        value["metrics"]["direct_blocked"] = 13
         self.rewrite(self.public, value)
-        with self.assertRaisesRegex(contract.ContractError, "frozen contract"):
+        with self.assertRaisesRegex(contract.ContractError, "frozen v11 contract"):
             contract.assemble(self.assemble_args())
 
     def test_paired_per_category_wilson_drift_is_rejected(self):

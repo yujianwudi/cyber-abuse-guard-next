@@ -7,11 +7,18 @@ source "$root/scripts/release-common.sh"
 release_require_commands make git jq sha256sum awk cmp mktemp mv rm chmod mkdir \
   install find touch zip unzip tar grep wc stat python3
 
+rc_release_lane="${RC_RELEASE_LANE:-round8}"
+case "$rc_release_lane" in
+  round8) canonical_repository='yujianwudi/cyber-abuse-guard' ;;
+  round9) canonical_repository='yujianwudi/cyber-abuse-guard-next' ;;
+  *) release_die "RC release assets require a reviewed lane identity" ;;
+esac
+
 [[ "${GITHUB_ACTIONS:-false}" == true ]] || \
   release_die "RC release assets may only be produced by GitHub Actions"
 [[ "${GITHUB_EVENT_NAME:-}" == workflow_dispatch ]] || \
   release_die "RC release assets require the dedicated manual workflow"
-[[ "${GITHUB_REPOSITORY:-}" == yujianwudi/cyber-abuse-guard ]] || \
+[[ "${GITHUB_REPOSITORY:-}" == "$canonical_repository" ]] || \
   release_die "RC release assets require the canonical repository"
 [[ "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ ]] || \
   release_die "RC release assets require a numeric GitHub run ID"
@@ -25,7 +32,6 @@ runner_name_reproducible='UNRECORDED_EPHEMERAL_GITHUB_HOSTED_RUNNER'
 workflow_run_reproducible='UNRECORDED_EPHEMERAL_GITHUB_ACTIONS_RUN'
 workflow_attempt_reproducible='UNRECORDED_EPHEMERAL_GITHUB_ACTIONS_ATTEMPT'
 runner_image_unobservable='UNOBSERVABLE_FROM_PINNED_JOB_CONTAINER'
-rc_release_lane="${RC_RELEASE_LANE:-round8}"
 host_evidence=''
 host_evidence_sidecar=''
 external_evaluation=''
@@ -912,7 +918,14 @@ create_rc_audit_bundle() {
 create_rc_source_archive() {
   local source_root="$1"
   local output_dir="$2"
-  local temporary listing
+  local temporary listing restricted_listing verifier_sha verifier_test_sha
+  local archive_prefix="cyber-abuse-guard-v${RELEASE_ARTIFACT_VERSION}/"
+  local verifier_path='scripts/round9_external_evaluation_contract.py'
+  local verifier_sha256='4c330ece27ce5e000f13ebc06bff6dbcaa2f18b5b62f73f940e78591051fae7e'
+  local verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
+  local verifier_test_sha256='f42625714cb46b89a4bc32a1ec52c2352d6f9c67f5f782ea117d08e7650c43c9'
+  local verifier_entry="${archive_prefix}${verifier_path}"
+  local verifier_test_entry="${archive_prefix}${verifier_test_path}"
   local transient_path_pattern='(^|/)(classifier_(candidate|single)_[^/]*|[^/]*\.(cpu|mem|pprof|test\.exe|exe))($|/)'
   local test_binary_path_pattern='(^|/)[^/]*\.test($|/)'
   local safe_test_source_pattern='(^|/)Dockerfile\.test($|/)'
@@ -953,13 +966,28 @@ create_rc_source_archive() {
 
   temporary="$(mktemp "$output_dir/.rc-source-release.XXXXXX")"
   git -C "$source_root" archive --format=tar.gz \
-    --prefix="cyber-abuse-guard-v${RELEASE_ARTIFACT_VERSION}/" \
+    --prefix="$archive_prefix" \
     --output="$temporary" "$RELEASE_GIT_COMMIT" -- "${archive_pathspecs[@]}"
   listing="$(tar -tzf "$temporary")"
   [[ -n "$listing" ]] || release_die "RC source archive is empty"
-  if grep -Ev "^cyber-abuse-guard-v${RELEASE_ARTIFACT_VERSION}/" <<<"$listing" >/dev/null; then
+  if grep -Ev "^${archive_prefix}" <<<"$listing" >/dev/null; then
     rm -f -- "$temporary"
     release_die "RC source archive contains an entry outside its fixed prefix"
+  fi
+  if [[ "$(grep -Fxc "$verifier_entry" <<<"$listing")" != 1 ]] ||
+    [[ "$(grep -Fxc "$verifier_test_entry" <<<"$listing")" != 1 ]]; then
+    rm -f -- "$temporary"
+    release_die "RC source archive lacks the exact reviewed external-evaluation verifier sources"
+  fi
+  if ! verifier_sha="$(tar -xOzf "$temporary" "$verifier_entry" | sha256sum | awk '{print $1}')" ||
+    ! verifier_test_sha="$(tar -xOzf "$temporary" "$verifier_test_entry" | sha256sum | awk '{print $1}')"; then
+    rm -f -- "$temporary"
+    release_die "RC source archive could not hash the reviewed external-evaluation verifier sources"
+  fi
+  if [[ "$verifier_sha" != "$verifier_sha256" ]] ||
+    [[ "$verifier_test_sha" != "$verifier_test_sha256" ]]; then
+    rm -f -- "$temporary"
+    release_die "RC source archive external-evaluation verifier source identity differs"
   fi
   if grep -Eiq '(^|/)(\.git($|/)|dist($|/)|build($|/)|[^/]*\.(db|sqlite|sqlite3|key|pem|p12|pfx|jks|keystore|log)($|[-.])|\.env($|[./]))' <<<"$listing" ||
     grep -Eiq "$secret_key_path_pattern" <<<"$listing" ||
@@ -974,7 +1002,9 @@ create_rc_source_archive() {
     rm -f -- "$temporary"
     release_die "RC source archive contains a forbidden backup, binary, archive, profile, test executable, or temporary classifier candidate"
   fi
-  if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)|(^|/)testdata/round9-independent-(benign|malicious)-v1/' <<<"$listing"; then
+  restricted_listing="$(awk -v verifier="$verifier_entry" -v verifier_test="$verifier_test_entry" \
+    '$0 != verifier && $0 != verifier_test { print }' <<<"$listing")"
+  if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired)[^/]*($|/)|(^|/)testdata/round9-independent-(benign|malicious)-v1/' <<<"$restricted_listing"; then
     rm -f -- "$temporary"
     release_die "RC source archive contains restricted evaluation material"
   fi
@@ -1267,10 +1297,37 @@ finalize_rc_package() {
         release_die "signed external evaluation development evidence differs from Phase 1"
       round9_external_evaluation_manifest="$(jq -c '.payload' "$output_dir/$external_evaluation")"
       jq -e '
-        .payload.schema == "round9-external-evaluation/v2" and
+        .payload.schema == "round9-external-evaluation/v3" and
         .payload.state == "PASS" and
         .payload.counted_mock.schema == "round9-external-counted-mock/v1" and
         .payload.counted_mock.state == "PASS" and
+        .payload.public_counted_mock.schema == "round9-public-counted-mock/v1" and
+        .payload.public_counted_mock.state == "PASS" and
+        .payload.public_counted_mock.development_only == true and
+        .payload.public_counted_mock.independent_holdout == false and
+        .payload.public_counted_mock.third_party_code_executed == false and
+        .payload.public_counted_mock.manifest.schema ==
+          "round9-public-adversarial-corpus/v11" and
+        .payload.public_counted_mock.manifest.dataset ==
+          "round9-public-adversarial-v11" and
+        .payload.public_counted_mock.route_matrix == {
+          modes: ["audit", "balanced", "strict"],
+          protocols: ["openai_chat", "openai_responses"],
+          streams: ["nonstream", "stream"], routes_per_payload: 12
+        } and
+        .payload.public_counted_mock.families.historical_unique.unique_payloads == 8 and
+        .payload.public_counted_mock.families.branch_head.unique_payloads == 1 and
+        .payload.public_counted_mock.families.unmerged_candidate_carrier.unique_payloads == 1 and
+        .payload.public_counted_mock.total.unique_payloads == 10 and
+        .payload.public_counted_mock.total.serialized_executions == 120 and
+        .payload.public_counted_mock.total.local_blocked == 80 and
+        .payload.public_counted_mock.total.upstream_delta == 40 and
+        .payload.public_counted_mock.total.usage_delta == 40 and
+        (.payload.public_counted_mock.total.hard_policy_blocked >= 0 and
+          .payload.public_counted_mock.total.hard_policy_blocked <= 80) and
+        .payload.public_counted_mock.total.decision_kind_counts.audit_eligible_malicious_text == 40 and
+        .payload.public_counted_mock.total.decision_kind_counts.block_malicious_text == 80 and
+        .payload.metrics.public_counted_mock == .payload.public_counted_mock and
         .payload.execution.network_binding == {
           host_ip: "127.0.0.1", host_port: 18394, container_port: 8317
         } and
@@ -1419,7 +1476,7 @@ Round 9 Linux amd64 prerelease for CPA v7.2.95.
 - Independent benign: $(jq -r '.independent_benign.unique_semantic_samples' <<<"$round9_corpus") unique; 0 blocked; Wilson95 upper $(jq -r '.independent_benign.wilson_upper_bound_ppm' <<<"$round9_corpus") ppm
 - Paired malicious recall: $(jq -r '.paired_malicious.recall_basis_points' <<<"$round9_corpus") basis points
 - Paired label audit: manifest v$(jq -r '.paired_malicious.corpus_manifest_version' <<<"$round9_corpus"); $(jq -r '.paired_malicious.label_audit.sha256' <<<"$round9_corpus")
-- Public adversarial v10: $(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus") formal unique ($(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus") historical + $(jq -r '.public_adversarial.unique_branch_head_payloads' <<<"$round9_corpus") branch-head + $(jq -r '.public_adversarial.unique_current_prompt_like_payloads' <<<"$round9_corpus") current prompt-like); $(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus") payload records; $(jq -r '.public_adversarial.unmerged_candidate_carriers' <<<"$round9_corpus") unmerged carrier; $(jq -r '.public_adversarial.nondefault_branch_candidate_carriers' <<<"$round9_corpus") active behind branches; $(jq -r '.public_adversarial.release_assets_reviewed' <<<"$round9_corpus") Release assets reviewed / $(jq -r '.public_adversarial.release_assets_with_prompt_entries' <<<"$round9_corpus") with prompt entries; $(jq -r '.public_adversarial.candidate_carrier_executions' <<<"$round9_corpus") executed; $(jq -r '.public_adversarial.candidate_carriers_not_provided' <<<"$round9_corpus") NOT_PROVIDED; direct $(jq -r '.public_adversarial.direct_active_blocked' <<<"$round9_corpus") blocked / $(jq -r '.public_adversarial.direct_active_allowed' <<<"$round9_corpus") allowed; $(jq -r '.public_adversarial.serialized_route_executions' <<<"$round9_corpus") serialized routes
+- Public adversarial v11: $(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus") formal unique ($(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus") historical + $(jq -r '.public_adversarial.unique_branch_head_payloads' <<<"$round9_corpus") branch-head + $(jq -r '.public_adversarial.unique_current_prompt_like_payloads' <<<"$round9_corpus") current prompt-like); $(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus") payload records; $(jq -r '.public_adversarial.unmerged_candidate_carriers' <<<"$round9_corpus") unmerged carrier; $(jq -r '.public_adversarial.nondefault_branch_candidate_carriers' <<<"$round9_corpus") active behind branches; $(jq -r '.public_adversarial.release_assets_reviewed' <<<"$round9_corpus") reviewed historical Release assets / $(jq -r '.public_adversarial.release_assets_with_prompt_entries' <<<"$round9_corpus") with prompt entries; $(jq -r '.public_adversarial.release_asset_metadata_records' <<<"$round9_corpus") Release asset metadata/digest records (none downloaded/opened); $(jq -r '.public_adversarial.candidate_carrier_executions' <<<"$round9_corpus") executed; $(jq -r '.public_adversarial.candidate_carriers_not_provided' <<<"$round9_corpus") NOT_PROVIDED; direct $(jq -r '.public_adversarial.direct_active_blocked' <<<"$round9_corpus") blocked / $(jq -r '.public_adversarial.direct_active_allowed' <<<"$round9_corpus") allowed; $(jq -r '.public_adversarial.serialized_route_executions' <<<"$round9_corpus") serialized routes
 - Independent malicious recall: $(jq -r '.independent_malicious.recall_basis_points' <<<"$round9_corpus") basis points
 - Audit schema v6; Raw Capture schema v4; CPA v7.2.95 counted-Mock PASS
 
@@ -1512,7 +1569,7 @@ EOF
           "$(jq -r '.paired_malicious.schema' <<<"$round9_machine_reports")" \
           "$(jq -r '.paired_malicious.bytes' <<<"$round9_machine_reports")" \
           "$(jq -r '.paired_malicious.sha256' <<<"$round9_machine_reports")"
-        printf -- '- Public adversarial v10: payloads=%s; formal_unique=%s; historical=%s; branch_head=%s; current_prompt_like=%s; unmerged_carriers=%s; nondefault_branches=%s; release_assets=%s; release_assets_with_prompts=%s; executed=%s; NOT_PROVIDED=%s; scenario_payloads=%s; serialized_routes=%s; direct_blocked=%s; direct_allowed=%s\n' \
+        printf -- '- Public adversarial v11: payloads=%s; formal_unique=%s; historical=%s; branch_head=%s; current_prompt_like=%s; unmerged_carriers=%s; nondefault_branches=%s; release_assets=%s; release_assets_with_prompts=%s; release_asset_metadata_records=%s; executed=%s; NOT_PROVIDED=%s; scenario_payloads=%s; serialized_routes=%s; direct_blocked=%s; direct_allowed=%s\n' \
           "$(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus")" \
@@ -1522,6 +1579,7 @@ EOF
           "$(jq -r '.public_adversarial.nondefault_branch_candidate_carriers' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.release_assets_reviewed' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.release_assets_with_prompt_entries' <<<"$round9_corpus")" \
+          "$(jq -r '.public_adversarial.release_asset_metadata_records' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.candidate_carrier_executions' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.candidate_carriers_not_provided' <<<"$round9_corpus")" \
           "$(jq -r '.public_adversarial.scenario_payload_executions' <<<"$round9_corpus")" \
