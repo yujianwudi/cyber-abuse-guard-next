@@ -70,6 +70,11 @@ then exposed a deterministic container dependency gap before any candidate
 asset was built. The active identity therefore advances to `v0.16-rc.4`; the
 failed `v0.16-rc.3` identity remains immutable historical evidence.
 
+The rc.4 source correction pins both the missing `libyaml-0-2=0.2.5-1`
+dependency and `python3-yaml=6.0-3+b2` before checkout, then runs the reviewed
+contract and its unittest discovery through isolated `/usr/bin/python3 -I -B`.
+This is a source correction only until GitHub Linux checks pass.
+
 The pre-existing uncommitted Round 8 RC workflow repair was isolated without
 publication in Git stash
 `stash@{0}: wip/round8-rc3-container-shell-before-round9`. Round 9 starts from

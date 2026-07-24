@@ -8,6 +8,7 @@ reads restricted evaluation, holdout, private, blind, retired, or consumed data.
 
 from __future__ import annotations
 
+import _imp
 import argparse
 import ast
 import hashlib
@@ -27,7 +28,13 @@ def reject_repository_yaml_shadow(repository_root: Path, search_path: list[str])
             entry.relative_to(repository_root)
         except ValueError:
             continue
-        for relative in ("yaml.py", "yaml"):
+        shadow_names = (
+            "yaml.py",
+            "yaml.pyc",
+            "yaml",
+            *(f"yaml{suffix}" for suffix in _imp.extension_suffixes()),
+        )
+        for relative in shadow_names:
             candidate = entry / relative
             if candidate.exists() or candidate.is_symlink():
                 raise RuntimeError(
@@ -275,24 +282,44 @@ SAFE_GATE_COMMANDS = (
     "python3 -B scripts/round6_safe_gate_contract.py --root .",
     "./scripts/release-doc-consistency.sh",
 )
+ROUND9_SAFE_GATE_COMMANDS = (
+    "/usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .",
+    "/usr/bin/python3 -I -B -m unittest discover -s scripts -p 'round6_safe_gate_contract_test.py'",
+    "./scripts/release-doc-consistency.sh",
+)
 ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS = (
     "set -euo pipefail",
-    'package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"',
+    'libyaml_package="$RUNNER_TEMP/libyaml-0-2_0.2.5-1_amd64.deb"',
+    'pyyaml_package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"',
     "curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 "
-    "--output \"$package\" "
+    "--output \"$libyaml_package\" "
+    "'https://deb.debian.org/debian/pool/main/liby/libyaml/"
+    "libyaml-0-2_0.2.5-1_amd64.deb'",
+    "printf '%s  %s\\n' "
+    "'207b539919a47c85bcf738677f0ccf5bbac9844f2d3f158696f518be4c4ba6c4' "
+    '"$libyaml_package" | sha256sum -c -',
+    '[[ "$(stat -c \'%s\' "$libyaml_package")" == 53580 ]]',
+    '[[ "$(dpkg-deb -f "$libyaml_package" Package)" == libyaml-0-2 ]]',
+    '[[ "$(dpkg-deb -f "$libyaml_package" Version)" == 0.2.5-1 ]]',
+    '[[ "$(dpkg-deb -f "$libyaml_package" Architecture)" == amd64 ]]',
+    "curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 "
+    "--output \"$pyyaml_package\" "
     "'https://deb.debian.org/debian/pool/main/p/pyyaml/"
     "python3-yaml_6.0-3+b2_amd64.deb'",
     "printf '%s  %s\\n' "
     "'8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "
-    '"$package" | sha256sum -c -',
-    'dpkg -i "$package"',
+    '"$pyyaml_package" | sha256sum -c -',
+    'dpkg -i "$libyaml_package"',
+    'dpkg -i "$pyyaml_package"',
+    '[[ "$(dpkg-query -W -f=\'${Version}\' libyaml-0-2)" == 0.2.5-1 ]]',
+    '[[ "$(dpkg-query -W -f=\'${Architecture}\' libyaml-0-2)" == amd64 ]]',
     '[[ "$(dpkg-query -W -f=\'${Version}\' python3-yaml)" == \'6.0-3+b2\' ]]',
     '[[ "$(dpkg-query -W -f=\'${Architecture}\' python3-yaml)" == amd64 ]]',
-    "[[ \"$(python3 -I -B -c 'import pathlib, yaml; "
+    "[[ \"$(/usr/bin/python3 -I -B -c 'import pathlib, yaml; "
     "print(pathlib.Path(yaml.__file__).resolve())')\" == "
     "/usr/lib/python3/dist-packages/yaml/__init__.py ]]",
-    "python3 -I -B -c 'import yaml; assert yaml.__version__ == \"6.0\"'",
-    'rm -f -- "$package"',
+    "/usr/bin/python3 -I -B -c 'import yaml; assert yaml.__version__ == \"6.0\"'",
+    'rm -f -- "$libyaml_package" "$pyyaml_package"',
 )
 SAFE_WORKFLOW_ENV_LINES = {
     "GOTOOLCHAIN: go1.26.4",
@@ -1130,7 +1157,7 @@ ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
 ROUND9_GATE_WORKFLOW_SHA256 = "2c71516851b1a2743c3d23434c6e330eafd44ee7cea2930fe8c3697fbb2a979a"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
-ROUND9_RC_WORKFLOW_SHA256 = "39fa2b0b8aa5ecee384523f0184fd6c4d5f9f6fb8fd068fb60da7f51b6e1a356"
+ROUND9_RC_WORKFLOW_SHA256 = "286e8789ce41786041c998a12f6a1bfc18f7e72ac4b9e30b5dffcf7fb8eac07e"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
 ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT = (
     "scripts/round9_independent_audit_contract_test.py"
@@ -1474,7 +1501,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "992a9456583233eb46aa9e581e17f6ba4daaca7bb632f364b4abece41d49515c"
+ROUND6_SAFE_GATE_TEST_SHA256 = "20025584db24d8cbb95421d8c4c2c217d33c42a192cc75373b7b9a3f9d49da33"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "d51fe316a686c1b4dd629f6a7b63f4159b882095811fcdea3311255527bd5da1"
 
 
@@ -2675,6 +2702,16 @@ def is_safe_gate_step(step: str) -> bool:
         return False
     commands = tuple(line.strip() for line in runs[0].splitlines() if line.strip())
     return commands == SAFE_GATE_COMMANDS
+
+
+def is_round9_safe_gate_step(step: str) -> bool:
+    if re.search(r"(?m)^\s+if:\s*", step):
+        return False
+    runs = yaml_run_blocks(step)
+    if len(runs) != 1:
+        return False
+    commands = tuple(line.strip() for line in runs[0].splitlines() if line.strip())
+    return commands == ROUND9_SAFE_GATE_COMMANDS
 
 
 def is_round9_safe_gate_bootstrap_step(step: str) -> bool:
@@ -7659,6 +7696,16 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             source,
             f"jobs.{job_name}.defaults.run.shell",
         )
+        for step_index, step_node in enumerate(
+            yaml_sequence(job.get("steps"), source, f"jobs.{job_name}.steps")
+        ):
+            step = yaml_mapping(
+                step_node, source, f"jobs.{job_name}.steps[{step_index}]"
+            )
+            if "continue-on-error" in step:
+                raise ContractError(
+                    f"Round 9 RC {job_name} steps may not define continue-on-error"
+                )
 
     publish = require_yaml_keys(
         jobs["publish"],
@@ -8034,7 +8081,7 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
                 raise ContractError(
                     f"Round 9 RC job {job_name} must install the exact hash-bound Safe Gate runtime before checkout"
                 )
-            if checkout_index + 1 >= len(steps) or not is_safe_gate_step(
+            if checkout_index + 1 >= len(steps) or not is_round9_safe_gate_step(
                 steps[checkout_index + 1]
             ):
                 raise ContractError(

@@ -13,8 +13,9 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;
   no candidate asset, attestation, or GitHub Release was created.
 - Bootstrap the exact Safe Gate in both containerized Round 9 build paths with
-  Debian `python3-yaml=6.0-3+b2`, verify both the package and module versions,
-  and fail closed when any bootstrap command or pin drifts.
+  SHA-bound Debian `libyaml-0-2=0.2.5-1` and `python3-yaml=6.0-3+b2`, verify
+  package metadata, install order, installed versions, module identity, and
+  isolated Python execution, and fail closed when any command or pin drifts.
 - Move the complete active Round 9 workflow, Host, evaluator, audit, artifact,
   test, and documentation identity to the unused `v0.16-rc.4` namespace. The
   old Tag is never moved, deleted, or reused.

@@ -75,13 +75,15 @@ The run produced zero Actions artifacts and no Release. The Tag is historical
 evidence and is never moved or reused; the complete active identity is now
 `v0.16-rc.4`.
 
-Each containerized rc.4 job installs the exact Debian
-`python3-yaml_6.0-3+b2_amd64.deb` before source checkout and verifies SHA-256
-`8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2`,
-package version, architecture, module version, and system module path. The job
-run shell is fixed to Bash. Restricted checkout is still followed immediately
-by the unchanged Safe Gate, and the gate rejects repository-local `yaml.py` or
-`yaml/` import shadows.
+Each containerized rc.4 job installs the exact Debian dependency pair
+`libyaml-0-2_0.2.5-1_amd64.deb` and `python3-yaml_6.0-3+b2_amd64.deb` before
+source checkout. Both packages are SHA-256 bound; the native dependency is also
+checked for exact size, package name, version, and architecture before install,
+and both installed versions plus the PyYAML system module path are rechecked.
+The job run shell is fixed to Bash. Restricted checkout is still followed
+immediately by the updated hash-bound Safe Gate under isolated Python. The gate
+rejects repository-local `yaml.py`, `yaml.pyc`, `yaml/`, and compatible extension
+module import shadows.
 
 The current engineering chain is `round9-gate.yml` → the private-candidate phase
 of `round9-release-rc.yml` → `round9-host-validation.yml`. There is no enabled

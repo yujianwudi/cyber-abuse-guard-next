@@ -241,15 +241,25 @@ jobs:
       - name: Install exact Safe Gate runtime before checkout
         run: |
           set -euo pipefail
-          package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"
-          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$package" 'https://deb.debian.org/debian/pool/main/p/pyyaml/python3-yaml_6.0-3+b2_amd64.deb'
-          printf '%s  %s\n' '8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "$package" | sha256sum -c -
-          dpkg -i "$package"
+          libyaml_package="$RUNNER_TEMP/libyaml-0-2_0.2.5-1_amd64.deb"
+          pyyaml_package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$libyaml_package" 'https://deb.debian.org/debian/pool/main/liby/libyaml/libyaml-0-2_0.2.5-1_amd64.deb'
+          printf '%s  %s\n' '207b539919a47c85bcf738677f0ccf5bbac9844f2d3f158696f518be4c4ba6c4' "$libyaml_package" | sha256sum -c -
+          [[ "$(stat -c '%s' "$libyaml_package")" == 53580 ]]
+          [[ "$(dpkg-deb -f "$libyaml_package" Package)" == libyaml-0-2 ]]
+          [[ "$(dpkg-deb -f "$libyaml_package" Version)" == 0.2.5-1 ]]
+          [[ "$(dpkg-deb -f "$libyaml_package" Architecture)" == amd64 ]]
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$pyyaml_package" 'https://deb.debian.org/debian/pool/main/p/pyyaml/python3-yaml_6.0-3+b2_amd64.deb'
+          printf '%s  %s\n' '8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "$pyyaml_package" | sha256sum -c -
+          dpkg -i "$libyaml_package"
+          dpkg -i "$pyyaml_package"
+          [[ "$(dpkg-query -W -f='${Version}' libyaml-0-2)" == 0.2.5-1 ]]
+          [[ "$(dpkg-query -W -f='${Architecture}' libyaml-0-2)" == amd64 ]]
           [[ "$(dpkg-query -W -f='${Version}' python3-yaml)" == '6.0-3+b2' ]]
           [[ "$(dpkg-query -W -f='${Architecture}' python3-yaml)" == amd64 ]]
-          [[ "$(python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
-          python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
-          rm -f -- "$package"
+          [[ "$(/usr/bin/python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
+          /usr/bin/python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
+          rm -f -- "$libyaml_package" "$pyyaml_package"
 
       - name: Checkout exact Round 9 tag with restricted data excluded
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -292,8 +302,8 @@ jobs:
 
       - name: Run exact Safe Gate after restricted checkout
         run: |
-          python3 -B scripts/round6_safe_gate_contract_test.py
-          python3 -B scripts/round6_safe_gate_contract.py --root .
+          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .
+          /usr/bin/python3 -I -B -m unittest discover -s scripts -p 'round6_safe_gate_contract_test.py'
           ./scripts/release-doc-consistency.sh
 
       - name: Recheck Round 9 external-evaluation and independent-audit contracts
@@ -560,15 +570,25 @@ jobs:
       - name: Install exact Safe Gate runtime before checkout
         run: |
           set -euo pipefail
-          package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"
-          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$package" 'https://deb.debian.org/debian/pool/main/p/pyyaml/python3-yaml_6.0-3+b2_amd64.deb'
-          printf '%s  %s\n' '8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "$package" | sha256sum -c -
-          dpkg -i "$package"
+          libyaml_package="$RUNNER_TEMP/libyaml-0-2_0.2.5-1_amd64.deb"
+          pyyaml_package="$RUNNER_TEMP/python3-yaml_6.0-3+b2_amd64.deb"
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$libyaml_package" 'https://deb.debian.org/debian/pool/main/liby/libyaml/libyaml-0-2_0.2.5-1_amd64.deb'
+          printf '%s  %s\n' '207b539919a47c85bcf738677f0ccf5bbac9844f2d3f158696f518be4c4ba6c4' "$libyaml_package" | sha256sum -c -
+          [[ "$(stat -c '%s' "$libyaml_package")" == 53580 ]]
+          [[ "$(dpkg-deb -f "$libyaml_package" Package)" == libyaml-0-2 ]]
+          [[ "$(dpkg-deb -f "$libyaml_package" Version)" == 0.2.5-1 ]]
+          [[ "$(dpkg-deb -f "$libyaml_package" Architecture)" == amd64 ]]
+          curl --fail --location --proto '=https' --proto-redir '=https' --tlsv1.2 --output "$pyyaml_package" 'https://deb.debian.org/debian/pool/main/p/pyyaml/python3-yaml_6.0-3+b2_amd64.deb'
+          printf '%s  %s\n' '8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2' "$pyyaml_package" | sha256sum -c -
+          dpkg -i "$libyaml_package"
+          dpkg -i "$pyyaml_package"
+          [[ "$(dpkg-query -W -f='${Version}' libyaml-0-2)" == 0.2.5-1 ]]
+          [[ "$(dpkg-query -W -f='${Architecture}' libyaml-0-2)" == amd64 ]]
           [[ "$(dpkg-query -W -f='${Version}' python3-yaml)" == '6.0-3+b2' ]]
           [[ "$(dpkg-query -W -f='${Architecture}' python3-yaml)" == amd64 ]]
-          [[ "$(python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
-          python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
-          rm -f -- "$package"
+          [[ "$(/usr/bin/python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
+          /usr/bin/python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
+          rm -f -- "$libyaml_package" "$pyyaml_package"
 
       - name: Checkout exact Round 9 tag with restricted data excluded
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -611,8 +631,8 @@ jobs:
 
       - name: Run exact Safe Gate after restricted checkout
         run: |
-          python3 -B scripts/round6_safe_gate_contract_test.py
-          python3 -B scripts/round6_safe_gate_contract.py --root .
+          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .
+          /usr/bin/python3 -I -B -m unittest discover -s scripts -p 'round6_safe_gate_contract_test.py'
           ./scripts/release-doc-consistency.sh
 
       - name: Recheck Round 9 external-evaluation and independent-audit contracts

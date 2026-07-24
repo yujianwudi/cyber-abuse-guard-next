@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import _imp
 import ast
 import hashlib
 import json
@@ -113,7 +114,13 @@ class Round6SafeGateContractTest(unittest.TestCase):
             root = Path(directory)
             scripts = root / "scripts"
             scripts.mkdir()
-            for relative in ("yaml.py", "yaml"):
+            shadow_names = (
+                "yaml.py",
+                "yaml.pyc",
+                "yaml",
+                *(f"yaml{suffix}" for suffix in _imp.extension_suffixes()),
+            )
+            for relative in shadow_names:
                 candidate = scripts / relative
                 if candidate.suffix:
                     candidate.write_text(
@@ -130,6 +137,27 @@ class Round6SafeGateContractTest(unittest.TestCase):
                     candidate.rmdir()
                 else:
                     candidate.unlink()
+
+    def test_isolated_python_does_not_import_repository_sitecustomize(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            marker = root / "sitecustomize-executed"
+            (root / "sitecustomize.py").write_text(
+                "from pathlib import Path\n"
+                f"Path({str(marker)!r}).write_text('executed', encoding='utf-8')\n",
+                encoding="utf-8",
+            )
+            contract = Path(__file__).with_name("round6_safe_gate_contract.py").resolve()
+            completed = subprocess.run(
+                [sys.executable, "-I", "-B", str(contract), "--help"],
+                cwd=root,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stdout)
+            self.assertFalse(marker.exists())
 
     def test_round9_malicious_text_producer_static_closure_is_hash_bound(self):
         root = Path(__file__).resolve().parent.parent
@@ -4324,6 +4352,19 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         root = Path(__file__).resolve().parent.parent
         path = root / ".github/workflows/round9-release-rc.yml"
         original = path.read_text(encoding="utf-8")
+
+        def replace_occurrence(
+            text: str, old: str, new: str, occurrence: int
+        ) -> str:
+            start = 0
+            for _ in range(occurrence):
+                index = text.find(old, start)
+                if index < 0:
+                    return text
+                start = index + len(old)
+            return text[:index] + new + text[index + len(old) :]
+
+        safe_gate_name = "      - name: Run exact Safe Gate after restricted checkout\n"
         mutations = (
             original.replace(
                 "      ci_run_id: ${{ steps.admit.outputs.ci_run_id }}\n",
@@ -4393,6 +4434,102 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "0" * 64,
                 "8d0db0b3099298fe039b94e4c52a6987798a90d23b80de3ac13c3cb75cf622a2",
                 1,
+            ),
+            replace_occurrence(
+                original,
+                "207b539919a47c85bcf738677f0ccf5bbac9844f2d3f158696f518be4c4ba6c4",
+                "0" * 64,
+                1,
+            ),
+            replace_occurrence(
+                original,
+                "207b539919a47c85bcf738677f0ccf5bbac9844f2d3f158696f518be4c4ba6c4",
+                "0" * 64,
+                2,
+            ),
+            replace_occurrence(original, '== 53580 ]]', '== 53581 ]]', 1),
+            replace_occurrence(original, '== 53580 ]]', '== 53581 ]]', 2),
+            replace_occurrence(
+                original,
+                'Package)" == libyaml-0-2 ]]',
+                'Package)" == libyaml-0-3 ]]',
+                1,
+            ),
+            replace_occurrence(
+                original,
+                'Package)" == libyaml-0-2 ]]',
+                'Package)" == libyaml-0-3 ]]',
+                2,
+            ),
+            replace_occurrence(
+                original,
+                'Version)" == 0.2.5-1 ]]',
+                'Version)" == 0.2.5-2 ]]',
+                1,
+            ),
+            replace_occurrence(
+                original,
+                'Version)" == 0.2.5-1 ]]',
+                'Version)" == 0.2.5-2 ]]',
+                2,
+            ),
+            replace_occurrence(
+                original,
+                'Architecture)" == amd64 ]]',
+                'Architecture)" == arm64 ]]',
+                1,
+            ),
+            replace_occurrence(
+                original,
+                'Architecture)" == amd64 ]]',
+                'Architecture)" == arm64 ]]',
+                2,
+            ),
+            replace_occurrence(
+                original, '          dpkg -i "$libyaml_package"\n', "", 1
+            ),
+            replace_occurrence(
+                original, '          dpkg -i "$libyaml_package"\n', "", 2
+            ),
+            replace_occurrence(
+                original,
+                safe_gate_name,
+                "      - name: Unreviewed step before Safe Gate\n"
+                "        run: /usr/bin/true\n\n"
+                + safe_gate_name,
+                1,
+            ),
+            replace_occurrence(
+                original,
+                safe_gate_name,
+                "      - name: Unreviewed step before Safe Gate\n"
+                "        run: /usr/bin/true\n\n"
+                + safe_gate_name,
+                2,
+            ),
+            replace_occurrence(
+                original,
+                safe_gate_name,
+                safe_gate_name + "        continue-on-error: ${{ true }}\n",
+                1,
+            ),
+            replace_occurrence(
+                original,
+                safe_gate_name,
+                safe_gate_name + "        continue-on-error: ${{ true }}\n",
+                2,
+            ),
+            replace_occurrence(
+                original,
+                "          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .\n",
+                "          python3 -B scripts/round6_safe_gate_contract.py --root .\n",
+                1,
+            ),
+            replace_occurrence(
+                original,
+                "          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .\n",
+                "          python3 -B scripts/round6_safe_gate_contract.py --root .\n",
+                2,
             ),
             original.replace(
                 "        shell: bash\n",
