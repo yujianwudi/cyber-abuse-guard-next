@@ -284,7 +284,7 @@ SAFE_GATE_COMMANDS = (
 )
 ROUND9_SAFE_GATE_COMMANDS = (
     "/usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .",
-    "/usr/bin/python3 -I -B -m unittest discover -s scripts -p 'round6_safe_gate_contract_test.py'",
+    "/usr/bin/python3 -I -B scripts/round6_safe_gate_contract_test.py",
     "./scripts/release-doc-consistency.sh",
 )
 ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS = (
@@ -315,10 +315,12 @@ ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS = (
     '[[ "$(dpkg-query -W -f=\'${Architecture}\' libyaml-0-2)" == amd64 ]]',
     '[[ "$(dpkg-query -W -f=\'${Version}\' python3-yaml)" == \'6.0-3+b2\' ]]',
     '[[ "$(dpkg-query -W -f=\'${Architecture}\' python3-yaml)" == amd64 ]]',
-    "[[ \"$(/usr/bin/python3 -I -B -c 'import pathlib, yaml; "
-    "print(pathlib.Path(yaml.__file__).resolve())')\" == "
-    "/usr/lib/python3/dist-packages/yaml/__init__.py ]]",
-    "/usr/bin/python3 -I -B -c 'import yaml; assert yaml.__version__ == \"6.0\"'",
+    "/usr/bin/python3 -I -B - <<'PY'",
+    "import pathlib",
+    "import yaml",
+    'assert pathlib.Path(yaml.__file__).resolve() == pathlib.Path("/usr/lib/python3/dist-packages/yaml/__init__.py")',
+    'assert yaml.__version__ == "6.0"',
+    "PY",
     'rm -f -- "$libyaml_package" "$pyyaml_package"',
 )
 SAFE_WORKFLOW_ENV_LINES = {
@@ -1157,7 +1159,7 @@ ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
 ROUND9_GATE_WORKFLOW_SHA256 = "2c71516851b1a2743c3d23434c6e330eafd44ee7cea2930fe8c3697fbb2a979a"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
-ROUND9_RC_WORKFLOW_SHA256 = "286e8789ce41786041c998a12f6a1bfc18f7e72ac4b9e30b5dffcf7fb8eac07e"
+ROUND9_RC_WORKFLOW_SHA256 = "e764ebad26bd11e849774dfa8732e961918b4528d6e4a0108ad8e5b2c127f816"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
 ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT = (
     "scripts/round9_independent_audit_contract_test.py"
@@ -1501,7 +1503,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "20025584db24d8cbb95421d8c4c2c217d33c42a192cc75373b7b9a3f9d49da33"
+ROUND6_SAFE_GATE_TEST_SHA256 = "768b3358bc8b77529467019aa3fac1435f9c9aabc7d433a0c473862536be1691"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "d51fe316a686c1b4dd629f6a7b63f4159b882095811fcdea3311255527bd5da1"
 
 

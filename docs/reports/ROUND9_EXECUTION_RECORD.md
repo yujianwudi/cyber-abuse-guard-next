@@ -54,6 +54,7 @@ successor_rc3_tag: v0.16-rc.3 / ANNOTATED_IMMUTABLE / object a70e30fe5b66a6060e0
 successor_rc3_phase1: PROVIDED_FAIL / run 30118817188 / missing-pyyaml-at-safe-gate-import / zero-artifacts
 successor_candidate_tag: v0.16-rc.4 / NOT_CREATED
 successor_release: NOT_CREATED
+successor_rc4_pr3_initial_checks: PROVIDED_FAIL / head edde8f7aee1bb264e07915b0992adff1914caa46 / CI 30122937438 + Round9 30122937432 + CodeQL 30122937442 / dynamic-python-read-only-contract / superseded-by-source-fix
 successor_final_candidate_freeze: NOT_ESTABLISHED
 successor_independent_evidence: NOT_PROVIDED
 successor_external_ledger_ruleset: 19669641 / round9-eval-ledger-immutable / active / no-bypass
@@ -72,7 +73,7 @@ failed `v0.16-rc.3` identity remains immutable historical evidence.
 
 The rc.4 source correction pins both the missing `libyaml-0-2=0.2.5-1`
 dependency and `python3-yaml=6.0-3+b2` before checkout, then runs the reviewed
-contract and its unittest discovery through isolated `/usr/bin/python3 -I -B`.
+contract and its hash-bound test runner through isolated `/usr/bin/python3 -I -B`.
 This is a source correction only until GitHub Linux checks pass.
 
 The pre-existing uncommitted Round 8 RC workflow repair was isolated without

@@ -5,6 +5,7 @@ from __future__ import annotations
 import _imp
 import ast
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -20,6 +21,16 @@ from pathlib import Path
 from unittest import mock
 
 sys.dont_write_bytecode = True
+
+_CONTRACT_PATH = Path(__file__).with_name("round6_safe_gate_contract.py").resolve()
+_CONTRACT_SPEC = importlib.util.spec_from_file_location(
+    "round6_safe_gate_contract", _CONTRACT_PATH
+)
+if _CONTRACT_SPEC is None or _CONTRACT_SPEC.loader is None:
+    raise RuntimeError("cannot load the reviewed Safe Gate contract by exact path")
+_CONTRACT_MODULE = importlib.util.module_from_spec(_CONTRACT_SPEC)
+sys.modules[_CONTRACT_SPEC.name] = _CONTRACT_MODULE
+_CONTRACT_SPEC.loader.exec_module(_CONTRACT_MODULE)
 
 from round6_safe_gate_contract import (
     ACTIONLINT_CONFIG_PATH,
@@ -4531,6 +4542,30 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "          python3 -B scripts/round6_safe_gate_contract.py --root .\n",
                 2,
             ),
+            replace_occurrence(
+                original,
+                "          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract_test.py\n",
+                "          python3 -B scripts/round6_safe_gate_contract_test.py\n",
+                1,
+            ),
+            replace_occurrence(
+                original,
+                "          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract_test.py\n",
+                "          python3 -B scripts/round6_safe_gate_contract_test.py\n",
+                2,
+            ),
+            replace_occurrence(
+                original,
+                "          /usr/bin/python3 -I -B - <<'PY'\n",
+                "          /usr/bin/python3 -I -B -c 'import yaml' <<'PY'\n",
+                1,
+            ),
+            replace_occurrence(
+                original,
+                "          /usr/bin/python3 -I -B - <<'PY'\n",
+                "          /usr/bin/python3 -I -B -c 'import yaml' <<'PY'\n",
+                2,
+            ),
             original.replace(
                 "        shell: bash\n",
                 "        shell: sh\n",
@@ -4545,6 +4580,12 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "/usr/lib/python3/dist-packages/yaml/__init__.py",
                 "/tmp/yaml/__init__.py",
                 1,
+            ),
+            replace_occurrence(
+                original,
+                "/usr/lib/python3/dist-packages/yaml/__init__.py",
+                "/tmp/yaml/__init__.py",
+                2,
             ),
             original.replace(
                 "    if: ${{ needs.admission.outputs.publication_permitted == 'true' }}",

@@ -257,8 +257,12 @@ jobs:
           [[ "$(dpkg-query -W -f='${Architecture}' libyaml-0-2)" == amd64 ]]
           [[ "$(dpkg-query -W -f='${Version}' python3-yaml)" == '6.0-3+b2' ]]
           [[ "$(dpkg-query -W -f='${Architecture}' python3-yaml)" == amd64 ]]
-          [[ "$(/usr/bin/python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
-          /usr/bin/python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
+          /usr/bin/python3 -I -B - <<'PY'
+          import pathlib
+          import yaml
+          assert pathlib.Path(yaml.__file__).resolve() == pathlib.Path("/usr/lib/python3/dist-packages/yaml/__init__.py")
+          assert yaml.__version__ == "6.0"
+          PY
           rm -f -- "$libyaml_package" "$pyyaml_package"
 
       - name: Checkout exact Round 9 tag with restricted data excluded
@@ -303,7 +307,7 @@ jobs:
       - name: Run exact Safe Gate after restricted checkout
         run: |
           /usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .
-          /usr/bin/python3 -I -B -m unittest discover -s scripts -p 'round6_safe_gate_contract_test.py'
+          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract_test.py
           ./scripts/release-doc-consistency.sh
 
       - name: Recheck Round 9 external-evaluation and independent-audit contracts
@@ -586,8 +590,12 @@ jobs:
           [[ "$(dpkg-query -W -f='${Architecture}' libyaml-0-2)" == amd64 ]]
           [[ "$(dpkg-query -W -f='${Version}' python3-yaml)" == '6.0-3+b2' ]]
           [[ "$(dpkg-query -W -f='${Architecture}' python3-yaml)" == amd64 ]]
-          [[ "$(/usr/bin/python3 -I -B -c 'import pathlib, yaml; print(pathlib.Path(yaml.__file__).resolve())')" == /usr/lib/python3/dist-packages/yaml/__init__.py ]]
-          /usr/bin/python3 -I -B -c 'import yaml; assert yaml.__version__ == "6.0"'
+          /usr/bin/python3 -I -B - <<'PY'
+          import pathlib
+          import yaml
+          assert pathlib.Path(yaml.__file__).resolve() == pathlib.Path("/usr/lib/python3/dist-packages/yaml/__init__.py")
+          assert yaml.__version__ == "6.0"
+          PY
           rm -f -- "$libyaml_package" "$pyyaml_package"
 
       - name: Checkout exact Round 9 tag with restricted data excluded
@@ -632,7 +640,7 @@ jobs:
       - name: Run exact Safe Gate after restricted checkout
         run: |
           /usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .
-          /usr/bin/python3 -I -B -m unittest discover -s scripts -p 'round6_safe_gate_contract_test.py'
+          /usr/bin/python3 -I -B scripts/round6_safe_gate_contract_test.py
           ./scripts/release-doc-consistency.sh
 
       - name: Recheck Round 9 external-evaluation and independent-audit contracts
