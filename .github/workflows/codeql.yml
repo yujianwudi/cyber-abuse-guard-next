@@ -1,0 +1,93 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  schedule:
+    - cron: '23 3 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.26.4'
+
+jobs:
+  analyze:
+    name: Analyze Go on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout reviewed source boundary
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+
+      - name: Recheck the Round6 restricted-data boundary
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        with:
+          languages: go
+          build-mode: manual
+
+      - name: Build reviewed Go source for CodeQL
+        run: go build -mod=readonly -tags=sqlite_omit_load_extension ./cmd/cyber-abuse-guard ./internal/... ./rules
+
+      - name: Analyze Go
+        uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        with:
+          category: /language:go

@@ -1,0 +1,283 @@
+name: Promote verified v0.15 release
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_commit:
+        description: Exact 40-character v0.15 source commit
+        required: true
+        type: string
+      expected_tree:
+        description: Exact 40-character v0.15 source tree
+        required: true
+        type: string
+      authorize_promotion:
+        description: Publish the already verified draft as stable/latest v0.15
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote-v0.15
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    permissions:
+      actions: read
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release_id: ${{ steps.verify.outputs.release_id }}
+      asset_fingerprint: ${{ steps.verify.outputs.asset_fingerprint }}
+      metadata_fingerprint: ${{ steps.verify.outputs.metadata_fingerprint }}
+      formal_run_id: ${{ steps.verify.outputs.formal_run_id }}
+    steps:
+      - name: Verify immutable draft, provenance, and release assets
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          AUTHORIZED: ${{ inputs.authorize_promotion }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AUTHORIZED" == true ]]
+          [[ "$DISPATCH_REF" == refs/tags/v0.15 ]]
+          [[ "$DISPATCH_SHA" == "$EXPECTED_COMMIT" ]]
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_COMMIT" ]]
+          [[ "$WORKFLOW_REF" == "${GITHUB_REPOSITORY}/.github/workflows/release-promote.yml@refs/tags/v0.15" ]]
+
+          main_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main")"
+          [[ "$(jq -r '.object.type' <<<"$main_ref")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$main_ref")" == "$EXPECTED_COMMIT" ]]
+
+          releases="$RUNNER_TEMP/releases.json"
+          gh api --paginate --slurp \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
+          release="$(jq -ce '
+            [ .[][] | select(.tag_name == "v0.15") ] |
+            if length == 1 then .[0] else error("expected exactly one v0.15 release") end
+          ' "$releases")"
+          [[ "$(jq -r '.draft' <<<"$release")" == true ]]
+          [[ "$(jq -r '.prerelease' <<<"$release")" == false ]]
+          [[ "$(jq -r '.name' <<<"$release")" == v0.15 ]]
+
+          expected_assets="$(cat <<'EOF'
+          build-metadata.json
+          checksums.txt
+          cyber-abuse-guard-v0.15-audit-bundle.zip
+          cyber-abuse-guard-v0.15-source.tar.gz
+          cyber-abuse-guard-v0.15-source.tar.gz.sha256
+          cyber-abuse-guard-v0.15.so
+          cyber-abuse-guard-v0.15.so.sha256
+          cyber-abuse-guard_0.15_linux_amd64.zip
+          formal-release-attestation.json
+          formal-release-attestation.json.sha256
+          release-evidence-final.md
+          release-evidence-final.md.sha256
+          release-test-summary.txt
+          release-test-summary.txt.sha256
+          round6-prerelease-attestation.json
+          round6-prerelease-attestation.json.sha256
+          ruleset-manifest.json
+          ruleset.sha256
+          sbom.cdx.json
+          EOF
+          )"
+          actual_assets="$(jq -r '.assets[].name' <<<"$release" | LC_ALL=C sort)"
+          [[ "$actual_assets" == "$expected_assets" ]]
+
+          tag_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.15")"
+          [[ "$(jq -r '.object.type' <<<"$tag_ref")" == tag ]]
+          tag_object_sha="$(jq -er '.object.sha | select(test("^[0-9a-f]{40}$"))' <<<"$tag_ref")"
+          tag_object="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_object")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$tag_object")" == "$EXPECTED_COMMIT" ]]
+
+          download_asset() {
+            local name="$1"
+            local destination="$2"
+            local asset_id
+            asset_id="$(jq -er --arg name "$name" '
+              [ .assets[] | select(.name == $name) ] |
+              if length == 1 then .[0].id else error("missing or duplicate release asset: " + $name) end
+            ' <<<"$release")"
+            gh api \
+              --header 'Accept: application/octet-stream' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" >"$destination"
+          }
+
+          verify_dir="$RUNNER_TEMP/release-verify"
+          mkdir -p "$verify_dir"
+          while IFS= read -r name; do
+            download_asset "$name" "$verify_dir/$name"
+          done <<<"$expected_assets"
+          (cd "$verify_dir" && sha256sum --check --strict formal-release-attestation.json.sha256)
+          (cd "$verify_dir" && sha256sum --check --strict round6-prerelease-attestation.json.sha256)
+          (cd "$verify_dir" && sha256sum --check --strict release-evidence-final.md.sha256)
+
+          formal="$verify_dir/formal-release-attestation.json"
+          jq -e \
+            --arg commit "$EXPECTED_COMMIT" \
+            --arg tree "$EXPECTED_TREE" '
+              .schema_version == 1 and
+              .status == "FORMAL_GATES_PASS / DRAFT_RELEASE_ONLY" and
+              .version == "0.15" and .tag == "v0.15" and
+              .commit == $commit and .tree == $tree and
+              (.candidate_attestation_sha256 | test("^[0-9a-f]{64}$")) and
+              ([.artifacts[] | test("^[0-9a-f]{64}$")] | all) and
+              .workflow.repository == env.GITHUB_REPOSITORY and
+              .workflow.ref == (env.GITHUB_REPOSITORY + "/.github/workflows/release.yml@refs/tags/v0.15") and
+              .workflow.sha == $commit and
+              (.workflow.run_id | type == "number")
+            ' "$formal" >/dev/null
+          [[ "$(sha256sum "$verify_dir/round6-prerelease-attestation.json" | awk '{print $1}')" == \
+            "$(jq -r '.candidate_attestation_sha256' "$formal")" ]]
+          [[ "$(sha256sum "$verify_dir/cyber-abuse-guard-v0.15.so" | awk '{print $1}')" == \
+            "$(jq -r '.artifacts.so_sha256' "$formal")" ]]
+          [[ "$(sha256sum "$verify_dir/cyber-abuse-guard_0.15_linux_amd64.zip" | awk '{print $1}')" == \
+            "$(jq -r '.artifacts.store_zip_sha256' "$formal")" ]]
+          [[ "$(sha256sum "$verify_dir/release-evidence-final.md" | awk '{print $1}')" == \
+            "$(jq -r '.artifacts.release_evidence_sha256' "$formal")" ]]
+          jq -e --rawfile reviewed_body "$verify_dir/release-evidence-final.md" \
+            '.body == $reviewed_body and (.target_commitish | type == "string" and length > 0)' \
+            <<<"$release" >/dev/null
+
+          formal_run_id="$(jq -r '.workflow.run_id' "$formal")"
+          formal_run="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${formal_run_id}")"
+          jq -e \
+            --arg commit "$EXPECTED_COMMIT" \
+            --arg repository "$GITHUB_REPOSITORY" '
+              .name == "Release" and .path == ".github/workflows/release.yml" and
+              .event == "push" and .head_sha == $commit and
+              .status == "completed" and .conclusion == "success" and
+              .repository.full_name == $repository
+            ' <<<"$formal_run" >/dev/null
+
+          release_id="$(jq -er '.id | select(type == "number")' <<<"$release")"
+          asset_fingerprint="$(jq -S -c '[.assets[] | {id,name,size,digest,state}] | sort_by(.name)' \
+            <<<"$release" | sha256sum | awk '{print $1}')"
+          metadata_fingerprint="$(jq -S -c \
+            '{tag_name,name,body,target_commitish,draft,prerelease}' \
+            <<<"$release" | sha256sum | awk '{print $1}')"
+          # shellcheck disable=SC2129
+          {
+            printf 'release_id=%s\n' "$release_id"
+            printf 'asset_fingerprint=%s\n' "$asset_fingerprint"
+            printf 'metadata_fingerprint=%s\n' "$metadata_fingerprint"
+            printf 'formal_run_id=%s\n' "$formal_run_id"
+          } >>"$GITHUB_OUTPUT"
+      - name: Download the exact formal workflow artifact
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: cyber-abuse-guard-v0.15-release
+          path: ${{ runner.temp }}/formal-run-assets
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.verify.outputs.formal_run_id }}
+      - name: Prove every draft asset is byte-identical to the formal workflow artifact
+        run: |
+          set -euo pipefail
+          draft_dir="$RUNNER_TEMP/release-verify"
+          formal_dir="$RUNNER_TEMP/formal-run-assets"
+          draft_files="$RUNNER_TEMP/draft-files.txt"
+          formal_files="$RUNNER_TEMP/formal-files.txt"
+          find "$draft_dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort >"$draft_files"
+          find "$formal_dir" -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort >"$formal_files"
+          diff -u "$draft_files" "$formal_files"
+          while IFS= read -r name; do
+            [[ -f "$draft_dir/$name" && ! -L "$draft_dir/$name" ]]
+            [[ -f "$formal_dir/$name" && ! -L "$formal_dir/$name" ]]
+            cmp -s "$draft_dir/$name" "$formal_dir/$name"
+          done <"$draft_files"
+
+  promote:
+    needs: verify
+    environment: formal-release-promotion
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Reverify immutable asset set and publish the same draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.verify.outputs.release_id }}
+          EXPECTED_ASSET_FINGERPRINT: ${{ needs.verify.outputs.asset_fingerprint }}
+          EXPECTED_METADATA_FINGERPRINT: ${{ needs.verify.outputs.metadata_fingerprint }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$EXPECTED_ASSET_FINGERPRINT" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_METADATA_FINGERPRINT" =~ ^[0-9a-f]{64}$ ]]
+          release="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}")"
+          [[ "$(jq -r '.tag_name' <<<"$release")" == v0.15 ]]
+          [[ "$(jq -r '.draft' <<<"$release")" == true ]]
+          [[ "$(jq -r '.prerelease' <<<"$release")" == false ]]
+          actual_fingerprint="$(jq -S -c '[.assets[] | {id,name,size,digest,state}] | sort_by(.name)' \
+            <<<"$release" | sha256sum | awk '{print $1}')"
+          [[ "$actual_fingerprint" == "$EXPECTED_ASSET_FINGERPRINT" ]]
+          actual_metadata_fingerprint="$(jq -S -c \
+            '{tag_name,name,body,target_commitish,draft,prerelease}' \
+            <<<"$release" | sha256sum | awk '{print $1}')"
+          [[ "$actual_metadata_fingerprint" == "$EXPECTED_METADATA_FINGERPRINT" ]]
+
+          tag_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/v0.15")"
+          [[ "$(jq -r '.object.type' <<<"$tag_ref")" == tag ]]
+          tag_object_sha="$(jq -er '.object.sha | select(test("^[0-9a-f]{40}$"))' <<<"$tag_ref")"
+          tag_object="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}")"
+          [[ "$(jq -r '.object.sha' <<<"$tag_object")" == "$EXPECTED_COMMIT" ]]
+
+          main_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main")"
+          [[ "$(jq -r '.object.type' <<<"$main_ref")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$main_ref")" == "$EXPECTED_COMMIT" ]]
+
+          promoted="$(gh api --method PATCH \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" \
+            -F draft=false \
+            -F prerelease=false \
+            -f make_latest=true)"
+          [[ "$(jq -r '.draft' <<<"$promoted")" == false ]]
+          [[ "$(jq -r '.prerelease' <<<"$promoted")" == false ]]
+          [[ "$(jq -r '.tag_name' <<<"$promoted")" == v0.15 ]]

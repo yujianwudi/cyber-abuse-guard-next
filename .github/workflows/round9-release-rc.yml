@@ -1,0 +1,1485 @@
+name: Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated Round 9 RC tag (must be v0.16-rc.3)
+        required: true
+        type: string
+      expected_tag_object_sha:
+        description: Exact 40-character annotated tag object SHA
+        required: true
+        type: string
+      expected_commit:
+        description: Exact 40-character main commit at the RC tag
+        required: true
+        type: string
+      expected_tree:
+        description: Exact 40-character source tree at the RC tag
+        required: true
+        type: string
+      ci_run:
+        description: Successful exact-main push CI run and attempt as RUN_ID:RUN_ATTEMPT
+        required: true
+        type: string
+      round9_gate_run:
+        description: Successful exact-main Round 9 policy-gate push run and attempt as RUN_ID:RUN_ATTEMPT
+        required: true
+        type: string
+      host_run:
+        description: Reserved protected Host identity; cannot authorize public prerelease creation
+        required: false
+        type: string
+      host_artifact_id:
+        description: Reserved signed Host-evidence artifact identity; cannot authorize public prerelease creation
+        required: false
+        type: string
+      host_artifact_digest:
+        description: Exact sha256 digest of the signed evaluation artifact ZIP
+        required: false
+        type: string
+      host_challenge:
+        description: Fresh lowercase 64-hex challenge bound by the protected Host workflow
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: round9-rc-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  GOTOOLCHAIN: go1.26.4
+  GOFLAGS: -mod=readonly
+  GO_VERSION: '1.26.4'
+  VERSION: '0.16'
+  RC_VERSION: '0.16-rc.3'
+  CYCLONEDX_GOMOD_VERSION: 'v1.9.0'
+  GOVULNCHECK_VERSION: 'v1.6.0'
+  GH_CLI_VERSION: '2.96.0'
+  GH_CLI_LINUX_AMD64_SHA256: '83d5c2ccad5498f58bf6368acb1ab32588cf43ab3a4b1c301bf36328b1c8bd60'
+  RC_BUILDER_IMAGE: 'docker.io/library/golang:1.26.4-bookworm'
+  RC_BUILDER_IMAGE_DIGEST: 'sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b'
+  RC_BUILDER_REFERENCE: 'docker.io/library/golang:1.26.4-bookworm@sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b'
+  ROUND9_NEW_PUBLIC_PRERELEASE_CREATION: BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE
+
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      ci_run_id: ${{ steps.admit.outputs.ci_run_id }}
+      ci_run_attempt: ${{ steps.admit.outputs.ci_run_attempt }}
+      round9_gate_run_id: ${{ steps.admit.outputs.round9_gate_run_id }}
+      round9_gate_run_attempt: ${{ steps.admit.outputs.round9_gate_run_attempt }}
+      host_run_id: ${{ steps.admit.outputs.host_run_id }}
+      host_run_attempt: ${{ steps.admit.outputs.host_run_attempt }}
+      publication_permitted: ${{ steps.admit.outputs.publication_permitted }}
+    steps:
+      - name: Bind Round 9 to exact main, immutable tag, CI, and unused names
+        id: admit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_TAG_OBJECT: ${{ inputs.expected_tag_object_sha }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          CI_RUN: ${{ inputs.ci_run }}
+          ROUND9_GATE_RUN: ${{ inputs.round9_gate_run }}
+          HOST_RUN: ${{ inputs.host_run }}
+          HOST_ARTIFACT_ID: ${{ inputs.host_artifact_id }}
+          HOST_ARTIFACT_DIGEST: ${{ inputs.host_artifact_digest }}
+          HOST_CHALLENGE: ${{ inputs.host_challenge }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" == v0.16-rc.3 ]]
+          [[ "$EXPECTED_TAG_OBJECT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CI_RUN" =~ ^([1-9][0-9]*):([1-9][0-9]*)$ ]]
+          CI_RUN_ID="${BASH_REMATCH[1]}"
+          CI_RUN_ATTEMPT="${BASH_REMATCH[2]}"
+          [[ "$ROUND9_GATE_RUN" =~ ^([1-9][0-9]*):([1-9][0-9]*)$ ]]
+          ROUND9_GATE_RUN_ID="${BASH_REMATCH[1]}"
+          ROUND9_GATE_RUN_ATTEMPT="${BASH_REMATCH[2]}"
+          [[ "$DISPATCH_REF" == "refs/tags/$TAG" ]]
+          [[ "$DISPATCH_SHA" == "$EXPECTED_COMMIT" ]]
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_COMMIT" ]]
+          [[ "$WORKFLOW_REF" == "${GITHUB_REPOSITORY}/.github/workflows/round9-release-rc.yml@refs/tags/$TAG" ]]
+
+          main_ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main")"
+          [[ "$(jq -r '.object.type' <<<"$main_ref")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$main_ref")" == "$EXPECTED_COMMIT" ]]
+          tag_ref="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_ref")" == tag ]]
+          [[ "$(jq -r '.object.sha' <<<"$tag_ref")" == "$EXPECTED_TAG_OBJECT" ]]
+          tag_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${EXPECTED_TAG_OBJECT}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_object")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$tag_object")" == "$EXPECTED_COMMIT" ]]
+          commit_object="$(gh api "repos/${GITHUB_REPOSITORY}/git/commits/${EXPECTED_COMMIT}")"
+          [[ "$(jq -r '.tree.sha' <<<"$commit_object")" == "$EXPECTED_TREE" ]]
+
+          # Round 8 is immutable historical input only.  Any tag drift or a newly
+          # published rc.2 Release blocks Round 9; this lane never repairs it.
+          historical_repository='yujianwudi/cyber-abuse-guard'
+          old_ref="$(gh api "repos/${historical_repository}/git/ref/tags/v0.16-rc.2")"
+          [[ "$(jq -r '.object.type' <<<"$old_ref")" == tag ]]
+          [[ "$(jq -r '.object.sha' <<<"$old_ref")" == 58bd9b78886da04c03b2c6d8f28e8cd7f2436e84 ]]
+          old_tag="$(gh api "repos/${historical_repository}/git/tags/58bd9b78886da04c03b2c6d8f28e8cd7f2436e84")"
+          [[ "$(jq -r '.object.sha' <<<"$old_tag")" == 9665fdd1aacab0d79b8790d68c87c6c8c80f8911 ]]
+          old_commit="$(gh api "repos/${historical_repository}/git/commits/9665fdd1aacab0d79b8790d68c87c6c8c80f8911")"
+          [[ "$(jq -r '.tree.sha' <<<"$old_commit")" == 84c6636b2012c825627bad34f922dfa0329d0a1e ]]
+
+          # The historical Round 8 dispatchers are executable at historical
+          # refs unless GitHub disables their workflow IDs repository-wide.
+          # Admission is fail-only until both reviewed IDs are disabled.
+          old_release_workflow="$(gh api "repos/${historical_repository}/actions/workflows/315644586")"
+          jq -e '
+            .id == 315644586 and
+            .path == ".github/workflows/release-rc.yml" and
+            .state == "disabled_manually"
+          ' <<<"$old_release_workflow" >/dev/null
+          old_host_workflow="$(gh api "repos/${historical_repository}/actions/workflows/318443961")"
+          jq -e '
+            .id == 318443961 and
+            .path == ".github/workflows/round8-host-validation.yml" and
+            .state == "disabled_manually"
+          ' <<<"$old_host_workflow" >/dev/null
+
+          historical_releases="$RUNNER_TEMP/historical-releases.json"
+          gh api --paginate --slurp \
+            "repos/${historical_repository}/releases?per_page=100" >"$historical_releases"
+          jq -e '[.[][] | select(.tag_name == "v0.16-rc.2")] | length == 0' \
+            "$historical_releases" >/dev/null
+          jq -e '[.[][] | select(.tag_name == "v0.16")] | length == 0' \
+            "$historical_releases" >/dev/null
+
+          releases="$RUNNER_TEMP/releases.json"
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
+          title='v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required'
+          jq -e --arg tag "$TAG" --arg title "$title" '
+            [.[][] | select(.name == $title and .tag_name != $tag)] | length == 0
+          ' "$releases" >/dev/null
+          jq -e --arg tag "$TAG" '
+            [.[][] | select(.tag_name == $tag)] | length == 0
+          ' "$releases" >/dev/null || {
+            printf '%s\n' \
+              'an existing Round 9 Release is fail-only until exact-candidate independent-audit evidence passes mechanical verification' >&2
+            exit 1
+          }
+
+          ci="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${CI_RUN_ID}")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg commit "$EXPECTED_COMMIT" \
+            --argjson run "$CI_RUN_ID" --argjson attempt "$CI_RUN_ATTEMPT" '
+              .id == $run and .run_attempt == $attempt and .name == "CI" and
+              .path == ".github/workflows/ci.yml" and .event == "push" and
+              .head_branch == "main" and .head_sha == $commit and
+              .status == "completed" and .conclusion == "success" and
+              .repository.full_name == $repo
+            ' <<<"$ci" >/dev/null
+
+          round9_gate="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ROUND9_GATE_RUN_ID}")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg commit "$EXPECTED_COMMIT" \
+            --argjson run "$ROUND9_GATE_RUN_ID" --argjson attempt "$ROUND9_GATE_RUN_ATTEMPT" '
+              .id == $run and .run_attempt == $attempt and
+              .name == "Round 9 policy gate" and
+              .path == ".github/workflows/round9-gate.yml" and
+              .event == "push" and .head_branch == "main" and
+              .head_sha == $commit and .status == "completed" and
+              .conclusion == "success" and .repository.full_name == $repo
+            ' <<<"$round9_gate" >/dev/null
+
+          HOST_RUN_ID=''
+          HOST_RUN_ATTEMPT=''
+          if [[ -n "$HOST_RUN" ]]; then
+            [[ "$HOST_RUN" =~ ^([1-9][0-9]*):([1-9][0-9]*)$ ]]
+            HOST_RUN_ID="${BASH_REMATCH[1]}"
+            HOST_RUN_ATTEMPT="${BASH_REMATCH[2]}"
+          fi
+          [[ -z "$HOST_RUN_ID" && -z "$HOST_RUN_ATTEMPT" ]]
+          [[ -z "$HOST_ARTIFACT_ID" && -z "$HOST_ARTIFACT_DIGEST" && -z "$HOST_CHALLENGE" ]]
+
+          artifact_name="round9-rc-${TAG}-${EXPECTED_COMMIT}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${artifact_name}&per_page=100")"
+          jq -e '.artifacts | length == 0' <<<"$artifacts" >/dev/null
+          {
+            printf 'ci_run_id=%s\n' "$CI_RUN_ID"
+            printf 'ci_run_attempt=%s\n' "$CI_RUN_ATTEMPT"
+            printf 'round9_gate_run_id=%s\n' "$ROUND9_GATE_RUN_ID"
+            printf 'round9_gate_run_attempt=%s\n' "$ROUND9_GATE_RUN_ATTEMPT"
+            printf 'host_run_id=%s\n' "$HOST_RUN_ID"
+            printf 'host_run_attempt=%s\n' "$HOST_RUN_ATTEMPT"
+            printf 'publication_permitted=false\n'
+          } >>"$GITHUB_OUTPUT"
+
+  build:
+    needs: admission
+    runs-on: ubuntu-24.04
+    container:
+      image: docker.io/library/golang:1.26.4-bookworm@sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b
+    timeout-minutes: 150
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+    steps:
+      - name: Checkout exact Round 9 tag with restricted data excluded
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/round9-independent-benign-v1/**
+            !/testdata/round9-independent-malicious-v1/**
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+
+      - name: Run exact Safe Gate after restricted checkout
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+
+      - name: Recheck Round 9 external-evaluation and independent-audit contracts
+        run: |
+          python3 -B scripts/round9_external_evaluation_contract_test.py
+          python3 -B scripts/round9_independent_audit_contract_test.py
+
+      - name: Verify exact source and new Round 9 identities
+        env:
+          EXPECTED_TAG_OBJECT: ${{ inputs.expected_tag_object_sha }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_COMMIT" ]]
+          [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_TREE" ]]
+          [[ "$(git rev-parse "${{ inputs.tag }}^{tag}")" == "$EXPECTED_TAG_OBJECT" ]]
+          [[ -z "$(git status --porcelain)" ]]
+          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v8"' internal/classifier/policy_identity.go
+          grep -E '^const ClassifierPolicySHA256 = "[0-9a-f]{64}"$' internal/classifier/policy_identity.go
+          ! grep -F 'ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d' internal/classifier/policy_identity.go
+          grep -Fx 'version: "1.0.10"' rules/manifest.yaml
+
+      - name: Install bounded build and supply-chain dependencies
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y build-essential binutils ca-certificates curl file git jq zip unzip nginx
+          mkdir -p "$RUNNER_TEMP/bin"
+          archive="$RUNNER_TEMP/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz"
+          root="$RUNNER_TEMP/gh_${GH_CLI_VERSION}_linux_amd64"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$GH_CLI_LINUX_AMD64_SHA256" "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" "gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
+          install -m 0755 "$root/bin/gh" /usr/local/bin/gh
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
+          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: Run complete Round 9 Linux gates
+        env:
+          CPA_COMPAT_PROFILE: primary
+          CPA_COMPAT_VERIFY_REMOTE: '1'
+        run: |
+          set -euo pipefail
+          make round6-format-check round6-git-diff-check round6-module-verify
+          make cpa-host-fixture-contract
+          make round4-regression round5-regression round6-regression
+          make unit-test race round6-vet fuzz-smoke round9-fuzz round6-script-test
+          make management-proxy-413-test corpus-regression
+          make development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus
+          make round6-benchmark round6-vulncheck cpa-latest-compat
+          (cd integration/round9countedmock && go test ./...)
+          make ARTIFACT_VERSION=${RC_VERSION} integration-test
+          make clean-tree-check
+
+      - name: Write canonical Round 9 gate summary
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          CI_RUN_ID: ${{ needs.admission.outputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ needs.admission.outputs.ci_run_attempt }}
+          ROUND9_GATE_RUN_ID: ${{ needs.admission.outputs.round9_gate_run_id }}
+          ROUND9_GATE_RUN_ATTEMPT: ${{ needs.admission.outputs.round9_gate_run_attempt }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' \
+            'CPA Cyber Abuse Guard v0.16-rc.3 Round 9 canonical Linux release gates' \
+            'summary_schema=1' \
+            "commit=$EXPECTED_COMMIT" \
+            "tree=$EXPECTED_TREE" \
+            "exact_main_ci_run=$CI_RUN_ID" \
+            "exact_main_ci_attempt=$CI_RUN_ATTEMPT" \
+            "exact_main_round9_gate_run=$ROUND9_GATE_RUN_ID" \
+            "exact_main_round9_gate_attempt=$ROUND9_GATE_RUN_ATTEMPT" \
+            'rc_gate.safe_contract=PASS' \
+            'rc_gate.full_linux_quality=PASS' \
+            'rc_gate.cpa_v7.2.95_primary_source_compatibility=PASS' \
+            'rc_gate.rc_integration=PASS' \
+            'rc_gate.clean_tree=PASS' \
+            'dynamic_stdout_included=false' \
+            'wall_clock_timing_included=false' \
+             'benchmark_measurements_included=false' >"$RUNNER_TEMP/rc-release-test-summary.txt"
+
+      - name: Produce self-contained Round 9 development evidence
+        id: development_evidence
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/round9-development-evidence"
+          install -d -m 0700 "$work"
+          runtime="$(go env GOVERSION)"
+          platform="$(go env GOOS)/$(go env GOARCH)"
+          [[ "$runtime" == go1.26.4 ]]
+          [[ "$platform" == linux/amd64 ]]
+
+          go run ./cmd/round9-development-benign-corpus-runner --root . \
+            >"$work/development-benign-report.json"
+          python3 -B scripts/round9_machine_reports.py paired \
+            --root . --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
+            --output "$work/paired-malicious-report.json" \
+            --log "$work/paired-malicious-producer.log" --go go
+          python3 -B scripts/round9_machine_reports.py public \
+            --root . --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
+            --output "$work/public-adversarial-report.json" \
+            --log "$work/public-adversarial-producer.log" --go go
+          python3 -B scripts/round9_machine_reports.py audit \
+            --root . --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
+            --output "$work/audit-contract-report.json" \
+            --log "$work/audit-contract-producer.log" --go go
+          python3 -B scripts/round9_machine_reports.py development \
+            --root . --tag v0.16-rc.3 --commit "$EXPECTED_COMMIT" \
+            --tree "$EXPECTED_TREE" --runtime "$runtime" --platform "$platform" \
+            --development-benign-report "$work/development-benign-report.json" \
+            --paired-report "$work/paired-malicious-report.json" \
+            --paired-log "$work/paired-malicious-producer.log" \
+            --public-report "$work/public-adversarial-report.json" \
+            --public-log "$work/public-adversarial-producer.log" \
+            --audit-report "$work/audit-contract-report.json" \
+            --audit-log "$work/audit-contract-producer.log" \
+            --output "$work/development-evidence.json"
+          python3 -B scripts/round9_machine_reports.py validate-development \
+            --root . --input "$work/development-evidence.json" \
+            --tag v0.16-rc.3 --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE"
+          {
+            printf 'path=%s\n' "$work/development-evidence.json"
+            printf 'sha256=%s\n' "$(sha256sum "$work/development-evidence.json" | awk '{print $1}')"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Build reproducible 17-asset private Round 9 candidate
+        env:
+          RELEASE_RC_BUILD: '1'
+          RELEASE_RC_TAG: ${{ inputs.tag }}
+          RELEASE_RC_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          RELEASE_RC_EXPECTED_TREE: ${{ inputs.expected_tree }}
+          RELEASE_RC_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          RC_RELEASE_LANE: round9
+          RC_CI_RUN_ID: ${{ needs.admission.outputs.ci_run_id }}
+          RC_CI_RUN_ATTEMPT: ${{ needs.admission.outputs.ci_run_attempt }}
+          RC_TEST_SUMMARY_INPUT: ${{ runner.temp }}/rc-release-test-summary.txt
+          RC_ROUND9_DEVELOPMENT_EVIDENCE_INPUT: ${{ steps.development_evidence.outputs.path }}
+          RC_PUBLISH_RELEASE: 'false'
+          RC_RUNNER_LABEL: ubuntu-24.04
+          RC_RUNNER_OS: ${{ runner.os }}
+          RC_RUNNER_ARCH: ${{ runner.arch }}
+          RC_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          RC_RUNNER_NAME: UNRECORDED_EPHEMERAL_GITHUB_HOSTED_RUNNER
+          RC_RUNNER_IMAGE_OS: UNOBSERVABLE_FROM_PINNED_JOB_CONTAINER
+          RC_RUNNER_IMAGE_VERSION: UNOBSERVABLE_FROM_PINNED_JOB_CONTAINER
+          ROUND6_SAFE_SPARSE_BUILD: '1'
+          REQUIRE_DIST_ARTIFACTS: '1'
+        run: ./scripts/round6-rc-artifacts.sh
+
+      - name: Verify private Round 9 manifest and exact allowlist
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            build-metadata.json checksums.txt \
+            cyber-abuse-guard-v0.16-rc.3.so cyber-abuse-guard-v0.16-rc.3.so.sha256 \
+            cyber-abuse-guard_0.16-rc.3_linux_amd64.zip \
+            cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip \
+            cyber-abuse-guard-v0.16-rc.3-source.tar.gz \
+            cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256 \
+            rc-release-evidence.md rc-release-evidence.md.sha256 \
+            rc-release-manifest.json rc-release-manifest.json.sha256 \
+            rc-release-test-summary.txt rc-release-test-summary.txt.sha256 \
+            ruleset-manifest.json ruleset.sha256 sbom.cdx.json | LC_ALL=C sort)"
+          [[ "$(find dist -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort)" == "$expected" ]]
+          jq -e '
+            .schema_version == 6 and .release_phase == "candidate" and
+            .artifact_count == 17 and .round9.release_lane == "round9" and
+            .round9.corpus_contract_status == "PASS" and
+            .round9.development_evidence.schema == "round9-development-evidence/v1" and
+            .round9.development_evidence.state == "PASS" and
+            .round9.development_evidence.runtime == "go1.26.4" and
+            .round9.development_evidence.platform == "linux/amd64" and
+            .round9.corpus.development_benign.unique_semantic_samples == 1200 and
+            .round9.corpus.development_benign.semantic_blocked == 0 and
+            .round9.corpus.development_benign.hard_policy_blocked == 0 and
+            .round9.corpus.paired_malicious.recall_basis_points == 10000 and
+            all(.round9.corpus.paired_malicious.per_category[];
+              .recall_basis_points == 10000) and
+            .round9.corpus.public_adversarial.payload_records == 24 and
+            .round9.corpus.public_adversarial.unique_formal_payloads == 23 and
+            .round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5 and
+            .round9.corpus.public_adversarial.release_assets_reviewed == 16 and
+            .round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4 and
+            .round9.audit_contract.schema_version == 6 and
+            .round9.audit_contract.raw_capture_schema_version == 4 and
+            .round9.machine_reports.development_benign.schema ==
+              "round9-development-benign-corpus-report/v1" and
+            .round9.machine_reports.paired_malicious.schema ==
+              "round9-development-paired-malicious-machine-report/v1" and
+            .round9.machine_reports.public_adversarial.schema ==
+                "round9-public-adversarial-report/v10" and
+            .round9.machine_reports.audit_contract.schema ==
+              "round9-audit-contract-report/v1" and
+            .round9.counted_mock == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
+            .round9.external_evaluation == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
+            .round9.external_ledger_proof == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
+            .round9.classifier.version == "classifier-policy-v8" and
+            .round9.ruleset.version == "1.0.10" and
+            .round9.release.tag == "v0.16-rc.3" and
+            .round9.release.title == "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required" and
+            .round9.release.body == "NOT_PROVIDED / EXTERNAL_EVALUATION_REQUIRED" and
+            .round9.release.publication_permitted == false and
+            .round9.release.draft == false and .round9.release.prerelease == true and
+            .round9.release.latest == false and (.round9.release.asset_allowlist | length == 17) and
+            .cpa.primary.version == "v7.2.95" and
+            .cpa.primary.commit == "f71ec0eb6776854457892452cf28c47f0d658251"
+          ' dist/rc-release-manifest.json >/dev/null
+          [[ "$(jq -r '.round9.release.asset_allowlist[]' dist/rc-release-manifest.json | LC_ALL=C sort)" == "$expected" ]]
+          (cd dist && sha256sum -c checksums.txt && sha256sum -c rc-release-manifest.json.sha256)
+
+      - name: Attest exact private Round 9 candidate assets
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: dist/*
+
+      - name: Upload exact private Round 9 candidate
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: round9-rc-${{ inputs.tag }}-${{ inputs.expected_commit }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  publish:
+    needs:
+      - admission
+      - build
+    # The former Host-only publication assembly is deliberately unreachable.
+    # The exact-candidate independent-audit verifier is present below, but no
+    # writer may be restored until real external evidence passes separate review.
+    if: ${{ needs.admission.outputs.publication_permitted == 'true' }}
+    environment:
+      name: round9-rc-publication
+    runs-on: ubuntu-24.04
+    container:
+      image: docker.io/library/golang:1.26.4-bookworm@sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact Round 9 tag with restricted data excluded
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/round9-independent-benign-v1/**
+            !/testdata/round9-independent-malicious-v1/**
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+
+      - name: Run exact Safe Gate after restricted checkout
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+
+      - name: Recheck Round 9 external-evaluation and independent-audit contracts
+        run: |
+          python3 -B scripts/round9_external_evaluation_contract_test.py
+          python3 -B scripts/round9_independent_audit_contract_test.py
+
+      - name: Install bounded publication dependencies
+        run: |
+          set -euo pipefail
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update
+          apt-get install -y build-essential binutils ca-certificates curl file git jq openssl zip unzip nginx
+          mkdir -p "$RUNNER_TEMP/bin"
+          archive="$RUNNER_TEMP/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz"
+          root="$RUNNER_TEMP/gh_${GH_CLI_VERSION}_linux_amd64"
+          curl --fail --location --proto '=https' --tlsv1.2 \
+            --output "$archive" \
+            "https://github.com/cli/cli/releases/download/v${GH_CLI_VERSION}/gh_${GH_CLI_VERSION}_linux_amd64.tar.gz"
+          printf '%s  %s\n' "$GH_CLI_LINUX_AMD64_SHA256" "$archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" "gh_${GH_CLI_VERSION}_linux_amd64/bin/gh"
+          install -m 0755 "$root/bin/gh" /usr/local/bin/gh
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
+          echo "$RUNNER_TEMP/bin" >>"$GITHUB_PATH"
+
+      - name: Download, attest, and verify signed external evaluation and ledger
+        id: external_evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_TAG_OBJECT: ${{ inputs.expected_tag_object_sha }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          HOST_RUN_ID: ${{ needs.admission.outputs.host_run_id }}
+          HOST_RUN_ATTEMPT: ${{ needs.admission.outputs.host_run_attempt }}
+          HOST_ARTIFACT_ID: ${{ inputs.host_artifact_id }}
+          HOST_ARTIFACT_DIGEST: ${{ inputs.host_artifact_digest }}
+          HOST_CHALLENGE: ${{ inputs.host_challenge }}
+          EVALUATOR_PUBLIC_KEY_BASE64: ${{ vars.ROUND9_EVALUATOR_PUBLIC_KEY_BASE64 }}
+          EVALUATOR_PUBLIC_KEY_SHA256: ${{ vars.ROUND9_EVALUATOR_PUBLIC_KEY_SHA256 }}
+          EVALUATOR_KEY_ID: ${{ vars.ROUND9_EVALUATOR_KEY_ID }}
+          EVALUATOR_SHA256: ${{ vars.ROUND9_EVALUATOR_SHA256 }}
+          LEDGER_RULESET_ID: ${{ vars.ROUND9_LEDGER_RULESET_ID }}
+          LEDGER_RULESET_NAME: ${{ vars.ROUND9_LEDGER_RULESET_NAME }}
+          REMOTE_VERIFY_TOKEN: ${{ secrets.ROUND9_REMOTE_VERIFY_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ -n "$EVALUATOR_PUBLIC_KEY_BASE64" ]]
+          [[ "$EVALUATOR_PUBLIC_KEY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$EVALUATOR_KEY_ID" =~ ^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$ ]]
+          [[ "$EVALUATOR_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$LEDGER_RULESET_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$LEDGER_RULESET_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$ ]]
+          [[ -n "$REMOTE_VERIFY_TOKEN" && "$REMOTE_VERIFY_TOKEN" != *$'\n'* && "$REMOTE_VERIFY_TOKEN" != *$'\r'* ]]
+          host_run="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${HOST_RUN_ID}")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg commit "$EXPECTED_COMMIT" \
+            --argjson run "$HOST_RUN_ID" --argjson attempt "$HOST_RUN_ATTEMPT" '
+              .id == $run and .run_attempt == $attempt and
+              .name == "Round 9 protected CPA Host validation" and
+              .path == ".github/workflows/round9-host-validation.yml" and
+              .event == "workflow_dispatch" and .head_sha == $commit and
+              .status == "completed" and .conclusion == "success" and
+              .repository.full_name == $repo
+            ' <<<"$host_run" >/dev/null
+          artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${HOST_RUN_ID}/artifacts?per_page=100")"
+          artifact="$(jq -ce --arg name "round9-external-evaluation-${EXPECTED_COMMIT}-${HOST_RUN_ID}-${HOST_RUN_ATTEMPT}" \
+            --arg digest "$HOST_ARTIFACT_DIGEST" --argjson id "$HOST_ARTIFACT_ID" \
+            --argjson run "$HOST_RUN_ID" '
+              [.artifacts[] | select(.id == $id)] |
+              if length == 1 then .[0] else error("expected one Host artifact") end |
+              select(.name == $name and .digest == $digest and .expired == false and
+                .workflow_run.id == $run and
+                (.size_in_bytes | type == "number" and . == floor and . > 0 and . <= 4194304))
+            ' <<<"$artifacts")"
+          [[ -n "$artifact" ]]
+          archive="$(mktemp "$RUNNER_TEMP/round9-external-evaluation.XXXXXX.zip")"
+          gh api --header 'Accept: application/octet-stream' \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts/${HOST_ARTIFACT_ID}/zip" >"$archive"
+          [[ "sha256:$(sha256sum "$archive" | awk '{print $1}')" == "$HOST_ARTIFACT_DIGEST" ]]
+          external="$(mktemp -d "$RUNNER_TEMP/round9-external-evaluation.XXXXXX")"
+          chmod 0700 "$external"
+          python3 -B - "$archive" "$external" <<'PY'
+          import pathlib, stat, sys, zipfile
+          source, destination = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          expected = {
+              "round9-external-evaluation.json",
+              "round9-external-ledger-proof.json",
+          }
+          with zipfile.ZipFile(source) as archive:
+              infos = archive.infolist()
+              names = [item.filename for item in infos]
+              if len(infos) != 2 or set(names) != expected or len(names) != len(set(names)):
+                  raise SystemExit("external evaluation artifact allowlist mismatch")
+              if any(item.is_dir() or pathlib.PurePosixPath(item.filename).name != item.filename for item in infos):
+                  raise SystemExit("external evaluation artifact contains a non-top-level entry")
+              if any(item.flag_bits & 1 or item.file_size > 1048576 for item in infos):
+                  raise SystemExit("external evaluation artifact entry is encrypted or oversized")
+              if sum(item.file_size for item in infos) > 2097152:
+                  raise SystemExit("external evaluation artifact expands beyond the reviewed bound")
+              for item in infos:
+                  mode = item.external_attr >> 16
+                  if mode and not stat.S_ISREG(mode):
+                      raise SystemExit("external evaluation artifact entry is not regular")
+                  target = destination / item.filename
+                  with target.open("xb") as output:
+                      output.write(archive.read(item))
+          PY
+          for name in round9-external-evaluation.json round9-external-ledger-proof.json; do
+            gh attestation verify "$external/$name" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-host-validation.yml" \
+              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+              --source-digest "$EXPECTED_COMMIT" >/dev/null
+          done
+          evaluation="$external/round9-external-evaluation.json"
+          proof="$external/round9-external-ledger-proof.json"
+          python3 -B - "$evaluation" "$proof" <<'PY'
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, str(Path.cwd() / "tools" / "round9-eval"))
+          from round9_eval_core import load_canonical_json
+
+          load_canonical_json(Path(sys.argv[1]), "external evaluation envelope", maximum=1048576)
+          load_canonical_json(Path(sys.argv[2]), "external ledger proof", maximum=1048576)
+          PY
+          public_key="$external/round9-evaluator-public-key.pem"
+          umask 077
+          (set -o noclobber; : >"$public_key")
+          printf '%s' "$EVALUATOR_PUBLIC_KEY_BASE64" | base64 --decode >"$public_key"
+          [[ "$(sha256sum "$public_key" | awk '{print $1}')" == "$EVALUATOR_PUBLIC_KEY_SHA256" ]]
+          chmod 0644 "$public_key"
+
+          evaluator_version="$(jq -er '.payload.evaluator.version' "$evaluation")"
+          evaluator_sha256="$(jq -er '.payload.evaluator.sha256' "$evaluation")"
+          evaluator_core_sha256="$(jq -er '.payload.evaluator.core_sha256' "$evaluation")"
+          evaluator_broker_sha256="$(jq -er '.payload.evaluator.broker_sha256' "$evaluation")"
+          evaluator_key_id="$(jq -er '.payload.evaluator.key_id' "$evaluation")"
+          sandbox_adapter_sha256="$(jq -er '.payload.execution.sandbox_adapter_sha256' "$evaluation")"
+          sandbox_adapter_config_sha256="$(jq -er '.payload.execution.sandbox_adapter_config_sha256' "$evaluation")"
+          docker_sandbox_sha256="$(jq -er '.payload.execution.docker_sandbox_sha256' "$evaluation")"
+          cpa_image_id="$(jq -er '.payload.execution.cpa_image_id' "$evaluation")"
+          counted_mock_image_id="$(jq -er '.payload.execution.counted_mock_image_id' "$evaluation")"
+          model="$(jq -er '.payload.execution.model' "$evaluation")"
+          so_sha256="$(jq -er '.payload.candidate.so_sha256' "$evaluation")"
+          classifier_version="$(jq -er '.payload.candidate.classifier_policy_version' "$evaluation")"
+          classifier_sha256="$(jq -er '.payload.candidate.classifier_policy_sha256' "$evaluation")"
+          ruleset_version="$(jq -er '.payload.candidate.ruleset_version' "$evaluation")"
+          ruleset_sha256="$(jq -er '.payload.candidate.ruleset_sha256' "$evaluation")"
+          ruleset_manifest_sha256="$(jq -er '.payload.candidate.ruleset_manifest_sha256' "$evaluation")"
+          build_metadata_sha256="$(jq -er '.payload.candidate.build_metadata_sha256' "$evaluation")"
+          release_manifest_sha256="$(jq -er '.payload.candidate.release_manifest_sha256' "$evaluation")"
+          phase1_run_id="$(jq -er '.payload.candidate.phase1_run_id' "$evaluation")"
+          phase1_run_attempt="$(jq -er '.payload.candidate.phase1_run_attempt' "$evaluation")"
+          phase1_artifact_id="$(jq -er '.payload.candidate.phase1_artifact_id' "$evaluation")"
+          phase1_artifact_digest="$(jq -er '.payload.candidate.phase1_artifact_digest' "$evaluation")"
+          [[ "$evaluator_sha256" == "$EVALUATOR_SHA256" ]]
+          [[ "$evaluator_key_id" == "$EVALUATOR_KEY_ID" ]]
+
+          env GH_TOKEN="$REMOTE_VERIFY_TOKEN" \
+          python3 -B scripts/round9_external_evaluation_contract.py verify-remote \
+            --envelope "$evaluation" --proof "$proof" \
+            --public-key "$public_key" --public-key-sha256 "$EVALUATOR_PUBLIC_KEY_SHA256" \
+            --key-id "$EVALUATOR_KEY_ID" --evaluator-version "$evaluator_version" \
+            --evaluator-sha256 "$EVALUATOR_SHA256" --core-sha256 "$evaluator_core_sha256" \
+            --broker-sha256 "$evaluator_broker_sha256" \
+            --sandbox-adapter-sha256 "$sandbox_adapter_sha256" \
+            --sandbox-adapter-config-sha256 "$sandbox_adapter_config_sha256" \
+            --docker-sandbox-sha256 "$docker_sandbox_sha256" \
+            --cpa-image-id "$cpa_image_id" --counted-mock-image-id "$counted_mock_image_id" \
+            --model "$model" --repository "$GITHUB_REPOSITORY" --tag v0.16-rc.3 \
+            --tag-object-sha "$EXPECTED_TAG_OBJECT" --commit "$EXPECTED_COMMIT" \
+            --tree "$EXPECTED_TREE" --so-sha256 "$so_sha256" \
+            --classifier-policy-version "$classifier_version" \
+            --classifier-policy-sha256 "$classifier_sha256" \
+            --ruleset-version "$ruleset_version" --ruleset-sha256 "$ruleset_sha256" \
+            --ruleset-manifest-sha256 "$ruleset_manifest_sha256" \
+            --build-metadata-sha256 "$build_metadata_sha256" \
+            --release-manifest-sha256 "$release_manifest_sha256" \
+            --phase1-run-id "$phase1_run_id" --phase1-run-attempt "$phase1_run_attempt" \
+            --phase1-artifact-id "$phase1_artifact_id" \
+            --phase1-artifact-digest "$phase1_artifact_digest" \
+            --host-run-id "$HOST_RUN_ID" --host-run-attempt "$HOST_RUN_ATTEMPT" \
+            --challenge "$HOST_CHALLENGE" --ruleset-id "$LEDGER_RULESET_ID" \
+            --ruleset-name "$LEDGER_RULESET_NAME"
+
+          phase1_run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase1_run_id}")"
+          jq -e --arg repo "$GITHUB_REPOSITORY" --arg commit "$EXPECTED_COMMIT" \
+            --argjson run "$phase1_run_id" --argjson attempt "$phase1_run_attempt" '
+              .id == $run and .run_attempt == $attempt and
+              .name == "Round 9 RC release v0.16-rc.3 - Linux counted-Mock admission" and
+              .path == ".github/workflows/round9-release-rc.yml" and
+              .event == "workflow_dispatch" and .head_sha == $commit and
+              .status == "completed" and .conclusion == "success" and
+              .repository.full_name == $repo
+            ' <<<"$phase1_run_json" >/dev/null
+          phase1_artifacts="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${phase1_run_id}/artifacts?per_page=100")"
+          phase1_artifact="$(jq -ce \
+            --arg name "round9-rc-v0.16-rc.3-${EXPECTED_COMMIT}-${phase1_run_id}-${phase1_run_attempt}" \
+            --arg digest "$phase1_artifact_digest" --argjson id "$phase1_artifact_id" \
+            --argjson run "$phase1_run_id" '
+              [.artifacts[] | select(.id == $id)] |
+              if length == 1 then .[0] else error("expected one Phase 1 artifact") end |
+              select(.name == $name and .digest == $digest and .expired == false and
+                .workflow_run.id == $run and
+                (.size_in_bytes | type == "number" and . == floor and . > 0 and . <= 134217728))
+            ' <<<"$phase1_artifacts")"
+          [[ -n "$phase1_artifact" ]]
+          phase1_archive="$(mktemp "$RUNNER_TEMP/round9-phase1.XXXXXX.zip")"
+          gh api --header 'Accept: application/octet-stream' \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts/${phase1_artifact_id}/zip" \
+            >"$phase1_archive"
+          [[ "sha256:$(sha256sum "$phase1_archive" | awk '{print $1}')" == \
+            "$phase1_artifact_digest" ]]
+          phase1="$(mktemp -d "$RUNNER_TEMP/round9-phase1.XXXXXX")"
+          chmod 0700 "$phase1"
+          python3 -B - "$phase1_archive" "$phase1" <<'PY'
+          import pathlib, stat, sys, zipfile
+
+          source, destination = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          expected = {
+              "build-metadata.json", "checksums.txt",
+              "cyber-abuse-guard-v0.16-rc.3.so",
+              "cyber-abuse-guard-v0.16-rc.3.so.sha256",
+              "cyber-abuse-guard_0.16-rc.3_linux_amd64.zip",
+              "cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip",
+              "cyber-abuse-guard-v0.16-rc.3-source.tar.gz",
+              "cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256",
+              "rc-release-evidence.md", "rc-release-evidence.md.sha256",
+              "rc-release-manifest.json", "rc-release-manifest.json.sha256",
+              "rc-release-test-summary.txt", "rc-release-test-summary.txt.sha256",
+              "ruleset-manifest.json", "ruleset.sha256", "sbom.cdx.json",
+          }
+          with zipfile.ZipFile(source) as archive:
+              infos = archive.infolist()
+              names = [item.filename for item in infos]
+              if len(infos) != 17 or set(names) != expected or len(names) != len(set(names)):
+                  raise SystemExit("Phase 1 artifact allowlist mismatch")
+              if any(item.is_dir() or pathlib.PurePosixPath(item.filename).name != item.filename for item in infos):
+                  raise SystemExit("Phase 1 artifact contains a non-top-level entry")
+              if any(item.flag_bits & 1 or item.file_size > 67108864 for item in infos):
+                  raise SystemExit("Phase 1 artifact entry is encrypted or oversized")
+              if sum(item.file_size for item in infos) > 134217728:
+                  raise SystemExit("Phase 1 artifact expands beyond the reviewed bound")
+              for item in infos:
+                  mode = item.external_attr >> 16
+                  if mode and not stat.S_ISREG(mode):
+                      raise SystemExit("Phase 1 artifact entry is not regular")
+                  target = destination / item.filename
+                  with target.open("xb") as output:
+                      output.write(archive.read(item))
+          PY
+          gh attestation verify "$phase1/rc-release-manifest.json" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-release-rc.yml" \
+            --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+            --source-digest "$EXPECTED_COMMIT" >/dev/null
+          (
+            cd "$phase1"
+            sha256sum -c checksums.txt
+            sha256sum -c rc-release-manifest.json.sha256
+          )
+          phase1_manifest="$phase1/rc-release-manifest.json"
+          [[ "$(sha256sum "$phase1_manifest" | awk '{print $1}')" == \
+            "$release_manifest_sha256" ]]
+          [[ "$(sha256sum "$phase1/cyber-abuse-guard-v0.16-rc.3.so" | awk '{print $1}')" == \
+            "$so_sha256" ]]
+          [[ "$(sha256sum "$phase1/ruleset-manifest.json" | awk '{print $1}')" == \
+            "$ruleset_manifest_sha256" ]]
+          [[ "$(sha256sum "$phase1/build-metadata.json" | awk '{print $1}')" == \
+            "$build_metadata_sha256" ]]
+          jq -e --arg commit "$EXPECTED_COMMIT" --arg tree "$EXPECTED_TREE" \
+            --argjson run "$phase1_run_id" --argjson attempt "$phase1_run_attempt" '
+              .schema_version == 6 and .release_phase == "candidate" and
+              .publish_rc_release == false and .artifact_count == 17 and
+              .commit == $commit and .tree == $tree and
+              .workflow.run_id == $run and .workflow.run_attempt == $attempt and
+              .workflow.ref ==
+                (env.GITHUB_REPOSITORY + "/.github/workflows/round9-release-rc.yml@refs/tags/v0.16-rc.3") and
+              .round9.release_lane == "round9" and
+              .round9.corpus_contract_status == "PASS" and
+              .round9.development_evidence.schema == "round9-development-evidence/v1" and
+              .round9.development_evidence.state == "PASS"
+            ' "$phase1_manifest" >/dev/null
+          development="$external/round9-development-evidence-from-phase1.json"
+          python3 -B - "$phase1_manifest" "$development" <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+
+          sys.path.insert(0, str(Path.cwd() / "scripts"))
+          from round9_machine_reports import canonical_bytes
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          value = manifest["round9"]["development_evidence"]
+          Path(sys.argv[2]).write_bytes(canonical_bytes(value))
+          PY
+          python3 -B scripts/round9_machine_reports.py validate-development \
+            --root . --input "$development" --tag v0.16-rc.3 \
+            --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE"
+          jq -e --slurpfile development "$development" \
+            '.payload.development_evidence == $development[0]' \
+            "$evaluation" >/dev/null
+          {
+            printf 'evaluation=%s\n' "$evaluation"
+            printf 'proof=%s\n' "$proof"
+            printf 'public_key=%s\n' "$public_key"
+            printf 'development_evidence=%s\n' "$development"
+            printf 'phase1_manifest=%s\n' "$phase1_manifest"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Write canonical Round 9 publication summary
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          CI_RUN_ID: ${{ needs.admission.outputs.ci_run_id }}
+          CI_RUN_ATTEMPT: ${{ needs.admission.outputs.ci_run_attempt }}
+          ROUND9_GATE_RUN_ID: ${{ needs.admission.outputs.round9_gate_run_id }}
+          ROUND9_GATE_RUN_ATTEMPT: ${{ needs.admission.outputs.round9_gate_run_attempt }}
+        run: |
+          printf '%s\n' \
+            'CPA Cyber Abuse Guard v0.16-rc.3 Round 9 canonical Linux release gates' \
+            'summary_schema=1' "commit=$EXPECTED_COMMIT" "tree=$EXPECTED_TREE" \
+            "exact_main_ci_run=$CI_RUN_ID" "exact_main_ci_attempt=$CI_RUN_ATTEMPT" \
+            "exact_main_round9_gate_run=$ROUND9_GATE_RUN_ID" \
+            "exact_main_round9_gate_attempt=$ROUND9_GATE_RUN_ATTEMPT" \
+            'rc_gate.safe_contract=PASS' 'rc_gate.full_linux_quality=PASS' \
+            'rc_gate.cpa_v7.2.95_primary_source_compatibility=PASS' \
+            'rc_gate.rc_integration=PASS' 'rc_gate.clean_tree=PASS' \
+            'dynamic_stdout_included=false' 'wall_clock_timing_included=false' \
+            'benchmark_measurements_included=false' >"$RUNNER_TEMP/rc-release-test-summary.txt"
+
+      - name: Rebuild reproducible 19-asset Round 9 publication candidate
+        env:
+          RELEASE_RC_BUILD: '1'
+          RELEASE_RC_TAG: ${{ inputs.tag }}
+          RELEASE_RC_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          RELEASE_RC_EXPECTED_TREE: ${{ inputs.expected_tree }}
+          RELEASE_RC_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          RC_RELEASE_LANE: round9
+          RC_CI_RUN_ID: ${{ needs.admission.outputs.ci_run_id }}
+          RC_CI_RUN_ATTEMPT: ${{ needs.admission.outputs.ci_run_attempt }}
+          RC_TEST_SUMMARY_INPUT: ${{ runner.temp }}/rc-release-test-summary.txt
+          RC_ROUND9_DEVELOPMENT_EVIDENCE_INPUT: ${{ steps.external_evidence.outputs.development_evidence }}
+          RC_PUBLISH_RELEASE: 'true'
+          RC_EXTERNAL_EVALUATION_INPUT: ${{ steps.external_evidence.outputs.evaluation }}
+          RC_EXTERNAL_LEDGER_PROOF_INPUT: ${{ steps.external_evidence.outputs.proof }}
+          RC_EXTERNAL_EVALUATOR_PUBLIC_KEY: ${{ steps.external_evidence.outputs.public_key }}
+          RC_EXTERNAL_EVALUATOR_PUBLIC_KEY_SHA256: ${{ vars.ROUND9_EVALUATOR_PUBLIC_KEY_SHA256 }}
+          RC_EXTERNAL_EVALUATOR_KEY_ID: ${{ vars.ROUND9_EVALUATOR_KEY_ID }}
+          RC_EXTERNAL_EVALUATOR_SHA256: ${{ vars.ROUND9_EVALUATOR_SHA256 }}
+          RC_EXTERNAL_LEDGER_RULESET_ID: ${{ vars.ROUND9_LEDGER_RULESET_ID }}
+          RC_EXTERNAL_LEDGER_RULESET_NAME: ${{ vars.ROUND9_LEDGER_RULESET_NAME }}
+          RC_EXTERNAL_HOST_RUN_ID: ${{ needs.admission.outputs.host_run_id }}
+          RC_EXTERNAL_HOST_RUN_ATTEMPT: ${{ needs.admission.outputs.host_run_attempt }}
+          RC_EXTERNAL_CHALLENGE: ${{ inputs.host_challenge }}
+          RC_RUNNER_LABEL: ubuntu-24.04
+          RC_RUNNER_OS: ${{ runner.os }}
+          RC_RUNNER_ARCH: ${{ runner.arch }}
+          RC_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+          RC_RUNNER_NAME: UNRECORDED_EPHEMERAL_GITHUB_HOSTED_RUNNER
+          RC_RUNNER_IMAGE_OS: UNOBSERVABLE_FROM_PINNED_JOB_CONTAINER
+          RC_RUNNER_IMAGE_VERSION: UNOBSERVABLE_FROM_PINNED_JOB_CONTAINER
+          ROUND6_SAFE_SPARSE_BUILD: '1'
+          REQUIRE_DIST_ARTIFACTS: '1'
+        run: ./scripts/round6-rc-artifacts.sh
+
+      - name: Verify Round 9 publication manifest and exact allowlist
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          HOST_RUN_ID: ${{ needs.admission.outputs.host_run_id }}
+          HOST_RUN_ATTEMPT: ${{ needs.admission.outputs.host_run_attempt }}
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            build-metadata.json checksums.txt \
+            cyber-abuse-guard-v0.16-rc.3.so cyber-abuse-guard-v0.16-rc.3.so.sha256 \
+            cyber-abuse-guard_0.16-rc.3_linux_amd64.zip \
+            cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip \
+            cyber-abuse-guard-v0.16-rc.3-source.tar.gz \
+            cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256 \
+            rc-release-evidence.md rc-release-evidence.md.sha256 \
+            rc-release-manifest.json rc-release-manifest.json.sha256 \
+            rc-release-test-summary.txt rc-release-test-summary.txt.sha256 \
+            round9-external-evaluation.json round9-external-ledger-proof.json \
+            ruleset-manifest.json ruleset.sha256 sbom.cdx.json | LC_ALL=C sort)"
+          [[ "$(find dist -mindepth 1 -maxdepth 1 -printf '%f\n' | LC_ALL=C sort)" == "$expected" ]]
+          jq -e --arg commit "$EXPECTED_COMMIT" \
+            --argjson host_run "$HOST_RUN_ID" --argjson host_attempt "$HOST_RUN_ATTEMPT" '
+            .schema_version == 6 and .release_phase == "publish" and .artifact_count == 19 and
+            .round9.release_lane == "round9" and .round9.corpus_contract_status == "PASS" and
+            .round9.classifier.version == "classifier-policy-v8" and
+            .round9.ruleset.version == "1.0.10" and
+            .round9.audit_contract.schema_version == 6 and
+            .round9.audit_contract.raw_capture_schema_version == 4 and
+            .round9.audit_contract.decision_kinds == [
+              "allow_clean",
+              "audit_eligible_malicious_text",
+              "audit_ineligible_risk",
+              "block_incomplete_inspection",
+              "block_malicious_text",
+              "block_opaque_media",
+              "block_subject_risk"
+            ] and
+            .round9.audit_contract.malicious_block_requires_eligible_winner == true and
+            .round9.audit_contract.incomplete_has_no_malicious_winner == true and
+            .round9.corpus.paired_malicious.corpus_name == "round9-development-paired-malicious-v3" and
+            .round9.corpus.paired_malicious.source_report_schema == "round9-development-paired-malicious-report/v3" and
+            .round9.corpus.paired_malicious.corpus_manifest_version == 2 and
+            (.round9.corpus.paired_malicious.label_audit.bytes | type == "number" and . >= 512) and
+            (.round9.corpus.paired_malicious.label_audit.sha256 | test("^[0-9a-f]{64}$")) and
+            .round9.corpus.paired_malicious.recall_basis_points == 10000 and
+            all(.round9.corpus.paired_malicious.per_category[]; .recall_basis_points == 10000) and
+            .round9.corpus.public_adversarial.payload_records == 24 and
+            .round9.corpus.public_adversarial.unique_historical_payloads == 8 and
+            .round9.corpus.public_adversarial.unique_branch_head_payloads == 1 and
+            .round9.corpus.public_adversarial.unique_current_prompt_like_payloads == 14 and
+            .round9.corpus.public_adversarial.unique_formal_payloads == 23 and
+            .round9.corpus.public_adversarial.unmerged_candidate_carriers == 1 and
+            .round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5 and
+            .round9.corpus.public_adversarial.release_assets_reviewed == 16 and
+            .round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4 and
+            .round9.corpus.public_adversarial.candidate_carrier_executions == 1 and
+            .round9.corpus.public_adversarial.candidate_carriers_not_provided == 0 and
+            .round9.corpus.public_adversarial.scenario_payload_executions == 24 and
+            .round9.corpus.public_adversarial.serialized_route_executions == 120 and
+            .round9.corpus.public_adversarial.direct_active_blocked == 12 and
+            .round9.corpus.public_adversarial.direct_active_allowed == 12 and
+            .round9.machine_reports.paired_malicious.schema == "round9-development-paired-malicious-machine-report/v1" and
+                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v10" and
+            .round9.external_evaluation.schema == "round9-external-evaluation/v2" and
+            .round9.external_evaluation.state == "PASS" and
+            .round9.external_evaluation.development_evidence ==
+              .round9.development_evidence and
+            .round9.external_evaluation.candidate.tag == "v0.16-rc.3" and
+            .round9.external_evaluation.candidate.commit == $commit and
+            .round9.external_evaluation.candidate.cpa_version == "v7.2.95" and
+            .round9.external_evaluation.execution.workflow_run_id == $host_run and
+            .round9.external_evaluation.execution.workflow_run_attempt == $host_attempt and
+            .round9.external_evaluation.execution.production_accessed == false and
+            .round9.external_evaluation.execution.real_provider_contacted == false and
+            .round9.external_evaluation.execution.network_binding == {
+              host_ip:"127.0.0.1",host_port:18394,container_port:8317
+            } and
+            .round9.external_evaluation.execution.phase_protocol == {
+              single_cpa_container:true,
+              initial_mode:"audit",
+              phase_order:["audit","balanced","strict"],
+              mode_switch_method:"PUT",
+              mode_switch_endpoint:"/v0/management/plugins/cyber-abuse-guard/config",
+              status_endpoint:"/v0/management/plugins/cyber-abuse-guard/status",
+              status_required_after_each_phase_transition:true,
+              mode_switch_authenticated:true
+            } and
+            .round9.external_evaluation.corpus.plaintext_in_repository == false and
+            .round9.external_evaluation.metrics.route_order.algorithm ==
+              "hmac_sha256_challenge_sequential_phase_order_v3" and
+            .round9.external_evaluation.metrics.route_order.phase_order ==
+              ["audit","balanced","strict"] and
+            .round9.external_evaluation.metrics.route_order.mode_status_verified ==
+              {audit:true,balanced:true,strict:true} and
+            .round9.external_evaluation.metrics.route_order.mode_switch_authenticated == true and
+            .round9.external_evaluation.metrics.benign.unique_semantic_samples >= 600 and
+            .round9.external_evaluation.metrics.benign.blocked == 0 and
+            .round9.external_evaluation.metrics.benign.hard_policy_blocked == 0 and
+            .round9.external_evaluation.metrics.benign.upstream_delta ==
+              .round9.external_evaluation.metrics.benign.serialized_route_executions and
+            .round9.external_evaluation.metrics.benign.usage_delta ==
+              .round9.external_evaluation.metrics.benign.serialized_route_executions and
+            .round9.external_evaluation.metrics.malicious.recall_basis_points >= 9500 and
+            all(.round9.external_evaluation.metrics.malicious.per_category[];
+              .recall_basis_points >= 9500) and
+            .round9.external_evaluation.metrics.incomplete.audit ==
+              {policy_blocked:false,upstream_delta:1,usage_delta:1} and
+            .round9.external_evaluation.metrics.incomplete.balanced.policy_blocked == false and
+            .round9.external_evaluation.metrics.incomplete.balanced.upstream_delta == 1 and
+            .round9.external_evaluation.metrics.incomplete.balanced.usage_delta == 1 and
+            .round9.external_evaluation.metrics.incomplete.strict.policy_blocked == true and
+            .round9.external_evaluation.metrics.incomplete.strict.upstream_delta == 0 and
+            .round9.external_evaluation.metrics.incomplete.strict.usage_delta == 0 and
+            .round9.external_evaluation.metrics.runtime_checks.schema ==
+              "round9-external-cpa-runtime-checks/v1" and
+            .round9.external_evaluation.metrics.runtime_checks.state == "PASS" and
+            .round9.external_evaluation.metrics.runtime_checks.audit_database == {
+              observed:true,quick_check:"ok",schema_version:6,
+              migration_versions:[1,2,3,4,5,6],wal_checkpoint_passed:true
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.restart_recovery == {
+              observed:true,controlled_restart_count:1,unexpected_restart_count:0,
+              post_restart_mode_verified:"audit"
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.panic_recovery == {
+              observed:true,probe_passed:true,panic_count:0,fatal_count:0,plugin_error_count:0
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.usage_queue == {
+              observed:true,allowed_request_delta:1,blocked_request_delta:0
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.raw_capture == {
+              observed:true,default_disabled:true,normal_request_records:0,
+              normal_request_plaintext_persisted:false
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.lifecycle == {
+              observed:true,exit_code:0,oom_killed:false,unexpected_restart_count:0
+            } and
+            .round9.counted_mock.schema == "round9-external-counted-mock/v1" and
+            .round9.counted_mock.state == "PASS" and
+            .round9.counted_mock == .round9.external_evaluation.counted_mock and
+            .round9.counted_mock.not_observed == [] and
+            .round9.counted_mock.host_results.network_binding == {
+              host_ip:"127.0.0.1",host_port:18394,container_port:8317
+            } and
+            .round9.counted_mock.host_results.phase_order == ["audit","balanced","strict"] and
+            .round9.counted_mock.host_results.phase_route_executions ==
+              .round9.external_evaluation.metrics.route_order.phase_route_executions and
+            .round9.counted_mock.host_results.mode_status_verified ==
+              {audit:true,balanced:true,strict:true} and
+            .round9.counted_mock.host_results.mode_switch_authenticated == true and
+            .round9.counted_mock.host_results.runtime_checks ==
+              .round9.external_evaluation.metrics.runtime_checks and
+            .round9.external_evaluation.privacy.raw_prompts_in_result == false and
+            .round9.external_evaluation.privacy.raw_responses_in_result == false and
+            .round9.external_evaluation.privacy.request_bodies_in_logs == false and
+            .round9.external_ledger_proof.schema == "round9-protected-git-ledger-proof/v1" and
+            .round9.external_ledger_proof.name == "round9-external-ledger-proof.json" and
+            (.round9.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
+            .artifacts.external_evaluation.name == "round9-external-evaluation.json" and
+            (.artifacts.external_evaluation.sha256 | test("^[0-9a-f]{64}$")) and
+            .artifacts.external_ledger_proof.name == "round9-external-ledger-proof.json" and
+            (.artifacts.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
+            .round9.release.tag == "v0.16-rc.3" and
+            .round9.release.title == "v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required" and
+            (.round9.release.body | type == "string" and contains("Public adversarial v10") and
+              contains("latest=false") and contains("independent audit")) and
+            .round9.release.publication_permitted == true and
+            .round9.release.draft == false and .round9.release.prerelease == true and
+            .round9.release.latest == false and (.round9.release.asset_allowlist | length == 19)
+          ' dist/rc-release-manifest.json >/dev/null
+          [[ "$(jq -r '.round9.release.asset_allowlist[]' dist/rc-release-manifest.json | LC_ALL=C sort)" == "$expected" ]]
+          (cd dist && sha256sum -c checksums.txt && sha256sum -c rc-release-manifest.json.sha256)
+
+      - name: Attest exact Round 9 release-built assets
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
+        with:
+          subject-path: |
+            dist/build-metadata.json
+            dist/checksums.txt
+            dist/cyber-abuse-guard-v0.16-rc.3.so
+            dist/cyber-abuse-guard-v0.16-rc.3.so.sha256
+            dist/cyber-abuse-guard_0.16-rc.3_linux_amd64.zip
+            dist/cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip
+            dist/cyber-abuse-guard-v0.16-rc.3-source.tar.gz
+            dist/cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256
+            dist/rc-release-evidence.md
+            dist/rc-release-evidence.md.sha256
+            dist/rc-release-manifest.json
+            dist/rc-release-manifest.json.sha256
+            dist/rc-release-test-summary.txt
+            dist/rc-release-test-summary.txt.sha256
+            dist/ruleset-manifest.json
+            dist/ruleset.sha256
+            dist/sbom.cdx.json
+
+      - name: Verify exact-candidate independent-audit package or report NOT_PROVIDED
+        env:
+          EXPECTED_TAG_OBJECT: ${{ inputs.expected_tag_object_sha }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          AUDIT_REPOSITORY: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_REPOSITORY }}
+          AUDIT_WORKFLOW_NAME: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_WORKFLOW_NAME }}
+          AUDIT_WORKFLOW: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_WORKFLOW }}
+          AUDIT_REF: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_REF }}
+          AUDIT_WORKFLOW_SHA: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_WORKFLOW_SHA }}
+          AUDIT_RUN_ID: ${{ vars.ROUND9_INDEPENDENT_AUDIT_RUN_ID }}
+          AUDIT_RUN_ATTEMPT: ${{ vars.ROUND9_INDEPENDENT_AUDIT_RUN_ATTEMPT }}
+          AUDIT_ARTIFACT_ID: ${{ vars.ROUND9_INDEPENDENT_AUDIT_ARTIFACT_ID }}
+          AUDIT_ARTIFACT_NAME: ${{ vars.ROUND9_INDEPENDENT_AUDIT_ARTIFACT_NAME }}
+          AUDIT_ARTIFACT_DIGEST: ${{ vars.ROUND9_INDEPENDENT_AUDIT_ARTIFACT_DIGEST }}
+          AUDIT_CHALLENGE: ${{ vars.ROUND9_INDEPENDENT_AUDIT_CHALLENGE }}
+          AUDIT_PUBLIC_KEY_BASE64: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_PUBLIC_KEY_BASE64 }}
+          AUDIT_PUBLIC_KEY_SHA256: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_PUBLIC_KEY_SHA256 }}
+          AUDIT_KEY_ID: ${{ vars.ROUND9_INDEPENDENT_AUDITOR_KEY_ID }}
+          HOST_EVALUATOR_PUBLIC_KEY_SHA256: ${{ vars.ROUND9_EVALUATOR_PUBLIC_KEY_SHA256 }}
+          AUDIT_LEDGER_RULESET_ID: ${{ vars.ROUND9_INDEPENDENT_AUDIT_LEDGER_RULESET_ID }}
+          AUDIT_LEDGER_RULESET_NAME: ${{ vars.ROUND9_INDEPENDENT_AUDIT_LEDGER_RULESET_NAME }}
+          GH_TOKEN: ${{ secrets.ROUND9_INDEPENDENT_AUDIT_REMOTE_VERIFY_TOKEN }}
+        run: |
+          set -euo pipefail
+          audit_root="$RUNNER_TEMP/round9-independent-audit"
+          evidence="$audit_root/round9-independent-audit.json"
+          proof="$audit_root/round9-independent-audit-ledger-proof.json"
+          public_key="$audit_root/round9-independent-auditor-public-key.pem"
+
+          missing=false
+          for value in \
+            "$AUDIT_REPOSITORY" "$AUDIT_WORKFLOW_NAME" "$AUDIT_WORKFLOW" \
+            "$AUDIT_REF" "$AUDIT_WORKFLOW_SHA" "$AUDIT_RUN_ID" \
+            "$AUDIT_RUN_ATTEMPT" "$AUDIT_ARTIFACT_ID" "$AUDIT_ARTIFACT_NAME" \
+            "$AUDIT_ARTIFACT_DIGEST" "$AUDIT_CHALLENGE" \
+            "$AUDIT_PUBLIC_KEY_BASE64" "$AUDIT_PUBLIC_KEY_SHA256" \
+            "$AUDIT_KEY_ID" "$HOST_EVALUATOR_PUBLIC_KEY_SHA256" \
+            "$AUDIT_LEDGER_RULESET_ID" "$AUDIT_LEDGER_RULESET_NAME" "$GH_TOKEN"; do
+            [[ -n "$value" ]] || missing=true
+          done
+          if [[ "$missing" == true ]]; then
+            python3 -B scripts/round9_independent_audit_contract.py verify-remote \
+              --evidence "$evidence" --proof "$proof" --asset-dir dist \
+              --public-key "$public_key" --public-key-sha256 "$AUDIT_PUBLIC_KEY_SHA256" \
+              --host-evaluator-public-key-sha256 "$HOST_EVALUATOR_PUBLIC_KEY_SHA256" \
+              --key-id "$AUDIT_KEY_ID" --repository "$GITHUB_REPOSITORY" \
+              --tag v0.16-rc.3 --tag-object-sha "$EXPECTED_TAG_OBJECT" \
+              --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
+              --challenge "$AUDIT_CHALLENGE" --auditor-repository "$AUDIT_REPOSITORY" \
+              --auditor-workflow-name "$AUDIT_WORKFLOW_NAME" \
+              --auditor-workflow "$AUDIT_WORKFLOW" --auditor-ref "$AUDIT_REF" \
+              --auditor-workflow-sha "$AUDIT_WORKFLOW_SHA" \
+              --auditor-run-id "$AUDIT_RUN_ID" --auditor-run-attempt "$AUDIT_RUN_ATTEMPT" \
+              --ledger-ruleset-id "$AUDIT_LEDGER_RULESET_ID" \
+              --ledger-ruleset-name "$AUDIT_LEDGER_RULESET_NAME" \
+              --audit-artifact-id "$AUDIT_ARTIFACT_ID" \
+              --audit-artifact-name "$AUDIT_ARTIFACT_NAME" \
+              --audit-artifact-digest "$AUDIT_ARTIFACT_DIGEST"
+          fi
+
+          [[ "$AUDIT_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]
+          [[ "$AUDIT_WORKFLOW" =~ ^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$ ]]
+          [[ "$AUDIT_REF" =~ ^refs/(heads|tags)/[^[:space:]]+$ ]]
+          [[ "$AUDIT_WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$AUDIT_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$AUDIT_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$AUDIT_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$AUDIT_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$AUDIT_CHALLENGE" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$AUDIT_PUBLIC_KEY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$HOST_EVALUATOR_PUBLIC_KEY_SHA256" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$AUDIT_LEDGER_RULESET_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$AUDIT_LEDGER_RULESET_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9_.:-]{2,127}$ ]]
+          [[ "$GH_TOKEN" != *$'\n'* && "$GH_TOKEN" != *$'\r'* ]]
+
+          mkdir -m 0700 "$audit_root"
+          archive="$(mktemp "$RUNNER_TEMP/round9-independent-audit.XXXXXX.zip")"
+          artifact="$(gh api "repos/${AUDIT_REPOSITORY}/actions/artifacts/${AUDIT_ARTIFACT_ID}")"
+          jq -e --arg repo "$AUDIT_REPOSITORY" --arg name "$AUDIT_ARTIFACT_NAME" \
+            --arg digest "$AUDIT_ARTIFACT_DIGEST" --argjson id "$AUDIT_ARTIFACT_ID" \
+            --argjson run "$AUDIT_RUN_ID" '
+              .id == $id and .name == $name and .digest == $digest and
+              .expired == false and .workflow_run.id == $run and
+              (.size_in_bytes | type == "number" and . == floor and . > 0 and . <= 4194304)
+            ' <<<"$artifact" >/dev/null
+          gh api --header 'Accept: application/octet-stream' \
+            "repos/${AUDIT_REPOSITORY}/actions/artifacts/${AUDIT_ARTIFACT_ID}/zip" >"$archive"
+          [[ "sha256:$(sha256sum "$archive" | awk '{print $1}')" == "$AUDIT_ARTIFACT_DIGEST" ]]
+          python3 -B - "$archive" "$audit_root" <<'PY'
+          import pathlib, stat, sys, zipfile
+
+          source, destination = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+          expected = {
+              "round9-independent-audit.json",
+              "round9-independent-audit-ledger-proof.json",
+          }
+          with zipfile.ZipFile(source) as archive:
+              infos = archive.infolist()
+              names = [item.filename for item in infos]
+              if len(infos) != 2 or set(names) != expected or len(names) != len(set(names)):
+                  raise SystemExit("independent-audit artifact allowlist mismatch")
+              if any(item.is_dir() or pathlib.PurePosixPath(item.filename).name != item.filename for item in infos):
+                  raise SystemExit("independent-audit artifact contains a non-top-level entry")
+              if any(item.flag_bits & 1 or item.file_size > 1048576 for item in infos):
+                  raise SystemExit("independent-audit artifact entry is encrypted or oversized")
+              if sum(item.file_size for item in infos) > 2097152:
+                  raise SystemExit("independent-audit artifact expands beyond the reviewed bound")
+              for item in infos:
+                  mode = item.external_attr >> 16
+                  if mode and not stat.S_ISREG(mode):
+                      raise SystemExit("independent-audit artifact entry is not regular")
+                  target = destination / item.filename
+                  with target.open("xb") as output:
+                      output.write(archive.read(item))
+          PY
+          umask 077
+          (set -o noclobber; : >"$public_key")
+          printf '%s' "$AUDIT_PUBLIC_KEY_BASE64" | base64 --decode >"$public_key"
+          [[ "$(sha256sum "$public_key" | awk '{print $1}')" == "$AUDIT_PUBLIC_KEY_SHA256" ]]
+          chmod 0644 "$public_key"
+
+          for name in round9-independent-audit.json round9-independent-audit-ledger-proof.json; do
+            gh attestation verify "$audit_root/$name" --repo "$AUDIT_REPOSITORY" \
+              --signer-workflow "$AUDIT_REPOSITORY/$AUDIT_WORKFLOW" \
+              --signer-digest "$AUDIT_WORKFLOW_SHA" --source-ref "$AUDIT_REF" \
+              --source-digest "$AUDIT_WORKFLOW_SHA" >/dev/null
+          done
+          python3 -B scripts/round9_independent_audit_contract.py verify-remote \
+            --evidence "$evidence" --proof "$proof" --asset-dir dist \
+            --public-key "$public_key" --public-key-sha256 "$AUDIT_PUBLIC_KEY_SHA256" \
+            --host-evaluator-public-key-sha256 "$HOST_EVALUATOR_PUBLIC_KEY_SHA256" \
+            --key-id "$AUDIT_KEY_ID" --repository "$GITHUB_REPOSITORY" \
+            --tag v0.16-rc.3 --tag-object-sha "$EXPECTED_TAG_OBJECT" \
+            --commit "$EXPECTED_COMMIT" --tree "$EXPECTED_TREE" \
+            --challenge "$AUDIT_CHALLENGE" --auditor-repository "$AUDIT_REPOSITORY" \
+            --auditor-workflow-name "$AUDIT_WORKFLOW_NAME" \
+            --auditor-workflow "$AUDIT_WORKFLOW" --auditor-ref "$AUDIT_REF" \
+            --auditor-workflow-sha "$AUDIT_WORKFLOW_SHA" \
+            --auditor-run-id "$AUDIT_RUN_ID" --auditor-run-attempt "$AUDIT_RUN_ATTEMPT" \
+            --ledger-ruleset-id "$AUDIT_LEDGER_RULESET_ID" \
+            --ledger-ruleset-name "$AUDIT_LEDGER_RULESET_NAME" \
+            --audit-artifact-id "$AUDIT_ARTIFACT_ID" \
+            --audit-artifact-name "$AUDIT_ARTIFACT_NAME" \
+            --audit-artifact-digest "$AUDIT_ARTIFACT_DIGEST"
+
+  publication_blocked:
+    needs:
+      - admission
+      - build
+    if: ${{ needs.admission.outputs.publication_permitted == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Fail closed after retaining the private candidate artifact
+        run: |
+          [[ "$ROUND9_NEW_PUBLIC_PRERELEASE_CREATION" == \
+            BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE ]]
+          printf '%s\n' \
+            'The private 17-asset candidate remains available as an Actions artifact.' \
+            'No new public Round 9 prerelease can be created by this workflow.' \
+            'Required exact-candidate independent-audit evidence is NOT_PROVIDED; the implemented verifier therefore remains fail-closed.' >&2
+          exit 1
+
+  verify_published:
+    needs: admission
+    # Existing Releases are rejected by admission. This legacy read-only
+    # verifier remains unreachable until an independent-audit gate replaces it.
+    if: ${{ needs.admission.outputs.publication_permitted == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+    steps:
+      - name: Verify existing immutable Round 9 Release without mutation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          set -euo pipefail
+          title='v0.16-rc.3 - Round 9 counted-Mock candidate; independent audit required'
+          release="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}")"
+          jq -e --arg commit "$EXPECTED_COMMIT" --arg title "$title" '
+            .draft == false and .immutable == true and .prerelease == true and
+            .target_commitish == $commit and .name == $title and
+            (.assets | length == 19 and all(.state == "uploaded") and
+              ([.[].name] | length) == ([.[].name] | unique | length))
+          ' <<<"$release" >/dev/null
+          expected="$(printf '%s\n' \
+            build-metadata.json checksums.txt \
+            cyber-abuse-guard-v0.16-rc.3.so cyber-abuse-guard-v0.16-rc.3.so.sha256 \
+            cyber-abuse-guard_0.16-rc.3_linux_amd64.zip \
+            cyber-abuse-guard-v0.16-rc.3-audit-bundle.zip \
+            cyber-abuse-guard-v0.16-rc.3-source.tar.gz \
+            cyber-abuse-guard-v0.16-rc.3-source.tar.gz.sha256 \
+            rc-release-evidence.md rc-release-evidence.md.sha256 \
+            rc-release-manifest.json rc-release-manifest.json.sha256 \
+            rc-release-test-summary.txt rc-release-test-summary.txt.sha256 \
+            round9-external-evaluation.json round9-external-ledger-proof.json \
+            ruleset-manifest.json ruleset.sha256 sbom.cdx.json | LC_ALL=C sort)"
+          [[ "$(jq -r '.assets[].name' <<<"$release" | LC_ALL=C sort)" == "$expected" ]]
+          mkdir -m 0700 "$RUNNER_TEMP/published"
+          while IFS= read -r name; do
+            asset="$(jq -ce --arg name "$name" '[.assets[] | select(.name == $name)] | if length == 1 then .[0] else error("asset mismatch") end' <<<"$release")"
+            id="$(jq -er '.id' <<<"$asset")"
+            gh api --header 'Accept: application/octet-stream' \
+              "repos/${GITHUB_REPOSITORY}/releases/assets/${id}" >"$RUNNER_TEMP/published/$name"
+            [[ "$(jq -r '.digest' <<<"$asset")" == "sha256:$(sha256sum "$RUNNER_TEMP/published/$name" | awk '{print $1}')" ]]
+          done <<<"$expected"
+          (cd "$RUNNER_TEMP/published" && sha256sum -c checksums.txt && sha256sum -c rc-release-manifest.json.sha256)
+          manifest="$RUNNER_TEMP/published/rc-release-manifest.json"
+          body="$(jq -er '.round9.release.body' "$manifest")"
+          [[ "$(jq -r '.round9.release.asset_allowlist[]' "$manifest" | LC_ALL=C sort)" == "$expected" ]]
+          jq -e --arg title "$title" --arg body "$body" --arg commit "$EXPECTED_COMMIT" '
+            .schema_version == 6 and .release_phase == "publish" and
+            .round9.corpus.public_adversarial.payload_records == 24 and
+            .round9.corpus.public_adversarial.unique_historical_payloads == 8 and
+            .round9.corpus.public_adversarial.unique_branch_head_payloads == 1 and
+            .round9.corpus.public_adversarial.unique_current_prompt_like_payloads == 14 and
+            .round9.corpus.public_adversarial.unique_formal_payloads == 23 and
+            .round9.corpus.public_adversarial.unmerged_candidate_carriers == 1 and
+            .round9.corpus.public_adversarial.nondefault_branch_candidate_carriers == 5 and
+            .round9.corpus.public_adversarial.release_assets_reviewed == 16 and
+            .round9.corpus.public_adversarial.release_assets_with_prompt_entries == 4 and
+            .round9.corpus.public_adversarial.candidate_carrier_executions == 1 and
+            .round9.corpus.public_adversarial.candidate_carriers_not_provided == 0 and
+            .round9.corpus.public_adversarial.scenario_payload_executions == 24 and
+            .round9.corpus.public_adversarial.serialized_route_executions == 120 and
+            .round9.corpus.public_adversarial.direct_active_blocked == 12 and
+            .round9.corpus.public_adversarial.direct_active_allowed == 12 and
+                .round9.machine_reports.public_adversarial.schema == "round9-public-adversarial-report/v10" and
+            .round9.external_evaluation.schema == "round9-external-evaluation/v2" and
+            .round9.external_evaluation.state == "PASS" and
+            .round9.external_evaluation.development_evidence ==
+              .round9.development_evidence and
+            .round9.external_evaluation.candidate.commit == $commit and
+            (.round9.external_evaluation.execution.workflow_run_id | type == "number" and . >= 1) and
+            (.round9.external_evaluation.execution.workflow_run_attempt | type == "number" and . >= 1) and
+            .round9.external_evaluation.execution.production_accessed == false and
+            .round9.external_evaluation.execution.real_provider_contacted == false and
+            .round9.external_evaluation.execution.network_binding == {
+              host_ip:"127.0.0.1",host_port:18394,container_port:8317
+            } and
+            .round9.external_evaluation.execution.phase_protocol == {
+              single_cpa_container:true,
+              initial_mode:"audit",
+              phase_order:["audit","balanced","strict"],
+              mode_switch_method:"PUT",
+              mode_switch_endpoint:"/v0/management/plugins/cyber-abuse-guard/config",
+              status_endpoint:"/v0/management/plugins/cyber-abuse-guard/status",
+              status_required_after_each_phase_transition:true,
+              mode_switch_authenticated:true
+            } and
+            .round9.external_evaluation.metrics.route_order.algorithm ==
+              "hmac_sha256_challenge_sequential_phase_order_v3" and
+            .round9.external_evaluation.metrics.route_order.phase_order ==
+              ["audit","balanced","strict"] and
+            .round9.external_evaluation.metrics.route_order.mode_status_verified ==
+              {audit:true,balanced:true,strict:true} and
+            .round9.external_evaluation.metrics.route_order.mode_switch_authenticated == true and
+            .round9.external_evaluation.metrics.benign.blocked == 0 and
+            .round9.external_evaluation.metrics.benign.hard_policy_blocked == 0 and
+            .round9.external_evaluation.metrics.malicious.recall_basis_points >= 9500 and
+            all(.round9.external_evaluation.metrics.malicious.per_category[];
+              .recall_basis_points >= 9500) and
+            .round9.external_evaluation.metrics.incomplete.audit ==
+              {policy_blocked:false,upstream_delta:1,usage_delta:1} and
+            .round9.external_evaluation.metrics.incomplete.balanced ==
+              {policy_blocked:false,upstream_delta:1,usage_delta:1} and
+            .round9.external_evaluation.metrics.incomplete.strict ==
+              {policy_blocked:true,upstream_delta:0,usage_delta:0} and
+            .round9.external_evaluation.metrics.runtime_checks.schema ==
+              "round9-external-cpa-runtime-checks/v1" and
+            .round9.external_evaluation.metrics.runtime_checks.state == "PASS" and
+            .round9.external_evaluation.metrics.runtime_checks.audit_database == {
+              observed:true,quick_check:"ok",schema_version:6,
+              migration_versions:[1,2,3,4,5,6],wal_checkpoint_passed:true
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.restart_recovery == {
+              observed:true,controlled_restart_count:1,unexpected_restart_count:0,
+              post_restart_mode_verified:"audit"
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.panic_recovery == {
+              observed:true,probe_passed:true,panic_count:0,fatal_count:0,plugin_error_count:0
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.usage_queue == {
+              observed:true,allowed_request_delta:1,blocked_request_delta:0
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.raw_capture == {
+              observed:true,default_disabled:true,normal_request_records:0,
+              normal_request_plaintext_persisted:false
+            } and
+            .round9.external_evaluation.metrics.runtime_checks.lifecycle == {
+              observed:true,exit_code:0,oom_killed:false,unexpected_restart_count:0
+            } and
+            .round9.counted_mock.schema == "round9-external-counted-mock/v1" and
+            .round9.counted_mock.state == "PASS" and
+            .round9.counted_mock == .round9.external_evaluation.counted_mock and
+            .round9.counted_mock.not_observed == [] and
+            .round9.counted_mock.host_results.network_binding == {
+              host_ip:"127.0.0.1",host_port:18394,container_port:8317
+            } and
+            .round9.counted_mock.host_results.phase_order == ["audit","balanced","strict"] and
+            .round9.counted_mock.host_results.phase_route_executions ==
+              .round9.external_evaluation.metrics.route_order.phase_route_executions and
+            .round9.counted_mock.host_results.mode_status_verified ==
+              {audit:true,balanced:true,strict:true} and
+            .round9.counted_mock.host_results.mode_switch_authenticated == true and
+            .round9.counted_mock.host_results.runtime_checks ==
+              .round9.external_evaluation.metrics.runtime_checks and
+            .round9.external_ledger_proof.schema == "round9-protected-git-ledger-proof/v1" and
+            .round9.external_ledger_proof.name == "round9-external-ledger-proof.json" and
+            (.round9.external_ledger_proof.sha256 | test("^[0-9a-f]{64}$")) and
+            .artifacts.external_evaluation.name == "round9-external-evaluation.json" and
+            .artifacts.external_ledger_proof.name == "round9-external-ledger-proof.json" and
+            .round9.release.tag == "v0.16-rc.3" and
+            .round9.release.title == $title and .round9.release.body == $body and
+            .round9.release.publication_permitted == true and
+            .round9.release.draft == false and .round9.release.prerelease == true and
+            .round9.release.latest == false and (.round9.release.asset_allowlist | length == 19)
+          ' "$manifest" >/dev/null
+          [[ "$(jq -er '.artifacts.external_evaluation.sha256' "$manifest")" == \
+            "$(sha256sum "$RUNNER_TEMP/published/round9-external-evaluation.json" | awk '{print $1}')" ]]
+          [[ "$(jq -er '.artifacts.external_ledger_proof.sha256' "$manifest")" == \
+            "$(sha256sum "$RUNNER_TEMP/published/round9-external-ledger-proof.json" | awk '{print $1}')" ]]
+          [[ "$(jq -er '.round9.external_ledger_proof.sha256' "$manifest")" == \
+            "$(sha256sum "$RUNNER_TEMP/published/round9-external-ledger-proof.json" | awk '{print $1}')" ]]
+          jq -e --arg body "$body" '.body == $body' <<<"$release" >/dev/null
+          ordinary="$(grep -Fvx -e round9-external-evaluation.json -e round9-external-ledger-proof.json <<<"$expected")"
+          while IFS= read -r name; do
+            gh attestation verify "$RUNNER_TEMP/published/$name" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-release-rc.yml" \
+              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+              --source-digest "$EXPECTED_COMMIT" >/dev/null
+          done <<<"$ordinary"
+          for name in round9-external-evaluation.json round9-external-ledger-proof.json; do
+            gh attestation verify "$RUNNER_TEMP/published/$name" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round9-host-validation.yml" \
+              --signer-digest "$EXPECTED_COMMIT" --source-ref refs/tags/v0.16-rc.3 \
+              --source-digest "$EXPECTED_COMMIT" >/dev/null
+          done
+          latest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          [[ "$latest" == v0.15 ]]

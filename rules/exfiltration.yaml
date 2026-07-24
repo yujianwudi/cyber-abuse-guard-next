@@ -1,0 +1,122 @@
+version: "1.0.10"
+rules:
+  - id: EXFIL-001
+    category: data_exfiltration
+    severity: critical
+    base_score: 65
+    hard_floor: 80
+    authorization_protected: true
+    intent:
+      zh: ["窃取", "外传", "偷运", "送出", "送到", "送往", "隐蔽上传", "带离网络"]
+      en: ["steal", "steals", "stealing", "stole", "stolen", "exfiltrate", "exfiltrates", "exfiltrating", "exfiltrated", "siphon", "siphons", "siphoning", "smuggle out", "create a dns tunnel", "send externally", "sent externally", "transfer off network", "transferred off network"]
+    object:
+      zh: ["客户数据库", "数据库", "客户记录", "隐私数据", "私钥", "签名密钥", "源代码归档", "敏感文档", "账号资料", "数据库备份"]
+      en: ["customer database", "production database", "database backups", "customer records", "private keys", "signing keys", "source archives", "source code archives", "customer secrets", "employee documents", "victim files"]
+    operational:
+      zh: ["完整程序", "完整工具", "可运行", "程序", "工具", "外部存储", "攻击者控制的云存储"]
+      en: ["write code", "working tool", "ready-to-run", "ready to run", "complete code", "software", "external endpoint", "external host", "server i control", "attacker-controlled server", "attacker-controlled cloud bucket", "external cloud bucket"]
+    target:
+      zh: ["受害主机", "真实用户", "真实组织", "生产", "员工电脑"]
+      en: ["victim", "compromised host", "production", "real organization", "employee"]
+    evasion:
+      zh: ["隐蔽外传", "隐蔽通道", "dns 隧道", "避免告警", "静默"]
+      en: ["covert exfiltration", "covert channel", "dns tunnel", "avoid alerts", "undetected"]
+    scale:
+      zh: ["批量", "自动", "多台", "分批"]
+      en: ["automate", "automated", "bulk", "multiple", "at scale"]
+  - id: EXFIL-002
+    category: data_exfiltration
+    severity: critical
+    base_score: 65
+    hard_floor: 80
+    authorization_protected: true
+    intent:
+      zh: ["发送到外部", "传到我的服务器", "带离网络", "外传", "上传到外部", "批量下载真实组织", "偷运", "传出", "送出", "送到", "送往", "转送到"]
+      en: ["send externally", "transfer off", "forward externally", "exfiltrate", "sneak", "smuggle out", "siphon out", "exfiltrte"]
+    object:
+      zh: ["隐私数据", "私钥", "客户资料", "数据库内容", "敏感信息", "敏感文档", "客户档案", "签名密钥", "内部源代码归档", "源代码归档"]
+      en: ["private keys", "customer data", "database contents", "customer secrets", "client records", "client archives", "signing keys", "employee documents", "internal source archives", "source archives", "source code archives", "secrets"]
+    operational:
+      zh: ["外部服务器", "外部目的地", "跨网络传输", "网外服务器", "境外服务器", "个人云盘", "个人存储账号", "私人网盘"]
+      en: ["external host", "external endpoint", "external destination", "covert transfer", "storage host i control", "off-network server", "overseas server", "personal storage account", "personal cloud", "personal drive", "private cloud account"]
+    target:
+      zh: ["受害者", "受害主机", "已失陷主机", "真实主机", "真实客户", "生产"]
+      en: ["victim", "victim host", "compromised host", "compromised workstation", "real host", "real customer", "production"]
+    evasion:
+      zh: ["隐蔽", "dns", "分批", "避开告警", "不触发告警"]
+      en: ["covert", "dns", "stealth", "small batches", "without raising an alert", "avoid alert", "avoid alerts"]
+    scale:
+      zh: ["批量", "多台", "自动"]
+      en: ["bulk", "multiple", "automated"]
+  - id: EXFIL-003
+    category: data_exfiltration
+    severity: high
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: true
+    intent:
+      zh: ["复制", "拷贝", "搬运"]
+      en: ["copy", "copies", "copying", "copied", "move", "moves", "moving", "moved"]
+    object:
+      zh: ["客户机密", "客户数据", "私钥", "敏感文档", "数据库备份", "数据库转储", "机密文件", "内部资料"]
+      en: ["customer secrets", "customer data", "private keys", "signing keys", "sensitive documents", "database backups", "database dumps", "confidential files", "internal documents", "source code archives"]
+    operational:
+      zh: ["外部主机", "外部服务器", "外部目的地", "受控服务器", "我的服务器", "远程服务器", "外部云存储"]
+      en: ["external host", "external server", "external destination", "outside endpoint", "beyond the corporate network", "server i control", "controlled server", "attacker-controlled server", "remote server", "offsite account", "external cloud bucket"]
+    target:
+      zh: ["受害主机", "真实客户"]
+      en: ["victim host", "real customer"]
+    evasion:
+      zh: ["隐蔽", "避免告警"]
+      en: ["covert", "avoid alerts", "undetected"]
+    scale:
+      zh: ["批量", "多个", "自动"]
+      en: ["bulk", "multiple", "automated"]
+  - id: EXFIL-004
+    category: data_exfiltration
+    severity: high
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: true
+    intent:
+      zh: ["创建", "制作", "搭建"]
+      en: ["create", "creates", "creating", "created", "build", "builds", "building", "built"]
+    object:
+      zh: ["dns 隧道", "隐蔽通道", "外传隧道"]
+      en: ["dns tunnel", "covert channel", "exfiltration tunnel"]
+    operational:
+      zh: ["可部署", "可运行", "完整工具"]
+      en: ["deployable", "working", "ready-to-run", "complete tool"]
+    target:
+      zh: ["受害者文件", "生产数据", "真实组织"]
+      en: ["victim files", "production data", "real organization"]
+    evasion:
+      zh: ["隐蔽外传", "绕过告警"]
+      en: ["covert exfiltration", "avoid alerts", "undetected"]
+    scale:
+      zh: ["批量", "多个", "自动"]
+      en: ["bulk", "multiple", "automated"]
+  - id: EXFIL-005
+    category: data_exfiltration
+    severity: high
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: true
+    intent:
+      zh: ["发送", "传输", "转移", "上传", "导出", "同步到外部"]
+      en: ["send", "sends", "sending", "sent", "transfer", "transfers", "transferring", "transferred", "upload", "uploads", "uploading", "uploaded", "export", "sync externally"]
+    object:
+      zh: ["客户记录", "数据库备份", "私钥", "敏感文档"]
+      en: ["customer records", "database backups", "private keys", "signing keys", "customer secrets", "employee documents"]
+    operational:
+      zh: ["外部网络", "网络之外", "外部主机", "我的服务器", "受控服务器", "远程服务器", "外部云存储"]
+      en: ["externally", "off network", "outside the network", "external host", "external endpoint", "server i control", "controlled server", "attacker-controlled server", "remote server", "external cloud bucket"]
+    target:
+      zh: ["受害主机", "真实客户", "生产环境"]
+      en: ["victim host", "real customer", "production", "compromised host"]
+    evasion:
+      zh: ["隐蔽", "避免告警"]
+      en: ["covert", "stealth", "avoid alerts", "undetected"]
+    scale:
+      zh: ["批量", "多台", "自动"]
+      en: ["bulk", "multiple", "automated", "at scale"]

@@ -1,0 +1,60 @@
+{
+  "corpus": {
+    "age_identity": "/etc/cag-round9-eval-broker/age-identity.txt",
+    "author_public_key": "/etc/cag-round9-eval-broker/corpus-author-ed25519.pub",
+    "benign_cases_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "benign_manifest_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "bundle_manifest_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "encrypted_bundle": "/var/lib/cag-round9-eval-broker/corpus/round9-independent-v1.tar.age",
+    "encrypted_bundle_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "evaluation_id": "round9-independent-v1",
+    "malicious_cases_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "malicious_manifest_sha256": "REPLACE_WITH_64_LOWERCASE_HEX"
+  },
+  "github": {
+    "api_url": "https://api.github.com",
+    "ledger_ruleset_id": 19602252,
+    "ledger_ruleset_name": "round9-eval-ledger-immutable",
+    "token_file": "/etc/cag-round9-eval-broker/github-token"
+  },
+  "identities": {
+    "author_key_id": "round9-independent-author-v1",
+    "broker_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "core_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "docker_sandbox_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "evaluator_key_id": "round9-evaluator-key-v1",
+    "evaluator_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "evaluator_version": "cag-round9-external-evaluator-v2",
+    "sandbox_adapter_config_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+    "sandbox_adapter_sha256": "REPLACE_WITH_64_LOWERCASE_HEX"
+  },
+  "paths": {
+    "age": "/usr/bin/age",
+    "allowed_output_root": "/var/lib/cag-round9-eval-broker/public",
+    "broker": "/usr/local/libexec/cag-round9-eval-broker",
+    "core": "/usr/local/libexec/round9_eval_core.py",
+    "docker_sandbox": "/usr/local/libexec/cag-round9-docker-sandbox",
+    "evaluator": "/usr/local/libexec/cag-round9-external-evaluator",
+    "gh": "/usr/local/bin/gh",
+    "openssl": "/usr/bin/openssl",
+    "sandbox_adapter": "/usr/local/libexec/cag-round9-cpa-sandbox",
+    "sandbox_adapter_config": "/etc/cag-round9-eval-broker/sandbox-adapter.json",
+    "state_root": "/var/lib/cag-round9-eval-broker/state",
+    "work_root": "/var/lib/cag-round9-eval-broker/work"
+  },
+  "repository": "yujianwudi/cyber-abuse-guard",
+  "sandbox": {
+    "counted_mock_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
+    "cpa_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
+    "daemon_id": "round9-independent-daemon-v1",
+    "model": "gpt-5.4",
+    "probe_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
+    "sandbox_id": "round9-independent-sandbox-v1",
+    "scan_limit_bytes": 16384
+  },
+  "schema": "round9-eval-broker-config/v1",
+  "signing": {
+    "private_key": "/etc/cag-round9-eval-broker/evaluator-ed25519-private.pem",
+    "public_key": "/etc/cag-round9-eval-broker/evaluator-ed25519-public.pem"
+  }
+}

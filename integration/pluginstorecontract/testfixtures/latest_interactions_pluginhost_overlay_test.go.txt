@@ -1,0 +1,86 @@
+package pluginhost
+
+import (
+	"bytes"
+	"context"
+	"net/http"
+	"net/url"
+	"testing"
+
+	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+)
+
+func TestCyberAbuseGuardInteractionsDirectExecutorFormatContract(t *testing.T) {
+	body := []byte(`{"model":"gemini-3.5-flash","input":"INTERACTIONS_DIRECT_FORMAT_CANARY"}`)
+	headers := make(http.Header)
+	headers.Set("X-CAG-Visibility", "header-canary")
+	query := url.Values{"session": []string{"direct-format-session"}}
+	var executorRequest pluginapi.ExecutorRequest
+
+	executor := &fakeExecutor{
+		identifier: "cyber-abuse-guard",
+		execute: func(_ context.Context, request pluginapi.ExecutorRequest) (pluginapi.ExecutorResponse, error) {
+			executorRequest = request
+			return pluginapi.ExecutorResponse{Payload: []byte(`{"blocked":true}`)}, nil
+		},
+	}
+	host := newRouteModelHostWithRecords(capabilityRecord{
+		id:       "cyber-abuse-guard",
+		priority: 300,
+		plugin: pluginapi.Plugin{Capabilities: pluginapi.Capabilities{
+			Executor:              executor,
+			ExecutorModelScope:    pluginapi.ExecutorModelScopeStatic,
+			ExecutorInputFormats:  []string{sdktranslator.FormatInteractions.String()},
+			ExecutorOutputFormats: []string{sdktranslator.FormatInteractions.String()},
+			ModelRouter: modelRouterFunc(func(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
+				if request.SourceFormat != sdktranslator.FormatInteractions.String() || request.RequestedModel != "gemini-3.5-flash" || request.Stream {
+					t.Fatalf("route identity = format %q model %q stream %v", request.SourceFormat, request.RequestedModel, request.Stream)
+				}
+				if !bytes.Equal(request.Body, body) || request.Headers.Get("X-CAG-Visibility") != "header-canary" || request.Query.Get("session") != "direct-format-session" {
+					t.Fatalf("route body/headers/query drifted: body=%s headers=%#v query=%#v", request.Body, request.Headers, request.Query)
+				}
+				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
+			}),
+		}},
+	})
+	t.Cleanup(host.ShutdownAll)
+
+	routeResponse, handled := host.RouteModel(context.Background(), pluginapi.ModelRouteRequest{
+		SourceFormat:   sdktranslator.FormatInteractions.String(),
+		RequestedModel: "gemini-3.5-flash",
+		Headers:        headers,
+		Query:          query,
+		Body:           body,
+	})
+	if !handled || !routeResponse.Handled || routeResponse.TargetKind != pluginapi.ModelRouteTargetSelf || routeResponse.Target != "cyber-abuse-guard" {
+		t.Fatalf("RouteModel() = %#v, %v; want direct Guard self target", routeResponse, handled)
+	}
+
+	response, errExecute := host.ExecutePluginExecutor(context.Background(), routeResponse.Target,
+		coreexecutor.Request{Model: "gemini-3.5-flash", Payload: body},
+		coreexecutor.Options{
+			SourceFormat:    sdktranslator.FormatInteractions,
+			ResponseFormat:  sdktranslator.FormatInteractions,
+			OriginalRequest: body,
+			Headers:         headers,
+			Query:           query,
+		},
+	)
+	if errExecute != nil {
+		t.Fatalf("ExecutePluginExecutor() error = %v", errExecute)
+	}
+	if string(response.Payload) != `{"blocked":true}` {
+		t.Fatalf("executor response payload = %s", response.Payload)
+	}
+	if executorRequest.SourceFormat != sdktranslator.FormatInteractions.String() || executorRequest.Format != sdktranslator.FormatInteractions.String() {
+		t.Fatalf("executor request formats = source %q target %q, want direct interactions", executorRequest.SourceFormat, executorRequest.Format)
+	}
+	if !bytes.Equal(executorRequest.OriginalRequest, body) || !bytes.Equal(executorRequest.Payload, body) {
+		t.Fatalf("executor original/payload drifted: original=%s payload=%s", executorRequest.OriginalRequest, executorRequest.Payload)
+	}
+	if executorRequest.Headers.Get("X-CAG-Visibility") != "header-canary" || executorRequest.Query.Get("session") != "direct-format-session" {
+		t.Fatalf("executor headers/query drifted: headers=%#v query=%#v", executorRequest.Headers, executorRequest.Query)
+	}
+}

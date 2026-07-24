@@ -1,0 +1,157 @@
+package gemini
+
+import (
+	"bytes"
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
+	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
+	"github.com/tidwall/gjson"
+)
+
+func TestCyberAbuseGuardInteractionsTranslatorRegistryContract(t *testing.T) {
+	if sdktranslator.FormatInteractions.String() != "interactions" {
+		t.Fatalf("FormatInteractions = %q, want interactions", sdktranslator.FormatInteractions)
+	}
+	if !sdktranslator.HasRequestTransformer(sdktranslator.FormatInteractions, sdktranslator.FormatOpenAI) {
+		t.Fatal("latest CPA translator registry has no interactions -> openai request transformer")
+	}
+	if !sdktranslator.HasNonStreamResponseTransformer(sdktranslator.FormatInteractions, sdktranslator.FormatOpenAI) {
+		t.Fatal("latest CPA translator registry has no openai -> interactions non-stream response transformer")
+	}
+	if !sdktranslator.HasStreamResponseTransformer(sdktranslator.FormatInteractions, sdktranslator.FormatOpenAI) {
+		t.Fatal("latest CPA translator registry has no openai -> interactions stream response transformer")
+	}
+}
+
+func TestCyberAbuseGuardInteractionsHandlerModelRouterContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	t.Run("model request exposes native fields before auth", func(t *testing.T) {
+		const inputCanary = "INTERACTIONS_MODEL_INPUT_CANARY"
+		body := `{"model":"models/gemini-3.5-flash","input":[{"type":"user_input","content":[{"type":"text","text":"` + inputCanary + `"}]}]}`
+		host := &interactionsContractHost{}
+		recorder := runInteractionsContractRequest(t, host, body, "model-session")
+
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+		}
+		if host.routeCalls != 1 || host.executorCalls != 1 {
+			t.Fatalf("route/executor calls = %d/%d, want 1/1", host.routeCalls, host.executorCalls)
+		}
+		request := host.routeRequest
+		if request.SourceFormat != sdktranslator.FormatInteractions.String() || request.RequestedModel != "gemini-3.5-flash" || request.Stream {
+			t.Fatalf("route request identity = format %q model %q stream %v", request.SourceFormat, request.RequestedModel, request.Stream)
+		}
+		if request.Headers.Get("X-CAG-Visibility") != "header-canary" || request.Query.Get("session") != "model-session" {
+			t.Fatalf("route request headers/query = %#v / %#v", request.Headers, request.Query)
+		}
+		if got := gjson.GetBytes(request.Body, "model").String(); got != "gemini-3.5-flash" {
+			t.Fatalf("route body model = %q, want normalized gemini-3.5-flash; body=%s", got, request.Body)
+		}
+		if got := gjson.GetBytes(request.Body, "input.0.content.0.text").String(); got != inputCanary {
+			t.Fatalf("route body input = %q, want %q; body=%s", got, inputCanary, request.Body)
+		}
+		if host.executorOptions.SourceFormat != sdktranslator.FormatInteractions || host.executorOptions.ResponseFormat != sdktranslator.FormatInteractions {
+			t.Fatalf("executor formats = %q -> %q, want interactions -> interactions", host.executorOptions.SourceFormat, host.executorOptions.ResponseFormat)
+		}
+		if !bytes.Equal(host.executorOptions.OriginalRequest, request.Body) || !bytes.Equal(host.executorRequest.Payload, request.Body) {
+			t.Fatalf("executor original/payload drifted from ModelRouter body: original=%s payload=%s route=%s",
+				host.executorOptions.OriginalRequest, host.executorRequest.Payload, request.Body)
+		}
+	})
+
+	t.Run("agent block route fails closed before executor and auth", func(t *testing.T) {
+		const inputCanary = "INTERACTIONS_AGENT_INPUT_CANARY"
+		body := `{"agent":"agents/cag-contract-agent","stream":true,"input":"` + inputCanary + `"}`
+		host := &interactionsContractHost{}
+		recorder := runInteractionsContractRequest(t, host, body, "agent-session")
+
+		if recorder.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusBadRequest, recorder.Body.String())
+		}
+		if !strings.Contains(recorder.Body.String(), "agent is only supported for native interactions execution") {
+			t.Fatalf("agent response does not expose the pinned CPA fail-closed contract: %s", recorder.Body.String())
+		}
+		if host.routeCalls != 1 || host.executorCalls != 0 {
+			t.Fatalf("route/executor calls = %d/%d, want 1/0", host.routeCalls, host.executorCalls)
+		}
+		request := host.routeRequest
+		if request.SourceFormat != sdktranslator.FormatInteractions.String() || request.RequestedModel != "agents/cag-contract-agent" || !request.Stream {
+			t.Fatalf("agent route identity = format %q model %q stream %v", request.SourceFormat, request.RequestedModel, request.Stream)
+		}
+		if request.Headers.Get("X-CAG-Visibility") != "header-canary" || request.Query.Get("session") != "agent-session" {
+			t.Fatalf("agent route headers/query = %#v / %#v", request.Headers, request.Query)
+		}
+		if got := gjson.GetBytes(request.Body, "input").String(); got != inputCanary {
+			t.Fatalf("agent route body input = %q, want %q; body=%s", got, inputCanary, request.Body)
+		}
+	})
+}
+
+type interactionsContractHost struct {
+	routeCalls      int
+	executorCalls   int
+	routeRequest    pluginapi.ModelRouteRequest
+	executorRequest coreexecutor.Request
+	executorOptions coreexecutor.Options
+}
+
+func (h *interactionsContractHost) HasModelRouters() bool { return true }
+
+func (h *interactionsContractHost) RouteModel(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, bool) {
+	h.routeCalls++
+	h.routeRequest = request
+	return pluginapi.ModelRouteResponse{
+		Handled:    true,
+		TargetKind: pluginapi.ModelRouteTargetExecutor,
+		Target:     "cyber-abuse-guard",
+		Reason:     "cyber_abuse_guard_contract_block",
+	}, true
+}
+
+func (h *interactionsContractHost) ExecutePluginExecutor(_ context.Context, _ string, request coreexecutor.Request, options coreexecutor.Options) (coreexecutor.Response, error) {
+	h.executorCalls++
+	h.executorRequest = request
+	h.executorOptions = options
+	return coreexecutor.Response{Payload: []byte(`{"id":"cag-contract-block"}`)}, nil
+}
+
+func (h *interactionsContractHost) ExecutePluginExecutorStream(_ context.Context, _ string, request coreexecutor.Request, options coreexecutor.Options) (*coreexecutor.StreamResult, error) {
+	h.executorCalls++
+	h.executorRequest = request
+	h.executorOptions = options
+	chunks := make(chan coreexecutor.StreamChunk)
+	close(chunks)
+	return &coreexecutor.StreamResult{Chunks: chunks}, nil
+}
+
+func (h *interactionsContractHost) CountPluginExecutor(_ context.Context, _ string, request coreexecutor.Request, options coreexecutor.Options) (coreexecutor.Response, error) {
+	h.executorCalls++
+	h.executorRequest = request
+	h.executorOptions = options
+	return coreexecutor.Response{Payload: []byte(`{"total_tokens":0}`)}, nil
+}
+
+func runInteractionsContractRequest(t *testing.T, host *interactionsContractHost, body, session string) *httptest.ResponseRecorder {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	ginContext, _ := gin.CreateTestContext(recorder)
+	ginContext.Request = httptest.NewRequest(http.MethodPost, "/v1beta/interactions?session="+session, strings.NewReader(body))
+	ginContext.Request.Header.Set("Content-Type", "application/json")
+	ginContext.Request.Header.Set("X-CAG-Visibility", "header-canary")
+
+	base := handlers.NewBaseAPIHandlers(&sdkconfig.SDKConfig{}, nil)
+	base.SetModelRouterHost(host)
+	NewGeminiAPIHandler(base).Interactions(ginContext)
+	return recorder
+}

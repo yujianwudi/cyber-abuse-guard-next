@@ -1,0 +1,59 @@
+/dist/
+/build/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.bak
+*.backup
+*.log
+/coverage.out
+*.test
+!Dockerfile.test
+*.so
+*.dll
+*.exe
+*.bin
+*.zip
+*.tar
+*.tgz
+*.gz
+/classifier*.test.exe
+/classifier*.cpu
+/classifier*.mem
+__pycache__/
+*.py[cod]
+/integration/.work/
+*.h
+/.cyber-abuse-guard-hmac
+/plugin-data/
+*.key
+*.pem
+*.ppk
+id_ed25519
+id_ed25519_servers
+id_rsa
+id_dsa
+id_ecdsa
+*.p12
+*.pfx
+*.jks
+*.keystore
+.netrc
+.npmrc
+.env
+.env.*
+!.env.example
+
+# Round 9 independent corpora are external audit inputs. Plaintext must never
+# be staged or enter repository history; the external evaluator consumes only
+# a root-owned encrypted bundle outside this checkout.
+/testdata/round9-independent-benign-v1/
+/testdata/round9-independent-malicious-v1/
+
+# Local Linux/WSL test caches are disposable and must not enter source or
+# release archives.
+/.round9-local-sandbox/

@@ -1,0 +1,291 @@
+package pluginhost
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+)
+
+func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
+	t.Run("guard-priority-high-blocks-first", func(t *testing.T) {
+		otherCalled := false
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", func() (pluginapi.ModelRouteResponse, error) {
+				otherCalled = true
+				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
+			}),
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", func() (pluginapi.ModelRouteResponse, error) {
+				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf, Reason: "policy-block"}, nil
+			}),
+		)
+		assertContractRouteTarget(t, host, "cyber-abuse-guard")
+		if otherCalled {
+			t.Fatal("lower-priority Router ran after guard handled the request")
+		}
+	})
+
+	t.Run("other-priority-high-bypasses-guard", func(t *testing.T) {
+		guardCalled := false
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", func() (pluginapi.ModelRouteResponse, error) {
+				guardCalled = true
+				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
+			}),
+			contractSelfRouter("zzz-router", 400, "fixture-provider", func() (pluginapi.ModelRouteResponse, error) {
+				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
+			}),
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+		if guardCalled {
+			t.Fatal("guard ran after a higher-priority Router handled the request")
+		}
+	})
+
+	t.Run("same-priority-uses-plugin-id-ascending", func(t *testing.T) {
+		hostGuardFirst := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 300, "fixture-provider", handledSelfRoute),
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", handledSelfRoute),
+		)
+		assertContractRouteTarget(t, hostGuardFirst, "cyber-abuse-guard")
+
+		hostFixtureFirst := newRouteModelHostWithRecords(
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", handledSelfRoute),
+			contractSelfRouter("aaa-router", 300, "fixture-provider", handledSelfRoute),
+		)
+		assertContractRouteTarget(t, hostFixtureFirst, "aaa-router")
+	})
+
+	t.Run("guard-fused-falls-through", func(t *testing.T) {
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", handledSelfRoute),
+		)
+		host.fusePlugin("cyber-abuse-guard", "fixture", "forced fuse")
+		assertContractRouteTarget(t, host, "zzz-router")
+	})
+
+	t.Run("guard-router-error-falls-through", func(t *testing.T) {
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", func() (pluginapi.ModelRouteResponse, error) {
+				return pluginapi.ModelRouteResponse{}, errors.New("forced guard Router error")
+			}),
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+	})
+
+	t.Run("guard-router-panic-fuses-and-falls-through", func(t *testing.T) {
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", func() (pluginapi.ModelRouteResponse, error) {
+				panic("forced guard Router panic")
+			}),
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+		if !host.isPluginFused("cyber-abuse-guard") {
+			t.Fatal("guard Router panic did not fuse the plugin")
+		}
+	})
+
+	t.Run("invalid-target-falls-through", func(t *testing.T) {
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", func() (pluginapi.ModelRouteResponse, error) {
+				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetKind("invalid")}, nil
+			}),
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+	})
+
+	t.Run("self-executor-identifier-missing-falls-through", func(t *testing.T) {
+		guard := contractSelfRouter("cyber-abuse-guard", 300, "", handledSelfRoute)
+		guard.plugin.Capabilities.Executor = &fakeExecutor{identifierFunc: func() string { return "" }}
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			guard,
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+	})
+
+	t.Run("self-executor-format-not-ready-falls-through", func(t *testing.T) {
+		guard := contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", handledSelfRoute)
+		guard.plugin.Capabilities.ExecutorInputFormats = nil
+		guard.plugin.Capabilities.ExecutorOutputFormats = nil
+		host := newHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			guard,
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+	})
+
+	t.Run("self-executor-disabled-falls-through", func(t *testing.T) {
+		guard := contractSelfRouter("cyber-abuse-guard", 300, "cyber-abuse-guard", handledSelfRoute)
+		guard.plugin.Capabilities.Executor = nil
+		host := newRouteModelHostWithRecords(
+			contractSelfRouter("zzz-router", 100, "fixture-provider", handledSelfRoute),
+			guard,
+		)
+		assertContractRouteTarget(t, host, "zzz-router")
+	})
+
+	t.Run("router-failure-without-fallback-continues-native", func(t *testing.T) {
+		host := newRouteModelHostWithRecords(contractSelfRouter(
+			"cyber-abuse-guard", 300, "cyber-abuse-guard",
+			func() (pluginapi.ModelRouteResponse, error) {
+				return pluginapi.ModelRouteResponse{}, errors.New("forced guard Router error")
+			},
+		))
+		if response, handled := host.RouteModel(context.Background(), contractRouteRequest()); handled || response.Handled {
+			t.Fatalf("RouteModel() = %#v, %v; want native routing continuation", response, handled)
+		}
+	})
+
+	t.Run("model-route-metadata-sanitizer-drops-non-json-callback", func(t *testing.T) {
+		request := rpcModelRouteRequest{
+			ModelRouteRequest: pluginapi.ModelRouteRequest{Metadata: map[string]any{
+				"keep": "value",
+				coreexecutor.SelectedAuthIndexCallbackMetadataKey: func(string) {},
+			}},
+			HostCallbackID: "callback-1",
+		}
+		sanitized, ok := sanitizePluginRequest(request).(rpcModelRouteRequest)
+		if !ok {
+			t.Fatalf("sanitizePluginRequest() type = %T, want rpcModelRouteRequest", sanitizePluginRequest(request))
+		}
+		raw, errMarshal := json.Marshal(sanitized)
+		if errMarshal != nil {
+			t.Fatalf("marshal sanitized ModelRouter request: %v", errMarshal)
+		}
+		var decoded rpcModelRouteRequest
+		if errUnmarshal := json.Unmarshal(raw, &decoded); errUnmarshal != nil {
+			t.Fatalf("unmarshal sanitized ModelRouter request: %v", errUnmarshal)
+		}
+		if decoded.Metadata["keep"] != "value" {
+			t.Fatalf("sanitized metadata = %#v, want preserved keep value", decoded.Metadata)
+		}
+		if _, exists := decoded.Metadata[coreexecutor.SelectedAuthIndexCallbackMetadataKey]; exists {
+			t.Fatalf("selected-auth-index callback crossed the C-ABI JSON boundary: %#v", decoded.Metadata)
+		}
+		if decoded.HostCallbackID != "callback-1" {
+			t.Fatalf("host callback ID = %q, want callback-1", decoded.HostCallbackID)
+		}
+	})
+
+	for _, lifecycle := range []string{"guard-not-loaded", "guard-registration-failed", "guard-disabled"} {
+		t.Run(lifecycle+"-falls-through", func(t *testing.T) {
+			assertLifecycleFallback(t, lifecycle)
+		})
+	}
+}
+
+func handledSelfRoute() (pluginapi.ModelRouteResponse, error) {
+	return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
+}
+
+func contractSelfRouter(
+	id string,
+	priority int,
+	identifier string,
+	route func() (pluginapi.ModelRouteResponse, error),
+) capabilityRecord {
+	return capabilityRecord{
+		id:       id,
+		priority: priority,
+		plugin: pluginapi.Plugin{Capabilities: pluginapi.Capabilities{
+			Executor:              &fakeExecutor{identifier: identifier},
+			ExecutorModelScope:    pluginapi.ExecutorModelScopeStatic,
+			ExecutorInputFormats:  []string{"openai"},
+			ExecutorOutputFormats: []string{"openai"},
+			ModelRouter: modelRouterFunc(func(context.Context, pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
+				return route()
+			}),
+		}},
+	}
+}
+
+func contractRouteRequest() pluginapi.ModelRouteRequest {
+	return pluginapi.ModelRouteRequest{
+		RequestedModel: "fixture-model",
+		SourceFormat:   "openai",
+		Body:           []byte(`{"model":"fixture-model"}`),
+	}
+}
+
+func assertContractRouteTarget(t *testing.T, host *Host, want string) {
+	t.Helper()
+	response, handled := host.RouteModel(context.Background(), contractRouteRequest())
+	if !handled || !response.Handled || response.Target != want {
+		t.Fatalf("RouteModel() = %#v, %v; want handled target %q", response, handled, want)
+	}
+}
+
+func assertLifecycleFallback(t *testing.T, scenario string) {
+	t.Helper()
+	enabled := true
+	disabled := false
+	loader := newTestSymbolLoader()
+	fixture := &testPlugin{
+		registerResult:    contractProviderRouterPlugin("fixture", "fixture-provider"),
+		reconfigureResult: contractProviderRouterPlugin("fixture", "fixture-provider"),
+	}
+	loader.lookups["zzz-router"] = newTestSymbolLookup(fixture)
+	guard := &testPlugin{
+		registerResult:    contractProviderRouterPlugin("guard", "guard-provider"),
+		reconfigureResult: contractProviderRouterPlugin("guard", "guard-provider"),
+	}
+	guardConfig := config.PluginInstanceConfig{Enabled: &enabled, Priority: 300}
+	switch scenario {
+	case "guard-not-loaded":
+		// Leave the loader entry absent while discovery still finds the file.
+	case "guard-registration-failed":
+		guard.panicOnRegister = true
+		loader.lookups["cyber-abuse-guard"] = newTestSymbolLookup(guard)
+	case "guard-disabled":
+		guardConfig.Enabled = &disabled
+		loader.lookups["cyber-abuse-guard"] = newTestSymbolLookup(guard)
+	default:
+		t.Fatalf("unknown lifecycle scenario %q", scenario)
+	}
+
+	host := NewForTest(loader)
+	t.Cleanup(host.ShutdownAll)
+	manager := coreauth.NewManager(nil, nil, nil)
+	if _, errRegister := manager.Register(context.Background(), &coreauth.Auth{ID: "fixture-auth", Provider: "fixture-provider"}); errRegister != nil {
+		t.Fatalf("register fixture provider auth: %v", errRegister)
+	}
+	host.authManager = manager
+	host.ApplyConfig(context.Background(), &config.Config{Plugins: config.PluginsConfig{
+		Enabled: true,
+		Dir:     makePluginDir(t, "cyber-abuse-guard", "zzz-router"),
+		Configs: map[string]config.PluginInstanceConfig{
+			"cyber-abuse-guard": guardConfig,
+			"zzz-router":        {Enabled: &enabled, Priority: 100},
+		},
+	}})
+
+	response, handled := host.RouteModel(context.Background(), contractRouteRequest())
+	if !handled || response.TargetKind != pluginapi.ModelRouteTargetProvider || response.Target != "fixture-provider" {
+		t.Fatalf("lifecycle fallback RouteModel() = %#v, %v; want fixture provider", response, handled)
+	}
+	if host.PluginRegistered("cyber-abuse-guard") {
+		t.Fatalf("guard unexpectedly registered in scenario %q", scenario)
+	}
+}
+
+func contractProviderRouterPlugin(name, provider string) pluginapi.Plugin {
+	plugin := validTestPlugin(name)
+	plugin.Capabilities.ModelRouter = modelRouterFunc(func(context.Context, pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
+		return pluginapi.ModelRouteResponse{
+			Handled:    true,
+			TargetKind: pluginapi.ModelRouteTargetProvider,
+			Target:     provider,
+		}, nil
+	})
+	return plugin
+}

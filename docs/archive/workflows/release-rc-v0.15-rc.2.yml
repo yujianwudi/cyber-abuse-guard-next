@@ -1,0 +1,600 @@
+name: RC release v0.15-rc.2 - Linux sandbox validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing annotated RC tag (must be v0.15-rc.2)
+        required: true
+        type: string
+      expected_commit:
+        description: Exact 40-character main commit at the RC tag
+        required: true
+        type: string
+      expected_tree:
+        description: Exact 40-character source tree at the RC tag
+        required: true
+        type: string
+      ci_run_id:
+        description: Successful exact-main push CI run for the commit
+        required: true
+        type: string
+      authorize_rc_release:
+        description: Publish the Linux-only sandbox RC prerelease
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: rc-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: '1.26.4'
+  VERSION: '0.15'
+  RC_VERSION: '0.15-rc.2'
+  CYCLONEDX_GOMOD_VERSION: 'v1.9.0'
+
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Bind RC authorization to annotated exact-main tag before checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          AUTHORIZED: ${{ inputs.authorize_rc_release }}
+        run: |
+          set -euo pipefail
+          [[ "$AUTHORIZED" == true ]]
+          [[ "$TAG" == v0.15-rc.2 ]]
+          [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_TREE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$DISPATCH_REF" == "refs/tags/$TAG" ]]
+          [[ "$DISPATCH_SHA" == "$EXPECTED_COMMIT" ]]
+          [[ "$WORKFLOW_SHA" == "$EXPECTED_COMMIT" ]]
+          [[ "$WORKFLOW_REF" == "${GITHUB_REPOSITORY}/.github/workflows/release-rc.yml@refs/tags/$TAG" ]]
+
+          main_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main")"
+          [[ "$(jq -r '.object.type' <<<"$main_ref")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$main_ref")" == "$EXPECTED_COMMIT" ]]
+
+          tag_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_ref")" == tag ]]
+          tag_object_sha="$(jq -er '.object.sha | select(test("^[0-9a-f]{40}$"))' <<<"$tag_ref")"
+          tag_object="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_object")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$tag_object")" == "$EXPECTED_COMMIT" ]]
+
+          commit_object="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/commits/${EXPECTED_COMMIT}")"
+          [[ "$(jq -r '.tree.sha' <<<"$commit_object")" == "$EXPECTED_TREE" ]]
+
+          formal_refs="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v0.15")"
+          jq -e '[.[] | select(.ref == "refs/tags/v0.15")] | length == 0' \
+            <<<"$formal_refs" >/dev/null
+
+          releases="$RUNNER_TEMP/rc-admission-releases.json"
+          gh api --paginate --slurp \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
+          release="$(jq -ce --arg tag "$TAG" '
+            [.[][] | select(.tag_name == $tag)] |
+            if length <= 1 then . else error("duplicate RC releases exist") end
+          ' "$releases")"
+          if [[ "$(jq -r 'length' <<<"$release")" == 1 ]]; then
+            jq -e '
+              .[0].prerelease == true and
+              ([.[0].assets[].name] - [
+                "cyber-abuse-guard-v0.15-rc.2.so",
+                "cyber-abuse-guard-v0.15-rc.2.so.sha256",
+                "cyber-abuse-guard_0.15-rc.2_linux_amd64.zip",
+                "build-metadata.json", "checksums.txt", "ruleset-manifest.json",
+                "ruleset.sha256", "sbom.cdx.json", "rc-release-manifest.json",
+                "rc-release-manifest.json.sha256"
+              ] | length == 0)
+            ' <<<"$release" >/dev/null
+          fi
+
+      - name: Bind RC admission to successful exact-main push CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+        run: |
+          set -euo pipefail
+          [[ "$CI_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          response="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${CI_RUN_ID}")"
+          jq -e \
+            --arg repository "$GITHUB_REPOSITORY" \
+            --arg commit "$EXPECTED_COMMIT" \
+            --argjson run_id "$CI_RUN_ID" '
+              .id == $run_id and
+              .name == "CI" and
+              .path == ".github/workflows/ci.yml" and
+              .event == "push" and
+              .head_branch == "main" and
+              .head_sha == $commit and
+              .status == "completed" and
+              .conclusion == "success" and
+              .repository.full_name == $repository
+            ' <<<"$response" >/dev/null
+
+  build:
+    needs: admission
+    permissions:
+      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact RC tag with restricted data excluded
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+
+      - name: Recheck restricted-data and workflow contracts
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+
+      - name: Verify immutable RC source identity and annotated tag
+        env:
+          TAG: ${{ inputs.tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_COMMIT" ]]
+          [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_TREE" ]]
+          [[ -z "$(git status --porcelain)" ]]
+          [[ "$(git cat-file -t "refs/tags/$TAG")" == tag ]]
+          [[ "$(git rev-list -n 1 "$TAG")" == "$EXPECTED_COMMIT" ]]
+          ! git show-ref --verify --quiet refs/tags/v0.15
+
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Install bounded RC build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential binutils file jq zip unzip
+          mkdir -p "$RUNNER_TEMP/bin"
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Recheck regressions and latest CPA v7.2.86 contracts
+        env:
+          CPA_COMPAT_VERIFY_REMOTE: '1'
+        run: |
+          make round6-format-check round6-git-diff-check round6-module-verify round6-regression round6-vet
+          go test ./internal/classifier -run '^TestClassifierPolicyIdentity$' -count=1
+          make cpa-host-fixture-contract cpa-latest-compat
+
+      - name: Build and reproduce exact RC release assets
+        env:
+          RELEASE_RC_BUILD: '1'
+          RELEASE_RC_TAG: ${{ inputs.tag }}
+          RELEASE_RC_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          RELEASE_RC_EXPECTED_TREE: ${{ inputs.expected_tree }}
+          RELEASE_RC_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          RC_CI_RUN_ID: ${{ inputs.ci_run_id }}
+          ROUND6_SAFE_SPARSE_BUILD: '1'
+          REQUIRE_DIST_ARTIFACTS: '1'
+        run: ./scripts/round6-rc-artifacts.sh
+
+      - name: Run RC-versioned CPA Host integration on publish-bound bytes
+        env:
+          RELEASE_RC_BUILD: '1'
+          RELEASE_RC_TAG: ${{ inputs.tag }}
+          RELEASE_RC_EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          RELEASE_RC_EXPECTED_TREE: ${{ inputs.expected_tree }}
+          ROUND6_SAFE_SPARSE_BUILD: '1'
+        run: make ARTIFACT_VERSION=${RC_VERSION} integration-test
+
+      - name: Reverify RC artifact allowlist and hashes
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            build-metadata.json \
+            checksums.txt \
+            cyber-abuse-guard-v0.15-rc.2.so \
+            cyber-abuse-guard-v0.15-rc.2.so.sha256 \
+            cyber-abuse-guard_0.15-rc.2_linux_amd64.zip \
+            rc-release-manifest.json \
+            rc-release-manifest.json.sha256 \
+            ruleset-manifest.json \
+            ruleset.sha256 \
+            sbom.cdx.json | LC_ALL=C sort)"
+          actual="$(find dist -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+          [[ "$actual" == "$expected" ]]
+          (cd dist && sha256sum -c checksums.txt && \
+            sha256sum -c cyber-abuse-guard-v0.15-rc.2.so.sha256 && \
+            sha256sum -c ruleset.sha256 && \
+            sha256sum -c rc-release-manifest.json.sha256)
+          jq -e \
+            --arg commit "$EXPECTED_COMMIT" \
+            --arg tree "$EXPECTED_TREE" '
+              .status == "SANDBOX_ONLY / SERVER_VALIDATION_REQUIRED / NOT_FORMAL / NOT_ROUND6_CANDIDATE" and
+              .source_version == "0.15" and .artifact_version == "0.15-rc.2" and
+              .tag == "v0.15-rc.2" and .commit == $commit and .tree == $tree and
+              .cpa.version == "v7.2.86" and
+              .cpa.commit == "81d70f5d9f3fdb39a6290ed9c917ff0c6f27ca30" and
+              .cpa.real_host_validation == "NOT_RUN / SERVER_SANDBOX_REQUIRED"
+            ' dist/rc-release-manifest.json >/dev/null
+          [[ -z "$(git status --porcelain)" ]]
+
+      - name: Upload exact verified RC assets
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rc-v0.15-rc.2-${{ inputs.expected_commit }}
+          path: |
+            dist/cyber-abuse-guard-v0.15-rc.2.so
+            dist/cyber-abuse-guard-v0.15-rc.2.so.sha256
+            dist/cyber-abuse-guard_0.15-rc.2_linux_amd64.zip
+            dist/build-metadata.json
+            dist/checksums.txt
+            dist/ruleset-manifest.json
+            dist/ruleset.sha256
+            dist/sbom.cdx.json
+            dist/rc-release-manifest.json
+            dist/rc-release-manifest.json.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    needs: build
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Download exact verified RC assets
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: rc-v0.15-rc.2-${{ inputs.expected_commit }}
+          path: dist
+
+      - name: Reverify transferred RC assets without repository source
+        env:
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          expected="$(printf '%s\n' \
+            build-metadata.json \
+            checksums.txt \
+            cyber-abuse-guard-v0.15-rc.2.so \
+            cyber-abuse-guard-v0.15-rc.2.so.sha256 \
+            cyber-abuse-guard_0.15-rc.2_linux_amd64.zip \
+            rc-release-manifest.json \
+            rc-release-manifest.json.sha256 \
+            ruleset-manifest.json \
+            ruleset.sha256 \
+            sbom.cdx.json | LC_ALL=C sort)"
+          actual="$(find dist -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort)"
+          [[ "$actual" == "$expected" ]]
+          (cd dist && sha256sum -c checksums.txt && \
+            sha256sum -c cyber-abuse-guard-v0.15-rc.2.so.sha256 && \
+            sha256sum -c ruleset.sha256 && \
+            sha256sum -c rc-release-manifest.json.sha256)
+          jq -e \
+            --arg commit "$EXPECTED_COMMIT" \
+            --arg tree "$EXPECTED_TREE" \
+            --argjson run_id "$BUILD_RUN_ID" '
+              .status == "SANDBOX_ONLY / SERVER_VALIDATION_REQUIRED / NOT_FORMAL / NOT_ROUND6_CANDIDATE" and
+              .artifact_version == "0.15-rc.2" and .tag == "v0.15-rc.2" and
+              .commit == $commit and .tree == $tree and .workflow.run_id == $run_id
+            ' dist/rc-release-manifest.json >/dev/null
+
+      - name: Recheck immutable tag and main before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+        run: |
+          set -euo pipefail
+          main_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/heads/main")"
+          [[ "$(jq -r '.object.type' <<<"$main_ref")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$main_ref")" == "$EXPECTED_COMMIT" ]]
+          tag_ref="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_ref")" == tag ]]
+          tag_object_sha="$(jq -er '.object.sha | select(test("^[0-9a-f]{40}$"))' <<<"$tag_ref")"
+          tag_object="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}")"
+          [[ "$(jq -r '.object.type' <<<"$tag_object")" == commit ]]
+          [[ "$(jq -r '.object.sha' <<<"$tag_object")" == "$EXPECTED_COMMIT" ]]
+          commit_object="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/git/commits/${EXPECTED_COMMIT}")"
+          [[ "$(jq -r '.tree.sha' <<<"$commit_object")" == "$EXPECTED_TREE" ]]
+
+          releases="$RUNNER_TEMP/rc-publish-releases.json"
+          gh api --paginate --slurp \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
+          release="$(jq -ce --arg tag "$TAG" '
+            [.[][] | select(.tag_name == $tag)] |
+            if length <= 1 then . else error("duplicate RC releases exist") end
+          ' "$releases")"
+          if [[ "$(jq -r 'length' <<<"$release")" == 1 ]]; then
+            jq -e '
+              .[0].prerelease == true and
+              ([.[0].assets[].name] - [
+                "cyber-abuse-guard-v0.15-rc.2.so",
+                "cyber-abuse-guard-v0.15-rc.2.so.sha256",
+                "cyber-abuse-guard_0.15-rc.2_linux_amd64.zip",
+                "build-metadata.json", "checksums.txt", "ruleset-manifest.json",
+                "ruleset.sha256", "sbom.cdx.json", "rc-release-manifest.json",
+                "rc-release-manifest.json.sha256"
+              ] | length == 0)
+            ' <<<"$release" >/dev/null
+          fi
+
+      - name: Create, byte-check, and publish v0.15-rc.2 prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_COMMIT: ${{ inputs.expected_commit }}
+          EXPECTED_TREE: ${{ inputs.expected_tree }}
+          CI_RUN_ID: ${{ inputs.ci_run_id }}
+        run: |
+          set -euo pipefail
+          assert_remote_identity() {
+            local main_ref tag_ref tag_object_sha tag_object commit_object formal_refs
+            main_ref="$(gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/ref/heads/main")"
+            [[ "$(jq -r '.object.type' <<<"$main_ref")" == commit ]]
+            [[ "$(jq -r '.object.sha' <<<"$main_ref")" == "$EXPECTED_COMMIT" ]]
+            tag_ref="$(gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}")"
+            [[ "$(jq -r '.object.type' <<<"$tag_ref")" == tag ]]
+            tag_object_sha="$(jq -er '.object.sha | select(test("^[0-9a-f]{40}$"))' <<<"$tag_ref")"
+            tag_object="$(gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/tags/${tag_object_sha}")"
+            [[ "$(jq -r '.object.type' <<<"$tag_object")" == commit ]]
+            [[ "$(jq -r '.object.sha' <<<"$tag_object")" == "$EXPECTED_COMMIT" ]]
+            commit_object="$(gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/commits/${EXPECTED_COMMIT}")"
+            [[ "$(jq -r '.tree.sha' <<<"$commit_object")" == "$EXPECTED_TREE" ]]
+            formal_refs="$(gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/v0.15")"
+            jq -e '[.[] | select(.ref == "refs/tags/v0.15")] | length == 0' \
+              <<<"$formal_refs" >/dev/null
+          }
+
+          notes="$RUNNER_TEMP/rc-release-notes.md"
+          cat >"$notes" <<EOF
+          Linux amd64 release candidate for server sandbox validation.
+
+          - Source commit: \`$EXPECTED_COMMIT\`
+          - Exact-main CI: https://github.com/${GITHUB_REPOSITORY}/actions/runs/$CI_RUN_ID
+          - CPA compatibility target: v7.2.86 (\`81d70f5d9f3fdb39a6290ed9c917ff0c6f27ca30\`)
+          - Store package: \`cyber-abuse-guard_0.15-rc.2_linux_amd64.zip\`
+
+          This prerelease is Linux amd64 only. It is not the formal v0.15 release,
+          not a Round6 Host/audit/evaluation attestation, and not production approval.
+          Real CPA Host validation remains required in the server sandbox.
+          EOF
+
+          assets=(
+            dist/cyber-abuse-guard-v0.15-rc.2.so
+            dist/cyber-abuse-guard-v0.15-rc.2.so.sha256
+            dist/cyber-abuse-guard_0.15-rc.2_linux_amd64.zip
+            dist/build-metadata.json
+            dist/checksums.txt
+            dist/ruleset-manifest.json
+            dist/ruleset.sha256
+            dist/sbom.cdx.json
+            dist/rc-release-manifest.json
+            dist/rc-release-manifest.json.sha256
+          )
+          assert_remote_identity
+
+          releases="$RUNNER_TEMP/rc-draft-releases.json"
+          gh api --paginate --slurp \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
+          matches="$(jq -ce --arg tag "$TAG" '
+            [.[][] | select(.tag_name == $tag)] |
+            if length <= 1 then . else error("duplicate RC releases exist") end
+          ' "$releases")"
+          if [[ "$(jq -r 'length' <<<"$matches")" == 0 ]]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --target "$EXPECTED_COMMIT" \
+              --title 'v0.15-rc.2 — Linux server sandbox validation required' \
+              --notes-file "$notes" \
+              --draft \
+              --prerelease \
+              --latest=false
+          fi
+
+          releases="$RUNNER_TEMP/rc-current-releases.json"
+          gh api --paginate --slurp \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases?per_page=100" >"$releases"
+          release="$(jq -ce --arg tag "$TAG" '
+            [.[][] | select(.tag_name == $tag)] |
+            if length == 1 then .[0] else error("expected exactly one RC release") end
+          ' "$releases")"
+          [[ "$(jq -r '.prerelease' <<<"$release")" == true ]]
+          expected_assets="$(printf '%s\n' "${assets[@]#dist/}" | LC_ALL=C sort)"
+          if [[ "$(jq -r '.draft' <<<"$release")" == true ]]; then
+            existing_assets="$(jq -r '.assets[].name' <<<"$release" | LC_ALL=C sort)"
+            if [[ -n "$existing_assets" ]]; then
+              unexpected_assets="$(comm -23 \
+                <(printf '%s\n' "$existing_assets") \
+                <(printf '%s\n' "$expected_assets"))"
+              [[ -z "$unexpected_assets" ]]
+            fi
+            gh release upload "$TAG" "${assets[@]}" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title 'v0.15-rc.2 — Linux server sandbox validation required' \
+              --notes-file "$notes" \
+              --draft \
+              --prerelease \
+              --latest=false
+          fi
+
+          release="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases/$(jq -r '.id' <<<"$release")")"
+          actual_assets="$(jq -r '.assets[].name' <<<"$release" | LC_ALL=C sort)"
+          [[ "$actual_assets" == "$expected_assets" ]]
+
+          verify_dir="$(mktemp -d "$RUNNER_TEMP/rc-upload-check.XXXXXX")"
+          trap 'rm -rf -- "$verify_dir"' EXIT
+          while IFS= read -r name; do
+            asset_id="$(jq -er --arg name "$name" '
+              [.assets[] | select(.name == $name)] |
+              if length == 1 then .[0].id else error("missing or duplicate RC asset") end
+            ' <<<"$release")"
+            gh api \
+              --header 'Accept: application/octet-stream' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/releases/assets/${asset_id}" >"$verify_dir/$name"
+            cmp -s "dist/$name" "$verify_dir/$name"
+          done <<<"$expected_assets"
+
+          draft_fingerprint="$(jq -c '[.assets[] | {id, name, size, digest}] | sort_by(.name)' <<<"$release")"
+          assert_remote_identity
+          current="$(gh api \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "repos/${GITHUB_REPOSITORY}/releases/$(jq -r '.id' <<<"$release")")"
+          [[ "$(jq -c '[.assets[] | {id, name, size, digest}] | sort_by(.name)' <<<"$current")" == "$draft_fingerprint" ]]
+          published_now=0
+          if [[ "$(jq -r '.draft' <<<"$current")" == true ]]; then
+            gh release edit "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft=false \
+              --prerelease \
+              --latest=false
+            published_now=1
+          fi
+          if ! {
+            assert_remote_identity
+            final="$(gh api \
+              --header 'Accept: application/vnd.github+json' \
+              --header 'X-GitHub-Api-Version: 2022-11-28' \
+              "repos/${GITHUB_REPOSITORY}/releases/$(jq -r '.id' <<<"$release")")"
+            [[ "$(jq -r '.draft' <<<"$final")" == false ]]
+            [[ "$(jq -r '.prerelease' <<<"$final")" == true ]]
+            [[ "$(jq -r '.tag_name' <<<"$final")" == "$TAG" ]]
+            [[ "$(jq -r '.name' <<<"$final")" == 'v0.15-rc.2 — Linux server sandbox validation required' ]]
+            jq -e '.assets | length == 10 and all(.state == "uploaded")' <<<"$final" >/dev/null
+            grep -Fq 'not the formal v0.15 release' <<<"$(jq -r '.body' <<<"$final")"
+            [[ "$(jq -r '.assets[].name' <<<"$final" | LC_ALL=C sort)" == "$expected_assets" ]]
+            [[ "$(jq -c '[.assets[] | {id, name, size, digest}] | sort_by(.name)' <<<"$final")" == "$draft_fingerprint" ]]
+          }; then
+            if [[ "$published_now" == 1 ]]; then
+              printf '%s\n' 'post-publication validation failed; restoring the RC release to draft' >&2
+              gh release edit "$TAG" \
+                --repo "$GITHUB_REPOSITORY" \
+                --draft \
+                --prerelease \
+                --latest=false
+              rollback="$(gh api \
+                --header 'Accept: application/vnd.github+json' \
+                --header 'X-GitHub-Api-Version: 2022-11-28' \
+                "repos/${GITHUB_REPOSITORY}/releases/$(jq -r '.id' <<<"$release")")"
+              [[ "$(jq -r '.draft' <<<"$rollback")" == true ]]
+            fi
+            exit 1
+          fi

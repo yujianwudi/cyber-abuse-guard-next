@@ -1,0 +1,448 @@
+# CPA Cyber Abuse Guard
+
+```text
+current_classifier_policy_version: classifier-policy-v8
+current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+```
+
+> **Repository lineage:** this is the clean-history successor project. Legacy
+> tags, branches, Releases, and historical assets remain read-only in
+> [`yujianwudi/cyber-abuse-guard`](https://github.com/yujianwudi/cyber-abuse-guard)
+> and are intentionally not recreated here.
+
+> **Current development state:** Round 9 redesigns Balanced around
+> candidate/clause/scope/referent-bound block eligibility and prepares the Linux
+> amd64 `v0.16-rc.3` prerelease lane. The fixed source/compile target is CPA
+> `v7.2.95` only. No candidate tag, Release, or
+> stable `v0.16` is created by the source changes alone. The protected
+> no-checkout external CPA evaluation, protected-ledger proof, exact-main CI,
+> and an independent audit are still required. Production approval has not been
+> granted, and production Balanced must remain gated.
+
+[![Historical CI](https://img.shields.io/badge/historical_CI-v0.15-blue)](https://github.com/yujianwudi/cyber-abuse-guard/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/Go-1.26.4-00ADD8?logo=go&logoColor=white)](go.mod)
+[![Platform](https://img.shields.io/badge/platform-Linux%20amd64-lightgrey)](docs/ROUND6_LIMITATIONS.md)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Historical RC](https://img.shields.io/badge/historical_RC-v0.15--rc.4-orange)](docs/ROUND6_RELEASE_GATE.md)
+[![Historical stable](https://img.shields.io/badge/historical_stable-v0.15-published-success)](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15)
+
+**A local, deterministic, pre-routing cyber-abuse request guard for
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA).**
+
+English | [简体中文](README_CN.md)
+
+> [!WARNING]
+> [`v0.15`](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15)
+> was manually published as the latest stable release on 2026-07-20 with ten
+> assets. Its release notes disclose that GitHub Actions did not run because of
+> billing and that the owner built the assets manually after an owner-reported
+> production sandbox pass. No independent Host/audit/evaluation attestation is
+> attached. The Round 6 and `v0.15-rc.*` material retained below is a historical
+> pre-publication engineering record, not the current v0.16 release state.
+
+When CPA has loaded and registered the plugin, Router ordering reaches it, and
+the self-executor is ready, the Guard inspects supported model requests before
+provider selection, authentication scheduling, usage accounting, and upstream
+work. Request content is evaluated in process and is not sent to a public
+classifier.
+
+## Current v0.16 development status
+
+| Item | State |
+|---|---|
+| Source version / RC target | `0.16` / `v0.16-rc.3` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
+| Historical candidates | `v0.16-rc.1` and the immutable Round 8 `v0.16-rc.2` identity are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
+| GitHub publication | No Round 9 tag or Release is claimed by this branch; `round9-release-rc.yml` may publish only a non-latest prerelease after exact-main and the protected external-evaluation gate pass |
+| CPA source/compile target | `v7.2.95` (`f71ec0eb6776854457892452cf28c47f0d658251`) |
+| Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v2 plus ledger proof |
+| External evidence contracts | evaluator aggregate v2; ledger event v2; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
+| Public adversarial corpus | `round9-public-adversarial-v10` / 183,752 bytes / SHA-256 `bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`; visible development regression only. Valid v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
+| Independent audit | **REQUIRED / NOT PROVIDED**; development self-tests do not satisfy this gate |
+| Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
+| v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
+| Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
+| Validation platform | Linux amd64 only; emitted numeric GLIBC ABI versions must be `<= 2.34` |
+| Out of scope | Windows, macOS, musl/Alpine, real Provider traffic, production deployment/validation |
+| CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
+| Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
+| Scanner identity | `streaming-scanner-v1` |
+| Classifier policy | `classifier-policy-v8`; final SHA-256 remains pending the exact source freeze and release commit |
+| Embedded YAML ruleset | `1.0.10`; final SHA-256 remains pending the exact source freeze and release commit |
+| Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
+| Code review | Automated review is advisory; no independent approval is claimed |
+
+## Historical v0.15 release record
+
+| Item | Historical fact |
+|---|---|
+| Stable release | `v0.15` was manually published on 2026-07-20 as non-draft, non-prerelease, latest stable |
+| Assets | Ten manually built release assets |
+| Validation claim | Production sandbox PASS is owner-reported in the Release notes; supporting independent Host evidence is not attached |
+| Independent evidence | No `formal-release-attestation.json` or `round6-prerelease-attestation.json` asset |
+| Source identities | classifier `v5`, ruleset `1.0.7`, audit schema v3 |
+
+The historical v10 evaluation remains `CONSUMED / FAIL` and cannot be rerun or
+used for tuning. Engineering checks do not override that methodology result or
+authorize production enforcement.
+
+## What Round 6 changes
+
+- Removes production use of `body[:max_scan_bytes]`. Supported JSON requests
+  are structurally traversed across the complete CPA-visible body.
+- Changes legacy `max_scan_bytes` into a compatibility alias for the retained
+  classifier window. It no longer means “inspect only the first 256 KiB”.
+- Adds bounded `max_total_text_bytes` and
+  `max_classification_chunks` limits so cumulative coverage and retained
+  memory are separate controls.
+- Streams JSON strings, multipart text, roles, provenance, and logical field
+  boundaries into a bounded classifier session.
+- Uses transactional media, metadata, tool-schema, and role decisions before
+  committing text to classification. Unknown or ambiguous roles cannot
+  impersonate a trusted user role.
+- Preserves cross-window matching and bounded role-aware composition without
+  retaining the full prompt.
+- Adds audit schema v3 fields `decision`, `coverage`,
+  `incomplete_reason`, and `scanner` plus fixed low-cardinality counters.
+- Clears every partial category, score, rule, evidence, and behavior result
+  when envelope or text coverage is incomplete.
+
+The optional “verified local hard finding under incomplete coverage” exception
+is deliberately disabled. Its counter remains for compatibility and is
+expected to stay zero.
+
+## Inspection and disposition contract
+
+Envelope completeness and text coverage are separate:
+
+- `complete`: the full visible structure and all model-visible decoded text
+  were inspected;
+- `budget_exhausted`: a configured cumulative text or classification-work
+  bound was reached;
+- `unavailable`: malformed input, unsupported encoding/schema, ambiguous role,
+  or an RPC boundary prevented full coverage.
+
+| Mode | Complete harmful request | Incomplete inspection |
+|---|---|---|
+| `off` | allow | allow |
+| `observe` | observe only | allow + observe |
+| `audit` | audit only | allow + audit |
+| `balanced` | local block at the balanced threshold | allow + audit |
+| `strict` | local block at the strict threshold | local block + audit |
+
+The safe startup defaults are `mode: observe` and
+`subject_control.enabled: false`. Observe updates bounded counters only: it
+does not block, accumulate subject risk, persist per-request SQLite events, or
+hash the full request body for audit correlation.
+
+Incomplete requests never update subject risk. A partial prefix cannot produce
+a policy block in `balanced`.
+Malicious-text blocking and subject accumulation both require an explicit
+trusted-current-user attribution proof. Unknown/future fields and non-user or
+tool-originated text remain inspectable and auditable, but cannot directly
+produce a malicious-text block or poison rolling subject state. A later current
+user may reactivate a bounded carrier only through the complete referent proof
+and the same candidate eligibility gate.
+The proof is bound to the CPA `SourceFormat`: only a matching root provider
+history or Responses scalar `input` can establish user authorship. Nested or
+cross-provider histories, developer/system/tool content, unknown content types,
+function responses, and opaque Responses reasoning state remain untrusted.
+Nested history/content arrays, scalar members of provider content arrays, and
+unknown or non-string Responses item `type` values are likewise scanned without
+receiving trusted-user attribution. The exact Responses `type` discriminator is
+transport metadata, not model-visible prompt text.
+
+With audit enabled, a complete category-free wrapper-only finding attributed
+to non-user or untrusted wrapper traffic stays visible through the bounded
+`audited` and
+`control_plane_meta_override` counters but does not create a per-request SQLite
+event or request/subject correlation hash by default. Set
+`audit.persist_wrapper_only: true` to restore those events. Cyber Abuse base
+findings, trusted-user wrapper findings, blocks, incomplete inspections, and
+opaque-media dispositions keep the full configured audit path.
+
+Repository-neutral regressions derived from four public prompt-override source
+pins cover high-authority `instructions`, Chat and Responses tool descriptions,
+CPA v7.2.95 Codex Desktop `additional_tools`, assistant/tool history, defensive
+domain catalogs, 1,397-17,166 decoded-byte templates, and the 16 KiB boundary
+without adding repository-name signatures or complete third-party prompts. See the
+[public jailbreak repository review](docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md).
+
+## Effective default limits
+
+| Control | Default / boundary |
+|---|---|
+| Runtime mode | `observe` |
+| Subject control | disabled; explicit opt-in |
+| CPA-visible RPC envelope | 8 MiB |
+| Retained classifier window | 256 KiB through the legacy alias; valid range 16 KiB–1 MiB |
+| Total model-visible text | 8 MiB |
+| Logical text fields | 512 |
+| Classification work | computed minimum with a floor of 2048 chunks |
+| JSON depth | 32 |
+| Derived decoding | at most 2 layers, 8 variants, 128 KiB encoded source, and 64 KiB aggregate retained decoded text |
+
+`text_bytes_scanned_total` is cumulative and may exceed
+`max_scan_bytes`. Peak retained text is governed by the effective window and
+bounded classifier state.
+
+Dense encoded text whose derived view exceeds the 128 KiB encoded-source bound
+still becomes incomplete. This is deliberate: long plain text is streamed, but
+the implementation does not claim complete coverage for an oversized derived
+decoded view.
+
+The compact shadow planner retains closed semantic representatives, short
+markers, and bounded span metadata rather than caller-controlled long keys or
+semantic values. Residual allocation still grows with JSON token/node and
+logical-field counts, under explicit hard limits. Allocation, RSS, and
+concurrency claims remain pending authoritative Linux CI and sandbox evidence.
+
+The legacy `ExtractText` API remains for source compatibility and preserves
+its materialized `Parts` segmentation semantics. Production routing uses the
+streaming request APIs and does not materialize the complete prompt.
+
+See:
+
+- [Streaming scanner design](docs/ROUND6_STREAMING_SCANNER_DESIGN.md)
+- [Configuration migration](docs/ROUND6_CONFIG_MIGRATION.md)
+- [Known limitations](docs/ROUND6_LIMITATIONS.md)
+- [CI, candidate, and release gates](docs/ROUND6_RELEASE_GATE.md)
+- [Documentation and workflow index](docs/README.md)
+- [Development handoff](docs/ROUND6_DEVELOPMENT_HANDOFF.md)
+
+## Supported request surfaces
+
+The request path covers OpenAI Chat, OpenAI Responses, Interactions, Anthropic
+Claude, Google Gemini, OpenAI image/video profiles, bounded
+`multipart/form-data`, tool definitions and payloads, metadata exclusion, and
+opaque media classification.
+
+Images, audio, video, and documents are opaque. Their bytes are not decoded,
+fetched, or sent elsewhere. `allow` for opaque media means “not inspected”, not
+“safe”.
+
+The deterministic policy covers credential theft, phishing, malware,
+ransomware, exploitation, data exfiltration, service disruption, and defense
+evasion. It is not a general content moderator or a replacement for provider
+policy.
+
+## Security and privacy boundary
+
+- By default the Guard does not persist raw prompts, tool payloads,
+  authorization headers, plaintext credentials, uploaded code, or provider
+  account identity. The explicit `audit.raw_capture.enabled` exception below
+  stores only redacted, bounded previews of requests whose final disposition
+  prevented upstream routing (`block`, including subject cooldown).
+- This is a Guard-local guarantee, not an end-to-end Host guarantee. CPA may
+  temporarily spool non-multipart request bodies and may persist raw bodies in
+  Host HTTP error logs; see [Decision output and privacy](docs/RULES.md#decision-output-and-privacy).
+- Ordinary audit, metrics, and management status expose fixed fields, counters,
+  and identities rather than prompt fragments or offsets. Only the
+  authenticated `/raw-captures` route can return an enabled review preview.
+- Media URLs are never fetched. No request-supplied code is executed.
+- The Round 6 work did not connect to a real Provider or account pool and did
+  not read production requests or audit data.
+- No code, workflow, installer, hook, dependency, application, or binary from
+  the four public adversarial repositories was executed. Selected public text
+  bytes are replayed only as inert local development regressions. The immutable
+  v5 snapshot remains historical. The exact v6 snapshot is also retained as a
+  frozen-invalid review-digest identity, and version 7 remains the prior valid
+  freeze. The exact announced v8 is immutable-invalid at 105,299 bytes /
+  SHA-256 `5def53300bad07c65717ed8f8a32d2da49952528275df77ea55703713f9e330f`;
+  the corrected in-place 105,298-byte / `2f953da4…` v8 rebind is retained only
+as rejected evidence. Active evidence is `round9-public-adversarial-v10` at
+183,752 bytes / SHA-256
+`bda9f4e70b9e3a050e7e40d025024fa8a9ebb1ffa2fb46f9f7ac47d27691526d`;
+v9 remains immutable history at 105,888 bytes / SHA-256
+`dd22068b452cb4183405bfe7697d52a1b7dd272de25ebef0790add46a71c9c38`.
+  This visible corpus is not an independent holdout or production approval.
+- CPA can still fail open in Host conditions outside the plugin's control,
+  including failed loading, Router fuse/error behavior, higher-priority
+  Routers, invalid target handling, or an executor the Host does not consider
+  ready. Real Host validation is therefore mandatory.
+
+The Round 6 restricted-data disclosure is recorded in the
+[development handoff](docs/ROUND6_DEVELOPMENT_HANDOFF.md). It does not claim
+zero source-level contact where an over-broad search or mechanical build-tag
+edit occurred, but no restricted corpus payload or production data was used
+for implementation or conclusions.
+
+## Blocked-request review capture
+
+`audit.raw_capture` is an operator-only false-positive review feature. It is
+**disabled by default**, requires ordinary audit storage, and is hard-limited
+to blocking decisions (`block` or subject `cooldown`). It does not record
+allowed, observed, or audit-only requests. Each stored preview is best-effort
+secret-redacted over a bounded `max_bytes + 64 KiB` prefix/overlap, then
+truncated on a valid UTF-8 boundary; SHA-256 still covers the complete request.
+The defaults are 8 KiB per capture and a 72-hour TTL. Redaction is not a
+complete DLP guarantee, so the SQLite data directory and CPA Management Key
+must be treated as sensitive production secrets.
+
+Schema-v6 migration backups are exact rollback snapshots and can retain
+sensitive previews. Turning Raw Capture off purges only the active database;
+it does not delete those backups. Authenticated `/status` exposes their
+path-free inventory, while deletion requires the separate
+`POST /migration-backups/purge` route and two exact confirmations documented in
+[Raw Capture](docs/RAW_CAPTURE.md#migration-backup-inventory-and-explicit-cleanup).
+
+Enable it explicitly:
+
+```yaml
+audit:
+  enabled: true
+  raw_capture:
+    enabled: true
+    only_blocked: true
+    redact_secrets: true
+    max_bytes: 8192
+    ttl_hours: 72
+```
+
+`only_blocked: false` and `redact_secrets: false` are rejected. Query through
+CPA's authenticated management API with `event_id`, `request_hash`, and/or
+`limit` (default 20, maximum 100):
+
+```bash
+curl -H "X-Management-Key: $CPA_MANAGEMENT_KEY" \
+  "http://127.0.0.1:8317/v0/management/plugins/cyber-abuse-guard/raw-captures?limit=20"
+```
+
+CPA v7.2.95 HTML-escapes the legacy `raw_preview` string. That field remains
+available for compatibility but is explicitly deprecated. New consumers should
+use the canonical `raw_preview_b64` field when byte-stable review text is
+required. Base64 is transport encoding, not encryption or redaction: decoded
+content remains sensitive and must be rendered as plain text only, never through
+`innerHTML` or another HTML-capable renderer. The management response applies a
+fixed 8 MiB budget to the complete Host-visible JSON body. A requested `limit`
+of 100 is still valid, but the endpoint may return fewer rows; check
+`response_truncated`, `returned_count`, and `cpa_host_response_bytes`.
+
+When a live disable transition succeeds while audit storage remains enabled,
+the endpoint returns an empty list only after the capture table is purged and
+the WAL checkpoint completes. If the whole audit subsystem is disabled across
+a restart, the old database is not opened or cleaned automatically. See the
+[operator guide](docs/RAW_CAPTURE.md) for the response contract and handling
+warnings.
+
+## Historical v0.15 pre-publication verification record
+
+The table and process below describe the reviewed v0.15 admission design before
+the later manual stable publication. They are retained for audit history and do
+not describe an available v0.16 workflow.
+
+| Gate | Current state |
+|---|---|
+| Round 6 implementation PR | [PR #9](https://github.com/yujianwudi/cyber-abuse-guard/pull/9) merged; its PR runner did not start because of the recorded GitHub billing limit, so it is not claimed as a PR-CI PASS |
+| Last fully verified pre-cleanup `main` push CI | [29630844605](https://github.com/yujianwudi/cyber-abuse-guard/actions/runs/29630844605) **SUCCESS** for `6782dfa` / tree `a8edbe2` |
+| RC4 exact-main CI | Must be a completed successful `push` run of `ci.yml` for the exact tagged `main` commit and is revalidated before checkout |
+| Source-only `v0.15-rc.1` tag CI | [29630926354](https://github.com/yujianwudi/cyber-abuse-guard/actions/runs/29630926354) **SUCCESS** for `6782dfa` / tree `a8edbe2` |
+| Private untagged clean candidate Actions artifact | **NOT CREATED / PENDING**; must bind one final commit/tree and emit `candidate-manifest.json` |
+| CPA v7.2.95 Host + Mock upstream | **NOT RUN / PENDING** |
+| Independent source/artifact/Host audit | **NOT RUN / PENDING** |
+| Candidate-bound external evaluation-v11 or later | **NOT RUN / PENDING**; must be first-and-only `CONSUMED / PASS` for the exact candidate |
+| Annotated `v0.15-dev.round6[.N]` prerelease | Optional and blocked until Host, independent audit, and candidate-level evaluation pass; never a formal release |
+| Public source-only `v0.15-rc.1` prerelease | Exists with no attached assets; not the private candidate, Host evidence, or formal release |
+| Historical asset-bearing `v0.15-rc.2` prerelease | **PUBLIC / PRERELEASE / SANDBOX ONLY**; ten Linux amd64 assets were published by direct owner override with tests skipped |
+| Protected `v0.15-rc.3` attempt | **FAILED / UNPUBLISHED / ZERO ASSETS**; run [29728286559](https://github.com/yujianwudi/cyber-abuse-guard/actions/runs/29728286559) passed admission, failed before packaging, skipped publish, and created no Release |
+| Formal-structure `v0.15-rc.4` prerelease | Exactly 17 Linux amd64 assets; internal gates and reproducibility must pass, while real CPA Host, independent audit/evaluation, formal release, and production authorization remain absent |
+| Annotated `v0.15` formal tag | Manually published as stable on 2026-07-20; the protected draft/promotion chain was not used |
+| Protected promotion of the unchanged draft | Not used for the actual v0.15 publication |
+
+Windows and macOS are intentionally absent from this matrix. Their absence is
+not a failed gate for this Linux-only round and must not be represented as test
+coverage.
+
+Safe Round 6 entry points are documented in
+[ROUND6_RELEASE_GATE.md](docs/ROUND6_RELEASE_GATE.md). Do not replace the
+allowlisted gates with broad `go test ./...` or `go vet ./...` commands that
+could compile or open consumed evaluation packages.
+
+Before the manual publication, the reviewed process prohibited creating
+`v0.15` until its external gates passed. That instruction is now historical;
+the published v0.15 assets still must not be reused as v0.16 evidence. Consumed
+v10 remains immutable and must not be rerun.
+
+## Artifact contract
+
+The historical v0.15 pre-publication evidence chain was designed as follows:
+
+1. Freeze the final PR head, pass PR CI, merge it to `main`, and pass push CI on
+   the exact resulting main commit/tree. Merge is a candidate prerequisite, not
+   deployment or release approval.
+2. A manual, private, **untagged** GitHub Actions dispatch from `main` builds clean exact-source
+   Linux amd64 candidate bytes. Its artifact is not a GitHub Release and expires.
+3. The CPA v7.2.95 Host + Mock record, the independent
+   audit, and a candidate-bound external `evaluation-v11` or later
+   `CONSUMED / PASS` report must all bind the same candidate identity.
+   The Host identity and evidence hash are carried by attestation schema v2 as
+   `cpa_version`, `cpa_commit`, and `cpa_host_sha256`.
+4. If a durable development handoff is needed after those gates, an existing
+   annotated `v0.15-dev.round6` (or numbered suffix) may produce a draft prerelease only
+   after those external gates pass. It remains `BLOCKED / NOT A FORMAL RELEASE`.
+5. Only that candidate-level external evaluation attestation may admit the
+   annotated formal tag `v0.15`. Its workflow
+   rebuilds and byte-compares the Host-tested candidate, emits
+   `formal-release-attestation.json`, and creates a draft formal Release; a
+   separate protected promotion publishes that unchanged draft.
+
+The private candidate contains `cyber-abuse-guard-v0.15.so`, its sidecar,
+`cyber-abuse-guard_0.15_linux_amd64.zip`, metadata, checksums, ruleset identity,
+SBOM, and `candidate-manifest.json`. The Store ZIP contains exactly one root
+`.so`. Audit bundles and source archives belong only to the later formal release
+path and must exclude evaluation, Holdout, private, blind, and retired material.
+They carry only the approved low-sensitivity attestation identities/hashes.
+Clean candidate bytes are still unreleased and provide no deployment
+authorization.
+
+This source tree intentionally does not self-record future Host/audit PASS
+hashes, merge identity, or Release state. Stable v0.15 eligibility is determined
+only by external Round 6/formal attestation assets that bind the final source,
+candidate workflow run, candidate bytes, Host records, independent audit, and
+release evaluation.
+
+The actual 2026-07-20 v0.15 publication did not complete that protected chain;
+its owner-reported sandbox result and manual-build disclosure live in the
+GitHub Release notes and are not upgraded here into independent evidence.
+
+The Round 9 prerelease development target is pinned to CPA v7.2.95 at
+`f71ec0eb6776854457892452cf28c47f0d658251`. Later upstream
+versions do not automatically change the supported or release-admitted target.
+Older observations remain non-executable historical records and are not current
+release or Host evidence.
+
+Historical evaluation-v10 remains `CONSUMED / FAIL`, cannot be rerun, and is
+not accepted as a formal-build input.
+
+The neutral source policy is [RELEASE_POLICY.md](docs/RELEASE_POLICY.md). The
+external decision records are `round6-prerelease-attestation.json` and
+`formal-release-attestation.json`; neither is self-authored as a future PASS by
+this source tree.
+
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| `cmd/cyber-abuse-guard/` | Native plugin entry point and CPA ABI bridge |
+| `internal/classifier/` | Deterministic policy and streaming classifier |
+| `internal/extract/` | Transactional request traversal, streaming text replay, decoding, roles, multipart, and media handling |
+| `internal/plugin/` | Router, executor, disposition, management, health, and reconfiguration |
+| `internal/audit/` | Privacy-minimal SQLite events, schema migrations, retention, and subject state |
+| `integration/` | CPA source/compile and Host contract modules |
+| `scripts/` | Safe gates, Linux build, packaging, verification, and reproducibility tooling |
+| [`docs/README.md`](docs/README.md) | Documentation index for architecture, operations, policy, current release handoff, and historical reports |
+
+Historical Round 5.2 evidence remains available in
+[AUDIT_HANDOFF.md](docs/AUDIT_HANDOFF.md),
+[TEST_REPORT.md](docs/reports/TEST_REPORT.md), and
+[RELEASE_EVIDENCE.md](docs/reports/RELEASE_EVIDENCE.md). It does not validate
+the Round 6 candidate.
+
+## Security reporting
+
+Follow [SECURITY.md](SECURITY.md). Do not include live credentials, private
+prompts, OAuth material, production request content, or account identifiers in
+an issue.
+
+## License
+
+[MIT](LICENSE)

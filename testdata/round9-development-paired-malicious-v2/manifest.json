@@ -1,0 +1,149 @@
+{
+    "name":  "round9-development-paired-malicious-v2",
+    "version":  1,
+    "generated_at":  "2026-07-23T08:20:41+08:00",
+    "authoring_context":  "visible_round9_paired_development_v2",
+    "expected_decision":  "block_malicious_text",
+    "label_confidence":  "unambiguous",
+    "generation_boundary":  {
+                                "independently_authored_before_candidate_execution":  false,
+                                "source_code_read":  true,
+                                "rules_read":  false,
+                                "existing_development_corpora_read":  true,
+                                "existing_holdout_evaluation_private_retired_content_read":  false,
+                                "candidate_output_observed":  false,
+                                "classifier_or_project_tests_run":  false,
+                                "semantic_policy":  "each record is a direct active malicious request paired to a distinct frozen benign request by a labelled semantic difference axis",
+                                "safety_policy":  "high-level malicious goals only; no code commands steps target identifiers or executable payloads"
+                            },
+    "schema":  {
+                   "file_format":  "jsonl",
+                   "fields":  [
+                                  "id",
+                                  "family",
+                                  "benign_base_id",
+                                  "difference_axis",
+                                  "category",
+                                  "language",
+                                  "prompt",
+                                  "expected_decision",
+                                  "label_confidence",
+                                  "authoring_context"
+                              ],
+                   "language_values":  [
+                                           "zh",
+                                           "en"
+                                       ]
+               },
+    "counts":  {
+                   "total":  120,
+                   "languages":  {
+                                     "zh":  60,
+                                     "en":  60
+                                 },
+                   "families":  {
+                                    "ctf_isolated_lab":  {
+                                                             "total":  8,
+                                                             "zh":  4,
+                                                             "en":  4
+                                                         },
+                                    "enterprise_credential_lifecycle":  {
+                                                                            "total":  8,
+                                                                            "zh":  4,
+                                                                            "en":  4
+                                                                        },
+                                    "enterprise_remote_management_agent":  {
+                                                                               "total":  8,
+                                                                               "zh":  4,
+                                                                               "en":  4
+                                                                           },
+                                    "forensics_incident_response":  {
+                                                                        "total":  8,
+                                                                        "zh":  4,
+                                                                        "en":  4
+                                                                    },
+                                    "inert_carriers_history":  {
+                                                                   "total":  8,
+                                                                   "zh":  4,
+                                                                   "en":  4
+                                                               },
+                                    "load_capacity_chaos_recovery":  {
+                                                                         "total":  8,
+                                                                         "zh":  4,
+                                                                         "en":  4
+                                                                     },
+                                    "long_context_risk_vocabulary":  {
+                                                                         "total":  8,
+                                                                         "zh":  4,
+                                                                         "en":  4
+                                                                     },
+                                    "malware_static_analysis":  {
+                                                                    "total":  8,
+                                                                    "zh":  4,
+                                                                    "en":  4
+                                                                },
+                                    "mixed_zh_en_colloquial":  {
+                                                                   "total":  8,
+                                                                   "zh":  4,
+                                                                   "en":  4
+                                                               },
+                                    "oauth_token_api_key_lifecycle":  {
+                                                                          "total":  8,
+                                                                          "zh":  4,
+                                                                          "en":  4
+                                                                      },
+                                    "ordinary_coding_refactor":  {
+                                                                     "total":  8,
+                                                                     "zh":  4,
+                                                                     "en":  4
+                                                                 },
+                                    "os_operations":  {
+                                                          "total":  8,
+                                                          "zh":  4,
+                                                          "en":  4
+                                                      },
+                                    "security_education_quote_translation":  {
+                                                                                 "total":  8,
+                                                                                 "zh":  4,
+                                                                                 "en":  4
+                                                                             },
+                                    "siem_edr_ids_log_analysis":  {
+                                                                      "total":  8,
+                                                                      "zh":  4,
+                                                                      "en":  4
+                                                                  },
+                                    "sigma_yara_ioc_detection":  {
+                                                                     "total":  8,
+                                                                     "zh":  4,
+                                                                     "en":  4
+                                                                 }
+                                },
+                   "categories":  {
+                                      "credential_theft":  16,
+                                      "phishing_deployment":  16,
+                                      "malware_deployment":  8,
+                                      "ransomware_deployment":  8,
+                                      "unauthorized_exploitation":  16,
+                                      "service_disruption":  8,
+                                      "data_exfiltration":  16,
+                                      "defense_evasion":  16,
+                                      "prompt_injection_evasion":  16
+                                  },
+                   "difference_axes":  {
+                                           "unauthorized_target":  15,
+                                           "third_party_victim":  15,
+                                           "covert_acquisition":  15,
+                                           "bypass_consent":  15,
+                                           "exfiltration_or_takeover":  15,
+                                           "real_deployment":  15,
+                                           "service_disruption":  15,
+                                           "execute_referent":  15
+                                       }
+               },
+    "files":  {
+                  "cases.jsonl":  {
+                                      "bytes":  54714,
+                                      "sha256":  "012b07e4853fdcc85bd5e56c86b30d6fa3ed6281ca178635b54744d94373f2c9"
+                                  }
+              }
+}

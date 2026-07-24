@@ -1,0 +1,315 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: go1.26.4
+  GOFLAGS: -mod=readonly
+  GO_VERSION: '1.26.4'
+  CYCLONEDX_GOMOD_VERSION: 'v1.9.0'
+  GOVULNCHECK_VERSION: 'v1.6.0'
+
+jobs:
+  quality-and-artifacts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Round6 safe sparse source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/round9-independent-benign-v1/**
+            !/testdata/round9-independent-malicious-v1/**
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+      - name: Recheck the Round6 restricted-data boundary
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install native verification dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential binutils curl file jq zip unzip nginx
+      - name: Install pinned security and SBOM tools
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          # shellcheck disable=SC2086
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
+          # shellcheck disable=SC2086
+          GOBIN="$RUNNER_TEMP/bin" go install golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: format
+        run: make round6-format-check
+      - name: git-diff-check
+        run: make round6-git-diff-check
+      - name: module-verify
+        run: make round6-module-verify
+      - name: Historical Round 8 counted-Mock regression
+        run: make round8-counted-mock-historical-regression
+      - name: CPA pinned Host source and fail-open contract
+        run: make cpa-host-fixture-contract
+      - name: round4-regression
+        run: make round4-regression
+      - name: round5-regression
+        run: make round5-regression
+      - name: round6-long-text-streaming-regression
+        run: make round6-regression
+      - name: unit-test
+        run: make unit-test
+      - name: race
+        run: make race
+      - name: vet
+        run: make round6-vet
+      - name: fuzz-smoke
+        run: make fuzz-smoke
+      - name: Round 9 bounded real fuzz
+        run: make round9-fuzz
+      - name: operational-script-security
+        run: make round6-script-test
+      - name: management-proxy-413
+        run: make management-proxy-413-test
+      - name: corpus-regression
+        run: make corpus-regression
+      - name: development-public-jailbreak-patterns-v1-validator
+        run: make development-public-jailbreak-corpus
+      - name: Round 9 semantic-vs-route corpus contract
+        run: make round9-corpus-contract
+      - name: Round 9 exact public adversarial corpus
+        run: make round9-public-corpus
+      - name: benchmark-acceptance
+        run: make round6-benchmark
+      - name: dependency-vulnerability-gate
+        run: make round6-vulncheck
+      - name: build-linux-amd64-and-integration-compile-only
+        env:
+          ALLOW_DIRTY_BUILD: '1'
+        run: make build-linux-amd64 integration-compile
+      - name: Round6-safe-development-artifacts
+        env:
+          ALLOW_DIRTY_BUILD: '1'
+          REQUIRE_DIST_ARTIFACTS: '1'
+        run: make round6-development-artifacts round6-cpa-store-contract
+      - name: artifact-hash
+        env:
+          ALLOW_DIRTY_BUILD: '1'
+        run: make artifact-hash
+      - name: safe-evidence-summary
+        run: |
+          artifact_version="$(jq -er '.version' dist/build-metadata.json)"
+          jq -r '
+            "artifact_commit=" + (.commit // "unknown" | tostring),
+            "artifact_version=" + (.version // "unknown" | tostring),
+            "classifier_policy=" + (.classifier_policy_version // "unknown" | tostring),
+            "classifier_policy_sha256=" + (.classifier_policy_sha256 // "unknown" | tostring),
+            "streaming_scanner=" + (.streaming_scanner // "unknown" | tostring)
+          ' dist/build-metadata.json
+          for artifact in \
+            "dist/cyber-abuse-guard-v${artifact_version}.so" \
+            "dist/cyber-abuse-guard-v${artifact_version}.so.sha256" \
+            "dist/cyber-abuse-guard_${artifact_version}_linux_amd64.zip" \
+            dist/build-metadata.json \
+            dist/checksums.txt \
+            dist/ruleset-manifest.json \
+            dist/ruleset.sha256 \
+            dist/sbom.cdx.json; do
+            printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
+            sha256sum "$artifact"
+          done
+          echo 'integration_summary=CPA v7.2.95 source/fail-open and build checks completed; isolated counted-Mock Host validation pending'
+          echo 'cpa_primary_identity=v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251'
+      - name: clean-tree-check
+        run: make clean-tree-check
+      - name: Upload development verification artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cyber-abuse-guard-linux-amd64-dirty
+          path: |
+            dist/cyber-abuse-guard-v*-dirty.so
+            dist/cyber-abuse-guard-v*-dirty.so.sha256
+            dist/cyber-abuse-guard_*-dirty_linux_amd64.zip
+            dist/build-metadata.json
+            dist/checksums.txt
+            dist/ruleset-manifest.json
+            dist/ruleset.sha256
+            dist/sbom.cdx.json
+          if-no-files-found: error
+      - name: CPA v7.2.95 source/compile contract
+        env:
+          CPA_COMPAT_PROFILE: "primary"
+          CPA_COMPAT_VERIFY_REMOTE: "1"
+        run: bash ./scripts/cpa-latest-compat.sh
+
+  reproducibility:
+    needs: quality-and-artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Round6 safe sparse source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/round9-independent-benign-v1/**
+            !/testdata/round9-independent-malicious-v1/**
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+      - name: Recheck the Round6 restricted-data boundary
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install reproducibility dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y build-essential binutils file jq zip unzip
+          mkdir -p "$RUNNER_TEMP/bin"
+          # shellcheck disable=SC2086
+          GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Compare two clean-clone Round6-safe development builds
+        env:
+          ROUND6_REPRODUCIBILITY_MODE: development
+        run: make round6-reproducibility-test
+      - name: clean-tree-check
+        run: make clean-tree-check
+
+  fuzz-long:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Round6 safe sparse source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/round9-independent-benign-v1/**
+            !/testdata/round9-independent-malicious-v1/**
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+      - name: Recheck the Round6 restricted-data boundary
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - run: |
+          go test ./internal/extract -run='^$' -fuzz='^FuzzExtractText$' -fuzztime=30s
+          go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestContentType$' -fuzztime=30s
+          go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestMediaMemberOrder$' -fuzztime=60s
+          go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestScalarMediaCarrierPermutation$' -fuzztime=60s
+          go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestMultipart$' -fuzztime=60s
+          go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestMultipartUnknownFieldEvidenceOrder$' -fuzztime=60s
+          go test ./internal/extract -run='^$' -fuzz='^FuzzRound6JSONStringChunkDecoderMatchesStdlib$' -fuzztime=60s
+          go test ./internal/classifier -run='^$' -fuzz='^FuzzClassifier$' -fuzztime=30s
+          go test ./internal/classifier -run='^$' -fuzz='^FuzzRound6StreamingChunkAndRoleBoundaries$' -fuzztime=60s
+          go test ./internal/classifier -run='^$' -fuzz='^FuzzMetaOverrideClausePermutation$' -fuzztime=30s
+          go test ./internal/classifier -run='^$' -fuzz='^FuzzMetaOverrideEncodingAndPartSplit$' -fuzztime=30s
+          go test ./internal/classifier -run='^$' -fuzz='^FuzzDefensiveQuotedSampleBoundary$' -fuzztime=30s
+          go test ./internal/config -run='^$' -fuzz='^FuzzConfigParser$' -fuzztime=30s

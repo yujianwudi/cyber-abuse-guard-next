@@ -1,0 +1,124 @@
+# Production also requires a regular mode-0600 secret file mounted read-only:
+# CYBER_ABUSE_GUARD_HMAC_KEY_FILE=/run/secrets/cyber-abuse-guard-hmac.key
+# Never commit the secret or put it in this YAML.
+plugins:
+  enabled: true
+  dir: plugins
+  configs:
+    cyber-abuse-guard:
+      enabled: true
+      priority: 300
+      # Sandbox/candidate default only. Production rollout remains prohibited
+      # until the documented Host, audit, evaluation, and formal-release gates pass.
+      mode: observe
+
+      # Legacy compatibility alias. It now selects the bounded text window;
+      # it no longer truncates raw JSON or caps cumulative inspected text.
+      max_scan_bytes: 262144
+      # Prefer this explicit key for new configurations. If both keys are
+      # present they must match.
+      # max_text_window_bytes: 262144
+      max_total_text_bytes: 8388608
+      # Omit to derive a safe value from total text, window size, and logical
+      # text-part capacity.
+      # max_classification_chunks: 2048
+      max_json_depth: 32
+      max_text_parts: 512
+
+      # block|audit|allow. If omitted: off=allow,
+      # observe/audit/balanced=audit, strict=block. The plugin never fetches
+      # public media URLs and never decodes image/audio/video bytes.
+      opaque_media_policy: audit
+
+      thresholds:
+        audit: 35
+        balanced_block: 60
+        hard_block: 80
+
+      allow_context:
+        ctf: true
+        lab: true
+        authorized_testing: true
+        defensive_analysis: true
+        remediation: true
+        malware_static_analysis: true
+
+      hard_block_even_if_authorized:
+        credential_theft: true
+        phishing_deployment: true
+        ransomware_deployment: true
+        data_exfiltration: true
+
+      subject_control:
+        # Opt in only after Observe/Audit review. The safe startup default does
+        # not correlate requests or accumulate cross-request subject risk.
+        enabled: false
+        # false keeps risk/cooldown/manual-block state in memory only; restart
+        # clears it. true requires audit.enabled, max_subjects <= 10000, and a
+        # stable CYBER_ABUSE_GUARD_HMAC_KEY_FILE.
+        persistence: false
+        max_subjects: 10000
+        window_minutes: 60
+        cooldown_score: 150
+        manual_block_score: 250
+        cooldown_minutes: 30
+
+      audit:
+        enabled: true
+        # Empty uses ~/.cli-proxy-api/plugins/cyber-abuse-guard.
+        data_dir: ""
+        retention_days: 30
+        max_db_mb: 256
+        # Observe never persists per-request events and therefore does not hash
+        # the request body for this field. Audit/enforcing modes compute it only
+        # when an event is actually persisted.
+        log_request_hash: true
+        log_subject_hash: true
+        log_rule_ids: true
+        log_category: true
+        # Complete non-user/untrusted category-free wrapper-only findings update
+        # counters without a request/subject hash or SQLite row. Trusted-user
+        # wrapper findings retain per-request audit attribution.
+        # Set true only when per-request wrapper correlation is operationally
+        # required; blocks, base Cyber Abuse findings, incomplete inspection,
+        # and opaque-media dispositions are always persisted when audit is on.
+        persist_wrapper_only: false
+        # Compatibility field: true is always rejected. There is no debug
+        # mode that persists unrestricted original prompt/request text.
+        log_original_text: false
+        # Sensitive operator-only false-positive review. Disabled by default.
+        # When enabled, only requests whose final disposition prevents upstream
+        # routing (block, including subject cooldown) receive a separate
+        # redacted, UTF-8-safe truncated preview. Redaction is best
+        # effort and must not be treated as a complete DLP boundary.
+        raw_capture:
+          enabled: false
+          # Safety invariants: false values are rejected.
+          only_blocked: true
+          redact_secrets: true
+          # 1..1048576 bytes per stored preview; redaction runs first.
+          max_bytes: 8192
+          # 1..87600 hours; when enabled, no longer than retention_days * 24.
+          ttl_hours: 72
+        # v0.1.1 databases are detected as schema v1. Migration to schema v2
+        # is atomic; optional VACUUM INTO backups are read-only and bounded.
+        backup_before_migration: true
+        max_migration_backups: 3
+
+      trusted_proxy:
+        # CPA v7.2.95 ModelRouter lacks a trustworthy direct-peer address;
+        # v0.16 therefore rejects enabled: true instead of trusting spoofable headers.
+        enabled: false
+        header: X-Forwarded-For
+        cidrs: []
+
+      # Reserved for a future local-only classifier; v0.16 rejects enabled: true.
+      classifier:
+        enabled: false
+        endpoint: ""
+        timeout_ms: 300
+        fail_mode: rules_only
+
+    # Disable after Cyber Abuse Guard is installed and verified.
+    antigravity-coding-filter:
+      enabled: false

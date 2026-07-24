@@ -1,0 +1,375 @@
+name: Round 9 policy gate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: round9-policy-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOTOOLCHAIN: go1.26.4
+  GOFLAGS: -mod=readonly
+  GO_VERSION: '1.26.4'
+  ROUND9_BENIGN_MANIFEST_SHA256: d33e4ff8954741a2fe9c24c0d34b239c649c7e0a6d31463cddba84dc6b6580b8
+  ROUND9_BENIGN_CASES_SHA256: 36d7f4dd635710f7ee81d02f9f62502c6276e554c80fc852f3d40acbfa70688d
+  ROUND9_PAIRED_MANIFEST_SHA256: 29d84900edeec8fceceee9ccd2640571f1e962643931f388dcc842b058c6a2c2
+  ROUND9_PAIRED_CASES_SHA256: 2a30da8d4872029d9b070a7b8bd8fb72a132994a21975f64b49cd56ecf4b2b3d
+  ROUND9_PAIRED_LABEL_AUDIT_SHA256: a2d34853f20ae1c0b18690a4f58f100fe0014c53232457d5084aa90407e2ab8f
+
+jobs:
+  round9-policy-and-corpus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout reviewed development surface
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          filter: blob:none
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /*
+            !/.round9-local-sandbox/**
+            !/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd]
+            !/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/docs/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+            !/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*
+            !/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*
+            !/testdata/round9-independent-benign-v1/**
+            !/testdata/round9-independent-malicious-v1/**
+            !/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*
+            !/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*
+            !/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*
+            !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
+      - name: Recheck restricted-data and workflow contracts
+        run: |
+          python3 -B scripts/round6_safe_gate_contract_test.py
+          python3 -B scripts/round6_safe_gate_contract.py --root .
+          ./scripts/release-doc-consistency.sh
+      - name: Verify external evaluator and protected-ledger contracts
+        run: |
+          python3 -B scripts/round9_external_evaluation_contract_test.py
+          python3 -B tools/round9-eval/round9_eval_core_test.py
+          python3 -B tools/round9-eval/cag_round9_external_evaluator_test.py
+          python3 -B tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py
+          python3 -B tools/round9-eval/cag_round9_eval_broker_test.py
+          bash -n tools/round9-eval/install.sh
+      - name: Set up pinned Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+      - name: Install Linux build dependency
+        run: sudo apt-get update && sudo apt-get install -y build-essential binutils file
+      - name: Verify pinned Linux amd64 Go runtime
+        run: |
+          set -euo pipefail
+          test "$(uname -s)" = Linux
+          test "$(uname -m)" = x86_64
+          test "$(go env GOOS)" = linux
+          test "$(go env GOARCH)" = amd64
+          test "$(go env GOVERSION)" = go1.26.4
+          test "$(go env GOFLAGS)" = -mod=readonly
+      - name: Freeze visible development corpus identities as read-only inputs
+        run: |
+          set -euo pipefail
+          mkdir -p round9-gate-output
+          printf '%s  %s\n' \
+            "$ROUND9_BENIGN_MANIFEST_SHA256" testdata/round9-development-benign-v1/manifest.json \
+            "$ROUND9_BENIGN_CASES_SHA256" testdata/round9-development-benign-v1/cases.jsonl \
+            "$ROUND9_PAIRED_MANIFEST_SHA256" testdata/round9-development-paired-malicious-v3/manifest.json \
+            "$ROUND9_PAIRED_CASES_SHA256" testdata/round9-development-paired-malicious-v3/cases.jsonl \
+            "$ROUND9_PAIRED_LABEL_AUDIT_SHA256" testdata/round9-development-paired-malicious-v3/LABEL_AUDIT.md \
+            > round9-gate-output/development-corpus-inputs.sha256
+          sha256sum -c round9-gate-output/development-corpus-inputs.sha256
+          chmod -R a-w \
+            testdata/round9-development-benign-v1 \
+            testdata/round9-development-paired-malicious-v3
+      - name: Verify task-facing policy identities
+        run: |
+          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v8"' internal/classifier/policy_identity.go
+          grep -Fx 'version: "1.0.10"' rules/manifest.yaml
+          grep -F '"internal/classifier/eligibility.go"' internal/classifier/policy_identity_test.go
+          go test ./internal/classifier \
+            -run '^(TestClassifierPolicyIdentity|TestClassifierPolicySourceInventoryClosure)$' \
+            -count=1 -v
+      - name: Candidate eligibility and disposition contracts
+        run: |
+          go test ./internal/classifier -run '^TestRound9' -count=1 -v
+          go test -tags=sqlite_omit_load_extension ./internal/plugin \
+            -run '^(TestInspectionDisposition.*|TestRound9.*)$' -count=1 -v
+      - name: Audit schema v6 contract
+        run: go test -tags=sqlite_omit_load_extension ./internal/audit -run '^(TestRound9|Test.*V6|Test.*SchemaV6)' -count=1 -v
+      - name: Exact v0.16-rc.2 old-SO rollback gate
+        run: |
+          ROUND9_OLD_SO_VERIFY_REMOTE=1 \
+          ROUND9_OLD_SO_ROLLBACK_REPORT=round9-gate-output/old-so-rollback.json \
+            make round9-old-so-rollback-gate
+      - name: Run bounded real fuzz for Round 9 policy surfaces
+        run: make round9-fuzz
+      - name: Corpus schema and route accounting contracts
+        run: make round9-corpus-contract
+      - name: Run 1200 semantic and 7200 route benign gate
+        run: |
+          set -euo pipefail
+          go run ./cmd/round9-development-benign-corpus-runner --root . \
+            > round9-gate-output/development-benign-report.json
+      - name: Run 120 semantic and 960 route paired malicious gate
+        run: |
+          set -euo pipefail
+          go run ./cmd/round9-paired-malicious-corpus-runner --root . \
+            > round9-gate-output/development-paired-malicious-report.json
+      - name: Verify exact runner metrics and frozen corpus identities
+        run: |
+          set -euo pipefail
+          python3 -B - <<'PY'
+          import hashlib
+          import json
+          import math
+          from pathlib import Path
+
+          output = Path("round9-gate-output")
+          benign = json.loads((output / "development-benign-report.json").read_text(encoding="utf-8"))
+          malicious = json.loads((output / "development-paired-malicious-report.json").read_text(encoding="utf-8"))
+
+          def require(actual, expected, label):
+              if actual != expected:
+                  raise SystemExit(f"{label}: got {actual!r}, want {expected!r}")
+
+          def identity(path):
+              data = Path(path).read_bytes()
+              return {"bytes": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+
+          def wilson95_percent(events, total):
+              z = 1.959963984540054
+              n = float(total)
+              p = float(events) / n
+              z2 = z * z
+              center = p + z2 / (2 * n)
+              margin = z * math.sqrt(p * (1 - p) / n + z2 / (4 * n * n))
+              denominator = 1 + z2 / n
+              return (
+                  max(0.0, (center - margin) / denominator) * 100,
+                  min(1.0, (center + margin) / denominator) * 100,
+              )
+
+          def require_float(actual, expected, label):
+              if not math.isclose(actual, expected, rel_tol=0, abs_tol=1e-12):
+                  raise SystemExit(f"{label}: got {actual!r}, want {expected!r}")
+
+          require(benign["schema"], "round9-development-benign-corpus-report/v1", "benign schema")
+          require(benign["corpus"], "round9-development-benign-v1", "benign corpus")
+          require(benign["runtime"], "go1.26.4", "benign Go runtime")
+          require(benign["platform"], "linux/amd64", "benign platform")
+          require(benign["metrics"]["unique_semantic_samples"], 1200, "benign semantic samples")
+          require(benign["metrics"]["serialized_route_executions"], 7200, "benign route executions")
+          require(benign["metrics"]["blocked_semantic_samples"], 0, "benign semantic blocks")
+          require(benign["metrics"]["blocked_executions"], 0, "benign route blocks")
+          require(benign["observed_benign_semantic_blocks"], 0, "benign observed semantic blocks")
+          require(benign["observed_benign_route_blocks"], 0, "benign observed route blocks")
+          require(
+              benign["metrics"]["allow_executions"] + benign["metrics"]["audit_executions"],
+              7200,
+              "benign allow plus audit executions",
+          )
+          require(
+              benign["metrics"]["category_counts"],
+              {
+                  "ctf_isolated_lab": 80,
+                  "enterprise_credential_lifecycle": 80,
+                  "enterprise_remote_management_agent": 80,
+                  "forensics_incident_response": 80,
+                  "inert_carriers_history": 80,
+                  "load_capacity_chaos_recovery": 80,
+                  "long_context_risk_vocabulary": 80,
+                  "malware_static_analysis": 80,
+                  "mixed_zh_en_colloquial": 80,
+                  "oauth_token_api_key_lifecycle": 80,
+                  "ordinary_coding_refactor": 80,
+                  "os_operations": 80,
+                  "security_education_quote_translation": 80,
+                  "siem_edr_ids_log_analysis": 80,
+                  "sigma_yara_ioc_detection": 80,
+              },
+              "benign category counts",
+          )
+          require(benign["metrics"]["language_counts"], {"en": 600, "zh": 600}, "benign language counts")
+          require(
+              benign["metrics"]["protocol_counts"],
+              {"openai_chat": 4800, "openai_responses": 2400},
+              "benign protocol counts",
+          )
+          require(benign["metrics"]["stream_counts"], {"false": 3600, "true": 3600}, "benign stream counts")
+          require(
+              benign["metrics"]["carrier_counts"],
+              {
+                  "code_block": 200,
+                  "configuration_documentation": 200,
+                  "current_user_content_parts": 200,
+                  "current_user_direct": 5000,
+                  "historical_assistant": 200,
+                  "log_output": 200,
+                  "long_history": 200,
+                  "quoted_natural_language": 200,
+                  "split_segments": 200,
+                  "system_instruction": 200,
+                  "tool_result": 200,
+                  "tool_schema": 200,
+              },
+              "benign carrier counts",
+          )
+          require(benign["metrics"]["mode_counts"], {"balanced": 6000, "strict": 1200}, "benign mode counts")
+          require(benign["metrics"]["failures"], [], "benign failures")
+
+          benign_manifest = identity("testdata/round9-development-benign-v1/manifest.json")
+          benign_cases = identity("testdata/round9-development-benign-v1/cases.jsonl")
+          require(benign["corpus_manifest_bytes"], benign_manifest["bytes"], "benign manifest bytes")
+          require(benign["corpus_manifest_sha256"], benign_manifest["sha256"], "benign manifest sha256")
+          require(benign["corpus_cases_bytes"], benign_cases["bytes"], "benign cases bytes")
+          require(benign["corpus_cases_sha256"], benign_cases["sha256"], "benign cases sha256")
+
+          require(malicious["schema"], "round9-development-paired-malicious-report/v3", "malicious schema")
+          require(malicious["corpus"], "round9-development-paired-malicious-v3", "malicious corpus")
+          require(malicious["runtime"], "go1.26.4", "malicious Go runtime")
+          require(malicious["platform"], "linux/amd64", "malicious platform")
+          require(malicious["pair_counts"]["total"], 120, "malicious manifest total")
+          require(malicious["metrics"]["unique_semantic_samples"], 120, "malicious semantic samples")
+          require(malicious["metrics"]["serialized_route_executions"], 960, "malicious route executions")
+          require(malicious["metrics"]["semantic_blocked"], 120, "malicious semantic blocks")
+          require(malicious["metrics"]["passed_route_executions"], 960, "malicious passing routes")
+          require(malicious["recall_percent"], 100, "malicious recall percent")
+          malicious_category_counts = {
+              "credential_theft": 16,
+              "data_exfiltration": 16,
+              "defense_evasion": 16,
+              "malware_deployment": 8,
+              "phishing_deployment": 16,
+              "prompt_injection_evasion": 16,
+              "ransomware_deployment": 8,
+              "service_disruption": 8,
+              "unauthorized_exploitation": 16,
+          }
+          require(malicious["metrics"]["category_counts"], malicious_category_counts, "malicious category counts")
+          require(malicious["metrics"]["language_counts"], {"en": 60, "zh": 60}, "malicious language counts")
+          require(
+              malicious["metrics"]["protocol_counts"],
+              {"openai_chat": 480, "openai_responses": 480},
+              "malicious protocol counts",
+          )
+          require(malicious["metrics"]["stream_counts"], {"false": 480, "true": 480}, "malicious stream counts")
+          require(malicious["metrics"]["mode_counts"], {"balanced": 480, "strict": 480}, "malicious mode counts")
+          require(malicious["metrics"]["failures"], [], "malicious failures")
+          require(set(malicious["metrics"]["per_category"]), set(malicious_category_counts), "malicious category set")
+          for category, semantic_samples in malicious_category_counts.items():
+              category_metrics = malicious["metrics"]["per_category"][category]
+              require(category_metrics["semantic_samples"], semantic_samples, f"{category} semantic samples")
+              require(category_metrics["semantic_blocked"], semantic_samples, f"{category} semantic blocks")
+              require(category_metrics["route_executions"], semantic_samples * 8, f"{category} route executions")
+              require(
+                  category_metrics["passed_route_executions"],
+                  semantic_samples * 8,
+                  f"{category} passed route executions",
+              )
+              require(category_metrics["recall_percent"], 100, f"{category} recall percent")
+              expected_lower, expected_upper = wilson95_percent(semantic_samples, semantic_samples)
+              require_float(
+                  category_metrics["wilson_95_lower_percent"],
+                  expected_lower,
+                  f"{category} Wilson lower",
+              )
+              require_float(
+                  category_metrics["wilson_95_upper_percent"],
+                  expected_upper,
+                  f"{category} Wilson upper",
+              )
+          overall_lower, overall_upper = wilson95_percent(120, 120)
+          require_float(malicious["wilson_95_lower_percent"], overall_lower, "malicious overall Wilson lower")
+          require_float(malicious["wilson_95_upper_percent"], overall_upper, "malicious overall Wilson upper")
+
+          malicious_manifest = identity("testdata/round9-development-paired-malicious-v3/manifest.json")
+          malicious_cases = identity("testdata/round9-development-paired-malicious-v3/cases.jsonl")
+          malicious_labels = identity("testdata/round9-development-paired-malicious-v3/LABEL_AUDIT.md")
+          require(malicious["corpus_manifest"], malicious_manifest, "malicious manifest identity")
+          require(malicious["corpus_cases"], malicious_cases, "malicious cases identity")
+          require(malicious["corpus_label_audit"], malicious_labels, "malicious label audit identity")
+          require(malicious["benign_corpus_manifest"], benign_manifest, "paired benign manifest identity")
+          require(malicious["benign_corpus_cases"], benign_cases, "paired benign cases identity")
+          PY
+          sha256sum -c round9-gate-output/development-corpus-inputs.sha256
+          git diff --exit-code -- \
+            testdata/round9-development-benign-v1 \
+            testdata/round9-development-paired-malicious-v3
+      - name: Exact public development corpus contract
+        run: make round9-public-corpus
+      - name: Ensure independent corpora stayed outside this tuning lane
+        run: |
+          test ! -e testdata/round9-independent-benign-v1/cases.jsonl
+          test ! -e testdata/round9-independent-malicious-v1
+      - name: Summarize bounded gate identity
+        run: |
+          set -euo pipefail
+          classifier_policy_version="$(sed -nE \
+            's/^const ClassifierPolicyVersion = "([^"]+)"$/\1/p' \
+            internal/classifier/policy_identity.go)"
+          classifier_policy_sha256="$(sed -nE \
+            's/^const ClassifierPolicySHA256 = "([0-9a-f]{64})"$/\1/p' \
+            internal/classifier/policy_identity.go)"
+          [[ "$classifier_policy_version" == "classifier-policy-v8" ]]
+          [[ "$classifier_policy_sha256" =~ ^[0-9a-f]{64}$ ]]
+          printf '%s\n' \
+            'schema=round9-policy-gate/v1' \
+            "commit=${GITHUB_SHA}" \
+            'platform=linux-amd64' \
+            "classifier=${classifier_policy_version}" \
+            "classifier_policy_sha256=${classifier_policy_sha256}" \
+            'ruleset=1.0.10' \
+            'development_benign_unique_semantic_samples=1200' \
+            'development_benign_serialized_route_executions=7200' \
+            'development_benign_blocked_semantic_samples=0' \
+            'development_benign_blocked_executions=0' \
+            'development_paired_malicious_unique_semantic_samples=120' \
+            'development_paired_malicious_serialized_route_executions=960' \
+            'development_paired_malicious_semantic_blocked=120' \
+            'development_paired_malicious_passed_route_executions=960' \
+            'development_corpus_inputs_read_only=true' \
+            "development_benign_manifest_sha256=${ROUND9_BENIGN_MANIFEST_SHA256}" \
+            "development_benign_cases_sha256=${ROUND9_BENIGN_CASES_SHA256}" \
+            "development_paired_manifest_sha256=${ROUND9_PAIRED_MANIFEST_SHA256}" \
+            "development_paired_cases_sha256=${ROUND9_PAIRED_CASES_SHA256}" \
+            "development_paired_label_audit_sha256=${ROUND9_PAIRED_LABEL_AUDIT_SHA256}" \
+            'independent_corpus_executed=false' \
+            > round9-policy-gate.txt
+      - name: Upload Round 9 gate summary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: round9-policy-gate-${{ github.sha }}
+          path: |
+            round9-policy-gate.txt
+            round9-gate-output/
+          if-no-files-found: error

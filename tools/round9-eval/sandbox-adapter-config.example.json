@@ -1,0 +1,13 @@
+{
+  "counted_mock_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
+  "cpa_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
+  "daemon_id": "round9-independent-daemon-v1",
+  "docker_executable": "/usr/bin/docker",
+  "docker_sandbox": "/usr/local/libexec/cag-round9-docker-sandbox",
+  "docker_sandbox_sha256": "REPLACE_WITH_64_LOWERCASE_HEX",
+  "model": "gpt-5.4",
+  "probe_image_id": "sha256:REPLACE_WITH_64_LOWERCASE_HEX",
+  "sandbox_id": "round9-independent-sandbox-v1",
+  "scan_limit_bytes": 16384,
+  "schema": "round9-cpa-sandbox-adapter-config/v1"
+}

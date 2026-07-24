@@ -1,0 +1,4 @@
+self-hosted-runner:
+  labels:
+    - cag-round8-sandbox
+    - cag-round9-sandbox

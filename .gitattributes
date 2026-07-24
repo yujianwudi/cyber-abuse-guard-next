@@ -1,0 +1,55 @@
+* text=auto
+
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.dockerignore text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+Dockerfile* text eol=lf
+*.go text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+
+# Round 9 frozen corpus artifacts have byte-level identities, including
+# deliberately retained historical line-ending layouts. Store them verbatim;
+# normalizing JSON/JSONL or encoded payload files would invalidate their hashes.
+/testdata/round9-development-*/** -text -whitespace
+/testdata/round9-public-adversarial-v*/** -text -whitespace
+
+# Formal source archives must not export consumed evaluation, holdout, blind,
+# private, or retired material. The release packager repeats these exclusions
+# explicitly and verifies the resulting archive fail-closed.
+/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]* export-ignore
+/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]* export-ignore
+/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]* export-ignore
+/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]* export-ignore
+/cmd/**/*[Bb][Ll][Ii][Nn][Dd]* export-ignore
+/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]* export-ignore
+/docs/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]* export-ignore
+/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]* export-ignore
+/docs/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]_[Rr][Ee][Pp][Oo][Rr][Tt].[Mm][Dd] export-ignore
+/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]* export-ignore
+/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]* export-ignore
+/docs/**/*[Bb][Ll][Ii][Nn][Dd]* export-ignore
+/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]* export-ignore
+/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]* export-ignore
+/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]* export-ignore
+/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]* export-ignore
+/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]* export-ignore
+/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]* export-ignore
+/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]* export-ignore
+/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]* export-ignore
+/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]* export-ignore
+/testdata/round9-independent-*/** export-ignore
+/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]* export-ignore
+/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]* export-ignore
+/testdata/**/*[Bb][Ll][Ii][Nn][Dd]* export-ignore
+/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]* export-ignore
+/scripts/verify-frozen-evaluation-v10-tree.sh export-ignore
+/.round9-local-sandbox/** export-ignore
