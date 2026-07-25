@@ -923,7 +923,7 @@ create_rc_source_archive() {
   local verifier_path='scripts/round9_external_evaluation_contract.py'
   local verifier_sha256='b632063bed7cdb59ae7d56b5f9634efd4945b8a0c769cb3dd86b9c52de1a2076'
   local verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
-  local verifier_test_sha256='6ce01201f808e28299b61c66e380e52981778bccfa9df407357de22bd56a31f8'
+  local verifier_test_sha256='7f32dc75f6354777eadf8791cc3b56ba9f9ac8db37334b8a66c7d046ded7ba48'
   local verifier_entry="${archive_prefix}${verifier_path}"
   local verifier_test_entry="${archive_prefix}${verifier_test_path}"
   local transient_path_pattern='(^|/)(classifier_(candidate|single)_[^/]*|[^/]*\.(cpu|mem|pprof|test\.exe|exe))($|/)'
