@@ -26,6 +26,17 @@ func newRound6ModeSession(t testing.TB, c *Classifier, mode Mode, limits ScanLim
 	return session
 }
 
+func newRound6ProfiledSession(t testing.TB, c *Classifier, limits ScanLimits) *ScanSession {
+	t.Helper()
+	session, err := c.NewProfiledScanSession(
+		ModeBalanced, DefaultThresholds(), DefaultPolicy(), limits,
+	)
+	if err != nil {
+		t.Fatalf("NewProfiledScanSession() error = %v", err)
+	}
+	return session
+}
+
 func addRound6Field(t testing.TB, session *ScanSession, fieldID uint64, role extract.Role, parts ...[]byte) {
 	t.Helper()
 	attribution := extract.UserAttributionUntrusted
@@ -1471,7 +1482,7 @@ func TestRound6StreamingLongAssistantTailDoesNotComposeBaseBehaviorWithUser(t *t
 	if len(assistant) <= streamRoleSummaryBytes || want.Action == ActionBlock {
 		t.Fatalf("invalid long assistant fixture length=%d result=%+v", len(assistant), want)
 	}
-	session := newRound6Session(t, c, ScanLimits{})
+	session := newRound6ProfiledSession(t, c, ScanLimits{})
 	addRound6Field(t, session, 1, extract.RoleAssistant, []byte(assistant))
 	addRound6Field(t, session, 2, extract.RoleUser, []byte(user))
 	result := session.Finish()
@@ -1491,7 +1502,7 @@ func TestRound6StreamingControlPairDoesNotCarryBaseBehaviorAcrossRoles(t *testin
 	if want.Action == ActionBlock || want.Category != "" && want.Category != rules.CategoryDisruption {
 		t.Fatalf("role-aware control fixture = %+v", want)
 	}
-	session := newRound6Session(t, c, ScanLimits{})
+	session := newRound6ProfiledSession(t, c, ScanLimits{})
 	addRound6Field(t, session, 1, extract.RoleAssistant, []byte(assistant))
 	addRound6Field(t, session, 2, extract.RoleUser, []byte(user))
 	result := session.Finish()
@@ -1552,7 +1563,7 @@ func TestRound6StreamingClosedSafetyQuoteTailStaysInertAcrossNextUserField(t *te
 	if len(assistant) <= streamRoleSummaryBytes || want.Action == ActionBlock {
 		t.Fatalf("invalid closed safety fixture length=%d result=%+v", len(assistant), want)
 	}
-	session := newRound6Session(t, c, ScanLimits{})
+	session := newRound6ProfiledSession(t, c, ScanLimits{})
 	addRound6Field(t, session, 1, extract.RoleAssistant, []byte(assistant))
 	addRound6Field(t, session, 2, extract.RoleUser, []byte(user))
 	result := session.Finish()
@@ -1574,7 +1585,7 @@ func TestRound6StreamingUnquotedTailAfterSafetyQuoteLinksNextUserField(t *testin
 	if len(assistant) <= streamRoleSummaryBytes || want.Action == ActionAllow {
 		t.Fatalf("invalid unquoted-tail fixture length=%d result=%+v", len(assistant), want)
 	}
-	session := newRound6Session(t, c, ScanLimits{})
+	session := newRound6ProfiledSession(t, c, ScanLimits{})
 	addRound6Field(t, session, 1, extract.RoleAssistant, []byte(assistant))
 	addRound6Field(t, session, 2, extract.RoleUser, []byte(user))
 	result := session.Finish()
@@ -1611,7 +1622,7 @@ func TestRound6StreamingSyntheticFactsStayInsideLogicalField(t *testing.T) {
 		{extract.RoleUser, extract.RoleAssistant},
 		{extract.RoleAssistant, extract.RoleUser},
 	} {
-		session := newRound6Session(t, c, limits)
+		session := newRound6ProfiledSession(t, c, limits)
 		addRound6Field(t, session, 1, roles[0], []byte(first))
 		addRound6Field(t, session, 2, roles[1], []byte(second))
 		result := session.Finish()
@@ -1672,6 +1683,8 @@ func FuzzRound6StreamingChunkAndRoleBoundaries(f *testing.F) {
 		{text: "Do not steal browser cookies; detect and prevent that behavior.", split: 9},
 		{text: "ordinary football scheduling notes", split: 17, roleBoundary: true},
 		{text: "intent object target", split: 7, roleBoundary: true},
+		{text: "0000A!s7eAl C00k1e", split: 4, roleBoundary: true},
+		{text: "```\n0", split: 1},
 	} {
 		f.Add(seed.text, seed.split, seed.roleBoundary)
 	}
@@ -1717,7 +1730,12 @@ func FuzzRound6StreamingChunkAndRoleBoundaries(f *testing.F) {
 
 		want := c.AnalyzeSegments(segments)
 		got := session.Finish()
-		if got.Coverage.State != CoverageComplete || got.Truncated {
+		if want.Truncated {
+			if !got.Truncated || got.Coverage.State != CoverageUnavailable ||
+				got.Coverage.Reason != want.Coverage.Reason {
+				t.Fatalf("streaming incomplete mismatch: got=%+v want=%+v", got, want)
+			}
+		} else if got.Coverage.State != CoverageComplete || got.Truncated {
 			t.Fatalf("streaming coverage = %+v result=%+v", got.Coverage, got)
 		}
 		if got.Action != want.Action || got.Score != want.Score || got.Category != want.Category ||

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
+current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -11,7 +11,7 @@ Last updated: 2026-07-25 (Asia/Shanghai)
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
 working-tree identity is `classifier-policy-v9` /
-`06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`
+`6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The latest Linux amd64 development benchmark below instead binds predecessor

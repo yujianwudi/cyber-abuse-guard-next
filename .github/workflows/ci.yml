@@ -299,7 +299,8 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - run: |
+      - id: fuzz
+        run: |
           go test ./internal/extract -run='^$' -fuzz='^FuzzExtractText$' -fuzztime=30s
           go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestContentType$' -fuzztime=30s
           go test ./internal/extract -run='^$' -fuzz='^FuzzExtractRequestMediaMemberOrder$' -fuzztime=60s
@@ -313,3 +314,38 @@ jobs:
           go test ./internal/classifier -run='^$' -fuzz='^FuzzMetaOverrideEncodingAndPartSplit$' -fuzztime=30s
           go test ./internal/classifier -run='^$' -fuzz='^FuzzDefensiveQuotedSampleBoundary$' -fuzztime=30s
           go test ./internal/config -run='^$' -fuzz='^FuzzConfigParser$' -fuzztime=30s
+      - name: Collect newly generated Go fuzz failure corpus
+        id: collect_fuzz
+        if: ${{ failure() && steps.fuzz.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          destination="$RUNNER_TEMP/go-fuzz-failures"
+          mkdir -p "$destination"
+
+          while IFS= read -r -d '' corpus; do
+            case "$corpus" in
+              internal/*/testdata/fuzz/Fuzz*/*) ;;
+              *)
+                echo "refusing unexpected fuzz corpus path: $corpus" >&2
+                exit 1
+                ;;
+            esac
+            [[ "$(basename "$corpus")" =~ ^[0-9a-f]{16}$ ]] || {
+              echo "refusing unexpected fuzz corpus filename: $corpus" >&2
+              exit 1
+            }
+            [[ "$(head -n 1 "$corpus")" == "go test fuzz v1" ]] || {
+              echo "refusing non-Go fuzz corpus file: $corpus" >&2
+              exit 1
+            }
+            install -D -m 0600 "$corpus" "$destination/$corpus"
+          done < <(git ls-files --others --exclude-standard -z -- \
+            ':(glob)internal/*/testdata/fuzz/Fuzz*/*')
+      - name: Upload Go fuzz failure corpus
+        if: ${{ failure() && steps.fuzz.outcome == 'failure' && steps.collect_fuzz.outcome == 'success' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: go-fuzz-failure
+          path: ${{ runner.temp }}/go-fuzz-failures
+          if-no-files-found: warn
+          retention-days: 7

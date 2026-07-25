@@ -1350,7 +1350,7 @@ REPRODUCIBILITY_WRAPPER_SCRIPT_SHA256 = (
 )
 FROZEN_EVALUATION_TREE_SCRIPT = "scripts/verify-frozen-evaluation-v10-tree.sh"
 FROZEN_EVALUATION_TREE_SCRIPT_SHA256 = (
-    "18c5a6d8adcae724f15742b21995a5d5c0cc2484cb7ac2c56d5c23ddf121d256"
+    "a412d4c18e703945f176e6134dd5cebd515eafd7eb4872e84a35d00702b75bff"
 )
 FROZEN_EVALUATION_STATUS_COMMAND = (
     'status="$(git -C "$root" status --porcelain=v1 --untracked-files=all -- "${paths[@]}")"'
@@ -1503,7 +1503,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "768b3358bc8b77529467019aa3fac1435f9c9aabc7d433a0c473862536be1691"
+ROUND6_SAFE_GATE_TEST_SHA256 = "f63a61b07f1ac4b9a3da9cb0c79a19c29ade883dcefc20b3f98b45f5a9b84d7d"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "d51fe316a686c1b4dd629f6a7b63f4159b882095811fcdea3311255527bd5da1"
 
 
@@ -3461,6 +3461,67 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         "bash ./scripts/cpa-latest-compat.sh",
         source,
         f"{cpa_path}.run",
+    )
+
+    fuzz_job = yaml_mapping(jobs.get("fuzz-long"), source, "jobs.fuzz-long")
+    fuzz_steps = yaml_sequence(
+        fuzz_job.get("steps"), source, "jobs.fuzz-long.steps"
+    )
+    fuzz_matches: list[tuple[int, Node, dict[str, Node]]] = []
+    collector_matches: list[tuple[int, Node, dict[str, Node]]] = []
+    uploader_matches: list[tuple[int, Node, dict[str, Node]]] = []
+    for step_index, step_node in enumerate(fuzz_steps):
+        step_path = f"jobs.fuzz-long.steps[{step_index}]"
+        step = yaml_mapping(step_node, source, step_path)
+        if "id" in step:
+            step_id = yaml_scalar(step["id"], source, f"{step_path}.id")
+            if step_id == "fuzz":
+                fuzz_matches.append((step_index, step_node, step))
+            elif step_id == "collect_fuzz":
+                collector_matches.append((step_index, step_node, step))
+        if "name" in step and yaml_scalar(step["name"], source, f"{step_path}.name") == (
+            "Upload Go fuzz failure corpus"
+        ):
+            uploader_matches.append((step_index, step_node, step))
+    if len(fuzz_matches) != 1 or len(collector_matches) != 1 or len(uploader_matches) != 1:
+        raise ContractError(
+            "CI fuzz failure artifact flow must contain one fuzz, collector, and uploader step"
+        )
+    fuzz_index, fuzz_node, _ = fuzz_matches[0]
+    collector_index, collector_node, collector = collector_matches[0]
+    uploader_index, uploader_node, uploader = uploader_matches[0]
+    if not fuzz_index < collector_index < uploader_index:
+        raise ContractError("CI fuzz failure artifact steps must preserve reviewed order")
+    require_yaml_keys(fuzz_node, ("id", "run"), source, "jobs.fuzz-long.steps.fuzz")
+    require_yaml_keys(
+        collector_node,
+        ("name", "id", "if", "run"),
+        source,
+        "jobs.fuzz-long.steps.collect_fuzz",
+    )
+    require_yaml_scalar(
+        collector["if"],
+        "${{ failure() && steps.fuzz.outcome == 'failure' }}",
+        source,
+        "jobs.fuzz-long.steps.collect_fuzz.if",
+    )
+    require_yaml_keys(
+        uploader_node,
+        ("name", "if", "uses", "with"),
+        source,
+        "jobs.fuzz-long.steps.upload_fuzz",
+    )
+    require_yaml_scalar(
+        uploader["if"],
+        "${{ failure() && steps.fuzz.outcome == 'failure' && steps.collect_fuzz.outcome == 'success' }}",
+        source,
+        "jobs.fuzz-long.steps.upload_fuzz.if",
+    )
+    require_yaml_scalar(
+        uploader["uses"],
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        source,
+        "jobs.fuzz-long.steps.upload_fuzz.uses",
     )
     if re.search(r"(?m)^\s+(?:GH_TOKEN|GITHUB_TOKEN):", text):
         raise ContractError("CI may not expose a repository token to checked-out source")

@@ -2809,6 +2809,32 @@ jobs:
             ):
                 validate_ci_workflow(workflow, source)
 
+    def test_ci_workflow_fuzz_artifact_requires_fuzz_failure_and_validated_collection(self):
+        source = Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml"
+        original = source.read_text(encoding="utf-8")
+        validate_ci_workflow(original, source)
+        mutations = (
+            original.replace(
+                "        if: ${{ failure() && steps.fuzz.outcome == 'failure' }}\n",
+                "        if: ${{ failure() }}\n",
+                1,
+            ),
+            original.replace(
+                "        if: ${{ failure() && steps.fuzz.outcome == 'failure' && steps.collect_fuzz.outcome == 'success' }}\n",
+                "        if: ${{ failure() && steps.fuzz.outcome == 'failure' }}\n",
+                1,
+            ),
+            original.replace("      - id: fuzz\n", "      - id: fuzz_job\n", 1),
+            original.replace("        id: collect_fuzz\n", "        id: collect_output\n", 1),
+        )
+        for workflow in mutations:
+            self.assertNotEqual(workflow, original)
+            with self.assertRaisesRegex(
+                ContractError,
+                "fuzz failure artifact|exact scalar",
+            ):
+                validate_ci_workflow(workflow, source)
+
     def test_candidate_scripts_match_reviewed_contract_and_are_ci_reachable(self):
         root = Path(__file__).parent.parent
         for name in (

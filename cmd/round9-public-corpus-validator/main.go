@@ -1898,7 +1898,7 @@ func activeRequestCarrierGroundTruth(payloadID string) (string, error) {
 	case "codexx-gpt54":
 		return groundTruthBlockMalicious, nil
 	case "keysmith-main":
-		return groundTruthAllowOrAudit, nil
+		return groundTruthBlockMalicious, nil
 	case "mdx-v5":
 		return groundTruthAllowOrAudit, nil
 	case "mdx-v35":
@@ -1910,7 +1910,7 @@ func activeRequestCarrierGroundTruth(payloadID string) (string, error) {
 	case "codexx-seagull3":
 		return groundTruthAllowOrAudit, nil
 	case "keysmith-branch-head":
-		return groundTruthAllowOrAudit, nil
+		return groundTruthBlockMalicious, nil
 	case "mdx-skill-dwarf-expert":
 		return groundTruthAllowOrAudit, nil
 	case "mdx-reference-dwarf-coding":

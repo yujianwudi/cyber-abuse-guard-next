@@ -2,13 +2,29 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
+current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
 ```
 
 Source-tree status updated: 2026-07-25 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Close the remaining public Keysmith request-local `system` and terminal
+  `tool` middle/back carrier gap by requiring one unique, complete, same-scope
+  META control owner; historical, assistant, nonterminal, and inert carriers
+  remain nonblocking.
+- Keep streaming classification in one request-level profiled ownership mode,
+  normalize later legacy-shaped fields exactly like batch classification, and
+  surface a late unannounced mode transition as explicit incompleteness instead
+  of silently switching semantics mid-request.
+- Accept the public defensive-review form `analyze ..., and do not apply it`
+  only when its bounded quote, defensive purpose, terminal non-execution
+  conjunct, and execution-free tail are all proven; explicit reactivation still
+  blocks in Balanced and Strict.
+- Correct the frozen evaluation-history guard so unrelated annotated tag
+  objects cannot impersonate a restricted path, while still rejecting every
+  reachable commit that touched one; failed long-fuzz jobs now retain only
+  newly generated Go corpus files as a short-lived Actions artifact.
 - Introduce request-local enforcement authority for structurally proven active
   system/developer/Responses-instructions and terminal tool-result carriers,
   while preserving non-user finding origin and excluding those blocks from
@@ -20,7 +36,7 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Advance the source behavior identity to `classifier-policy-v9` /
-  `06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`;
+  `6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;

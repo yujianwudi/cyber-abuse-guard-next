@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
+current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
 ```
 
 Status: **NOT AUTHORIZED FOR EXECUTION BY CODEX**.

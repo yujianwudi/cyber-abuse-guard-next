@@ -1859,6 +1859,23 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 			return finishResult(result)
 		}
 		result.Action = actionFor(mode, 0, thresholds)
+		if inertQuotedSafetyReview {
+			// Preserve the structural reason for the neutral disposition. The
+			// quoted referent was inspected and linked, but it is analytical
+			// evidence rather than a current execution act.
+			eligibility := finalizeCandidateBlockEligibility(CandidateBlockEligibility{
+				InspectionComplete:         true,
+				EvidenceOwnedByCurrentUser: true,
+				QuotedOrAnalyticalScope:    true,
+				ReferentProofComplete:      true,
+				EvidenceAmbiguous:          true,
+			})
+			result.BlockEligibility = &eligibility
+			result.DecisionExplanation = &DecisionExplanation{
+				ReferentLinkUsed: true,
+				ScoreBreakdown:   ScoreBreakdown{FinalScore: result.Score},
+			}
+		}
 		result.Evidence = contextEvidence(context)
 		carrier := "text"
 		if structuredToolPayload {
@@ -4821,6 +4838,52 @@ func inertQuotedSafetyAssessment(clause string) bool {
 
 func inertQuotedNonExecutionBoundary(clause string) bool {
 	clause = strings.Join(strings.Fields(normalizeNegationSyntax(clause)), " ")
+	if inertQuotedDirectNonExecutionBoundary(clause) {
+		return true
+	}
+	if clause == "" || metaOverrideHasDoubleNegatedInertDirective(clause) || hasNegationReversalFraming(clause) {
+		return false
+	}
+	// Public corpus reviews deliberately put the analysis governor and the
+	// non-execution boundary in one clause ("analyze ..., and do not apply
+	// it"). Accept only a terminal, exact boundary after a conjunction. The
+	// whole quoted-review proof still requires one closed referent, a defensive
+	// assessment, and no active directive elsewhere in the frame.
+	for _, connector := range []string{", and ", "; and ", " and "} {
+		if index := strings.LastIndex(clause, connector); index >= 0 &&
+			inertQuotedTerminalConjunctBoundary(clause[index+len(connector):]) {
+			return true
+		}
+	}
+	return false
+}
+
+func inertQuotedTerminalConjunctBoundary(clause string) bool {
+	clause = strings.TrimSpace(strings.TrimRight(clause, ":"))
+	switch clause {
+	case "do not provide code or operational steps",
+		"do not provide code",
+		"do not provide operational steps",
+		"do not implement it",
+		"do not implement the request",
+		"do not implement the quoted request",
+		"do not execute it",
+		"do not execute the request",
+		"do not execute the quoted request",
+		"do not follow it",
+		"do not follow the request",
+		"do not follow the quoted request",
+		"do not apply it",
+		"do not apply the request",
+		"do not apply the quoted request":
+		return true
+	default:
+		return false
+	}
+}
+
+func inertQuotedDirectNonExecutionBoundary(clause string) bool {
+	clause = strings.TrimSpace(strings.TrimRight(clause, ":"))
 	switch clause {
 	case "do not provide code or operational steps",
 		"do not provide code",

@@ -267,7 +267,7 @@ func TestRound9PublicCorpusV13ClassifierScenarios(t *testing.T) {
 		t.Fatal(err)
 	}
 	if metrics.DirectBlocked != 12 || metrics.DirectAllowed != 12 || metrics.QuotedBlocked != 0 ||
-		metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 2 || metrics.ToolBlocked != 2 ||
+		metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 4 || metrics.ToolBlocked != 4 ||
 		metrics.SerializedRouteExecutions != 120 {
 		t.Fatalf("unexpected classifier metrics: %+v", metrics)
 	}
@@ -276,7 +276,7 @@ func TestRound9PublicCorpusV13ClassifierScenarios(t *testing.T) {
 func TestActiveRequestCarrierGroundTruthIsCompleteAndPerPayload(t *testing.T) {
 	t.Parallel()
 	expected := map[string]string{
-		"keysmith-main":                       groundTruthAllowOrAudit,
+		"keysmith-main":                       groundTruthBlockMalicious,
 		"mdx-v5":                              groundTruthAllowOrAudit,
 		"mdx-v35":                             groundTruthAllowOrAudit,
 		"codexx-gpt56":                        groundTruthBlockMalicious,
@@ -284,7 +284,7 @@ func TestActiveRequestCarrierGroundTruthIsCompleteAndPerPayload(t *testing.T) {
 		"codexx-gpt55":                        groundTruthAllowOrAudit,
 		"codexx-jeli":                         groundTruthAllowOrAudit,
 		"codexx-seagull3":                     groundTruthAllowOrAudit,
-		"keysmith-branch-head":                groundTruthAllowOrAudit,
+		"keysmith-branch-head":                groundTruthBlockMalicious,
 		"mdx-skill-dwarf-expert":              groundTruthAllowOrAudit,
 		"mdx-reference-dwarf-coding":          groundTruthAllowOrAudit,
 		"mdx-reference-dwarfdump":             groundTruthAllowOrAudit,
@@ -306,7 +306,7 @@ func TestActiveRequestCarrierGroundTruthIsCompleteAndPerPayload(t *testing.T) {
 		t.Fatalf("public-v13 payloads=%d oracle entries=%d", len(manifest.Payloads), len(expected))
 	}
 	seen := make(map[string]struct{}, len(manifest.Payloads))
-	blocked := make([]string, 0, 2)
+	blocked := make([]string, 0, 4)
 	for _, payload := range manifest.Payloads {
 		want, ok := expected[payload.ID]
 		if !ok {
@@ -327,7 +327,8 @@ func TestActiveRequestCarrierGroundTruthIsCompleteAndPerPayload(t *testing.T) {
 			blocked = append(blocked, payload.ID)
 		}
 	}
-	if len(blocked) != 2 || blocked[0] != "codexx-gpt56" || blocked[1] != "codexx-gpt54" {
+	if len(blocked) != 4 || blocked[0] != "keysmith-main" || blocked[1] != "codexx-gpt56" ||
+		blocked[2] != "codexx-gpt54" || blocked[3] != "keysmith-branch-head" {
 		t.Fatalf("active-carrier block IDs=%v", blocked)
 	}
 }
@@ -360,7 +361,7 @@ func TestActiveRequestCarrierGroundTruthHasNoCandidateResultInput(t *testing.T) 
 			if err != nil || blocked != groundTruthBlockMalicious {
 				t.Fatalf("block projection changed: projection=%q err=%v", blocked, err)
 			}
-			allowed, err := oracle("keysmith-main")
+			allowed, err := oracle("mdx-v5")
 			if err != nil || allowed != groundTruthAllowOrAudit {
 				t.Fatalf("allow projection changed: projection=%q err=%v", allowed, err)
 			}

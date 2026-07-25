@@ -32,7 +32,9 @@ if [[ -n "$tracked" ]]; then
   exit 1
 fi
 
-reachable="$(git -C "$root" rev-list --objects --all -- "${paths[@]}")"
+# Ask for commits that touched the paths, not object names. With --objects,
+# rev-list emits annotated tag objects even when no path matches.
+reachable="$(git -C "$root" rev-list --all --full-history -- "${paths[@]}")"
 if [[ -n "$reachable" ]]; then
   printf 'consumed evaluation-v10 paths are reachable from repository history\n' >&2
   exit 1

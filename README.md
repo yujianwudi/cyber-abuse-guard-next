@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
+current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -69,13 +69,20 @@ classifier.
 | CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v9` / `06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`; Host and release binding remain pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v9` / `6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211`; Host and release binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |
 
 ### Latest source-only runtime remediation
 
+- The four public Keysmith `system`/terminal-`tool` middle/back carrier cases
+  now require and receive a unique same-scope request-local META owner; nearby
+  historical, assistant, nonterminal, or inert material cannot borrow that
+  authority. This source result still requires a fresh protected Host audit.
+- Streaming now selects profiled ownership semantics once per request rather
+  than once per field, matching batch normalization for legacy-shaped fields
+  and eliminating the long-fuzz role-boundary drift.
 - Structurally proven active `system`/`developer`/Responses `instructions` and
   terminal provider-native tool results now have request-local enforcement
   authority without being attributed to the authenticated user or entering

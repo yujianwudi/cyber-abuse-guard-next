@@ -581,6 +581,7 @@ type ScanSession struct {
 	profiledPendingToolIncomplete bool
 	profiledPendingIncompleteTurn int
 	profiledPendingIncompleteConv int
+	profiledRequest               bool
 	quotedOrInertSuppressed       bool
 
 	aborted  bool
@@ -592,6 +593,18 @@ type ScanSession struct {
 // returned as an operational error and must not be converted into request
 // incompleteness by callers.
 func (c *Classifier) NewScanSession(mode Mode, thresholds Thresholds, policy Policy, limits ScanLimits) (*ScanSession, error) {
+	return c.newScanSession(mode, thresholds, policy, limits, false)
+}
+
+// NewProfiledScanSession constructs a streaming session whose extractor has
+// already proven a provider-native request profile. This request-level mode is
+// required before the first field because later legacy-shaped fields must be
+// normalized under the same ownership semantics as batch classification.
+func (c *Classifier) NewProfiledScanSession(mode Mode, thresholds Thresholds, policy Policy, limits ScanLimits) (*ScanSession, error) {
+	return c.newScanSession(mode, thresholds, policy, limits, true)
+}
+
+func (c *Classifier) newScanSession(mode Mode, thresholds Thresholds, policy Policy, limits ScanLimits, profiledRequest bool) (*ScanSession, error) {
 	normalized, err := limits.normalized()
 	if err != nil {
 		return nil, err
@@ -615,6 +628,7 @@ func (c *Classifier) NewScanSession(mode Mode, thresholds Thresholds, policy Pol
 		profiledPendingToolConvIndex:  -1,
 		profiledPendingIncompleteTurn: -1,
 		profiledPendingIncompleteConv: -1,
+		profiledRequest:               profiledRequest,
 	}, nil
 }
 
@@ -627,6 +641,17 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 	if chunk.Start {
 		if s.active != nil {
 			return ErrInvalidSegmentOrder
+		}
+		if !s.profiledRequest && segmentChunkDeclaresProfiledMetadata(chunk) {
+			s.profiledRequest = true
+			if s.coverage.Bytes != 0 {
+				// Batch classification chooses profiled ownership semantics for the
+				// entire request. An auto-detected transition after text was already
+				// classified cannot be replayed without retaining the request, so fail
+				// closed as incomplete. Production profiled extractors predeclare the
+				// mode through NewProfiledScanSession and never take this path.
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			}
 		}
 		s.active = &streamingField{
 			id:                chunk.FieldID,
@@ -901,8 +926,8 @@ func (s *ScanSession) finishField(field *streamingField) {
 	field.safetyQuote = 0
 	field.safetyClosed = 0
 	field.safetyRiskFacts.reset()
-	fieldSegment := s.profiledStreamingEffectiveSegment(streamingSegmentForField(field, ""))
-	profiledField := hasProfiledSegmentMetadata([]extract.Segment{fieldSegment})
+	fieldSegment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
+	profiledField := s.profiledRequest
 	if profiledField && profiledContentInert(fieldSegment.ContentKind) &&
 		!s.profiledStreamingPendingTool(fieldSegment) && field.totalBytes > 0 {
 		s.quotedOrInertSuppressed = true
@@ -969,6 +994,12 @@ func (s *ScanSession) finishField(field *streamingField) {
 	hasHistoricalWindowCandidate := false
 	if field.hasBest {
 		segment := fieldSegment
+		if text, complete := s.completeStreamingRequestLocalOwnerText(field, fieldEnforcementScope); complete {
+			// Single-field request-local ownership needs the same bounded text that
+			// batch classification receives. Recover it only for a complete field
+			// whose ordinary core independently reaches the hard admission gate.
+			segment.Text = text
+		}
 		origin := findingOriginForSegment(segment)
 		if profiledField {
 			pendingTool := s.profiledStreamingPendingTool(segment)
@@ -1153,7 +1184,7 @@ func (s *ScanSession) rememberLastTrustedUserBlock(field *streamingField, bestBe
 	if s == nil || field == nil || field.role != extract.RoleUser ||
 		field.provenance != extract.ProvenanceContent ||
 		field.userAttribution != extract.UserAttributionTrusted || !field.hasBest ||
-		findingOriginForSegment(s.profiledStreamingEffectiveSegment(streamingSegmentForField(field, ""))) != FindingOriginUserContent ||
+		findingOriginForSegment(s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))) != FindingOriginUserContent ||
 		!resultHasEligibleMaliciousWinner(field.best, s.thresholds) {
 		return
 	}
@@ -1178,6 +1209,29 @@ func completeStreamingFieldText(field *streamingField) (string, bool) {
 	return string(field.roleSummary), true
 }
 
+func (s *ScanSession) completeStreamingRequestLocalOwnerText(
+	field *streamingField,
+	scope EnforcementScope,
+) (string, bool) {
+	if s == nil || field == nil ||
+		(scope != EnforcementScopeRequestLocalSystem && scope != EnforcementScopeRequestLocalTool) {
+		return "", false
+	}
+	potential := s.classifier.streamingRiskPotential(field.riskFacts.facts, s.policy, s.thresholds)
+	if !potential.hasQualifiedOrdinary || potential.qualifiedOrdinaryScore < s.thresholds.HardBlock {
+		return "", false
+	}
+	if text, complete := completeStreamingFieldText(field); complete {
+		return text, true
+	}
+	if int64(len(field.buffer)) != field.totalBytes {
+		return "", false
+	}
+	// The current field still fits in the bounded scan window. Reuse it only for
+	// this transient ownership proof; no request text survives finalization.
+	return string(field.buffer), true
+}
+
 func streamingSegmentForField(field *streamingField, text string) extract.Segment {
 	if field == nil {
 		return extract.Segment{Text: text}
@@ -1194,6 +1248,17 @@ func streamingSegmentForField(field *streamingField, text string) extract.Segmen
 		FieldPathHash:     field.fieldPathHash,
 		Text:              text,
 	}
+}
+
+func segmentChunkDeclaresProfiledMetadata(chunk extract.SegmentChunk) bool {
+	return segmentDeclaresProfiledMetadata(extract.Segment{
+		ConversationIndex: chunk.ConversationIndex,
+		TurnIndex:         chunk.TurnIndex,
+		IsCurrentTurn:     chunk.IsCurrentTurn,
+		ScopeID:           chunk.ScopeID,
+		ContentKind:       chunk.ContentKind,
+		FieldPathHash:     chunk.FieldPathHash,
+	})
 }
 
 func streamingSegmentForSummary(summary *streamingFieldSummary, text string) extract.Segment {
@@ -1250,6 +1315,14 @@ func (s *ScanSession) profiledStreamingEffectiveSegment(segment extract.Segment)
 		segment.IsCurrentTurn = true
 	}
 	return segment
+}
+
+func (s *ScanSession) profiledStreamingRequestSegment(segment extract.Segment) extract.Segment {
+	if s != nil && s.profiledRequest && !segmentDeclaresProfiledCoordinates(segment) {
+		segment.ConversationIndex = -1
+		segment.TurnIndex = -1
+	}
+	return s.profiledStreamingEffectiveSegment(segment)
 }
 
 func (s *ScanSession) profiledStreamingPendingStandaloneTool(segment extract.Segment) bool {
@@ -1649,7 +1722,7 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	if s == nil || current == nil || s.coverage.State != CoverageComplete {
 		return
 	}
-	segment := s.profiledStreamingEffectiveSegment(streamingSegmentForSummary(current, ""))
+	segment := s.profiledStreamingRequestSegment(streamingSegmentForSummary(current, ""))
 	profiledRiskOwner := profiledStreamingCurrentReferentDirective(segment)
 	if s.profiledHasPreviousUserRisk &&
 		(!profiledRiskOwner || !s.profiledPreviousUserRiskMatches(segment)) {
@@ -3602,7 +3675,7 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 	profiledPotentialProof := !field.roleComplete && profiledStreamingCurrentReferentDirective(
 		streamingSegmentForField(field, ""),
 	)
-	windowSegment := s.profiledStreamingEffectiveSegment(streamingSegmentForField(field, ""))
+	windowSegment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
 	profiledPreviousRisk := s.profiledPreviousUserRiskMatches(windowSegment) &&
 		!s.profiledPreviousUserComplete
 	unprofiledPreviousRisk := !hasProfiledSegmentMetadata([]extract.Segment{windowSegment}) &&
@@ -3640,7 +3713,7 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 		if strings.TrimSpace(windowText) == "" {
 			return true
 		}
-		segment := s.profiledStreamingEffectiveSegment(streamingSegmentForField(field, windowText))
+		segment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, windowText))
 		if !provisional && !s.profiledStreamingInspectable(segment) {
 			return true
 		}
@@ -3678,7 +3751,7 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 				}
 				proofWindowText = proofWindowText[proofStart:]
 			}
-			physicalSegment := s.profiledStreamingEffectiveSegment(
+			physicalSegment := s.profiledStreamingRequestSegment(
 				streamingSegmentForField(field, proofWindowText),
 			)
 			var physicalFacts classificationSignalFacts
@@ -3718,7 +3791,7 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			}
 			uniqueWindowText := physicalWindowText[proofStart:]
 			if strings.TrimSpace(uniqueWindowText) != "" {
-				uniqueSegment := s.profiledStreamingEffectiveSegment(
+				uniqueSegment := s.profiledStreamingRequestSegment(
 					streamingSegmentForField(field, uniqueWindowText),
 				)
 				var uniqueFacts classificationSignalFacts

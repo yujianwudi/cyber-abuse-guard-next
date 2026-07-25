@@ -2361,7 +2361,9 @@ func (c *Classifier) annotateProfiledResult(
 		return
 	}
 	owner := refs[len(refs)-1]
-	syntheticMetaOwner, syntheticMetaOwnership := profiledSyntheticMetaControlOwner(result, refs)
+	syntheticMetaOwner, syntheticMetaOwnership := c.profiledSyntheticMetaControlOwner(
+		result, refs, policy, mode, thresholds,
+	)
 	if syntheticMetaOwnership {
 		owner = syntheticMetaOwner
 	}
@@ -2429,23 +2431,35 @@ func (c *Classifier) annotateProfiledResult(
 	)
 	if sourceBindingAmbiguous {
 		markResultCandidateEvidenceAmbiguous(result, mode, thresholds)
+	} else if syntheticMetaOwnership {
+		scope := enforcementScopeForProfiledGroup(refs)
+		if scope == EnforcementScopeRequestLocalSystem || scope == EnforcementScopeRequestLocalTool {
+			// Request-local META authority is admitted only after the exact field
+			// owner and the candidate identity have both been bound. The role-aware
+			// pre-pass deliberately keeps standalone META audit-only until here.
+			bindResultCandidateEnforcementScope(result, scope, mode, thresholds)
+		}
 	}
 }
 
 // profiledSyntheticMetaControlOwner recognizes the one result shape whose
 // occurrences deliberately have no physical clause spans: a standalone META
 // control candidate. The roleless classifier has already proved the bounded
-// active control document, while the profiled group proves one current trusted
-// user scope and a local active owner. Replaying every ordinary directive and
-// semantic matcher cannot recover a more precise META span
+// active control document. The profiled group must then prove either one
+// current trusted-user owner or one closed request-local system/tool owner.
+// Replaying every ordinary directive and semantic matcher cannot recover a
+// more precise META span
 // (signalSupportsProfiledEvidence intentionally excludes META), so the generic
-// path would otherwise reject the deliberately synthetic occurrence. Keeping
-// this predicate strict preserves that audit meaning without allowing mixed
-// ordinary/META candidates, tool payloads, or cross-scope text to borrow
-// ownership.
-func profiledSyntheticMetaControlOwner(
+// path would otherwise reject the deliberately synthetic occurrence. The
+// request-local path therefore reclassifies each bounded field and requires one
+// unique complete control-plane owner; mixed ordinary/META candidates, tool
+// payload provenance, and cross-scope text still cannot borrow ownership.
+func (c *Classifier) profiledSyntheticMetaControlOwner(
 	result *Result,
 	refs []profiledSegmentRef,
+	policy Policy,
+	mode Mode,
+	thresholds Thresholds,
 ) (profiledSegmentRef, bool) {
 	if result == nil || !standaloneMetaControlResult(*result) ||
 		len(result.EvidenceOccurrences) == 0 || len(refs) == 0 {
@@ -2462,6 +2476,35 @@ func profiledSyntheticMetaControlOwner(
 	}
 
 	base := refs[0].segment
+	if scope := enforcementScopeForProfiledGroup(refs); scope == EnforcementScopeRequestLocalSystem || scope == EnforcementScopeRequestLocalTool {
+		var owner profiledSegmentRef
+		ownerSet := false
+		for _, ref := range refs {
+			segment := ref.segment
+			if segment.Role != base.Role || segment.Provenance != extract.ProvenanceContent ||
+				segment.ScopeID == 0 || segment.ScopeID != base.ScopeID ||
+				segment.FieldPathHash == "" || enforcementScopeForSegment(segment) != scope {
+				return profiledSegmentRef{}, false
+			}
+			var fieldFacts classificationSignalFacts
+			fieldCandidate := c.classifyWithPolicyCaptured(
+				[]string{segment.Text}, mode, thresholds, policy, false, &fieldFacts, false,
+			)
+			if !c.requestLocalStandaloneMetaControlEnforceable(
+				fieldCandidate, fieldFacts, policy, thresholds,
+			) {
+				continue
+			}
+			if ownerSet {
+				// Synthetic META occurrences carry no physical spans. More than one
+				// independently complete field therefore has no unique bounded owner.
+				return profiledSegmentRef{}, false
+			}
+			owner = ref
+			ownerSet = true
+		}
+		return owner, ownerSet
+	}
 	var owner profiledSegmentRef
 	ownerSet := false
 	for _, ref := range refs {
@@ -3075,7 +3118,13 @@ func withRoleAwareFindingOriginAndScope(
 		// prevents provider policies and tool diagnostics from being blocked merely
 		// because they describe instruction hierarchy or refusal suppression.
 		if standaloneMetaControlResult(result) {
-			bindResultCandidateActor(&result, false, mode, thresholds)
+			alreadyBound := result.BlockEligibility != nil &&
+				result.BlockEligibility.EnforcementScope == scope &&
+				result.BlockEligibility.Eligible &&
+				result.CandidateIdentityBlockingProofComplete()
+			if !alreadyBound {
+				bindResultCandidateActor(&result, false, mode, thresholds)
+			}
 		} else {
 			bindResultCandidateEnforcementScope(&result, scope, mode, thresholds)
 		}
@@ -3113,6 +3162,59 @@ func withRoleAwareFindingOriginAndScope(
 		result.DecisionExplanation.HardFloorReason = hardFloorReasonNone
 	}
 	return result
+}
+
+// requestLocalStandaloneMetaControlEnforceable distinguishes a complete
+// prescriptive control-plane carrier from ordinary provider policy language.
+// The caller has already proved the closed request-local system/tool role,
+// provenance, content-kind, path/scope, and (for tools) terminality boundary.
+// Requiring the four independently classified control families keeps that
+// structural authority from promoting a generic hierarchy/refusal discussion.
+func (c *Classifier) requestLocalStandaloneMetaControlEnforceable(
+	result Result,
+	facts classificationSignalFacts,
+	policy Policy,
+	thresholds Thresholds,
+) bool {
+	if !standaloneMetaControlResult(result) || result.BlockEligibility == nil {
+		return false
+	}
+	eligibility := result.BlockEligibility
+	if !eligibility.InspectionComplete || !eligibility.CurrentExecutionActProven ||
+		!eligibility.HarmfulCoreComplete || !eligibility.OperationallyActionable ||
+		!eligibility.SecurityControlEvasion || eligibility.DefensiveScopeConflict ||
+		eligibility.QuotedOrAnalyticalScope || eligibility.CrossScopeComposition ||
+		!eligibility.ReferentProofComplete || eligibility.EvidenceAmbiguous {
+		return false
+	}
+	required := map[string]bool{
+		metaOverrideRuleID + ":direct_completion":   false,
+		metaOverrideRuleID + ":output_control":      false,
+		metaOverrideRuleID + ":refusal_suppression": false,
+		metaOverrideRuleID + ":unrestricted_mode":   false,
+	}
+	for _, evidence := range result.Evidence {
+		if _, ok := required[evidence.ID]; ok {
+			required[evidence.ID] = true
+		}
+	}
+	for _, present := range required {
+		if !present {
+			return false
+		}
+	}
+	// A pure hierarchy/refusal/output wrapper is common in legitimate provider
+	// policy and remains audit-only. Request-local META becomes enforceable only
+	// when the same exact field also carries a qualified ordinary cyber-abuse
+	// core and an explicit harmful-target conflict. This is a secondary positive
+	// proof attached to the already complete META candidate; it can never create
+	// a category or score by itself.
+	if c == nil || !facts.harmConflict {
+		return false
+	}
+	potential := c.streamingRiskPotential(facts, policy, thresholds)
+	thresholds = validThresholdsOrDefault(thresholds)
+	return potential.hasQualifiedOrdinary && potential.qualifiedOrdinaryScore >= thresholds.HardBlock
 }
 
 func profiledRoleOwnedWrapper(result Result, origin FindingOrigin) bool {

@@ -141,7 +141,11 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		HardBlock:     state.config.Thresholds.HardBlock,
 	}
 	policy := classifierPolicy(state.config)
-	session, sessionErr := state.classifier.NewScanSession(mode, thresholds, policy, classifier.ScanLimits{
+	newScanSession := state.classifier.NewScanSession
+	if sourceFormatKnown {
+		newScanSession = state.classifier.NewProfiledScanSession
+	}
+	session, sessionErr := newScanSession(mode, thresholds, policy, classifier.ScanLimits{
 		WindowBytes:   state.config.EffectiveTextWindowBytes(),
 		MaxTotalBytes: state.config.MaxTotalTextBytes,
 		MaxChunks:     state.config.EffectiveMaxClassificationChunks(),
