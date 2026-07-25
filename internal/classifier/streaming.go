@@ -273,17 +273,30 @@ type profiledOverflowIntent struct {
 	anchorIndex int
 }
 
+// profiledDefensiveQuoteOverflowRun retains only the logical-field identity and
+// three content-free frame bits for the contiguous run that has crossed the
+// per-scope unit window. carrierLost records that exact carrier text is no
+// longer available, so a later completed attempt must become explicit
+// incomplete coverage instead of silently inheriting suppression.
+type profiledDefensiveQuoteOverflowRun struct {
+	set         bool
+	segment     extract.Segment
+	signals     inertQuotedSafetyReviewFrameSignals
+	carrierLost bool
+}
+
 // profiledCurrentReferentScope retains only the bounded, ordered semantic units
 // needed to resolve one current-turn referent scope. Keeping physical order is
 // what prevents a referent from jumping across a nearer benign carrier or an
 // unrelated directive/schema/result barrier.
 type profiledCurrentReferentScope struct {
-	key                  profiledCurrentReferentScopeKey
-	set                  bool
-	overflow             bool
-	overflowReferentRisk bool
-	overflowIntents      []profiledOverflowIntent
-	units                []profiledCurrentReferentUnit
+	key                       profiledCurrentReferentScopeKey
+	set                       bool
+	overflow                  bool
+	overflowReferentRisk      bool
+	overflowIntents           []profiledOverflowIntent
+	defensiveQuoteOverflowRun profiledDefensiveQuoteOverflowRun
+	units                     []profiledCurrentReferentUnit
 }
 
 // streamingFieldRiskFacts contains only bounded classifier signal bits and
@@ -1637,55 +1650,107 @@ func streamingContainsASCIIFold(text, phrase string) bool {
 	return false
 }
 
-func streamingDefensiveQuotedReviewFrameSignals(text string) inertQuotedSafetyReviewFrameSignals {
-	if text == "" {
-		return 0
-	}
-	containsAny := func(phrases ...string) bool {
+const (
+	streamingDefensiveFrameBoundaryStem = iota
+	streamingDefensiveFrameBoundaryObject
+	streamingDefensiveFrameReferenceStem
+	streamingDefensiveFrameReference
+	streamingDefensiveFrameQualifier
+	streamingDefensiveFrameSignalCount
+)
+
+var streamingDefensiveFrameMatcher = buildStreamingDefensiveFrameMatcher()
+
+func buildStreamingDefensiveFrameMatcher() *literalMatcher {
+	builder := newMatcherBuilder()
+	add := func(signalID int, phrases ...string) {
 		for _, phrase := range phrases {
-			if streamingContainsASCIIFold(text, phrase) {
-				return true
+			views := normalizeParts([]string{phrase})
+			if len(views.standardRunes) != 0 && !views.truncated {
+				// Runtime input passes the same NFKC/case/zero-width normalization
+				// as the main classifier. This coarse ambiguity gate deliberately
+				// retains the prior substring semantics; exact suppression still
+				// requires the bounded structural proof.
+				builder.add(string(views.standardRunes), false, signalID)
 			}
 		}
-		return false
 	}
-	boundaryStem := containsAny(
+	add(streamingDefensiveFrameBoundaryStem,
 		"do not", "don't", "never", "must not", "should not", "cannot", "can't",
 		"will not", "would not", "could not", "may not", "without", "no ", "keep",
 	)
-	referenceStem := containsAny(
+	add(streamingDefensiveFrameBoundaryObject,
+		"execute", "implement", "apply", "follow", "obey", "carry out", "act on", "run it", "deploy", "build it", "reproduce",
+		"code", "source", "commands", "script", "payload", "instruction", "operational detail", "operational step", "execution step", "operations",
+		" inert", " non-operational", " nonoperational",
+	)
+	add(streamingDefensiveFrameReferenceStem,
 		"quoted", "following", " below", " above", "this request", "this prompt", "this instruction",
 		"this sample", "this example", "this text", "passage", "excerpt", "code block", "fenced block",
 	)
-	if !boundaryStem && !referenceStem {
-		return 0
-	}
-	signals := inertQuotedSafetyReviewFrameSignals(0)
-	if referenceStem && containsAny(
+	add(streamingDefensiveFrameReference,
 		"quoted request", "quoted prompt", "quoted instruction", "quoted text", "quoted sample", "quoted example",
 		"following request", "following prompt", "following instruction", "following text", "following sample", "following example", "following passage", "following excerpt",
 		"request below", "prompt below", "instruction below", "text below", "sample below", "example below",
 		"request above", "prompt above", "sample above", "example above", "this request", "this prompt", "this instruction", "this sample", "this example", "this text",
 		"quoted passage", "quoted excerpt", "code block", "fenced block",
-	) {
-		signals |= inertQuotedSafetyReviewFrameReference
-	}
-	if boundaryStem && containsAny(
-		"execute", "implement", "apply", "follow", "obey", "carry out", "act on", "run it", "deploy", "build it", "reproduce",
-		"code", "source", "commands", "script", "payload", "instruction", "operational detail", "operational step", "execution step", "operations",
-		" inert", " non-operational", " nonoperational",
-	) {
-		signals |= inertQuotedSafetyReviewFrameBoundary
-	}
-	if containsAny(
+	)
+	add(streamingDefensiveFrameQualifier,
 		"explain ", "analyze ", "analyse ", "review ", "assess ", "evaluate ", "audit ", "inspect ", "classify ", "summarize ", "summarise ", "describe ",
 		"security audit", "safety audit", "defensive audit", "security review", "safety review", "defensive review", "risk assessment",
 		"risk", "harm", "unsafe", "dangerous", "abusive", "malicious", "threat", "policy violation", "security implication", "safety implication",
 		"detection gap", "warning sign", "mitigation", "remediation", "defensive control", "safeguard",
 		" is included", " included here", " included below", " included,", " is provided", " provided below",
 		"appears below", " is shown", "shown below", " is presented", "presented below", "follows below", "sample follows", "example follows",
-	) {
+	)
+	return builder.build()
+}
+
+func streamingDefensiveQuotedReviewFrameSignals(text string) inertQuotedSafetyReviewFrameSignals {
+	if text == "" {
+		return 0
+	}
+	buffer := takeNormalizedRuneBuffer()
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, buffer, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	return streamingDefensiveQuotedReviewFrameSignalsNormalized(
+		views.standardRunes, views.truncated,
+	)
+}
+
+func streamingDefensiveQuotedReviewFrameSignalsNormalized(
+	standardRunes []rune,
+	truncated bool,
+) inertQuotedSafetyReviewFrameSignals {
+	if truncated {
+		// A normalized streaming window is bounded by the same classifier
+		// ceiling. If adversarial expansion exhausts it, retain the smallest
+		// content-free state that prevents a nearby carrier from becoming a
+		// complete allow.
+		return inertQuotedSafetyReviewFrameReference |
+			inertQuotedSafetyReviewFrameQualifier |
+			inertQuotedSafetyReviewFrameBoundary
+	}
+	if len(standardRunes) == 0 {
+		return 0
+	}
+	matched := [streamingDefensiveFrameSignalCount]bool{}
+	streamingDefensiveFrameMatcher.match(standardRunes, matched[:])
+	if !matched[streamingDefensiveFrameBoundaryStem] &&
+		!matched[streamingDefensiveFrameReferenceStem] {
+		return 0
+	}
+	signals := inertQuotedSafetyReviewFrameSignals(0)
+	if matched[streamingDefensiveFrameReference] {
+		signals |= inertQuotedSafetyReviewFrameReference
+	}
+	if matched[streamingDefensiveFrameQualifier] {
 		signals |= inertQuotedSafetyReviewFrameQualifier
+	}
+	if matched[streamingDefensiveFrameBoundaryStem] &&
+		matched[streamingDefensiveFrameBoundaryObject] {
+		signals |= inertQuotedSafetyReviewFrameBoundary
 	}
 	return signals
 }
@@ -2109,9 +2174,12 @@ func (s *ScanSession) findOrAddProfiledCurrentReferentScope(
 	if len(s.profiledCurrentReferents) >= maxProfiledCurrentReferentScopes {
 		evictIndex := -1
 		for index := range s.profiledCurrentReferents {
-			if !profiledCurrentReferentScopeHasPotential(s.classifier, &s.profiledCurrentReferents[index]) {
+			if !s.profiledCurrentReferentScopeNeedsRetention(&s.profiledCurrentReferents[index]) {
 				evictIndex = index
 				break
+			}
+			if s.coverage.State != CoverageComplete {
+				return nil
 			}
 		}
 		if evictIndex < 0 {
@@ -2122,6 +2190,8 @@ func (s *ScanSession) findOrAddProfiledCurrentReferentScope(
 		s.profiledCurrentReferents[evictIndex].units = nil
 		clear(s.profiledCurrentReferents[evictIndex].overflowIntents)
 		s.profiledCurrentReferents[evictIndex].overflowIntents = nil
+		s.profiledCurrentReferents[evictIndex].defensiveQuoteOverflowRun =
+			profiledDefensiveQuoteOverflowRun{}
 		copy(s.profiledCurrentReferents[evictIndex:], s.profiledCurrentReferents[evictIndex+1:])
 		clear(s.profiledCurrentReferents[len(s.profiledCurrentReferents)-1:])
 		s.profiledCurrentReferents = s.profiledCurrentReferents[:len(s.profiledCurrentReferents)-1]
@@ -2131,6 +2201,193 @@ func (s *ScanSession) findOrAddProfiledCurrentReferentScope(
 		set: true,
 	})
 	return &s.profiledCurrentReferents[len(s.profiledCurrentReferents)-1]
+}
+
+func profiledDefensiveQuoteUnitSignals(
+	classifier *Classifier,
+	unit profiledCurrentReferentUnit,
+) inertQuotedSafetyReviewFrameSignals {
+	if !unit.directive {
+		return 0
+	}
+	signals := unit.defensiveQuoteSignals
+	if classifier != nil && unit.complete && unit.text != "" {
+		if completeSignals, complete := classifier.rawInertQuotedSafetyReviewFrameSignals(unit.text); complete {
+			signals |= completeSignals
+		}
+	}
+	return signals
+}
+
+func (s *ScanSession) profiledDefensiveQuoteUnitGroupsHaveRisk(
+	units []profiledCurrentReferentUnit,
+) bool {
+	if s == nil || s.classifier == nil {
+		return false
+	}
+	for start := 0; start < len(units); {
+		first := units[start]
+		if first.barrier || first.ref.segment.FieldPathHash == "" {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(units) && profiledUnitsShareLogicalTextField(first, units[end]) {
+			end++
+		}
+		if s.profiledDefensiveQuoteUnitGroupHasRisk(units[start:end]) {
+			return true
+		}
+		if s.coverage.State != CoverageComplete {
+			return true
+		}
+		start = end
+	}
+	return false
+}
+
+func (s *ScanSession) profiledDefensiveQuoteUnitGroupHasRisk(
+	units []profiledCurrentReferentUnit,
+) bool {
+	if s == nil || s.classifier == nil || len(units) == 0 {
+		return false
+	}
+	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	signals := inertQuotedSafetyReviewFrameSignals(0)
+	carriers := make([]profiledCurrentReferentUnit, 0, 2)
+	complete := true
+	overBudget := false
+	totalBytes := 0
+	frameOverBudget := false
+	frameBytes := 0
+	for _, unit := range units {
+		signals |= profiledDefensiveQuoteUnitSignals(s.classifier, unit)
+		if unit.carrier {
+			carriers = append(carriers, unit)
+		}
+		complete = complete && unit.complete
+		if overBudget || len(unit.text) > maxReconstructedBytes-totalBytes {
+			overBudget = true
+		} else {
+			totalBytes += len(unit.text)
+		}
+		if !unit.directive || !unit.complete {
+			continue
+		}
+		if frameOverBudget || len(unit.text) > maxInertQuotedReviewFrameBytes-frameBytes {
+			frameOverBudget = true
+		} else {
+			frameBytes += len(unit.text)
+		}
+	}
+	if len(carriers) == 0 {
+		return false
+	}
+	attempted := signals.attempted()
+	if !attempted && !frameOverBudget && frameBytes != 0 {
+		var frame strings.Builder
+		frame.Grow(frameBytes)
+		for _, unit := range units {
+			if unit.directive && unit.complete {
+				frame.WriteString(unit.text)
+			}
+		}
+		attempted = s.classifier.isRawInertQuotedSafetyReviewFrameAttempt(frame.String())
+	}
+	if !attempted {
+		return false
+	}
+	if complete && !overBudget && totalBytes != 0 {
+		var raw strings.Builder
+		raw.Grow(totalBytes)
+		for _, unit := range units {
+			raw.WriteString(unit.text)
+		}
+		if s.classifier.isRawInertQuotedSafetyReview(raw.String()) {
+			return false
+		}
+	}
+	return s.profiledDefensiveQuoteCarriersHaveRisk(carriers)
+}
+
+func (s *ScanSession) profiledDefensiveQuoteCarriersHaveRisk(
+	carriers []profiledCurrentReferentUnit,
+) bool {
+	if s == nil || s.classifier == nil || len(carriers) == 0 {
+		return false
+	}
+	for _, carrier := range carriers {
+		if !carrier.complete {
+			return true
+		}
+	}
+	batch := &roleClassificationBatch{session: s}
+	if len(carriers) > 1 {
+		refs := make([]profiledSegmentRef, 0, len(carriers))
+		for _, carrier := range carriers {
+			refs = append(refs, carrier.ref)
+		}
+		parts, imperative, complete := s.classifier.profiledSelfContainedCarrierRefs(refs)
+		if !complete {
+			return true
+		}
+		if imperative {
+			candidate, ok := batch.classify(parts, false)
+			if !ok || profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+				return true
+			}
+		}
+	}
+	for _, carrier := range carriers {
+		candidate, ok := s.profiledCurrentReferentCarrierCandidate(batch, carrier)
+		if !ok || profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ScanSession) profiledDefensiveQuoteOverflowHasRisk(
+	state *profiledCurrentReferentScope,
+) bool {
+	if s == nil || s.classifier == nil || state == nil ||
+		!state.defensiveQuoteOverflowRun.set {
+		return false
+	}
+	run := state.defensiveQuoteOverflowRun
+	signals := run.signals
+	carriers := make([]profiledCurrentReferentUnit, 0, 2)
+	for _, unit := range state.units {
+		if unit.barrier ||
+			!profiledSegmentsShareLogicalTextField(run.segment, unit.ref.segment) {
+			break
+		}
+		signals |= profiledDefensiveQuoteUnitSignals(s.classifier, unit)
+		if unit.carrier {
+			carriers = append(carriers, unit)
+		}
+	}
+	if !signals.attempted() {
+		return false
+	}
+	if run.carrierLost {
+		return true
+	}
+	return s.profiledDefensiveQuoteCarriersHaveRisk(carriers)
+}
+
+func (s *ScanSession) profiledCurrentReferentScopeNeedsRetention(
+	state *profiledCurrentReferentScope,
+) bool {
+	if s == nil || state == nil {
+		return false
+	}
+	if profiledCurrentReferentScopeHasPotential(s.classifier, state) {
+		return true
+	}
+	return s.profiledDefensiveQuoteOverflowHasRisk(state) ||
+		s.profiledDefensiveQuoteUnitGroupsHaveRisk(state.units)
 }
 
 func profiledCurrentReferentScopeHasPotential(
@@ -2284,6 +2541,46 @@ func (s *ScanSession) profiledCurrentReferentCarrierCandidate(
 	return batch.classify([]string{carrier.text}, false)
 }
 
+func finalizeProfiledDefensiveQuoteOverflowRun(state *profiledCurrentReferentScope) {
+	if state == nil || !state.defensiveQuoteOverflowRun.set {
+		return
+	}
+	if state.defensiveQuoteOverflowRun.carrierLost &&
+		state.defensiveQuoteOverflowRun.signals.attempted() {
+		state.overflowReferentRisk = true
+	}
+	state.defensiveQuoteOverflowRun = profiledDefensiveQuoteOverflowRun{}
+}
+
+func (s *ScanSession) recordProfiledDefensiveQuoteOverflowUnit(
+	state *profiledCurrentReferentScope,
+	unit profiledCurrentReferentUnit,
+) {
+	if s == nil || state == nil {
+		return
+	}
+	segment := unit.ref.segment
+	if unit.barrier || segment.FieldPathHash == "" {
+		finalizeProfiledDefensiveQuoteOverflowRun(state)
+		return
+	}
+	run := &state.defensiveQuoteOverflowRun
+	if run.set && !profiledSegmentsShareLogicalTextField(run.segment, segment) {
+		finalizeProfiledDefensiveQuoteOverflowRun(state)
+		run = &state.defensiveQuoteOverflowRun
+	}
+	if !run.set {
+		segment.Text = ""
+		run.set = true
+		run.segment = segment
+	}
+	run.signals |= profiledDefensiveQuoteUnitSignals(s.classifier, unit)
+	run.carrierLost = run.carrierLost || unit.carrier
+	if run.carrierLost && run.signals.attempted() {
+		state.overflowReferentRisk = true
+	}
+}
+
 func (s *ScanSession) appendProfiledCurrentReferentUnit(
 	state *profiledCurrentReferentScope,
 	unit profiledCurrentReferentUnit,
@@ -2306,6 +2603,7 @@ func (s *ScanSession) appendProfiledCurrentReferentUnit(
 	if len(state.units) >= maxRoleClassifierSegments {
 		state.overflow = true
 		evicted := state.units[0]
+		s.recordProfiledDefensiveQuoteOverflowUnit(state, evicted)
 		if len(state.units) > 1 {
 			s.recordProfiledOverflowPair(state, evicted, state.units[1])
 			// The second unit's original preceding semantic owner has now left
@@ -2576,6 +2874,7 @@ func (s *ScanSession) flushProfiledCurrentReferentScope() {
 		for index := range states {
 			clear(states[index].overflowIntents)
 			states[index].overflowIntents = nil
+			states[index].defensiveQuoteOverflowRun = profiledDefensiveQuoteOverflowRun{}
 			clear(states[index].units)
 			states[index].units = nil
 		}
@@ -2597,6 +2896,9 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 		return
 	}
 	if state.overflow {
+		if s.profiledDefensiveQuoteOverflowHasRisk(state) {
+			state.overflowReferentRisk = true
+		}
 		for _, unit := range state.units {
 			s.applyProfiledOverflowCancellations(state, unit)
 		}
@@ -3029,8 +3331,10 @@ func profiledUnitsShareLogicalTextField(first, current profiledCurrentReferentUn
 	if first.barrier || current.barrier {
 		return false
 	}
-	left := first.ref.segment
-	right := current.ref.segment
+	return profiledSegmentsShareLogicalTextField(first.ref.segment, current.ref.segment)
+}
+
+func profiledSegmentsShareLogicalTextField(left, right extract.Segment) bool {
 	return left.FieldPathHash != "" && left.FieldPathHash == right.FieldPathHash &&
 		left.Role == right.Role && left.Provenance == right.Provenance &&
 		left.UserAttribution == right.UserAttribution &&
@@ -4025,13 +4329,13 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 	profiledDirective := profiledStreamingCurrentReferentDirective(
 		s.profiledStreamingRequestSegment(streamingSegmentForField(field, "")),
 	)
-	if profiledDirective && field.totalBytes > streamRoleSummaryBytes {
-		field.profiledDefensiveQuoteSignals |= streamingDefensiveQuotedReviewFrameSignals(rawWindow)
-		// A complete short field is re-proven exactly at flush. For a longer
-		// field, retain only this content-free ambiguity bit so an adjacent
-		// malicious carrier cannot become a complete allow merely because the
-		// review frame exceeded the 512-byte association proof.
-	}
+	needsDefensiveQuoteSignals := profiledDirective && field.totalBytes > streamRoleSummaryBytes
+	defensiveQuoteSignalsCaptured := false
+	// A complete short field is re-proven exactly at flush. For a longer field,
+	// retain only content-free ambiguity bits so an adjacent malicious carrier
+	// cannot become a complete allow merely because the review frame exceeded
+	// the 512-byte association proof. The ordinary classification call below
+	// shares its normalized rune view whenever no compact prefix was injected.
 	profiledPotentialProof := !field.roleComplete && profiledDirective
 	windowSegment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
 	profiledPreviousRisk := s.profiledPreviousUserRiskMatches(windowSegment) &&
@@ -4083,13 +4387,24 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			return false
 		}
 		s.coverage.Windows++
+		var normalizedDefensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
+		var normalizedDefensiveQuoteSignalsOut *inertQuotedSafetyReviewFrameSignals
+		if needsDefensiveQuoteSignals && !provisional && compactPrefixBytes == 0 &&
+			physicalWindowText == rawWindow {
+			normalizedDefensiveQuoteSignalsOut = &normalizedDefensiveQuoteSignals
+		}
 		result := s.classifier.classifyWithPolicyCaptured(
 			[]string{segment.Text}, s.mode, s.thresholds, s.policy,
 			field.provenance == extract.ProvenanceToolPayload ||
 				field.contentKind == extract.ContentKindToolCallArguments,
 			&field.windowFacts,
 			profiledTrustedCurrentUserNaturalLanguageDirective(segment),
+			normalizedDefensiveQuoteSignalsOut,
 		)
+		if normalizedDefensiveQuoteSignalsOut != nil {
+			field.profiledDefensiveQuoteSignals |= normalizedDefensiveQuoteSignals
+			defensiveQuoteSignalsCaptured = true
+		}
 		if result.Truncated {
 			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 			return false
@@ -4119,6 +4434,7 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 					field.contentKind == extract.ContentKindToolCallArguments,
 				&physicalFacts,
 				profiledTrustedCurrentUserNaturalLanguageDirective(physicalSegment),
+				nil,
 			)
 			if physicalResult.Truncated {
 				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
@@ -4159,6 +4475,7 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 						field.contentKind == extract.ContentKindToolCallArguments,
 					&uniqueFacts,
 					profiledTrustedCurrentUserNaturalLanguageDirective(uniqueSegment),
+					nil,
 				)
 				if uniqueResult.Truncated {
 					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
@@ -4196,6 +4513,9 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 	if !classify(decision.normalText, decision.normalCarry, false) ||
 		!classify(decision.provisionalText, decision.provisionalCarry, true) {
 		return false
+	}
+	if needsDefensiveQuoteSignals && !defensiveQuoteSignalsCaptured {
+		field.profiledDefensiveQuoteSignals |= streamingDefensiveQuotedReviewFrameSignals(rawWindow)
 	}
 	if reconstructed {
 		s.coverage.BoundaryReconstructions++

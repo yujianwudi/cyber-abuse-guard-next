@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
+current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
 ```
 
 ## Scope, release state, and invariants
@@ -316,6 +316,22 @@ frame-signal bits; a complete carrier must independently satisfy the malicious
 eligibility gate before it is activated, while a benign carrier remains
 nonblocking. An incomplete carrier or unprovable classification budget returns
 explicit incomplete coverage rather than a complete allow.
+
+Long-frame signals are generated from the same NFKC, lower-case, homoglyph, and
+zero-width-normalized rune view as ordinary classification. A precompiled
+Aho-Corasick matcher derives the three coarse bits in one linear pass. The
+ordinary classification path exposes its normalized rune view to this matcher
+when no compact carry was injected; otherwise the scanner keeps the independent
+bounded fallback. A window may emit qualifier bits only after the same
+reference- or boundary-stem gate used by the predecessor scanner, preventing a
+distant qualifier-only window from completing an unrelated partial frame. If
+the 64-scope or 64-unit profiled budget is reached, only the logical-field
+metadata, those three bits, and a content-free lost-carrier flag cross the
+rolling boundary. A complete attempted frame is never silently evicted; lost
+carrier text makes coverage explicitly incomplete, while a retained carrier is
+reclassified so benign code remains available. Scope-cap eviction first proves
+a complete bounded inert review or classifies the retained carrier; fully safe
+scopes remain evictable instead of exhausting the 64-scope budget.
 
 The most recent eligible user review can be linked to one later user follow-up.
 An affirmative referential directive such as `execute it`, `proceed`, or

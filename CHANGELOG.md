@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
+current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
 ```
 
 Source-tree status updated: 2026-07-25 (Asia/Shanghai)
@@ -20,6 +20,19 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
 - Remove a redundant single-carrier classification window, add tight-budget
   and 511/512/513-byte regressions, and extend the existing defensive-quote
   fuzz target with arbitrary byte cut points and UTF-8 boundary seeds.
+- Preserve defensive-frame potential across the 64-scope and 64-unit profiled
+  budgets with a content-free logical-field overflow run; a lost carrier now
+  yields explicit incomplete coverage, while a retained benign carrier is
+  reclassified and remains nonblocking. At the scope cap, a complete valid
+  review or a malformed frame with a benign carrier is resolved before
+  eviction, so 64 safe scopes cannot force the 65th ordinary scope incomplete.
+- Generate over-512-byte frame signals after the classifier's NFKC, case, and
+  zero-width normalization, using one Aho-Corasick pass instead of repeated
+  literal scans. Reuse the ordinary classifier's normalized rune view when no
+  compact carry is injected, while preserving the prior reference/boundary-stem
+  gate so a distant qualifier-only window cannot complete an attempt; add
+  full-width, zero-width, scope-eviction, unit-eviction, and maximum-window
+  performance regressions.
 - Close the remaining public Keysmith request-local `system` and terminal
   `tool` middle/back carrier gap by requiring one unique, complete, same-scope
   META control owner; historical, assistant, nonterminal, and inert carriers
@@ -47,7 +60,7 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Advance the source behavior identity to `classifier-policy-v9` /
-  `361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117`;
+  `971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;

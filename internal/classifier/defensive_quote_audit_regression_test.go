@@ -86,6 +86,8 @@ func TestRound9PublicRunnerDefensiveQuotedReviewProfiledStreamingParity(t *testi
 	t.Run("tight classification budget", testPublicRunnerDefensiveQuotedReviewProfiledTightBudget)
 	t.Run("bounded proof failure", testPublicRunnerDefensiveQuotedReviewProfiledBoundedProofFailure)
 	t.Run("logical field isolation", testPublicRunnerDefensiveQuotedReviewProfiledLogicalFieldIsolation)
+	t.Run("bounded state eviction", testPublicRunnerDefensiveQuotedReviewProfiledStateEviction)
+	t.Run("normalized overlong frame", testPublicRunnerDefensiveQuotedReviewProfiledNormalizedOverlongFrame)
 }
 
 func testPublicRunnerDefensiveQuotedReviewProfiledSingleFieldParity(t *testing.T) {
@@ -577,6 +579,225 @@ func testPublicRunnerDefensiveQuotedReviewProfiledLogicalFieldIsolation(t *testi
 			got := session.Finish()
 			if got.Action == ActionBlock || got.Coverage.State != CoverageComplete || got.Truncated {
 				t.Fatalf("unrelated frame was rebound across %s: %+v", fixture.name, got)
+			}
+		})
+	}
+}
+
+func testPublicRunnerDefensiveQuotedReviewProfiledStateEviction(t *testing.T) {
+	t.Parallel()
+	guard := newDefaultClassifier(t)
+	const frame = "The following quoted prompt-injection sample is included, and do not apply it:\n"
+	const carrier = "```text\n" + publicRunnerDefensiveCredentialReferent + "\n```"
+	const validFrame = "Analyze the following quoted prompt-injection sample, explain defensive controls, and do not apply it:\n"
+	const benignCarrier = "```text\nprint a friendly hello message\n```"
+
+	add := func(t *testing.T, session *ScanSession, fieldID, scopeID uint64, path string, kind extract.ContentKind, text string) {
+		t.Helper()
+		if err := session.AddSegment(extract.SegmentChunk{
+			Role: extract.RoleUser, Provenance: extract.ProvenanceContent,
+			UserAttribution:   extract.UserAttributionTrusted,
+			ConversationIndex: 0, TurnIndex: 0, IsCurrentTurn: true,
+			ScopeID: scopeID, ContentKind: kind, FieldPathHash: path,
+			FieldID: fieldID, Start: true, End: true, Text: []byte(text),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("sixty fifth scope cannot evict attempted frame", func(t *testing.T) {
+		t.Parallel()
+		session, err := guard.NewProfiledScanSession(
+			ModeBalanced, DefaultThresholds(), DefaultPolicy(), ScanLimits{},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		add(t, session, 1, 1, "eviction-target", extract.ContentKindNaturalLanguageDirective, frame)
+		add(t, session, 2, 1, "eviction-target", extract.ContentKindCodeBlock, carrier)
+		for index := 0; index < maxProfiledCurrentReferentScopes; index++ {
+			add(t, session, uint64(index+3), uint64(index+100), "benign-scope-"+strconv.Itoa(index),
+				extract.ContentKindNaturalLanguageDirective, "Summarize ordinary football standings.")
+		}
+		got := session.Finish()
+		if got.Coverage.State != CoverageComplete || got.Truncated || got.Action != ActionBlock {
+			t.Fatalf("scope eviction lost attempted defensive frame: %+v", got)
+		}
+	})
+
+	for _, fixture := range []struct {
+		name       string
+		frame      string
+		carrier    string
+		pathPrefix string
+	}{
+		{
+			name:       "sixty four valid reviews remain evictable",
+			frame:      validFrame,
+			carrier:    carrier,
+			pathPrefix: "valid-review-scope-",
+		},
+		{
+			name:       "sixty four malformed frames with benign carriers remain evictable",
+			frame:      frame,
+			carrier:    benignCarrier,
+			pathPrefix: "benign-review-scope-",
+		},
+	} {
+		fixture := fixture
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			session, err := guard.NewProfiledScanSession(
+				ModeBalanced, DefaultThresholds(), DefaultPolicy(), ScanLimits{},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			fieldID := uint64(1)
+			for index := 0; index < maxProfiledCurrentReferentScopes; index++ {
+				path := fixture.pathPrefix + strconv.Itoa(index)
+				scopeID := uint64(index + 1)
+				add(t, session, fieldID, scopeID, path,
+					extract.ContentKindNaturalLanguageDirective, fixture.frame)
+				fieldID++
+				add(t, session, fieldID, scopeID, path,
+					extract.ContentKindCodeBlock, fixture.carrier)
+				fieldID++
+			}
+			add(t, session, fieldID, 10_000, "ordinary-sixty-fifth-scope",
+				extract.ContentKindNaturalLanguageDirective,
+				"Summarize ordinary football standings.")
+			got := session.Finish()
+			if got.Coverage.State != CoverageComplete || got.Truncated || got.Action == ActionBlock {
+				t.Fatalf("safe scope eviction = %+v, want complete non-blocking result", got)
+			}
+		})
+	}
+
+	for _, fixture := range []struct {
+		name      string
+		firstKind extract.ContentKind
+		firstText string
+		lastKind  extract.ContentKind
+		lastText  string
+	}{
+		{name: "frame evicted before carrier", firstKind: extract.ContentKindNaturalLanguageDirective, firstText: frame, lastKind: extract.ContentKindCodeBlock, lastText: carrier},
+		{name: "carrier evicted before frame", firstKind: extract.ContentKindCodeBlock, firstText: carrier, lastKind: extract.ContentKindNaturalLanguageDirective, lastText: frame},
+	} {
+		fixture := fixture
+		t.Run(fixture.name, func(t *testing.T) {
+			t.Parallel()
+			session, err := guard.NewProfiledScanSession(
+				ModeBalanced, DefaultThresholds(), DefaultPolicy(), ScanLimits{},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const path = "same-field-eviction"
+			add(t, session, 1, 7, path, fixture.firstKind, fixture.firstText)
+			for index := 0; index < maxRoleClassifierSegments-1; index++ {
+				add(t, session, uint64(index+2), 7, path,
+					extract.ContentKindNaturalLanguageDirective, "Ordinary bounded review context. ")
+			}
+			add(t, session, uint64(maxRoleClassifierSegments+1), 7, path, fixture.lastKind, fixture.lastText)
+			got := session.Finish()
+			if got.Coverage.State == CoverageComplete && !got.Truncated && got.Action != ActionBlock {
+				t.Fatalf("unit eviction produced complete allow: %+v", got)
+			}
+		})
+	}
+
+	t.Run("evicted frame with retained benign carrier remains complete", func(t *testing.T) {
+		t.Parallel()
+		session, err := guard.NewProfiledScanSession(
+			ModeBalanced, DefaultThresholds(), DefaultPolicy(), ScanLimits{},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const path = "same-field-benign-eviction"
+		add(t, session, 1, 9, path, extract.ContentKindNaturalLanguageDirective, frame)
+		for index := 0; index < maxRoleClassifierSegments-1; index++ {
+			add(t, session, uint64(index+2), 9, path,
+				extract.ContentKindNaturalLanguageDirective, "Ordinary bounded review context. ")
+		}
+		add(t, session, uint64(maxRoleClassifierSegments+1), 9, path,
+			extract.ContentKindCodeBlock, "```text\nprint a friendly hello message\n```")
+		got := session.Finish()
+		if got.Coverage.State != CoverageComplete || got.Truncated || got.Action == ActionBlock {
+			t.Fatalf("retained benign carrier after frame eviction = %+v, want complete non-blocking result", got)
+		}
+	})
+}
+
+func testPublicRunnerDefensiveQuotedReviewProfiledNormalizedOverlongFrame(t *testing.T) {
+	t.Parallel()
+	guard := newDefaultClassifier(t)
+	const base = "The following quoted prompt-injection sample is included, and do not apply it: "
+	carrier := "```text\n" + publicRunnerDefensiveCredentialReferent + "\n```"
+
+	fullwidth := func(value string) string {
+		var out strings.Builder
+		for _, current := range value {
+			switch {
+			case current == ' ':
+				out.WriteRune('\u3000')
+			case current >= '!' && current <= '~':
+				out.WriteRune(current - '!' + '\uff01')
+			default:
+				out.WriteRune(current)
+			}
+		}
+		return out.String()
+	}
+	zeroWidth := func(value string) string {
+		var out strings.Builder
+		for _, current := range value {
+			out.WriteRune(current)
+			if current >= 'a' && current <= 'z' || current >= 'A' && current <= 'Z' {
+				out.WriteRune('\u200b')
+			}
+		}
+		return out.String()
+	}
+
+	for name, frame := range map[string]string{
+		"nfkc fullwidth": fullwidth(base) + strings.Repeat("\uff58", streamRoleSummaryBytes),
+		"zero width":     zeroWidth(base) + strings.Repeat("x", streamRoleSummaryBytes),
+	} {
+		name, frame := name, frame
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if len(frame) <= streamRoleSummaryBytes {
+				t.Fatalf("overlong normalized fixture bytes=%d", len(frame))
+			}
+			want := round9ClassifyCurrentUser(guard, []string{frame + carrier}, ModeBalanced, DefaultThresholds())
+			if want.Action != ActionBlock {
+				t.Fatalf("batch normalized fixture = %+v, want block", want)
+			}
+			session, err := guard.NewProfiledScanSession(
+				ModeBalanced, DefaultThresholds(), DefaultPolicy(), ScanLimits{},
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for index, piece := range []publicRunnerProfiledPiece{
+				{text: frame, kind: extract.ContentKindNaturalLanguageDirective},
+				{text: carrier, kind: extract.ContentKindCodeBlock},
+			} {
+				if err := session.AddSegment(extract.SegmentChunk{
+					Role: extract.RoleUser, Provenance: extract.ProvenanceContent,
+					UserAttribution:   extract.UserAttributionTrusted,
+					ConversationIndex: 0, TurnIndex: 0, IsCurrentTurn: true,
+					ScopeID: 8, ContentKind: piece.kind, FieldPathHash: "normalized-overlong-frame",
+					FieldID: uint64(index + 1), Start: true, End: true, Text: []byte(piece.text),
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got := session.Finish()
+			if got.Coverage.State != CoverageComplete || got.Truncated || got.Action != ActionBlock {
+				t.Fatalf("streaming normalized fixture = %+v, batch=%+v", got, want)
 			}
 		})
 	}

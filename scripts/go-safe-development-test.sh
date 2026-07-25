@@ -415,6 +415,7 @@ expected_safe_classifier_entries=(
   BenchmarkRepositoryNeutralAuthorityCatalog
   BenchmarkRound6StreamingOneMiB
   BenchmarkRound6StreamingScale
+  BenchmarkStreamingDefensiveQuotedReviewFrameSignals
   FuzzDefensiveQuotedSampleBoundary
   FuzzClassifier
   FuzzMetaOverrideClausePermutation

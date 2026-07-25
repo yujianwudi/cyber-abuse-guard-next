@@ -2488,7 +2488,7 @@ func (c *Classifier) profiledSyntheticMetaControlOwner(
 			}
 			var fieldFacts classificationSignalFacts
 			fieldCandidate := c.classifyWithPolicyCaptured(
-				[]string{segment.Text}, mode, thresholds, policy, false, &fieldFacts, false,
+				[]string{segment.Text}, mode, thresholds, policy, false, &fieldFacts, false, nil,
 			)
 			if !c.requestLocalStandaloneMetaControlEnforceable(
 				fieldCandidate, fieldFacts, policy, thresholds,

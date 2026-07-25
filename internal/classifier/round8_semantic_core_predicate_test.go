@@ -159,7 +159,7 @@ func round8MergedSemanticFacts(
 	for _, part := range parts {
 		var facts classificationSignalFacts
 		result := guard.classifyWithPolicyCaptured(
-			[]string{part}, ModeBalanced, thresholds, policy, false, &facts, false,
+			[]string{part}, ModeBalanced, thresholds, policy, false, &facts, false, nil,
 		)
 		merged.mergeWindow(guard, facts, result)
 	}

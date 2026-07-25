@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
+current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
 ```
 
 Last updated: 2026-07-22 (Asia/Shanghai)
@@ -78,8 +78,11 @@ contains a prompt span or decoded content.
 The profiled streaming classifier may transiently retain bounded current-field
 units and may reconstruct at most 66,080 bytes for one exact defensive-quote
 proof. References are cleared when the request scope is flushed; only three
-content-free long-frame signal bits can survive an over-budget field. These
-bytes are never persisted, logged, or returned, but Go heap storage is managed
+content-free long-frame signal bits can survive an over-budget field. A rolling
+64-unit overflow additionally retains only the structural field-path digest,
+role/provenance/turn/scope coordinates, those signal bits, and a lost-carrier
+boolean; it never retains the evicted carrier or directive text. These bytes are
+never persisted, logged, or returned, but Go heap storage is managed
 by the garbage collector and is not promised to be immediately zeroized after
 the references are cleared.
 

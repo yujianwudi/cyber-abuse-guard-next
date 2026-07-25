@@ -2,17 +2,17 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
+current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
 
 ## Current Round 9 evidence boundary
 
-The classifier, extractor, plugin, and release sources are still being
-converged on `feat/round9-balanced-eligibility`; no final source commit or exact
-candidate has been frozen. The following evidence classes are independent and
-must not be collapsed into a generic "Host" or "counted-Mock" claim:
+Round 9 source development now lands on `main`; no final release source freeze
+or exact candidate has been declared. The following evidence classes are
+independent and must not be collapsed into a generic "Host" or "counted-Mock"
+claim:
 
 | Evidence boundary | Current status |
 |---|---|
@@ -303,7 +303,7 @@ for any of the three missing runtime evidence classes.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
     `classifier-policy-v9` / SHA-256
-`361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117`,
+`971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
+current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -14,7 +14,7 @@ The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
-`361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117`
+`971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging, so no rc.4 final commit/tree, exact Linux
@@ -37,7 +37,7 @@ v9 and must not be relabeled as current-policy or independent evidence.
 | Current Round 9 identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v9` / `361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
+| Classifier policy | `classifier-policy-v9` / `971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Audit database | schema v6; closed decision/explanation contract; mandatory pre-v6 backup and old-SO rollback |
 | Audit unavailable management semantics | **TARGETED LINUX SELF-CHECK PASS** — audit disabled remains a schema-correct empty/no-op result; audit enabled with nil store returns `503 audit_unavailable` for `/events`, `/stats`, and `DELETE /events` |
@@ -64,8 +64,9 @@ was created or executed.
 
 | Check | Result |
 |---|---|
-| Safe development boundary | **PASS**; 20 packages, 418 classifier entries, 104 Round 8 entries, 154 Round 9 entries, and the Round 9 counted-Mock module test |
-| Profiled defensive-quote plugin-route regression | **PASS**; OpenAI Chat, OpenAI Responses, Claude, and Gemini envelopes in Balanced and Strict block second/missing-governor/split-carrier/clause-overflow/513-byte malicious frames while valid reviews, direct prohibitions, and over-budget benign carriers remain complete nonblocking requests; simulated router counter deltas are asserted |
+| Safe development boundary | **PASS**; 20 packages, 419 classifier entries, 104 Round 8 entries, 154 Round 9 entries, and the Round 9 counted-Mock module test |
+| Profiled defensive-quote plugin-route regression | **PASS**; OpenAI Chat, OpenAI Responses, Claude, and Gemini envelopes in Balanced and Strict block second/missing-governor/split-carrier/clause-overflow/513-byte malicious frames; malicious 65-scope and both 65-unit eviction orders cannot complete-allow; 64 valid reviews or 64 malformed frames with benign carriers plus a 65th ordinary scope remain complete nonblocking; full-width and zero-width overlong frames match batch behavior; a distant qualifier-only window cannot complete a partial frame; valid reviews, direct prohibitions, retained benign overflow carriers, and over-budget benign carriers remain nonblocking; simulated router counter deltas are asserted |
+| Normalized long-frame signal microbenchmark | **PASS / SOURCE ONLY**; direct normalize+match measured 0.349-0.375 ms/op at 16 KiB and 22.170-24.868 ms/op at 1 MiB with 2 allocs/op; the full profiled path measured 8.078-9.757 ms/op and 253.508-269.327 ms/op respectively, under WSL Linux amd64 Go 1.26.4; no CPA Host performance is inferred |
 | Safe package tests with `sqlite_omit_load_extension` | **PASS** |
 | Safe package race detector with `sqlite_omit_load_extension` | **PASS**; plugin matrix 518.114 s, classifier 117.883 s |
 | `make round6-vet` | **PASS** |
@@ -765,7 +766,7 @@ ledger proof, exact-main CI, or independent audit has passed.
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9
-working_tree_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
+working_tree_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 verification_status: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 ```

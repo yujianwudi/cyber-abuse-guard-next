@@ -529,14 +529,17 @@ func (c *Classifier) ClassifyWithPolicy(parts []string, mode Mode, thresholds Th
 // allowing a provider-native structured tool payload to retain one whole-part
 // semantic window. Ordinary user text never receives that exception.
 func (c *Classifier) classifyWithPolicy(parts []string, mode Mode, thresholds Thresholds, policy Policy, structuredToolPayload bool) Result {
-	return c.classifyWithPolicyCaptured(parts, mode, thresholds, policy, structuredToolPayload, nil, false)
+	return c.classifyWithPolicyCaptured(parts, mode, thresholds, policy, structuredToolPayload, nil, false, nil)
 }
 
 func (c *Classifier) classifyTrustedCurrentUserWithPolicy(parts []string, mode Mode, thresholds Thresholds, policy Policy) Result {
-	return c.classifyWithPolicyCaptured(parts, mode, thresholds, policy, false, nil, true)
+	return c.classifyWithPolicyCaptured(parts, mode, thresholds, policy, false, nil, true, nil)
 }
 
-func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thresholds Thresholds, policy Policy, structuredToolPayload bool, capture *classificationSignalFacts, allowExtendedGeneratedAgentWindow bool) Result {
+func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thresholds Thresholds, policy Policy, structuredToolPayload bool, capture *classificationSignalFacts, allowExtendedGeneratedAgentWindow bool, defensiveQuoteFrameSignals *inertQuotedSafetyReviewFrameSignals) Result {
+	if defensiveQuoteFrameSignals != nil {
+		*defensiveQuoteFrameSignals = 0
+	}
 	if c == nil {
 		return Result{PolicyVersion: ClassifierPolicyVersion, PolicySHA256: ClassifierPolicySHA256, Action: ActionAllow}
 	}
@@ -870,6 +873,11 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 	}
 	finalizeMetaTail()
 	currentText := string(currentRunes)
+	if defensiveQuoteFrameSignals != nil {
+		*defensiveQuoteFrameSignals = streamingDefensiveQuotedReviewFrameSignalsNormalized(
+			currentRunes, truncated,
+		)
+	}
 	previousText := ""
 	if partCount > 1 {
 		previousText = string(previousRunes)
