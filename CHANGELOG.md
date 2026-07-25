@@ -2,13 +2,29 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
+current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
 ```
 
-Source-tree status updated: 2026-07-25 (Asia/Shanghai)
+Source-tree status updated: 2026-07-26 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Restore a narrowly bounded defensive incident-response review form that asks
+  only for risk explanation plus detection/remediation advice and explicitly
+  forbids execution. The exact comma/colon, hyphenated/non-hyphenated
+  `incident response` analysis/training introductions now enter the existing
+  single-quote structural proof; they do not weaken carrier classification,
+  ownership, execution-tail reactivation, proof budgets, or multilingual
+  fail-closed behavior.
+- Cover that form across batch classification, profiled content-kind splitting
+  with whole/halves/bytewise chunks, Balanced/Strict, and OpenAI Chat,
+  OpenAI Responses, Claude, and Gemini simulated routes. Appending an execution
+  instruction still reactivates and blocks the credential-theft carrier.
+- Add a true cross-window coarse-signal boundary regression: a distant
+  qualifier-only tail cannot complete admission, all three bits still trigger
+  independent malicious-carrier classification, benign educational carriers
+  remain nonblocking, and field/scope boundaries cannot lend signals. A
+  truncated normalized matcher remains explicitly fail-active.
 - Restore batch/profiled-plugin-route parity when extraction splits one logical user field into
   natural-language and fenced content: a second malicious referent, a missing
   analysis governor, split carriers, clause overflow, or an over-budget review
@@ -66,7 +82,7 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Advance the source behavior identity to `classifier-policy-v9` /
-  `fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`;
+  `840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
+current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -60,7 +60,7 @@ classifier.
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
-| Independent audit | **REQUIRED / NOT PROVIDED**; development self-tests do not satisfy this gate |
+| Independent audit | A user-supplied external report for `f37a25dd` states that CPA v7.2.95 multilingual checks passed and identified a defensive incident-response false positive. The report is not a repository-bound attestation; the current source still requires exact-commit re-audit |
 | Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
 | v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
@@ -69,7 +69,7 @@ classifier.
 | CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v9` / `fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`; Host and release binding remain pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v9` / `840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`; Host and release binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |
@@ -95,6 +95,11 @@ classifier.
   governor, an explicit non-execution boundary, and an independent-tail check.
   Variants in quotes, fenced blocks, colons, and newlines can remain review-only,
   while an appended execution clause still blocks.
+- The enumerated governor now also accepts narrowly bounded defensive
+  incident-response training/analysis introductions. This fixes the independent
+  audit's safe-review false positive without treating generic defensive words as
+  permission and without changing malicious-carrier or multilingual fail-closed
+  handling.
 - These changes are source-only. They do not create a Tag, Release, plugin
   binary, CPA Host result, independent audit, or production approval.
 

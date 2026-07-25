@@ -2,10 +2,10 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
+current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
 ```
 
-Last updated: 2026-07-25 (Asia/Shanghai)
+Last updated: 2026-07-26 (Asia/Shanghai)
 
 ## Current Round 9 evidence boundary
 
@@ -303,7 +303,7 @@ for any of the three missing runtime evidence classes.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
     `classifier-policy-v9` / SHA-256
-`fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`,
+`840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -547,8 +547,9 @@ for any of the three missing runtime evidence classes.
     library bill of health.
 
 61. **The multilingual defensive-frame repair is source-only until the exact
-    main commit is independently rerun.** Independent CPA v7.2.95 counted-Mock
-    testing of historical commit `aea54c8c3b357b085fb8c37d06eb4b501dcd29bb`
+    main commit is independently rerun.** A prior user-supplied external CPA
+    v7.2.95 counted-Mock report for historical commit
+    `aea54c8c3b357b085fb8c37d06eb4b501dcd29bb`
     observed 20/20 Chinese, Japanese, Korean, and mixed-language long-frame
     cases complete-allowing an upstream call. The current tree adds bounded
     multilingual ambiguity signals and Linux classifier/plugin regressions, but
@@ -556,3 +557,22 @@ for any of the three missing runtime evidence classes.
     Balanced/Strict Host behavior. Repository-local and Tencent Cloud #2
     counted-Mock matrices must bind the final commit and plugin bytes before
     Host promotion; green GitHub Actions alone are insufficient.
+
+62. **The incident-response false-positive repair is intentionally finite and
+    still requires exact-candidate Host review.** The user-supplied external
+    report `Cyber-Abuse-Guard-Next-f37a25dd独立审计与二号机隔离测试报告-20260726.md`
+    for `f37a25dd1ef7f64677282f154372cf2b4cb0ad7b`
+    confirmed the multilingual malicious-carrier repair but found that an
+    explicit defensive incident-response analysis request was blocked in both
+    Balanced and Strict. The current source extends only the exact English
+    analytical introduction grammar and preserves quote count, field/scope
+    binding, byte/clause budgets, non-execution boundaries, and execution-tail
+    reactivation. That external file is not checked into or cryptographically
+    bound by this repository. Repository classifier and simulated full-route
+    checks are not CPA Host, plugin-binary, latency, RSS, or independent
+    re-audit evidence.
+    Coarse multilingual admission still uses a finite literal matcher whose
+    same-field bits may accumulate across distant windows; changing that
+    conservative behavior requires a reproducible safe fixture plus fuzz and
+    Host evidence because a broad relaxation could restore complete-allow
+    bypasses.

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
+current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
 ```
 
 The default rule set is embedded into the shared object from `/rules`. Every
@@ -130,7 +130,13 @@ non-execution signal, and no contradictory operational continuation.
 The same fail-closed structure applies to a base Cyber Abuse quotation only
 for one closed `quoted request`/`quoted prompt`. The normalized English lead-in
 must exactly match an enumerated `explain`/`analyze`/`analyse`/`review why ...`
-template (optionally prefixed by `for a defensive review,`), the next clause
+template. Enumerated prefixes include `for a defensive review,` and bounded
+comma/colon forms of these literal introductions: `for defensive incident
+response training only`, `for defensive incident-response training only`,
+`for defensive incident response analysis only`, `for defensive
+incident-response analysis only`, `for incident response training only`, and
+`for incident-response training only`. Bare `defensive`, `training`, or
+`incident response` keywords never grant credit. The next clause
 must characterize the quote as unsafe, and the final clause must be an exact
 non-execution boundary. For multipart classification, optional proof of the
 earlier history is capped at 8 prior parts and 32 KiB; exceeding either cap or
@@ -280,7 +286,7 @@ policy is separately identified as:
 
 ```text
 current_release_classifier_policy_version: classifier-policy-v9
-current_release_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
+current_release_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
 ```
 
 The policy digest test binds the deterministic classifier, matcher,

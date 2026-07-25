@@ -62,6 +62,9 @@ func TestRound6NormalizeBytesMatchesStringNormalization(t *testing.T) {
 				)
 			}
 		}
+		if truncated := streamingDefensiveQuotedReviewFrameSignalsNormalized(nil, true); truncated != completeFrame {
+			t.Fatalf("truncated normalized defensive signals = %03b, want fail-active %03b", truncated, completeFrame)
+		}
 		for _, input := range []string{"risk", "风险", "リスク", "위험"} {
 			if qualifierOnly := streamingDefensiveQuotedReviewFrameSignals(input); qualifierOnly != 0 {
 				t.Fatalf("qualifier-only window %q signals = %03b, want old-gate zero", input, qualifierOnly)

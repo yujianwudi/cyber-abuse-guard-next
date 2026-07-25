@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
+current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
 ```
 
 ## Scope, release state, and invariants
@@ -304,6 +304,14 @@ non-execution boundary. The quote is classified independently from the wrapper.
 The wrapper never lends its context, signals, evidence, or behavior graph to the
 referent.
 
+The exact analytical governor may use a bounded `for ... only,` or `for ...
+only:` introduction for defensive incident-response training/analysis (with or
+without the compound hyphen), after which the existing `analyze`/`explain`/
+`review` proof must still establish risk plus detection/remediation purpose.
+This is an enumerated grammar extension, not a keyword exemption: a second
+quote, an execution tail, missing boundary, excessive frame, or independently
+actionable carrier outside the proven structure receives no suppression.
+
 Provider extraction may split that one original string into natural-language
 and fenced content-kind units. Streaming reconstruction is therefore allowed
 only for consecutive units with the same nonempty `FieldPathHash`, role,
@@ -333,6 +341,11 @@ The scanner instead classifies each complete carrier in the same logical field
 independently; a carrier cannot borrow signals across field, role, provenance,
 turn, or scope boundaries. Benign carriers remain nonblocking, while an
 incomplete or unclassifiable carrier makes coverage unavailable.
+
+The three coarse ambiguity bits can accumulate only inside one logical field.
+They deliberately remain conservative for overlong multilingual material; the
+finite literal vocabulary and same-field distance are fuzzing and Host-review
+targets, not permission to relax the exact suppression proof.
 
 If the 64-scope or 64-unit profiled budget is reached, only the logical-field
 metadata, those three bits, and a content-free lost-carrier flag cross the

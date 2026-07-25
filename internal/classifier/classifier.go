@@ -4888,6 +4888,18 @@ func inertQuotedSafetyTrimAnalysisIntro(clause string) string {
 			"for a security audit, ", "for a safety audit, ", "for a defensive audit, ",
 			"for a security review, ", "for a safety review, ", "for a defensive review, ",
 			"as a security audit, ", "as a safety review, ", "as a defensive review, ",
+			"for defensive incident response training only, ",
+			"for defensive incident response training only: ",
+			"for defensive incident-response training only, ",
+			"for defensive incident-response training only: ",
+			"for defensive incident response analysis only, ",
+			"for defensive incident response analysis only: ",
+			"for defensive incident-response analysis only, ",
+			"for defensive incident-response analysis only: ",
+			"for incident response training only, ",
+			"for incident response training only: ",
+			"for incident-response training only, ",
+			"for incident-response training only: ",
 		} {
 			if strings.HasPrefix(clause, prefix) {
 				clause = quotedReviewTrimIntroductoryGovernors(strings.TrimSpace(clause[len(prefix):]))
