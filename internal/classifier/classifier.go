@@ -3678,6 +3678,85 @@ func (c *Classifier) rawInertQuotedSafetyReviewReferent(text string) (string, bo
 	return c.inertQuotedSafetyReviewReferent(string(views.standardRunes))
 }
 
+func (c *Classifier) isRawInertQuotedSafetyReviewFrameAttempt(text string) bool {
+	signals, complete := c.rawInertQuotedSafetyReviewFrameSignals(text)
+	return complete && signals.attempted()
+}
+
+type inertQuotedSafetyReviewFrameSignals uint8
+
+const (
+	inertQuotedSafetyReviewFrameReference inertQuotedSafetyReviewFrameSignals = 1 << iota
+	inertQuotedSafetyReviewFrameQualifier
+	inertQuotedSafetyReviewFrameBoundary
+)
+
+func (signals inertQuotedSafetyReviewFrameSignals) attempted() bool {
+	const required = inertQuotedSafetyReviewFrameReference |
+		inertQuotedSafetyReviewFrameQualifier |
+		inertQuotedSafetyReviewFrameBoundary
+	return signals&required == required
+}
+
+func (c *Classifier) rawInertQuotedSafetyReviewFrameSignals(
+	text string,
+) (inertQuotedSafetyReviewFrameSignals, bool) {
+	if c == nil || text == "" || len(text) > maxInertQuotedReviewFrameBytes {
+		return 0, false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated {
+		return 0, false
+	}
+	return inertQuotedSafetyReviewFrameSignalSet(string(views.standardRunes)), true
+}
+
+func inertQuotedSafetyReviewFrameAttempt(outside string) bool {
+	return inertQuotedSafetyReviewFrameSignalSet(outside).attempted()
+}
+
+func inertQuotedSafetyReviewFrameSignalSet(outside string) inertQuotedSafetyReviewFrameSignals {
+	if outside == "" {
+		return 0
+	}
+	signals := inertQuotedSafetyReviewFrameSignals(0)
+	if inertQuotedSafetyReviewMayReference(outside) {
+		signals |= inertQuotedSafetyReviewFrameReference
+	}
+	// This is only the coarse admission gate for an attempted review frame,
+	// not the eight-clause proof that grants suppression. Inspect the full
+	// globally bounded directive set so adding a ninth harmless sentence cannot
+	// hide a malformed review from the exact proof below.
+	clauses, _ := metaOverrideDirectiveClausesBoundedWithLimit(
+		outside, maxMetaOverrideDirectiveBoundaries,
+	)
+	if len(clauses) == 0 {
+		return signals
+	}
+	sawGovernor := false
+	sawAssessment := false
+	sawBoundary := false
+	for _, clause := range clauses {
+		sawGovernor = sawGovernor || inertQuotedSafetyAnalysisGovernor(clause.text, true)
+		sawAssessment = sawAssessment || inertQuotedSafetyAssessment(clause.text)
+		sawBoundary = sawBoundary || inertQuotedNonExecutionBoundary(clause.text)
+	}
+	explicitInclusion := containsAnyLiteral(outside,
+		" is included", " included here", " included below", " included,",
+		" is provided", " provided below", " appears below", " is shown", " shown below",
+		" is presented", " presented below", " follows below", " sample follows", " example follows",
+	)
+	if sawGovernor || sawAssessment || explicitInclusion {
+		signals |= inertQuotedSafetyReviewFrameQualifier
+	}
+	if sawBoundary {
+		signals |= inertQuotedSafetyReviewFrameBoundary
+	}
+	return signals
+}
+
 func (c *Classifier) hasAffirmativeImplementationRequest(text string) bool {
 	if c == nil || text == "" || len(c.implementationStarts) == 0 {
 		return false

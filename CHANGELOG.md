@@ -2,13 +2,24 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 ```
 
 Source-tree status updated: 2026-07-25 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Restore batch/profiled-plugin-route parity when extraction splits one logical user field into
+  natural-language and fenced content: a second malicious referent, a missing
+  analysis governor, split carriers, clause overflow, or an over-budget review
+  frame can no longer inherit defensive suppression in Balanced or Strict.
+- Bind reconstruction to the same `FieldPathHash`, role, provenance,
+  attribution, conversation, turn, and scope; retain only three content-free
+  long-frame signal bits, classify the exact carrier before enforcement, and
+  keep over-budget benign code reviews nonblocking.
+- Remove a redundant single-carrier classification window, add tight-budget
+  and 511/512/513-byte regressions, and extend the existing defensive-quote
+  fuzz target with arbitrary byte cut points and UTF-8 boundary seeds.
 - Close the remaining public Keysmith request-local `system` and terminal
   `tool` middle/back carrier gap by requiring one unique, complete, same-scope
   META control owner; historical, assistant, nonterminal, and inert carriers
@@ -36,7 +47,7 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Advance the source behavior identity to `classifier-policy-v9` /
-  `6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211`;
+  `361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;

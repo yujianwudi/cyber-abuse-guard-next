@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 ```
 
 ## Scope, release state, and invariants
@@ -303,6 +303,19 @@ when the surrounding user text proves an unsafe assessment and an exact final
 non-execution boundary. The quote is classified independently from the wrapper.
 The wrapper never lends its context, signals, evidence, or behavior graph to the
 referent.
+
+Provider extraction may split that one original string into natural-language
+and fenced content-kind units. Streaming reconstruction is therefore allowed
+only for consecutive units with the same nonempty `FieldPathHash`, role,
+provenance, attribution, conversation, turn, current-turn flag, and `ScopeID`.
+Suppression still requires exactly one closed referent plus the complete
+governor, assessment, and terminal boundary. A second referent, missing
+governor, split malicious carrier, clause overflow, or over-budget frame cannot
+reuse the first referent's credit. Long fields retain only three content-free
+frame-signal bits; a complete carrier must independently satisfy the malicious
+eligibility gate before it is activated, while a benign carrier remains
+nonblocking. An incomplete carrier or unprovable classification budget returns
+explicit incomplete coverage rather than a complete allow.
 
 The most recent eligible user review can be linked to one later user follow-up.
 An affirmative referential directive such as `execute it`, `proceed`, or

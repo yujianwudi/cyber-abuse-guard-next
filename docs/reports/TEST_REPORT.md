@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -14,7 +14,7 @@ The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
-`6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211`
+`361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging, so no rc.4 final commit/tree, exact Linux
@@ -37,7 +37,7 @@ v9 and must not be relabeled as current-policy or independent evidence.
 | Current Round 9 identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v9` / `6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
+| Classifier policy | `classifier-policy-v9` / `361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Audit database | schema v6; closed decision/explanation contract; mandatory pre-v6 backup and old-SO rollback |
 | Audit unavailable management semantics | **TARGETED LINUX SELF-CHECK PASS** — audit disabled remains a schema-correct empty/no-op result; audit enabled with nil store returns `503 audit_unavailable` for `/events`, `/stats`, and `DELETE /events` |
@@ -57,18 +57,23 @@ v9 and must not be relabeled as current-policy or independent evidence.
 ### 2026-07-25 classifier-policy-v9 source-only verification
 
 The runtime remediation was validated only as Linux source. The local WSL
-toolchain was `go1.26.0 linux/amd64`, not the GitHub workflow pin `go1.26.4`.
+toolchain was the GitHub workflow pin `go1.26.4 linux/amd64` with
+`GOFLAGS=-mod=readonly`.
 No CPA process, plugin `.so`, counted Mock Host, real Provider, Tag, or Release
 was created or executed.
 
 | Check | Result |
 |---|---|
-| `make test` safe development boundary | **PASS**; 20 packages, 409 classifier entries, and the Round 9 counted-Mock module test |
-| `go test -tags=sqlite_omit_load_extension ./internal/classifier ./internal/plugin ./internal/audit -count=1` | **PASS** |
-| `go test -race -tags=sqlite_omit_load_extension ./internal/classifier ./internal/plugin ./internal/audit -count=1` | **PASS** |
+| Safe development boundary | **PASS**; 20 packages, 418 classifier entries, 104 Round 8 entries, 154 Round 9 entries, and the Round 9 counted-Mock module test |
+| Profiled defensive-quote plugin-route regression | **PASS**; OpenAI Chat, OpenAI Responses, Claude, and Gemini envelopes in Balanced and Strict block second/missing-governor/split-carrier/clause-overflow/513-byte malicious frames while valid reviews, direct prohibitions, and over-budget benign carriers remain complete nonblocking requests; simulated router counter deltas are asserted |
+| Safe package tests with `sqlite_omit_load_extension` | **PASS** |
+| Safe package race detector with `sqlite_omit_load_extension` | **PASS**; plugin matrix 518.114 s, classifier 117.883 s |
 | `make round6-vet` | **PASS** |
-| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 204 tests |
+| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 205 tests |
 | `scripts/round6_safe_gate_contract.py --root .` | **PASS**; 11 entrypoints, 40 Make targets, and 60 scripts |
+| Defensive-quote differential fuzz | **PASS**; 30 s, 18,158 executions, 20 new interesting inputs; arbitrary byte cuts and UTF-8 boundary seeds included |
+| Round 9 fuzz gate | **PASS**; 10 s each for classifier, request content-type extraction, and audit decision explanation |
+| Round 5 / Round 6 regressions and public corpus contracts | **PASS** |
 | Modified Round 9 Python contract/evaluator tests | **PASS** |
 | Format, shell syntax, diff, and release-document consistency | **PASS** |
 
@@ -760,7 +765,7 @@ ledger proof, exact-main CI, or independent audit has passed.
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9
-working_tree_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+working_tree_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 verification_status: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 ```

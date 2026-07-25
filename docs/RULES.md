@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 ```
 
 The default rule set is embedded into the shared object from `/rules`. Every
@@ -280,7 +280,7 @@ policy is separately identified as:
 
 ```text
 current_release_classifier_policy_version: classifier-policy-v9
-current_release_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+current_release_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 ```
 
 The policy digest test binds the deterministic classifier, matcher,
@@ -306,8 +306,9 @@ trusted. A role-attribution failure clears every tentative trust bit.
 
 Commit `21ceb57e6b6030e56d7820c9a67a8eecd068c669` passed push and PR CI as
 an earlier classifier-policy-v3 checkpoint. It does not verify the historical
-v0.15 classifier-policy-v5 identity, the current v7 identity, or either final
-candidate. Automated review is development feedback only.
+v0.15 classifier-policy-v5 identity, any historical v7 identity, the current
+classifier-policy-v9 identity, or either final candidate. Automated review is
+development feedback only.
 The final PR head must have no unresolved, non-outdated actionable review
 threads before merge; no independent approval is claimed.
 

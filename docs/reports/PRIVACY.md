@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6e64d5f30d43a37b4359c46328a8a705b67969ac671bbad788093f00a0845211
+current_classifier_policy_sha256: 361f122cbfaf94a16524724f3299fd68b29786f14b721dc7802b7797bfab9117
 ```
 
 Last updated: 2026-07-22 (Asia/Shanghai)
@@ -74,6 +74,14 @@ redacted preview, and a SHA-256 digest of the original complete request bytes.
 
 The classifier `BehaviorGraph` contains only stable booleans/relations and never
 contains a prompt span or decoded content.
+
+The profiled streaming classifier may transiently retain bounded current-field
+units and may reconstruct at most 66,080 bytes for one exact defensive-quote
+proof. References are cleared when the request scope is flushed; only three
+content-free long-frame signal bits can survive an over-budget field. These
+bytes are never persisted, logged, or returned, but Go heap storage is managed
+by the garbage collector and is not promised to be immediately zeroized after
+the references are cleared.
 
 ## Implemented controls
 

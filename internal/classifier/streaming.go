@@ -203,6 +203,7 @@ type streamingField struct {
 	windowFacts                     classificationSignalFacts
 	quotedFollowUp                  bool
 	profiledReferentProofIncomplete bool
+	profiledDefensiveQuoteSignals   inertQuotedSafetyReviewFrameSignals
 	quotedReviewCandidate           bool
 	quotedReviewDelimiter           string
 	quotedReviewSearchCarry         []byte
@@ -236,6 +237,7 @@ type streamingFieldSummary struct {
 	hasText                         bool
 	profiledReferentPotential       bool
 	profiledReferentProofIncomplete bool
+	profiledDefensiveQuoteSignals   inertQuotedSafetyReviewFrameSignals
 }
 
 type profiledCurrentReferentScopeKey struct {
@@ -255,6 +257,7 @@ type profiledCurrentReferentUnit struct {
 	precedingOwnerEvicted bool
 	affirmativePotential  bool
 	proofIncomplete       bool
+	defensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
 }
 
 type profiledOverflowIntentKind uint8
@@ -1066,6 +1069,7 @@ func (s *ScanSession) finishField(field *streamingField) {
 		hasText:                         field.totalBytes > 0,
 		profiledReferentPotential:       field.quotedFollowUp,
 		profiledReferentProofIncomplete: field.profiledReferentProofIncomplete,
+		profiledDefensiveQuoteSignals:   field.profiledDefensiveQuoteSignals,
 	}
 	if summary.sampleComplete {
 		summary.sample = append([]byte(nil), field.roleSummary...)
@@ -1633,6 +1637,59 @@ func streamingContainsASCIIFold(text, phrase string) bool {
 	return false
 }
 
+func streamingDefensiveQuotedReviewFrameSignals(text string) inertQuotedSafetyReviewFrameSignals {
+	if text == "" {
+		return 0
+	}
+	containsAny := func(phrases ...string) bool {
+		for _, phrase := range phrases {
+			if streamingContainsASCIIFold(text, phrase) {
+				return true
+			}
+		}
+		return false
+	}
+	boundaryStem := containsAny(
+		"do not", "don't", "never", "must not", "should not", "cannot", "can't",
+		"will not", "would not", "could not", "may not", "without", "no ", "keep",
+	)
+	referenceStem := containsAny(
+		"quoted", "following", " below", " above", "this request", "this prompt", "this instruction",
+		"this sample", "this example", "this text", "passage", "excerpt", "code block", "fenced block",
+	)
+	if !boundaryStem && !referenceStem {
+		return 0
+	}
+	signals := inertQuotedSafetyReviewFrameSignals(0)
+	if referenceStem && containsAny(
+		"quoted request", "quoted prompt", "quoted instruction", "quoted text", "quoted sample", "quoted example",
+		"following request", "following prompt", "following instruction", "following text", "following sample", "following example", "following passage", "following excerpt",
+		"request below", "prompt below", "instruction below", "text below", "sample below", "example below",
+		"request above", "prompt above", "sample above", "example above", "this request", "this prompt", "this instruction", "this sample", "this example", "this text",
+		"quoted passage", "quoted excerpt", "code block", "fenced block",
+	) {
+		signals |= inertQuotedSafetyReviewFrameReference
+	}
+	if boundaryStem && containsAny(
+		"execute", "implement", "apply", "follow", "obey", "carry out", "act on", "run it", "deploy", "build it", "reproduce",
+		"code", "source", "commands", "script", "payload", "instruction", "operational detail", "operational step", "execution step", "operations",
+		" inert", " non-operational", " nonoperational",
+	) {
+		signals |= inertQuotedSafetyReviewFrameBoundary
+	}
+	if containsAny(
+		"explain ", "analyze ", "analyse ", "review ", "assess ", "evaluate ", "audit ", "inspect ", "classify ", "summarize ", "summarise ", "describe ",
+		"security audit", "safety audit", "defensive audit", "security review", "safety review", "defensive review", "risk assessment",
+		"risk", "harm", "unsafe", "dangerous", "abusive", "malicious", "threat", "policy violation", "security implication", "safety implication",
+		"detection gap", "warning sign", "mitigation", "remediation", "defensive control", "safeguard",
+		" is included", " included here", " included below", " included,", " is provided", " provided below",
+		"appears below", " is shown", "shown below", " is presented", "presented below", "follows below", "sample follows", "example follows",
+	) {
+		signals |= inertQuotedSafetyReviewFrameQualifier
+	}
+	return signals
+}
+
 const streamingQuotedReviewProofBytes = maxMetaOverrideSplitAssociationBytes
 
 func (field *streamingField) trackQuotedReviewBytes(text []byte) {
@@ -2021,6 +2078,7 @@ func profiledCurrentReferentBarrier(unit profiledCurrentReferentUnit) profiledCu
 	unit.directive = false
 	unit.affirmativePotential = false
 	unit.proofIncomplete = false
+	unit.defensiveQuoteSignals = 0
 	unit.complete = true
 	unit.barrier = true
 	unit.text = ""
@@ -2182,6 +2240,7 @@ func profiledStreamingCurrentReferentUnit(
 	unit.directive = profiledStreamingCurrentReferentDirective(segment)
 	unit.affirmativePotential = current.profiledReferentPotential
 	unit.proofIncomplete = current.profiledReferentProofIncomplete
+	unit.defensiveQuoteSignals = current.profiledDefensiveQuoteSignals
 	return unit, true
 }
 
@@ -2572,9 +2631,16 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 		directiveUnits = append(directiveUnits, index)
 	}
 	if hasIncompleteDirective {
+		if hasLocalCarrier && s.considerProfiledIncompleteDefensiveQuoteFrameAttempt(state) {
+			return
+		}
 		if hasAffirmativePotential && (hasLocalCarrier || s.profiledHistoricalHasResult) {
 			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 		}
+		return
+	}
+	s.considerProfiledDefensiveQuotedAmbiguity(state)
+	if s.coverage.State != CoverageComplete {
 		return
 	}
 	s.considerProfiledSelfContainedCarriers(state)
@@ -2668,6 +2734,107 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	}
 }
 
+func (s *ScanSession) considerProfiledIncompleteDefensiveQuoteFrameAttempt(
+	state *profiledCurrentReferentScope,
+) bool {
+	if s == nil || s.classifier == nil || state == nil {
+		return false
+	}
+	batch := &roleClassificationBatch{session: s}
+	for start := 0; start < len(state.units); {
+		first := state.units[start]
+		if first.barrier || first.ref.segment.FieldPathHash == "" {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
+			end++
+		}
+		hasCarrier := false
+		hasIncompleteDirective := false
+		signals := inertQuotedSafetyReviewFrameSignals(0)
+		for index := start; index < end; index++ {
+			unit := state.units[index]
+			hasCarrier = hasCarrier || unit.carrier
+			if !unit.directive {
+				continue
+			}
+			if !unit.complete {
+				hasIncompleteDirective = true
+				signals |= unit.defensiveQuoteSignals
+				continue
+			}
+			if unitSignals, complete := s.classifier.rawInertQuotedSafetyReviewFrameSignals(unit.text); complete {
+				signals |= unitSignals
+			}
+		}
+		if hasCarrier && hasIncompleteDirective && signals.attempted() {
+			carrierRefs := make([]profiledSegmentRef, 0, end-start)
+			for index := start; index < end; index++ {
+				carrier := state.units[index]
+				if !carrier.carrier {
+					continue
+				}
+				if !carrier.complete {
+					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					return true
+				}
+				carrierRefs = append(carrierRefs, carrier.ref)
+			}
+			if len(carrierRefs) > 1 {
+				parts, imperative, proofComplete := s.classifier.profiledSelfContainedCarrierRefs(carrierRefs)
+				if !proofComplete {
+					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					return true
+				}
+				if imperative {
+					candidate, ok := batch.classify(parts, false)
+					if !ok {
+						return true
+					}
+					if profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+						candidate = withRoleAwareFindingOrigin(
+							candidate, FindingOriginUserContent, s.mode, s.thresholds,
+						)
+						profiledCarrierRunClearOccurrenceOffsets(&candidate)
+						s.classifier.annotateProfiledResult(
+							&candidate, carrierRefs, false, s.policy, s.mode, s.thresholds,
+						)
+						markResultDirectCarrierActivated(&candidate, true, true, s.mode, s.thresholds)
+						s.consider(candidate, FindingOriginUserContent)
+						return true
+					}
+				}
+			}
+			for index := start; index < end; index++ {
+				carrier := state.units[index]
+				if !carrier.carrier {
+					continue
+				}
+				candidate, ok := s.profiledCurrentReferentCarrierCandidate(batch, carrier)
+				if !ok {
+					return true
+				}
+				if profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+					candidate = withRoleAwareFindingOrigin(
+						candidate, FindingOriginUserContent, s.mode, s.thresholds,
+					)
+					s.classifier.annotateProfiledResult(
+						&candidate, []profiledSegmentRef{carrier.ref}, false,
+						s.policy, s.mode, s.thresholds,
+					)
+					markResultDirectCarrierActivated(&candidate, true, true, s.mode, s.thresholds)
+					s.consider(candidate, FindingOriginUserContent)
+					return true
+				}
+			}
+		}
+		start = end
+	}
+	return false
+}
+
 func selectProfiledStreamingCurrentNeighbor(
 	state *profiledCurrentReferentScope,
 	anchorIndex int,
@@ -2692,6 +2859,183 @@ func selectProfiledStreamingCurrentNeighbor(
 	default:
 		return -1, false
 	}
+}
+
+// considerProfiledDefensiveQuotedAmbiguity restores the whole-field safety
+// contract after a profiled extractor splits one logical user string into
+// natural-language and fenced/quoted content-kind units. Optional suppression
+// is granted only when the reconstructed bounded field proves exactly one
+// closed referent, an analysis governor, a safety assessment, and a terminal
+// non-execution boundary. An attempted but invalid frame is classified as the
+// current user's active logical field; unrelated standalone fenced evidence is
+// left to the ordinary content-kind policy.
+func (s *ScanSession) considerProfiledDefensiveQuotedAmbiguity(state *profiledCurrentReferentScope) {
+	if s == nil || state == nil || s.classifier == nil || s.coverage.State != CoverageComplete {
+		return
+	}
+	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	for start := 0; start < len(state.units); {
+		first := state.units[start]
+		if first.barrier || first.ref.segment.FieldPathHash == "" {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
+			end++
+		}
+
+		hasCarrier := false
+		hasDirective := false
+		complete := true
+		totalBytes := 0
+		for index := start; index < end; index++ {
+			unit := state.units[index]
+			hasCarrier = hasCarrier || unit.carrier
+			hasDirective = hasDirective || unit.directive
+			complete = complete && unit.complete
+			if len(unit.text) > maxReconstructedBytes-totalBytes {
+				complete = false
+				break
+			}
+			totalBytes += len(unit.text)
+		}
+		frameAttempt := hasCarrier && hasDirective &&
+			s.profiledDefensiveQuoteFrameAttempt(state, start, end)
+		if frameAttempt && (!complete || totalBytes == 0) {
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return
+		}
+		if !hasCarrier || !hasDirective || !frameAttempt || !complete || totalBytes == 0 {
+			start = end
+			continue
+		}
+
+		var raw strings.Builder
+		raw.Grow(totalBytes)
+		for index := start; index < end; index++ {
+			raw.WriteString(state.units[index].text)
+		}
+		text := raw.String()
+		if s.classifier.isRawInertQuotedSafetyReview(text) {
+			start = end
+			continue
+		}
+
+		batch := &roleClassificationBatch{session: s}
+		carrierRefs := make([]profiledSegmentRef, 0, end-start)
+		for index := start; index < end; index++ {
+			carrier := state.units[index]
+			if carrier.carrier && carrier.complete {
+				carrierRefs = append(carrierRefs, carrier.ref)
+			}
+		}
+		if len(carrierRefs) > 1 {
+			parts, imperative, proofComplete := s.classifier.profiledSelfContainedCarrierRefs(carrierRefs)
+			if !proofComplete {
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return
+			}
+			if imperative {
+				candidate, ok := batch.classify(parts, false)
+				if !ok {
+					return
+				}
+				candidate = withRoleAwareFindingOrigin(
+					candidate, FindingOriginUserContent, s.mode, s.thresholds,
+				)
+				profiledCarrierRunClearOccurrenceOffsets(&candidate)
+				s.classifier.annotateProfiledResult(
+					&candidate, carrierRefs, false, s.policy, s.mode, s.thresholds,
+				)
+				markResultDirectCarrierActivated(&candidate, true, true, s.mode, s.thresholds)
+				if profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+					s.consider(candidate, FindingOriginUserContent)
+					start = end
+					continue
+				}
+			}
+		}
+		for index := start; index < end; index++ {
+			carrier := state.units[index]
+			if !carrier.carrier || !carrier.complete {
+				continue
+			}
+			candidate, ok := s.profiledCurrentReferentCarrierCandidate(batch, carrier)
+			if !ok {
+				return
+			}
+			candidate = withRoleAwareFindingOrigin(
+				candidate, FindingOriginUserContent, s.mode, s.thresholds,
+			)
+			s.classifier.annotateProfiledResult(
+				&candidate, []profiledSegmentRef{carrier.ref}, false,
+				s.policy, s.mode, s.thresholds,
+			)
+			markResultDirectCarrierActivated(&candidate, true, true, s.mode, s.thresholds)
+			if profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+				s.consider(candidate, FindingOriginUserContent)
+			}
+		}
+		start = end
+	}
+}
+
+func (s *ScanSession) profiledDefensiveQuoteFrameAttempt(
+	state *profiledCurrentReferentScope,
+	start int,
+	end int,
+) bool {
+	if s == nil || s.classifier == nil || state == nil ||
+		start < 0 || start >= end || end > len(state.units) {
+		return false
+	}
+	totalBytes := 0
+	overBudget := false
+	signals := inertQuotedSafetyReviewFrameSignals(0)
+	for index := start; index < end; index++ {
+		unit := state.units[index]
+		if !unit.directive || !unit.complete || unit.text == "" {
+			continue
+		}
+		if unitSignals, complete := s.classifier.rawInertQuotedSafetyReviewFrameSignals(unit.text); complete {
+			signals |= unitSignals
+		}
+		if overBudget || len(unit.text) > maxInertQuotedReviewFrameBytes-totalBytes {
+			overBudget = true
+			continue
+		}
+		totalBytes += len(unit.text)
+	}
+	if overBudget {
+		return signals.attempted()
+	}
+	if totalBytes == 0 {
+		return false
+	}
+	var frame strings.Builder
+	frame.Grow(totalBytes)
+	for index := start; index < end; index++ {
+		unit := state.units[index]
+		if unit.directive && unit.complete {
+			frame.WriteString(unit.text)
+		}
+	}
+	return s.classifier.isRawInertQuotedSafetyReviewFrameAttempt(frame.String())
+}
+
+func profiledUnitsShareLogicalTextField(first, current profiledCurrentReferentUnit) bool {
+	if first.barrier || current.barrier {
+		return false
+	}
+	left := first.ref.segment
+	right := current.ref.segment
+	return left.FieldPathHash != "" && left.FieldPathHash == right.FieldPathHash &&
+		left.Role == right.Role && left.Provenance == right.Provenance &&
+		left.UserAttribution == right.UserAttribution &&
+		left.ConversationIndex == right.ConversationIndex && left.TurnIndex == right.TurnIndex &&
+		left.IsCurrentTurn == right.IsCurrentTurn && left.ScopeID == right.ScopeID
 }
 
 // considerProfiledSelfContainedCarriers mirrors the batch admission rule for a
@@ -2728,6 +3072,13 @@ func (s *ScanSession) considerProfiledSelfContainedCarriers(state *profiledCurre
 		for unitIndex := index; unitIndex < end; unitIndex++ {
 			refs = append(refs, state.units[unitIndex].ref)
 		}
+		// A single carrier is resolved by the ordinary direct/referent paths or
+		// by the defensive-quote ambiguity pass above. Do not spend a second
+		// classification window on a candidate this run can never admit.
+		if len(refs) == 1 {
+			index = end
+			continue
+		}
 		parts, imperative, complete := s.classifier.profiledSelfContainedCarrierRefs(refs)
 		if !complete {
 			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
@@ -2749,11 +3100,10 @@ func (s *ScanSession) considerProfiledSelfContainedCarriers(state *profiledCurre
 		neighborIndex, localOwner := selectProfiledStreamingCurrentRunOwner(
 			s.classifier, state, index, end,
 		)
-		// A single carrier is resolved by the ordinary direct/referent paths.
 		// Split fenced runs are admitted here only with a complete adjacent
 		// natural-language reactivation; no owner, a review, a cancellation, or a
 		// merely descriptive/direct fragment remains audit-only in this path.
-		if !localOwner || len(refs) == 1 {
+		if !localOwner {
 			index = end
 			continue
 		}
@@ -3672,9 +4022,17 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 		field.trackQuotedReviewBytes(text[uniqueStart:])
 	}
 	decision := prepareStreamingRoleWindow(field, rawWindow, uniqueStart)
-	profiledPotentialProof := !field.roleComplete && profiledStreamingCurrentReferentDirective(
-		streamingSegmentForField(field, ""),
+	profiledDirective := profiledStreamingCurrentReferentDirective(
+		s.profiledStreamingRequestSegment(streamingSegmentForField(field, "")),
 	)
+	if profiledDirective && field.totalBytes > streamRoleSummaryBytes {
+		field.profiledDefensiveQuoteSignals |= streamingDefensiveQuotedReviewFrameSignals(rawWindow)
+		// A complete short field is re-proven exactly at flush. For a longer
+		// field, retain only this content-free ambiguity bit so an adjacent
+		// malicious carrier cannot become a complete allow merely because the
+		// review frame exceeded the 512-byte association proof.
+	}
+	profiledPotentialProof := !field.roleComplete && profiledDirective
 	windowSegment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
 	profiledPreviousRisk := s.profiledPreviousUserRiskMatches(windowSegment) &&
 		!s.profiledPreviousUserComplete
