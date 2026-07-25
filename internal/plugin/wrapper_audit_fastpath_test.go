@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"path/filepath"
@@ -274,6 +275,18 @@ func TestBalancedAuditOnWrapperOnlyAllocationAcceptance(t *testing.T) {
 			}
 			configuration += "subject_control:\n  enabled: true\n  max_subjects: 64\n"
 			register(b, p, configuration)
+			if enabled {
+				state := p.runtime.Load()
+				if state == nil || state.audit == nil {
+					b.Fatal("audit-on benchmark runtime is unavailable")
+				}
+				// Store.Open starts its writer asynchronously. Complete a barrier
+				// before ResetTimer so one-time worker/ticker setup is not charged
+				// as per-request audit overhead by process-wide benchmark stats.
+				if err := state.audit.Flush(context.Background()); err != nil {
+					b.Fatalf("initialize audit-on benchmark worker: %v", err)
+				}
+			}
 
 			request, err := json.Marshal(pluginapi.ModelRouteRequest{
 				SourceFormat:   fourRepoCarrierFormat(fourRepoAdditionalNamespace),
