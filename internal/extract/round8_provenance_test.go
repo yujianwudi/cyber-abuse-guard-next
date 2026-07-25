@@ -248,20 +248,20 @@ func TestRound8ToolCallAndResultContentKindMatrix(t *testing.T) {
 
 	for _, test := range tests {
 		test := test
-			t.Run(test.name, func(t *testing.T) {
-				t.Parallel()
-				result, err := ExtractProfiledRequest(
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			result, err := ExtractProfiledRequest(
 				[]byte(test.body), round8JSONHeaders(), RequestProfile{Source: test.profile}, Limits{},
 			)
-				if err != nil || !result.IsComplete() || !result.RoleAware {
-					t.Fatalf("result=%#v err=%v", result, err)
+			if err != nil || !result.IsComplete() || !result.RoleAware {
+				t.Fatalf("result=%#v err=%v", result, err)
+			}
+			for _, segment := range result.Segments {
+				if segment.Text == "call_1" {
+					t.Fatalf("provider tool correlation ID surfaced as model-visible text: %#v", segment)
 				}
-				for _, segment := range result.Segments {
-					if segment.Text == "call_1" {
-						t.Fatalf("provider tool correlation ID surfaced as model-visible text: %#v", segment)
-					}
-				}
-				args := round8RequireSegment(t, result.Segments, test.args)
+			}
+			args := round8RequireSegment(t, result.Segments, test.args)
 			toolResult := round8RequireSegment(t, result.Segments, test.result)
 			current := round8RequireSegment(t, result.Segments, test.current)
 			if args.ContentKind != ContentKindToolCallArguments || args.Provenance != ProvenanceToolPayload ||
