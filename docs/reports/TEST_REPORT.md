@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -14,7 +14,7 @@ The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
-`971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`
+`fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging, so no rc.4 final commit/tree, exact Linux
@@ -22,6 +22,13 @@ The source tree is still converging, so no rc.4 final commit/tree, exact Linux
 claimed. The immutable rc.3 attempt passed exact-main CI at `77cf2de` and then
 failed before asset creation because PyYAML was undeclared in the fixed builder
 container; it supplies failure history, not rc.4 evidence.
+Independent CPA v7.2.95 counted-Mock review of historical commit
+`aea54c8c3b357b085fb8c37d06eb4b501dcd29bb` found 20/20 Chinese, Japanese,
+Korean, and mixed-language long defensive frames returning complete allow with
+an upstream call. That result remains a failed historical candidate. The
+working tree addresses it only at the Linux source/full-route boundary; current
+CPA Host and counted-Mock remediation evidence is still pending an independent
+rerun of the final exact commit and plugin bytes.
 The visible development-only active corpus is `round9-public-adversarial-v13` (481448 bytes,
 SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`);
 it is frozen public development evidence, not independent evidence. The exact
@@ -37,8 +44,9 @@ v9 and must not be relabeled as current-policy or independent evidence.
 | Current Round 9 identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v9` / `971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
+| Classifier policy | `classifier-policy-v9` / `fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
+| Multilingual defensive-frame remediation | **TARGETED LINUX SOURCE/FULL-ROUTE SELF-CHECK PASS; HOST PENDING.** Chinese, Japanese, Korean, and mixed frames at 511/512/513 bytes, 1 KiB, and 16 KiB block a credential-theft carrier in Balanced and Strict; OpenAI Chat, OpenAI Responses, Claude, and Gemini routes assert complete/block counters, and 16 KiB benign carriers remain complete/nonblocking. Targeted classifier/plugin race checks pass. No CPA process, `.so`, or counted-Mock result is inferred |
 | Audit database | schema v6; closed decision/explanation contract; mandatory pre-v6 backup and old-SO rollback |
 | Audit unavailable management semantics | **TARGETED LINUX SELF-CHECK PASS** — audit disabled remains a schema-correct empty/no-op result; audit enabled with nil store returns `503 audit_unavailable` for `/events`, `/stats`, and `DELETE /events` |
 | Public adversarial development corpus | Active: `round9-public-adversarial-v13` / 481448 bytes / `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; v12/v11/v10/v9 retained as prior valid history, exact v8 retained as immutable-invalid history, its corrected in-place rebind retained as rejected evidence, v7 retained as earlier valid history, and v6 as frozen-invalid history; v13 records the later MDX Star History storage/source/workflow/test-only default-head advance while retaining five behind non-default branches, 16 reviewed historical Release assets (four with prompt entries), and 199 metadata/digest-only Release assets that were neither downloaded nor opened; public text only, no third-party code execution, not an independent Holdout |
@@ -65,10 +73,10 @@ was created or executed.
 | Check | Result |
 |---|---|
 | Safe development boundary | **PASS**; 20 packages, 419 classifier entries, 104 Round 8 entries, 154 Round 9 entries, and the Round 9 counted-Mock module test |
-| Profiled defensive-quote plugin-route regression | **PASS**; OpenAI Chat, OpenAI Responses, Claude, and Gemini envelopes in Balanced and Strict block second/missing-governor/split-carrier/clause-overflow/513-byte malicious frames; malicious 65-scope and both 65-unit eviction orders cannot complete-allow; 64 valid reviews or 64 malformed frames with benign carriers plus a 65th ordinary scope remain complete nonblocking; full-width and zero-width overlong frames match batch behavior; a distant qualifier-only window cannot complete a partial frame; valid reviews, direct prohibitions, retained benign overflow carriers, and over-budget benign carriers remain nonblocking; simulated router counter deltas are asserted |
-| Normalized long-frame signal microbenchmark | **PASS / SOURCE ONLY**; direct normalize+match measured 0.349-0.375 ms/op at 16 KiB and 22.170-24.868 ms/op at 1 MiB with 2 allocs/op; the full profiled path measured 8.078-9.757 ms/op and 253.508-269.327 ms/op respectively, under WSL Linux amd64 Go 1.26.4; no CPA Host performance is inferred |
+| Profiled defensive-quote plugin-route regression | **PASS / SOURCE ONLY**; OpenAI Chat, OpenAI Responses, Claude, and Gemini envelopes in Balanced and Strict block second/missing-governor/split-carrier/clause-overflow/513-byte malicious frames; Chinese, Japanese, Korean, and mixed frames cover 511/512/513 bytes, 1 KiB, and 16 KiB with malicious block and 16 KiB benign nonblock controls; malicious 65-scope and both 65-unit eviction orders cannot complete-allow; 64 valid reviews or 64 malformed frames with benign carriers plus a 65th ordinary scope remain complete nonblocking; full-width and zero-width overlong frames match batch behavior; qualifier-only English/CJK windows remain `0b000`; fixed independent bitmask oracles assert `0b111`, `0b101`, and `0b000`; simulated router counter deltas are asserted |
+| Normalized multilingual long-frame signal microbenchmark | **PASS / SOURCE ONLY**; three isolated Go 1.26.4 runs measured direct normalize+match at 0.355-0.363 ms/op for 16 KiB and 22.230-22.564 ms/op for 1 MiB with 2 allocs/op; the full profiled path measured 7.873-8.598 ms/op and 250.230-259.302 ms/op respectively; three directive-overflow runs measured the 1,024-unique case at 93.324-97.670 ms/op under the 175 ms ceiling; no CPA Host performance is inferred |
 | Safe package tests with `sqlite_omit_load_extension` | **PASS** |
-| Safe package race detector with `sqlite_omit_load_extension` | **PASS**; plugin matrix 518.114 s, classifier 117.883 s |
+| Race detector | **PASS / CURRENT SOURCE SCOPE**; full Go 1.26.4 classifier race passed in 109.842 s, and the multilingual four-provider plugin route passed its targeted race in 7.903 s. A full plugin-package race was not rerun for this working-tree identity and remains an exact-main CI gate |
 | `make round6-vet` | **PASS** |
 | `scripts/round6_safe_gate_contract_test.py` | **PASS**; 205 tests |
 | `scripts/round6_safe_gate_contract.py --root .` | **PASS**; 11 entrypoints, 40 Make targets, and 60 scripts |
@@ -766,7 +774,7 @@ ledger proof, exact-main CI, or independent audit has passed.
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9
-working_tree_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+working_tree_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 verification_status: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 ```

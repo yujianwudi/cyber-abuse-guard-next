@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -11,7 +11,7 @@ Last updated: 2026-07-25 (Asia/Shanghai)
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
 working-tree identity is `classifier-policy-v9` /
-`971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`
+`fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The latest Linux amd64 development benchmark below instead binds predecessor
@@ -25,7 +25,8 @@ a final commit/tree, a reproducible Linux `.so`, or any counted-Mock/Host bounda
 | Complete local Linux development recipe | **DEVELOPMENT SELF-CHECK PASS.** `GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go make round6-benchmark` with `GOFLAGS=-mod=readonly` exited successfully. Raw log: `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063` |
 | Role-aware maximum-parts path | **DEVELOPMENT REGRESSION FIXED AND HARD-BOUNDED.** Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. `TestCandidateRichProfiledMaxPartsPerformanceBound` enforces <=2 s/op, <=16 MiB/op, and <=2048 allocs/op while retaining an eligible current-user malicious block proof; the roleless allocation gate remains <=256 allocs/op |
 | Current v9 WSL source self-check | **PASS / DEVELOPMENT ONLY.** Linux amd64 Go 1.26.4 recorded classifier p50/p95/p99 of 454.800 µs / 764.214 µs / 1.007808 ms over 10,000 samples; adversarial candidate-rich and near-budget cases were 42.930 ms/op and 24.744 ms/op. One-iteration streaming samples were 51.037 ms for 270 KiB, 197.453 ms for 1 MiB, 803.990 ms for 4 MiB, and 1.616 s near 8 MiB. These are local source measurements, not CPA Host or release evidence |
-| Normalized long-frame signal pass | **PASS / DEVELOPMENT ONLY.** `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` with Go 1.26.4 measured 0.349-0.375 ms/op at 16 KiB (43.71-46.93 MB/s, 886-890 B/op, 2 allocs/op) and 22.170-24.868 ms/op at 1 MiB (42.16-47.30 MB/s, 420,492-467,125 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path, which now reuses the main normalized view when safe, measured 8.078-9.757 ms/op at 16 KiB and 253.508-269.327 ms/op at 1 MiB. These are WSL source microbenchmarks, not CPA Host evidence |
+| Normalized multilingual long-frame signal pass | **PASS / DEVELOPMENT ONLY.** Three isolated Go 1.26.4 `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` runs measured 0.355-0.363 ms/op at 16 KiB (45.15-46.21 MB/s, 810-813 B/op, 2 allocs/op) and 22.230-22.564 ms/op at 1 MiB (46.47-47.17 MB/s, 841-847 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path measured 7.873-8.598 ms/op at 16 KiB (543,028-563,462 B/op, 108-110 allocs/op) and 250.230-259.302 ms/op at 1 MiB (16,886,254-17,299,688 B/op, 333-339 allocs/op). These are WSL Linux source microbenchmarks, not CPA Host evidence |
+| Directive-clause overflow wall-clock boundary | **PASS / DEVELOPMENT ONLY.** Three isolated Go 1.26.4 runs measured the 1,024-unique-prohibition case at 93.324-97.670 ms/op against the `<175 ms/op` gate. The historical `aea54c8c` audit's 222.731 ms/op result was not reproduced. No CPA Host latency or throughput is inferred |
 | Pre-fix diagnostic retained as history | The earlier working-tree snapshot recorded 14.948-16.418 s/op, approximately 397 MB/op, and about 1.077 million allocs/op. Its CPU profile (`6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69`) and memory profile (`fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6`) remain diagnostic chronology only and are not attributed to the current classifier identity |
 | Classifier latency and allocation acceptance on the final source freeze | `NOT_PROVIDED`; the working-tree hard bounds pass, but the final commit/tree and exact candidate have not been frozen or rerun |
 | Standalone and CPA Host RSS on the exact candidate | `NOT_PROVIDED` |
@@ -51,7 +52,9 @@ classified twice, and a reconstructed proof is capped at 66,080 bytes. Tight
 `MaxChunks` regression and the complete performance-acceptance suite pass. The
 over-512-byte signal path performs one multi-pattern scan and shares the main
 normalized view when no compact carry was injected; the conservative fallback
-normalizes independently. The 64-unit overflow retains only content-free field
+normalizes independently. Chinese, Japanese, Korean, and mixed-language terms
+extend only that precompiled ambiguity matcher; they do not add repeated literal
+scans or grant suppression. The 64-unit overflow retains only content-free field
 identity and signal state. The 64-scope path performs bounded proof or carrier
 classification only when capacity eviction is required, allowing complete safe
 scopes to leave the window. No exact CPA Host latency, RSS, or throughput result

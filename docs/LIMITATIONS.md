@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -303,7 +303,7 @@ for any of the three missing runtime evidence classes.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
     `classifier-policy-v9` / SHA-256
-`971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`,
+`fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -545,3 +545,14 @@ for any of the three missing runtime evidence classes.
     disclosed and reassessed before any exact-candidate release; a development
     vulnerability-gate exit code cannot be represented as a clean standard
     library bill of health.
+
+61. **The multilingual defensive-frame repair is source-only until the exact
+    main commit is independently rerun.** Independent CPA v7.2.95 counted-Mock
+    testing of historical commit `aea54c8c3b357b085fb8c37d06eb4b501dcd29bb`
+    observed 20/20 Chinese, Japanese, Korean, and mixed-language long-frame
+    cases complete-allowing an upstream call. The current tree adds bounded
+    multilingual ambiguity signals and Linux classifier/plugin regressions, but
+    those checks do not prove CPA reconstruction, counters, latency, or
+    Balanced/Strict Host behavior. Repository-local and Tencent Cloud #2
+    counted-Mock matrices must bind the final commit and plugin bytes before
+    Host promotion; green GitHub Actions alone are insufficient.

@@ -1679,14 +1679,29 @@ func buildStreamingDefensiveFrameMatcher() *literalMatcher {
 		"do not", "don't", "never", "must not", "should not", "cannot", "can't",
 		"will not", "would not", "could not", "may not", "without", "no ", "keep",
 	)
+	add(streamingDefensiveFrameBoundaryStem,
+		"不要", "不得", "切勿", "禁止", "不应", "不能", "不可", "请勿",
+		"しない", "しないで", "してはいけない", "してはならない", "せず", "禁止", "行わない",
+		"하지 마", "하지마", "하지 말", "하지 않", "해서는 안", "하면 안", "금지", "말고", "않도록",
+	)
 	add(streamingDefensiveFrameBoundaryObject,
 		"execute", "implement", "apply", "follow", "obey", "carry out", "act on", "run it", "deploy", "build it", "reproduce",
 		"code", "source", "commands", "script", "payload", "instruction", "operational detail", "operational step", "execution step", "operations",
 		" inert", " non-operational", " nonoperational",
 	)
+	add(streamingDefensiveFrameBoundaryObject,
+		"执行", "实施", "应用", "遵循", "服从", "运行", "部署", "构建", "复现", "代码", "命令", "脚本", "载荷", "指令", "操作",
+		"実行", "実装", "適用", "従う", "遵守", "運用", "デプロイ", "構築", "再現", "コード", "コマンド", "スクリプト", "ペイロード", "指示", "操作",
+		"실행", "구현", "적용", "따르", "준수", "운영", "배포", "빌드", "재현", "코드", "명령", "스크립트", "페이로드", "지시", "작업",
+	)
 	add(streamingDefensiveFrameReferenceStem,
 		"quoted", "following", " below", " above", "this request", "this prompt", "this instruction",
 		"this sample", "this example", "this text", "passage", "excerpt", "code block", "fenced block",
+	)
+	add(streamingDefensiveFrameReferenceStem,
+		"引用", "以下", "下面", "下方", "上述", "上面", "前述", "代码块", "围栏代码",
+		"次の", "下記", "上記", "コードブロック", "フェンス",
+		"인용", "다음", "아래", "상기", "위의", "앞의", "코드 블록", "펜스",
 	)
 	add(streamingDefensiveFrameReference,
 		"quoted request", "quoted prompt", "quoted instruction", "quoted text", "quoted sample", "quoted example",
@@ -1695,6 +1710,12 @@ func buildStreamingDefensiveFrameMatcher() *literalMatcher {
 		"request above", "prompt above", "sample above", "example above", "this request", "this prompt", "this instruction", "this sample", "this example", "this text",
 		"quoted passage", "quoted excerpt", "code block", "fenced block",
 	)
+	add(streamingDefensiveFrameReference,
+		"以下引用", "下方引用", "引用的请求", "引用请求", "引用的提示", "引用提示", "引用的指令", "引用指令", "引用的文本", "引用文本", "引用的样本", "引用样本",
+		"以下请求", "以下提示", "以下指令", "以下文本", "以下样本", "以下示例", "下面的请求", "下面的提示", "下面的指令", "下面的文本", "下面的样本", "上述请求", "上述提示", "上述指令",
+		"引用されたリクエスト", "引用されたプロンプト", "引用された指示", "引用されたテキスト", "引用されたサンプル", "以下のリクエスト", "以下のプロンプト", "以下の指示", "以下のテキスト", "以下のサンプル", "次のリクエスト", "次のプロンプト", "次の指示", "下記のリクエスト", "上記のリクエスト",
+		"인용된 요청", "인용된 프롬프트", "인용된 지시", "인용된 텍스트", "인용된 샘플", "다음 요청", "다음 프롬프트", "다음 지시", "다음 텍스트", "다음 샘플", "아래 요청", "아래의 요청", "아래 프롬프트", "위의 요청",
+	)
 	add(streamingDefensiveFrameQualifier,
 		"explain ", "analyze ", "analyse ", "review ", "assess ", "evaluate ", "audit ", "inspect ", "classify ", "summarize ", "summarise ", "describe ",
 		"security audit", "safety audit", "defensive audit", "security review", "safety review", "defensive review", "risk assessment",
@@ -1702,6 +1723,11 @@ func buildStreamingDefensiveFrameMatcher() *literalMatcher {
 		"detection gap", "warning sign", "mitigation", "remediation", "defensive control", "safeguard",
 		" is included", " included here", " included below", " included,", " is provided", " provided below",
 		"appears below", " is shown", "shown below", " is presented", "presented below", "follows below", "sample follows", "example follows",
+	)
+	add(streamingDefensiveFrameQualifier,
+		"分析", "解析", "审查", "审核", "评估", "检查", "分类", "总结", "说明", "解释", "安全审计", "安全审查", "防御审查", "风险评估", "风险", "危害", "有害", "危险", "滥用", "恶意", "威胁", "安全问题", "防御措施", "缓解措施", "修复建议", "检测缺口", "警示信号", "包含如下", "包含以下", "提供如下", "如下所示",
+		"分析", "解析", "レビュー", "審査", "評価", "監査", "検査", "分類", "要約", "説明", "セキュリティ監査", "安全監査", "防御レビュー", "リスク評価", "リスク", "危険", "有害", "悪用", "悪意", "脅威", "セキュリティ上", "防御策", "緩和策", "対策", "検出", "以下に含", "以下に示", "提供され",
+		"분석", "검토", "심사", "평가", "감사", "검사", "분류", "요약", "설명", "보안 감사", "안전 감사", "방어 검토", "위험 평가", "위험", "유해", "위험한", "악용", "악성", "위협", "보안 문제", "방어 조치", "완화", "대응책", "탐지", "포함되어", "아래에 포함", "아래에 제시",
 	)
 	return builder.build()
 }

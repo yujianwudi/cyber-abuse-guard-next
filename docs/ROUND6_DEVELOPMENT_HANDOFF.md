@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 ```
 
 The identity above is the repository's current Round 9 identity. The remainder

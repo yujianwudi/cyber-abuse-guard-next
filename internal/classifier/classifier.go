@@ -3718,7 +3718,15 @@ func (c *Classifier) rawInertQuotedSafetyReviewFrameSignals(
 	if views.truncated {
 		return 0, false
 	}
-	return inertQuotedSafetyReviewFrameSignalSet(string(views.standardRunes)), true
+	signals := inertQuotedSafetyReviewFrameSignalSet(string(views.standardRunes))
+	// Multilingual terms are a coarse ambiguity admission gate only. They make
+	// a same-field carrier eligible for independent classification but never
+	// grant quoted-review suppression, which still requires the exact bounded
+	// structural proof above.
+	signals |= streamingDefensiveQuotedReviewFrameSignalsNormalized(
+		views.standardRunes, false,
+	)
+	return signals, true
 }
 
 func inertQuotedSafetyReviewFrameAttempt(outside string) bool {

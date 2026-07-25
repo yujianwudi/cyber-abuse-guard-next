@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 ```
 
 ## Scope, release state, and invariants
@@ -324,8 +324,17 @@ ordinary classification path exposes its normalized rune view to this matcher
 when no compact carry was injected; otherwise the scanner keeps the independent
 bounded fallback. A window may emit qualifier bits only after the same
 reference- or boundary-stem gate used by the predecessor scanner, preventing a
-distant qualifier-only window from completing an unrelated partial frame. If
-the 64-scope or 64-unit profiled budget is reached, only the logical-field
+distant qualifier-only window from completing an unrelated partial frame.
+
+When Chinese, Japanese, Korean, or mixed-language reference, analysis/risk, and
+non-execution terms satisfy this gate, they establish ambiguity only. They do
+not prove the exact bounded safe-review structure and never grant suppression.
+The scanner instead classifies each complete carrier in the same logical field
+independently; a carrier cannot borrow signals across field, role, provenance,
+turn, or scope boundaries. Benign carriers remain nonblocking, while an
+incomplete or unclassifiable carrier makes coverage unavailable.
+
+If the 64-scope or 64-unit profiled budget is reached, only the logical-field
 metadata, those three bits, and a content-free lost-carrier flag cross the
 rolling boundary. A complete attempted frame is never silently evicted; lost
 carrier text makes coverage explicitly incomplete, while a retained carrier is

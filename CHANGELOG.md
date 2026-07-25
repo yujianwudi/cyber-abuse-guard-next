@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f
+current_classifier_policy_sha256: fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227
 ```
 
 Source-tree status updated: 2026-07-25 (Asia/Shanghai)
@@ -33,6 +33,12 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   gate so a distant qualifier-only window cannot complete an attempt; add
   full-width, zero-width, scope-eviction, unit-eviction, and maximum-window
   performance regressions.
+- Extend that ambiguity gate to Chinese, Japanese, Korean, and mixed-language
+  defensive frames at 511/512/513 bytes, 1 KiB, and 16 KiB. Multilingual terms
+  never grant quoted-review suppression: they only require an exact same-field
+  carrier to be classified independently; malicious carriers block while
+  benign 16 KiB controls remain complete and nonblocking across Balanced,
+  Strict, OpenAI Chat, OpenAI Responses, Claude, and Gemini source routes.
 - Close the remaining public Keysmith request-local `system` and terminal
   `tool` middle/back carrier gap by requiring one unique, complete, same-scope
   META control owner; historical, assistant, nonterminal, and inert carriers
@@ -60,7 +66,7 @@ Source-tree status updated: 2026-07-25 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Advance the source behavior identity to `classifier-policy-v9` /
-  `971d41d053473e68ff4b9f8bbe1c6e63753ac712ab570c54a27f594d7a6b318f`;
+  `fbdba9387158dfb1a5c0e6f175a5d56ae95a526c75b19644f72b74fb1675d227`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;
