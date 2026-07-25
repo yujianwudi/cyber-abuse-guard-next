@@ -72,6 +72,7 @@ func auditDecisionExplanation(result classifier.Result) *audit.DecisionExplanati
 		EligibilityReasonFlags:     source.EligibilityReasonFlags,
 		InspectionComplete:         source.InspectionComplete,
 		EvidenceOwnedByCurrentUser: source.EvidenceOwnedByCurrentUser,
+		EnforcementScope:           auditEnforcementScope(source.EnforcementScope),
 		CurrentExecutionActProven:  source.CurrentExecutionActProven,
 		HarmfulCoreComplete:        source.HarmfulCoreComplete,
 		OperationallyActionable:    source.OperationallyActionable,
@@ -87,6 +88,19 @@ func auditDecisionExplanation(result classifier.Result) *audit.DecisionExplanati
 		ReferentProofComplete:      source.ReferentProofComplete,
 		EvidenceAmbiguous:          source.EvidenceAmbiguous,
 		CrossScopeComposition:      source.CrossScopeComposition,
+	}
+}
+
+func auditEnforcementScope(scope classifier.EnforcementScope) audit.EnforcementScope {
+	switch scope {
+	case classifier.EnforcementScopeCurrentUser:
+		return audit.EnforcementScopeCurrentUser
+	case classifier.EnforcementScopeRequestLocalSystem:
+		return audit.EnforcementScopeRequestLocalSystem
+	case classifier.EnforcementScopeRequestLocalTool:
+		return audit.EnforcementScopeRequestLocalTool
+	default:
+		return audit.EnforcementScopeNone
 	}
 }
 

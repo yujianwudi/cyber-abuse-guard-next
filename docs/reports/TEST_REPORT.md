@@ -1,20 +1,20 @@
 # Test Report — v0.16 Round 9 candidate and historical evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
 
 ## Current Round 9 source-tree snapshot verification
 
-The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v8, ruleset
+The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 1.0.10, audit schema v6, and CPA
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
-identity is classifier-policy-v8 /
-`b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`
+identity is classifier-policy-v9 /
+`06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging, so no rc.4 final commit/tree, exact Linux
@@ -30,10 +30,14 @@ v8 remains immutable-invalid at 105299 bytes / `5def5330…`, while the
 105298-byte / `2f953da4…` corrected in-place rebind is retained separately as
 rejected evidence. The exact v6 bytes also remain immutable but frozen-invalid.
 
+The retained benign-corpus, paired-malicious, and benchmark rows below were
+produced for the predecessor `classifier-policy-v8`. They were not rerun for
+v9 and must not be relabeled as current-policy or independent evidence.
+
 | Current Round 9 identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
+| Classifier policy | `classifier-policy-v9` / `06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Audit database | schema v6; closed decision/explanation contract; mandatory pre-v6 backup and old-SO rollback |
 | Audit unavailable management semantics | **TARGETED LINUX SELF-CHECK PASS** — audit disabled remains a schema-correct empty/no-op result; audit enabled with nil store returns `503 audit_unavailable` for `/events`, `/stats`, and `DELETE /events` |
@@ -50,12 +54,30 @@ rejected evidence. The exact v6 bytes also remain immutable but frozen-invalid.
 | Production approval | **NOT_GRANTED** |
 | Overall | **BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT** |
 
-The development corpus reports were produced on Linux amd64 with Go 1.26.4 and
+### 2026-07-25 classifier-policy-v9 source-only verification
+
+The runtime remediation was validated only as Linux source. The local WSL
+toolchain was `go1.26.0 linux/amd64`, not the GitHub workflow pin `go1.26.4`.
+No CPA process, plugin `.so`, counted Mock Host, real Provider, Tag, or Release
+was created or executed.
+
+| Check | Result |
+|---|---|
+| `make test` safe development boundary | **PASS**; 20 packages, 409 classifier entries, and the Round 9 counted-Mock module test |
+| `go test -tags=sqlite_omit_load_extension ./internal/classifier ./internal/plugin ./internal/audit -count=1` | **PASS** |
+| `go test -race -tags=sqlite_omit_load_extension ./internal/classifier ./internal/plugin ./internal/audit -count=1` | **PASS** |
+| `make round6-vet` | **PASS** |
+| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 204 tests |
+| `scripts/round6_safe_gate_contract.py --root .` | **PASS**; 11 entrypoints, 40 Make targets, and 60 scripts |
+| Modified Round 9 Python contract/evaluator tests | **PASS** |
+| Format, shell syntax, diff, and release-document consistency | **PASS** |
+
+The predecessor development corpus reports were produced on Linux amd64 with Go 1.26.4 and
 `GOFLAGS=-mod=readonly` using the two checked-in Round 9 runner commands. The
 complete benchmark log was produced through
 `GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go make round6-benchmark` under
-the same module-readonly boundary. These files bind the working-tree policy
-identity shown above, not a final commit/tree or reproducible plugin artifact.
+the same module-readonly boundary. These files bind `classifier-policy-v8`,
+not the current v9 source identity, a final commit/tree, or a reproducible plugin artifact.
 No repository-local or Tencent Cloud #2 counted-Mock, protected external
 evaluation, independent benign/malicious corpus, exact-candidate independent
 audit, final Linux `.so`, exact-main CI, tag, or Release evidence was provided.
@@ -737,8 +759,8 @@ ledger proof, exact-main CI, or independent audit has passed.
 ```text
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
-working_tree_classifier_policy_version: classifier-policy-v8
-working_tree_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+working_tree_classifier_policy_version: classifier-policy-v9
+working_tree_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 verification_status: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 ```

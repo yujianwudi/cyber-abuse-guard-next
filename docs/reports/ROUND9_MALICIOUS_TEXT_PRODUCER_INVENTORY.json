@@ -29,14 +29,14 @@
       "path": "internal/plugin/disposition.go",
       "function": "eligibleMaliciousWinner",
       "contract": "plugin requires CandidateBlockEligibility and closed winner proof",
-      "function_ast_sha256": "29017066edda368cd134864c9149aedc0dd2c20781999874fa3ec73ed784d572"
+      "function_ast_sha256": "942547b425830a5c67381d048bfc812f0cc6502f237de97b9162fa3f7690be92"
     },
     {
       "id": "plugin-inspection-disposition",
       "path": "internal/plugin/disposition.go",
       "function": "inspectionDisposition",
       "contract": "ineligible ActionBlock is downgraded before block_malicious_text",
-      "function_ast_sha256": "d7b2d45432932bbb293ee1cf3e3d4e1fe97752989afdebe86492a39f33d66ef3"
+      "function_ast_sha256": "66a8f51b868f0dd29c9e948568ee690f126eef124fdb588b9cbfb4d44fedac5b"
     },
     {
       "id": "plugin-management-transport-projection",
@@ -215,7 +215,7 @@
     {
       "id": "action-016-role-aware-candidate",
       "path": "internal/classifier/roles.go",
-      "function": "withRoleAwareFindingOrigin",
+      "function": "withRoleAwareFindingOriginAndScope",
       "kind": "block_capable_call",
       "symbol": "candidateActionFor",
       "ordinal": 1,
@@ -255,6 +255,17 @@
       "node_ast_sha256": "8102c559cc1fe00ba8fcf3e51bbea519396bd6b61d6a122c85c10e3f28befbcc",
       "gate_id": "plugin-management-transport-projection",
       "gate_relation": "transport_projection_preserves_separate_decision_kind"
+    },
+    {
+      "id": "action-020-bind-enforcement-scope-candidate",
+      "path": "internal/classifier/eligibility.go",
+      "function": "bindResultCandidateEnforcementScope",
+      "kind": "block_capable_call",
+      "symbol": "candidateActionFor",
+      "ordinal": 1,
+      "node_ast_sha256": "f94b21bd32c1bd44e0a51c3706418d0a5381fe95ac271d091248348c9d8182d4",
+      "gate_id": "classifier-candidate-eligibility",
+      "gate_relation": "candidate_action_for_requires_eligible"
     }
   ]
 }

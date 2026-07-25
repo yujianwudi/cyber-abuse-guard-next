@@ -66,6 +66,9 @@ var fourRepoIndependentBlockingCarriers = []fourRepoCarrier{
 	fourRepoResponsesInstructions,
 	fourRepoChatSystem,
 	fourRepoChatDeveloper,
+}
+
+var fourRepoInertNonUserCarriers = []fourRepoCarrier{
 	fourRepoChatFunctionDesc,
 	fourRepoChatLegacyFunction,
 	fourRepoResponsesFunctionDesc,
@@ -187,16 +190,21 @@ func TestFourRepositoryNonUserCarrierCrossProduct(t *testing.T) {
 	t.Cleanup(p.Shutdown)
 	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
 
-	independentlyActive := make(map[fourRepoCarrier]struct{}, len(fourRepoIndependentBlockingCarriers))
+	controlPlaneObservable := make(map[fourRepoCarrier]struct{},
+		len(fourRepoIndependentBlockingCarriers)+len(fourRepoInertNonUserCarriers))
 	for _, carrier := range fourRepoIndependentBlockingCarriers {
-		independentlyActive[carrier] = struct{}{}
+		controlPlaneObservable[carrier] = struct{}{}
+	}
+	for _, carrier := range fourRepoInertNonUserCarriers {
+		controlPlaneObservable[carrier] = struct{}{}
 	}
 
 	// The first four profiles represent the four public control families. Run
 	// every family through every CPA-visible non-user carrier so a format-specific
 	// role attribution regression cannot turn a global wrapper into user intent.
-	// Only independently active system/developer/instructions/schema carriers may
-	// emit a control-plane finding; historical outputs and call traffic stay inert.
+	// Active system/developer/instructions carriers and inert schema/description
+	// carriers may emit a bounded control-plane observation. Only the former may
+	// block; historical outputs and call traffic stay fully inert.
 	for profileIndex := 0; profileIndex < 4; profileIndex++ {
 		profile := fourRepoSurrogateProfiles[profileIndex]
 		for carrierIndex, carrier := range fourRepoNonUserCarriers {
@@ -211,7 +219,7 @@ func TestFourRepositoryNonUserCarrierCrossProduct(t *testing.T) {
 					t.Fatalf("non-user wrapper plus benign trusted user was handled: route=%+v", route)
 				}
 				expectedControlFindings := beforeControlFindings
-				if _, ok := independentlyActive[carrier]; ok {
+				if _, ok := controlPlaneObservable[carrier]; ok {
 					expectedControlFindings++
 				}
 				if after := p.counters.controlPlaneMetaOverride.Load(); after != expectedControlFindings {
@@ -299,19 +307,18 @@ func TestFourRepositoryTrustedUserWrapperAndBenignNearNeighborBoundary(t *testin
 	}
 }
 
-func TestFourRepositoryDirectNonUserBaseBehaviorIsInertWithoutSubjectPoisoning(t *testing.T) {
+func TestFourRepositoryRequestLocalAuthorityAndInertCarrierBoundaries(t *testing.T) {
 	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
 	p := New()
 	t.Cleanup(p.Shutdown)
-	hashCalls := countRequestHashes(p)
 	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: true\n  max_subjects: 64\n")
 
 	headers := http.Header{"Authorization": []string{"Bearer four-repository-non-user-base"}}
 	blockedBefore := p.counters.blocked.Load()
-	// Round 9 requires every non-user carrier to remain non-blocking. System,
-	// developer, instructions, schema, assistant, and tool traffic may contribute
-	// bounded untrusted audit evidence, but only a trusted current-user directive
-	// or a complete explicit referent can create malicious-text eligibility.
+	// Current request system/developer/instructions carriers may block an
+	// independently complete cyber-abuse behavior without becoming user-owned.
+	// Schemas, descriptions, assistant/tool history, and model-generated calls
+	// remain inert unless a trusted current user explicitly reactivates them.
 	seen := make(map[fourRepoCarrier]string, len(fourRepoNonUserCarriers))
 	assertUniqueGroup := func(group string, carriers []fourRepoCarrier) {
 		t.Helper()
@@ -323,6 +330,7 @@ func TestFourRepositoryDirectNonUserBaseBehaviorIsInertWithoutSubjectPoisoning(t
 		}
 	}
 	assertUniqueGroup("independent-block", fourRepoIndependentBlockingCarriers)
+	assertUniqueGroup("schema-or-description-inert", fourRepoInertNonUserCarriers)
 	assertUniqueGroup("historical-inert", fourRepoHistoricalInertCarriers)
 	if got, want := len(seen), len(fourRepoNonUserCarriers); got != want {
 		t.Fatalf("grouped carrier coverage=%d, want all %d carriers", got, want)
@@ -333,13 +341,24 @@ func TestFourRepositoryDirectNonUserBaseBehaviorIsInertWithoutSubjectPoisoning(t
 		}
 	}
 
-	t.Run("formerly-independent-now-inert", func(t *testing.T) {
+	t.Run("request-local-authority-blocks-without-subject-attribution", func(t *testing.T) {
 		for _, carrier := range fourRepoIndependentBlockingCarriers {
 			t.Run(string(carrier), func(t *testing.T) {
 				body, _ := fourRepoMarshalAndCheckBytes(t, carrier, fourRepoAbuseUser, fourRepoBenignUser)
 				route := callSubjectAdmissionRoute(t, p, fourRepoCarrierFormat(carrier), string(body), headers)
+				if !route.Handled || route.Reason != "cyber_abuse_guard_hard_policy" {
+					t.Fatalf("request-local authority abuse was not blocked: route=%+v", route)
+				}
+			})
+		}
+	})
+	t.Run("schema-or-description-inert", func(t *testing.T) {
+		for _, carrier := range fourRepoInertNonUserCarriers {
+			t.Run(string(carrier), func(t *testing.T) {
+				body, _ := fourRepoMarshalAndCheckBytes(t, carrier, fourRepoAbuseUser, fourRepoBenignUser)
+				route := callSubjectAdmissionRoute(t, p, fourRepoCarrierFormat(carrier), string(body), headers)
 				if route.Handled || route.Reason != "" {
-					t.Fatalf("non-user directive created a local block: route=%+v", route)
+					t.Fatalf("schema or description carrier was not inert: route=%+v", route)
 				}
 			})
 		}
@@ -360,20 +379,14 @@ func TestFourRepositoryDirectNonUserBaseBehaviorIsInertWithoutSubjectPoisoning(t
 	if state, present := p.runtime.Load().subject.Snapshot(subjectHash); present {
 		t.Fatalf("non-user base behaviors poisoned subject state: %+v", state)
 	}
-	if got, want := p.counters.blocked.Load(), blockedBefore; got != want {
+	if got, want := p.counters.blocked.Load(), blockedBefore+uint64(len(fourRepoIndependentBlockingCarriers)); got != want {
 		t.Fatalf("blocked counter=%d, want %d", got, want)
-	}
-	if got := *hashCalls; got != 0 {
-		t.Fatalf("request hash calls=%d, want none for non-blocking carriers", got)
 	}
 
 	cleanBody, _ := fourRepoMarshalAndCheckBytes(t, fourRepoChatUser, fourRepoBenignUser, "")
 	clean := callSubjectAdmissionRoute(t, p, fourRepoCarrierFormat(fourRepoChatUser), string(cleanBody), headers)
 	if clean.Handled || clean.Reason != "" {
 		t.Fatalf("same-auth clean follow-up was poisoned: route=%+v", clean)
-	}
-	if *hashCalls != 0 {
-		t.Fatalf("clean follow-up unexpectedly hashed the request: calls=%d", *hashCalls)
 	}
 }
 

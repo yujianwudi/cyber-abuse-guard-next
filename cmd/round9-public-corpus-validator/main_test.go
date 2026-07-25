@@ -267,9 +267,104 @@ func TestRound9PublicCorpusV13ClassifierScenarios(t *testing.T) {
 		t.Fatal(err)
 	}
 	if metrics.DirectBlocked != 12 || metrics.DirectAllowed != 12 || metrics.QuotedBlocked != 0 ||
-		metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 0 || metrics.ToolBlocked != 0 ||
+		metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 2 || metrics.ToolBlocked != 2 ||
 		metrics.SerializedRouteExecutions != 120 {
 		t.Fatalf("unexpected classifier metrics: %+v", metrics)
+	}
+}
+
+func TestActiveRequestCarrierGroundTruthIsCompleteAndPerPayload(t *testing.T) {
+	t.Parallel()
+	expected := map[string]string{
+		"keysmith-main":                       groundTruthAllowOrAudit,
+		"mdx-v5":                              groundTruthAllowOrAudit,
+		"mdx-v35":                             groundTruthAllowOrAudit,
+		"codexx-gpt56":                        groundTruthBlockMalicious,
+		"codexx-gpt54":                        groundTruthBlockMalicious,
+		"codexx-gpt55":                        groundTruthAllowOrAudit,
+		"codexx-jeli":                         groundTruthAllowOrAudit,
+		"codexx-seagull3":                     groundTruthAllowOrAudit,
+		"keysmith-branch-head":                groundTruthAllowOrAudit,
+		"mdx-skill-dwarf-expert":              groundTruthAllowOrAudit,
+		"mdx-reference-dwarf-coding":          groundTruthAllowOrAudit,
+		"mdx-reference-dwarfdump":             groundTruthAllowOrAudit,
+		"mdx-reference-readelf":               groundTruthAllowOrAudit,
+		"mdx-skill-anti-debugging":            groundTruthAllowOrAudit,
+		"mdx-matrix-anti-debugging":           groundTruthAllowOrAudit,
+		"mdx-skill-binary-protection-bypass":  groundTruthAllowOrAudit,
+		"mdx-matrix-binary-protection-bypass": groundTruthAllowOrAudit,
+		"mdx-skill-code-obfuscation":          groundTruthAllowOrAudit,
+		"mdx-skill-symbolic-execution":        groundTruthAllowOrAudit,
+		"mdx-cookbook-angr":                   groundTruthAllowOrAudit,
+		"mdx-skill-vm-bytecode-reverse":       groundTruthAllowOrAudit,
+		"codex55-pr9-compact":                 groundTruthAllowOrAudit,
+		"mdx-v41":                             groundTruthAllowOrAudit,
+		"mdx-v41-skills":                      groundTruthAllowOrAudit,
+	}
+	manifest := loadPublicManifest(t)
+	if len(manifest.Payloads) != len(expected) {
+		t.Fatalf("public-v13 payloads=%d oracle entries=%d", len(manifest.Payloads), len(expected))
+	}
+	seen := make(map[string]struct{}, len(manifest.Payloads))
+	blocked := make([]string, 0, 2)
+	for _, payload := range manifest.Payloads {
+		want, ok := expected[payload.ID]
+		if !ok {
+			t.Fatalf("public-v13 payload %q has no explicit expected projection", payload.ID)
+		}
+		got, err := activeRequestCarrierGroundTruth(payload.ID)
+		if err != nil {
+			t.Fatalf("payload %q: %v", payload.ID, err)
+		}
+		if got != want {
+			t.Fatalf("payload %q projection=%q want %q", payload.ID, got, want)
+		}
+		if _, duplicate := seen[payload.ID]; duplicate {
+			t.Fatalf("public-v13 payload ID %q is duplicated", payload.ID)
+		}
+		seen[payload.ID] = struct{}{}
+		if got == groundTruthBlockMalicious {
+			blocked = append(blocked, payload.ID)
+		}
+	}
+	if len(blocked) != 2 || blocked[0] != "codexx-gpt56" || blocked[1] != "codexx-gpt54" {
+		t.Fatalf("active-carrier block IDs=%v", blocked)
+	}
+}
+
+func TestActiveRequestCarrierGroundTruthRejectsUnknownPayloads(t *testing.T) {
+	t.Parallel()
+	for _, payloadID := range []string{"", "unknown", "codexx-gpt56 ", "CODEXX-GPT54"} {
+		payloadID := payloadID
+		t.Run(fmt.Sprintf("id=%q", payloadID), func(t *testing.T) {
+			groundTruth, err := activeRequestCarrierGroundTruth(payloadID)
+			if err == nil || groundTruth != "" {
+				t.Fatalf("unknown payload projection=%q err=%v", groundTruth, err)
+			}
+		})
+	}
+}
+
+func TestActiveRequestCarrierGroundTruthHasNoCandidateResultInput(t *testing.T) {
+	t.Parallel()
+	var oracle func(string) (string, error) = activeRequestCarrierGroundTruth
+	candidateOutputs := []classifier.Result{
+		{},
+		{Action: classifier.ActionAllow},
+		{Action: classifier.ActionBlock, RuleIDs: []string{"META-OVERRIDE-001"}},
+		{Action: classifier.ActionBlock, BlockEligibility: &classifier.CandidateBlockEligibility{Eligible: true}},
+	}
+	for index, candidateOutput := range candidateOutputs {
+		t.Run(fmt.Sprintf("candidate-%d-action-%s-rules-%d", index, candidateOutput.Action, len(candidateOutput.RuleIDs)), func(t *testing.T) {
+			blocked, err := oracle("codexx-gpt56")
+			if err != nil || blocked != groundTruthBlockMalicious {
+				t.Fatalf("block projection changed: projection=%q err=%v", blocked, err)
+			}
+			allowed, err := oracle("keysmith-main")
+			if err != nil || allowed != groundTruthAllowOrAudit {
+				t.Fatalf("allow projection changed: projection=%q err=%v", allowed, err)
+			}
+		})
 	}
 }
 

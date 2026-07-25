@@ -654,7 +654,7 @@ round6-regression:
 		TestWrapperAuditFastPathPreservesSecurityEvents \
 		TestBalancedAuditOnTrustedUserWrapperPersists \
 		TestBalancedAuditOnWrapperOnlyAllocationAcceptance \
-		TestRound6LongText270KiBRolePositionMatrixHonorsCurrentUserOwnership \
+		TestRound6LongText270KiBActiveRolePositionMatrixBlocks \
 		TestRound6LongTextOneMiBPositionMatrixBlocks \
 		TestRound6CrossWindowCredentialCanaryBlocks \
 		TestRound6CrossWindowNegationAndBenignRemainAllowed \

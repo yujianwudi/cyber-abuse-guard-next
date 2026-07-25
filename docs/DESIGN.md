@@ -1,8 +1,8 @@
 # CPA Cyber Abuse Guard v0.16 Round 9 Design
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 ## Scope, release state, and invariants
@@ -286,12 +286,15 @@ For recognized role histories, each retained segment is classified on its own,
 so old explicit abuse cannot be hidden by appending benign turns. Adjacent user
 turns are additionally classified as a pair to preserve follow-up semantics
 across an intervening assistant refusal. Non-user text is never combined with
-user evidence and remains inspectable only as inert or auditable carrier
-content. It cannot produce a malicious-text block unless a later current,
-trusted user directive proves the bounded referent chain and the reactivated
-candidate passes the same eligibility gate. Ambiguous or role-less envelopes
-retain bounded inspection and audit evidence, but never a legacy malicious-text
-block without trusted current-user ownership.
+user evidence. A structurally proven active system/developer instruction or
+terminal provider-native tool result may block only its own independently
+complete harmful candidate under `request_local_system` or
+`request_local_tool`; it is never user-owned and never enters subject state.
+Assistant history, tool schemas, nonterminal tool results, and other carrier
+content remain inert or auditable unless a later current trusted-user directive
+proves the bounded referent chain and the reactivated candidate passes the same
+eligibility gate. Ambiguous or role-less envelopes retain bounded inspection
+and audit evidence, but never gain request authority.
 
 ### Defensive quotation and referential reactivation
 
@@ -395,7 +398,7 @@ These mechanisms remain stateless across independent API calls and do not
 attest to local instruction-file integrity.
 
 Ruleset `1.0.10` identifies the embedded YAML assets only. The complete
-code-level behavior is separately identified as `classifier-policy-v8`; its
+code-level behavior is separately identified as `classifier-policy-v9`; its
 exact SHA-256 is the canonical current identity in this document's prologue and
 `internal/classifier/policy_identity.go`.
 Its tested source list binds the classifier, matcher, normalizer, role logic,
@@ -465,11 +468,13 @@ classifier coverage are complete; finding confidence is
 `FindingCompleteRequest`; the winning finding origin is the closed,
 text-free `user_content` value; the behavior graph contains `BaseBehavior`;
 the classifier returned an eligible `block_malicious_text` decision; and the
-score is at or above the configured `hard_block` threshold. System, assistant,
-tool, tool-payload, roleless, unknown, mixed-role, or lower-confidence findings
-remain inspectable and auditable but are ineligible for malicious-text blocking
-and cannot accumulate subject risk. A Strict incomplete/opaque request decision
-is a separate disposition and never supplies a malicious winner or subject hit.
+score is at or above the configured `hard_block` threshold. Every system,
+assistant, tool, tool-payload, roleless, unknown, mixed-role, or
+lower-confidence finding is ineligible for subject accumulation. A structurally
+proven active system/developer instruction or terminal tool result may still
+produce its request-local malicious-text block, while the other non-user cases
+remain inert or auditable. A Strict incomplete/opaque request decision is a
+separate disposition and never supplies a malicious winner or subject hit.
 
 User authorship is a separate, zero-value-untrusted transient proof rather than
 an inference from `RoleUser`. The extractor marks it trusted only for recognized
@@ -839,7 +844,7 @@ SSE stream with terminal frames; returning successful chunks would force HTTP
 ## Build identity and release reproducibility
 
 Builds link immutable version, full commit SHA, ruleset version/hash,
-`classifier-policy-v8` and its exact policy SHA-256, streaming-scanner identity,
+`classifier-policy-v9` and its exact policy SHA-256, streaming-scanner identity,
 and dirty state. Build metadata and the verifier bind
 these identities. Candidate mode requires a clean worktree, exact expected
 commit/tree, the commit timestamp, an absent stable `v0.16` tag, and forbids

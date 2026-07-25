@@ -129,6 +129,7 @@ type DecisionExplanation struct {
 	EligibilityReasonFlags     uint64                  `json:"eligibility_reason_flags"`
 	InspectionComplete         bool                    `json:"inspection_complete"`
 	EvidenceOwnedByCurrentUser bool                    `json:"evidence_owned_by_current_user"`
+	EnforcementScope           EnforcementScope        `json:"enforcement_scope,omitempty"`
 	CurrentExecutionActProven  bool                    `json:"current_execution_act_proven"`
 	HarmfulCoreComplete        bool                    `json:"harmful_core_complete"`
 	OperationallyActionable    bool                    `json:"operationally_actionable"`

@@ -1,8 +1,8 @@
 # Known Limitations — v0.16 Round 9 development candidate
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -302,8 +302,8 @@ for any of the three missing runtime evidence classes.
 
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
-    `classifier-policy-v8` / SHA-256
-`b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`,
+    `classifier-policy-v9` / SHA-256
+`06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical

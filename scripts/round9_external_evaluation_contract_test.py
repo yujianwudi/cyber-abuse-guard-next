@@ -149,7 +149,7 @@ class ExternalEvaluationContractTest(unittest.TestCase):
             commit="5" * 40,
             tree="6" * 40,
             so_sha256="7" * 64,
-            classifier_policy_version="classifier-policy-v8",
+            classifier_policy_version="classifier-policy-v9",
             classifier_policy_sha256="8" * 64,
             ruleset_version="1.0.10",
             ruleset_sha256="9" * 64,
@@ -322,7 +322,7 @@ class ExternalEvaluationContractTest(unittest.TestCase):
             ("cpa_image_id", "2" * 64),
             ("counted_mock_image_id", "sha256:short"),
             ("ruleset_version", "1.0.11"),
-            ("tag", "v0.16-rc.4"),
+            ("tag", "v0.16-rc.3"),
         ):
             with self.subTest(field=field):
                 changed = copy.copy(args)

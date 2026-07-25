@@ -326,7 +326,7 @@ jobs:
           [[ "$(git rev-parse 'HEAD^{tree}')" == "$EXPECTED_TREE" ]]
           [[ "$(git rev-parse "${{ inputs.tag }}^{tag}")" == "$EXPECTED_TAG_OBJECT" ]]
           [[ -z "$(git status --porcelain)" ]]
-          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v8"' internal/classifier/policy_identity.go
+          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v9"' internal/classifier/policy_identity.go
           grep -E '^const ClassifierPolicySHA256 = "[0-9a-f]{64}"$' internal/classifier/policy_identity.go
           if grep -F 'ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d' internal/classifier/policy_identity.go; then
             exit 1
@@ -519,7 +519,7 @@ jobs:
             .round9.counted_mock == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
             .round9.external_evaluation == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
             .round9.external_ledger_proof == {state:"NOT_PROVIDED",reason:"EXTERNAL_EVALUATION_REQUIRED"} and
-            .round9.classifier.version == "classifier-policy-v8" and
+            .round9.classifier.version == "classifier-policy-v9" and
             .round9.ruleset.version == "1.0.10" and
             .round9.release.tag == "v0.16-rc.4" and
             .round9.release.title == "v0.16-rc.4 - Round 9 counted-Mock candidate; independent audit required" and
@@ -1029,7 +1029,7 @@ jobs:
             --argjson host_run "$HOST_RUN_ID" --argjson host_attempt "$HOST_RUN_ATTEMPT" '
             .schema_version == 6 and .release_phase == "publish" and .artifact_count == 19 and
             .round9.release_lane == "round9" and .round9.corpus_contract_status == "PASS" and
-            .round9.classifier.version == "classifier-policy-v8" and
+            .round9.classifier.version == "classifier-policy-v9" and
             .round9.ruleset.version == "1.0.10" and
             .round9.audit_contract.schema_version == 6 and
             .round9.audit_contract.raw_capture_schema_version == 4 and

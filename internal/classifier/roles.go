@@ -616,8 +616,8 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			markQuotedOrInertSuppressed(&candidate)
 			quotedOrInertSuppressed = true
 		}
-		candidate = withRoleAwareFindingOrigin(
-			candidate, origin, mode, thresholds,
+		candidate = withRoleAwareFindingOriginAndScope(
+			candidate, origin, enforcementScopeForProfiledGroup(group.refs), mode, thresholds,
 		)
 		c.annotateProfiledResult(&candidate, group.refs, false, policy, mode, thresholds)
 		if candidate.DecisionExplanation != nil && candidate.DecisionExplanation.QuotedOrInertSuppressed {
@@ -865,6 +865,14 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 			}
 
 			normalized := string(views.standardRunes)
+			// A structurally proven inert review may contain sentence/connective
+			// cues inside the quoted referent. Do not let the local-subcandidate
+			// pre-pass reinterpret those quoted clauses as an independent tail;
+			// a real directive appended outside the quote makes the full review
+			// proof fail and therefore still reaches the checks below.
+			if c.isInertQuotedSafetyReview(normalized) {
+				continue
+			}
 			if referent, ok := c.quotedSafetyReviewReactivationReferent(normalized); ok {
 				candidate := c.classifyWithPolicy([]string{referent}, mode, thresholds, policy, false)
 				candidate = withRoleAwareFindingOrigin(
@@ -1039,9 +1047,17 @@ func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUse
 	groups := make([]profiledSegmentGroup, 0, len(segments))
 	indexes := make(map[profiledSegmentGroupKey]int, len(segments))
 	activeTurnIndex := -1
+	terminalConversationIndex := -1
+	terminalTurnIndex := -1
 	for _, segment := range segments {
 		if segment.IsCurrentTurn && segment.TurnIndex > activeTurnIndex {
 			activeTurnIndex = segment.TurnIndex
+		}
+		if segment.ConversationIndex > terminalConversationIndex {
+			terminalConversationIndex = segment.ConversationIndex
+		}
+		if segment.TurnIndex > terminalTurnIndex {
+			terminalTurnIndex = segment.TurnIndex
 		}
 	}
 	if activeTurnIndex < 0 {
@@ -1056,7 +1072,8 @@ func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUse
 			if !trustedUserContentSegment(segment) || segment.IsCurrentTurn || profiledContentInert(segment.ContentKind) {
 				continue
 			}
-		} else if !profiledSegmentClassifiable(segment, activeTurnIndex) {
+		} else if !profiledSegmentClassifiable(segment, activeTurnIndex) &&
+			!profiledRequestLocalToolResult(segment, terminalConversationIndex, terminalTurnIndex) {
 			continue
 		}
 		effectiveCurrent := profiledEffectiveCurrentTurn(segment, activeTurnIndex)
@@ -1077,7 +1094,8 @@ func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUse
 		group := &groups[groupIndex]
 		group.refs = append(group.refs, profiledSegmentRef{index: index, segment: segment})
 		group.parts = append(group.parts, segment.Text)
-		group.activeDirective = group.activeDirective || profiledContentActiveDirective(segment.ContentKind)
+		group.activeDirective = group.activeDirective || profiledContentActiveDirective(segment.ContentKind) ||
+			profiledRequestLocalToolResult(segment, terminalConversationIndex, terminalTurnIndex)
 		group.structuredTool = group.structuredTool || segment.Provenance == extract.ProvenanceToolPayload ||
 			segment.ContentKind == extract.ContentKindToolCallArguments
 	}
@@ -1334,6 +1352,50 @@ func profiledSegmentClassifiable(segment extract.Segment, activeTurnIndex int) b
 		// non-current unless the extractor marks it explicitly.
 		return segment.IsCurrentTurn || segment.TurnIndex < 0
 	}
+}
+
+// profiledRequestLocalToolResult identifies a terminal provider-native tool
+// result that directly feeds the model response being requested. Earlier tool
+// results remain historical evidence and require an explicit current-user
+// referent before they can become active.
+func profiledRequestLocalToolResult(
+	segment extract.Segment,
+	terminalConversationIndex int,
+	terminalTurnIndex int,
+) bool {
+	if !profiledRequestLocalToolResultCarrier(segment) {
+		return false
+	}
+	return profiledTerminalConversationPosition(
+		segment.ConversationIndex, segment.TurnIndex,
+		terminalConversationIndex, terminalTurnIndex,
+	)
+}
+
+func profiledRequestLocalToolResultCarrier(segment extract.Segment) bool {
+	if segment.Role != extract.RoleTool || segment.Provenance != extract.ProvenanceContent ||
+		segment.ContentKind != extract.ContentKindToolResult || segment.ScopeID == 0 ||
+		segment.FieldPathHash == "" {
+		return false
+	}
+	return true
+}
+
+// profiledTerminalConversationPosition is shared by batch and streaming. A
+// provider history item is authoritative whenever conversation coordinates are
+// available. Only wholly unindexed inputs fall back to the highest turn; this
+// keeps an earlier unindexed tool result historical even when it is physically
+// emitted after the terminal turn.
+func profiledTerminalConversationPosition(
+	conversationIndex int,
+	turnIndex int,
+	terminalConversationIndex int,
+	terminalTurnIndex int,
+) bool {
+	if conversationIndex >= 0 || terminalConversationIndex >= 0 {
+		return conversationIndex >= 0 && conversationIndex == terminalConversationIndex
+	}
+	return turnIndex == terminalTurnIndex
 }
 
 func profiledEffectiveCurrentTurn(segment extract.Segment, activeTurnIndex int) bool {
@@ -2887,6 +2949,66 @@ func findingOriginForSegment(segment extract.Segment) FindingOrigin {
 	return FindingOriginNonUserOrUntrusted
 }
 
+// enforcementScopeForSegment preserves user attribution while recognizing the
+// two closed non-user carriers that directly control the model response. Tool
+// results reach this helper only after the profiled batch/streaming path proves
+// that they are terminal request-local input rather than replayed history.
+func enforcementScopeForSegment(segment extract.Segment) EnforcementScope {
+	if findingOriginForSegment(segment) == FindingOriginUserContent {
+		return EnforcementScopeCurrentUser
+	}
+	if segment.ScopeID == 0 || segment.FieldPathHash == "" ||
+		segment.Provenance != extract.ProvenanceContent {
+		return EnforcementScopeNone
+	}
+	switch {
+	case segment.Role == extract.RoleSystem &&
+		segment.ContentKind == extract.ContentKindNaturalLanguageDirective:
+		return EnforcementScopeRequestLocalSystem
+	case segment.Role == extract.RoleTool && segment.ContentKind == extract.ContentKindToolResult:
+		return EnforcementScopeRequestLocalTool
+	default:
+		return EnforcementScopeNone
+	}
+}
+
+// enforcementScopeForProfiledGroup binds a candidate to the active authority
+// owner anywhere in one extractor-proven group. Fenced code/configuration is a
+// carrier rather than an authority declaration, so selecting refs[0] (batch)
+// or the most recently streamed field made ownership depend on physical order.
+// The group key fields prove that every carrier belongs to the same owner; one
+// qualifying directive/tool-result field then supplies the enforcement scope
+// for the complete group.
+func enforcementScopeForProfiledGroup(refs []profiledSegmentRef) EnforcementScope {
+	if len(refs) == 0 {
+		return EnforcementScopeNone
+	}
+	base := refs[0].segment
+	if base.ScopeID == 0 {
+		return EnforcementScopeNone
+	}
+	scope := EnforcementScopeNone
+	for _, ref := range refs {
+		segment := ref.segment
+		if segment.Role != base.Role || segment.Provenance != base.Provenance ||
+			segment.UserAttribution != base.UserAttribution ||
+			segment.ConversationIndex != base.ConversationIndex ||
+			segment.TurnIndex != base.TurnIndex || segment.IsCurrentTurn != base.IsCurrentTurn ||
+			segment.ScopeID != base.ScopeID {
+			return EnforcementScopeNone
+		}
+		candidate := enforcementScopeForSegment(segment)
+		if candidate == EnforcementScopeNone {
+			continue
+		}
+		if scope != EnforcementScopeNone && scope != candidate {
+			return EnforcementScopeNone
+		}
+		scope = candidate
+	}
+	return scope
+}
+
 func userCombinationFindingOrigin(trusted bool) FindingOrigin {
 	// This helper is used only by the legacy/non-profiled conversation path.
 	// Trust in the role label alone does not prove current-turn ownership.
@@ -2926,6 +3048,16 @@ func withFindingOrigin(result Result, origin FindingOrigin) Result {
 // unknown-role fallback: callers without proven role provenance retain their
 // existing conservative behavior.
 func withRoleAwareFindingOrigin(result Result, origin FindingOrigin, mode Mode, thresholds Thresholds) Result {
+	return withRoleAwareFindingOriginAndScope(result, origin, EnforcementScopeNone, mode, thresholds)
+}
+
+func withRoleAwareFindingOriginAndScope(
+	result Result,
+	origin FindingOrigin,
+	scope EnforcementScope,
+	mode Mode,
+	thresholds Thresholds,
+) Result {
 	result = withFindingOrigin(result, origin)
 	// Result is passed by value, but its explanation is a pointer. Actor binding
 	// narrows eligibility and may remove an ineligible hard floor, so clone the
@@ -2935,7 +3067,21 @@ func withRoleAwareFindingOrigin(result Result, origin FindingOrigin, mode Mode, 
 		explanation := *result.DecisionExplanation
 		result.DecisionExplanation = &explanation
 	}
-	bindResultCandidateActor(&result, origin == FindingOriginUserContent, mode, thresholds)
+	if origin == FindingOriginUserContent {
+		bindResultCandidateActor(&result, true, mode, thresholds)
+	} else if scope == EnforcementScopeRequestLocalSystem || scope == EnforcementScopeRequestLocalTool {
+		// Prompt-override wrappers without an independently complete cyber-abuse
+		// base behavior remain audit-only outside current user ownership. This
+		// prevents provider policies and tool diagnostics from being blocked merely
+		// because they describe instruction hierarchy or refusal suppression.
+		if standaloneMetaControlResult(result) {
+			bindResultCandidateActor(&result, false, mode, thresholds)
+		} else {
+			bindResultCandidateEnforcementScope(&result, scope, mode, thresholds)
+		}
+	} else {
+		bindResultCandidateActor(&result, false, mode, thresholds)
+	}
 	if origin != FindingOriginNonUserOrUntrusted || result.Behavior == nil ||
 		!result.Behavior.Wrapper || result.Behavior.BaseBehavior {
 		return result

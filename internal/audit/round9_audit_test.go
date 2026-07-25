@@ -761,6 +761,7 @@ func round9EligibleDecisionExplanationFixture() *DecisionExplanation {
 	explanation.EligibilityReasonFlags = eligibilityFlagExplicitMalice
 	explanation.InspectionComplete = true
 	explanation.EvidenceOwnedByCurrentUser = true
+	explanation.EnforcementScope = EnforcementScopeCurrentUser
 	explanation.CurrentExecutionActProven = true
 	explanation.HarmfulCoreComplete = true
 	explanation.OperationallyActionable = true

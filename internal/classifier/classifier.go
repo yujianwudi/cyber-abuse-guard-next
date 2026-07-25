@@ -26,6 +26,14 @@ const (
 	maxNegationReversalTailBytes  = 512
 	maxInertReviewPriorParts      = 8
 	maxInertReviewPriorBytes      = 32 << 10
+	// Quoted-review credit is optional and deliberately local. The quoted
+	// referent may be long enough to carry a realistic transcript, while the
+	// analysis frame around it must remain a small, exhaustively inspected
+	// association window.
+	maxInertQuotedReviewReferentBytes  = 64 << 10
+	maxInertQuotedReviewFrameBytes     = maxMetaOverrideSplitAssociationBytes
+	maxInertQuotedReviewFrameClauses   = 8
+	maxInertQuotedReviewDelimiterBytes = 32
 
 	ordinaryCandidateEvidenceIntent      uint8 = 1 << 0
 	ordinaryCandidateEvidenceOperational uint8 = 1 << 1
@@ -880,8 +888,7 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		)
 		hasReactivatedQuotedReferent = true
 	}
-	inertQuotedSafetyReview = !truncated && !hasIndependentMaliciousExecutionClause(currentText) &&
-		c.isInertQuotedSafetyReview(currentText) &&
+	inertQuotedSafetyReview = !truncated && c.isInertQuotedSafetyReview(currentText) &&
 		c.priorPartsAllowInertQuotedSafetyReview(parts, currentPartIndex, mode, thresholds, policy)
 	quotedOrInertSuppressed = inertQuotedSafetyReview ||
 		(previousInertQuotedSafetyReview && !quotedReviewImplementationFollowUp)
@@ -3438,70 +3445,173 @@ func hasExplicitHarmConflict(text string) bool {
 	)
 }
 
-// isInertQuotedSafetyReview recognizes one deliberately narrow user request:
-// explain or review a single closed quotation, explicitly characterize it as
-// unsafe, and end with an exact non-execution boundary. The quoted bytes retain
-// their matcher signals so a later implementation follow-up can reactivate the
-// underlying category, but they do not create a current-turn cyber-abuse
-// candidate. Ambiguous quotations and any unquoted directive fail closed.
+// isInertQuotedSafetyReview recognizes one deliberately bounded user request:
+// analyze a single closed quotation, characterize its safety risk, and provide
+// an explicit non-execution boundary. The quoted bytes retain their matcher
+// signals so a later implementation follow-up can reactivate the underlying
+// category, but they do not create a current-turn cyber-abuse candidate.
+// Ambiguous quotations and any independent directive outside the quotation fail
+// closed.
 func (c *Classifier) isInertQuotedSafetyReview(text string) bool {
 	_, ok := c.inertQuotedSafetyReviewReferent(text)
 	return ok
 }
 
 func (c *Classifier) inertQuotedSafetyReviewReferent(text string) (string, bool) {
-	if text == "" || !strings.Contains(text, "quoted ") || !strings.ContainsAny(text, "\"'`") {
+	if c == nil || text == "" || !inertQuotedSafetyReviewHasDelimiter(text) ||
+		!inertQuotedSafetyReviewMayReference(text) {
 		return "", false
 	}
-	if !strings.Contains(text, "quoted request") && !strings.Contains(text, "quoted prompt") {
+	if len(text) > maxInertQuotedReviewReferentBytes+maxInertQuotedReviewFrameBytes+maxInertQuotedReviewDelimiterBytes {
 		return "", false
 	}
-
-	spans, complete := metaOverrideQuotedSpans(text)
+	spans, complete := metaOverrideQuotedSpansWithLimit(text, 2)
 	if !complete || len(spans) != 1 {
 		return "", false
 	}
 	quoted := spans[0]
-	if quoted.start <= 0 || quoted.end <= quoted.start+2 || quoted.end >= len(text) {
+	if quoted.start < 0 || quoted.end <= quoted.start || quoted.end > len(text) {
 		return "", false
 	}
-
 	prefix := strings.TrimSpace(text[:quoted.start])
 	suffix := strings.TrimSpace(text[quoted.end:])
-	if !inertQuotedSafetyReviewPrefix(prefix) {
+	if prefix == "" && suffix == "" ||
+		len(prefix) > maxInertQuotedReviewFrameBytes ||
+		len(suffix) > maxInertQuotedReviewFrameBytes-len(prefix) {
 		return "", false
-	}
-	clauses, overflow := metaOverrideDirectiveClausesBounded(suffix)
-	if overflow || len(clauses) != 2 ||
-		!inertQuotedSafetyAssessment(clauses[0].text) ||
-		!inertQuotedNonExecutionBoundary(clauses[1].text) {
-		return "", false
-	}
-
-	// The rare structural path may spend one bounded matcher pass proving that
-	// the material before the quote contains no independent cyber-abuse,
-	// implementation, or control-plane directive. The common route exits above
-	// without allocating.
-	prefixRunes := []rune(prefix)
-	prefixSignals := make([]bool, c.signalCount)
-	c.standardMatcher.match(prefixRunes, prefixSignals)
-	if c.compactMatcher != nil {
-		compactScratch := make([]bool, c.compactMatcher.maxPatternLength)
-		c.compactMatcher.matchCompactWithScratch(prefixRunes, prefixSignals, compactScratch)
-	}
-	if prefixSignals[c.implementationRequest] || c.hasMetaOverrideSignal(prefixSignals) || hasNegationReversalFraming(prefix) {
-		return "", false
-	}
-	for _, rule := range c.rules {
-		if prefixSignals[rule.intent] || prefixSignals[rule.object] {
-			return "", false
-		}
 	}
 	referent, ok := quotedSafetyReviewSpanContent(text, quoted)
-	if !ok {
+	if !ok || len(referent) > maxInertQuotedReviewReferentBytes {
+		return "", false
+	}
+	if !c.inertQuotedSafetyReviewFrame(prefix, suffix) {
 		return "", false
 	}
 	return referent, true
+}
+
+func inertQuotedSafetyReviewHasDelimiter(text string) bool {
+	return strings.ContainsAny(text, "\"'`\u2018\u2019\u201c\u201d\u300c\u300d\u300e\u300f") ||
+		strings.Contains(text, "<sample>") || strings.Contains(text, "[sample]")
+}
+
+func inertQuotedSafetyReviewMayReference(text string) bool {
+	return containsAnyLiteral(text,
+		"quoted request", "quoted prompt", "quoted instruction", "quoted text", "quoted sample", "quoted example",
+		"following request", "following prompt", "following instruction", "following sample", "following example", "following text",
+		"following passage", "following excerpt", "this request", "this prompt", "this instruction", "this sample", "this example", "this text",
+		"request below", "prompt below", "instruction below", "sample below", "example below", "text below",
+		"request above", "prompt above", "sample above", "example above", "quoted passage", "quoted excerpt", "code block", "fenced block",
+	)
+}
+
+// inertQuotedSafetyReviewFrame proves the small control frame around a quoted
+// referent. The quote itself is absent from this secondary frame scan; a
+// directive appended after the closing delimiter remains present and is
+// inspected as ordinary text. The request-level independent-clause gate still
+// runs separately before optional quoted-review credit is applied.
+func (c *Classifier) inertQuotedSafetyReviewFrame(prefix, suffix string) bool {
+	prefixClauses, prefixOverflow := metaOverrideDirectiveClausesBoundedWithLimit(
+		prefix, maxInertQuotedReviewFrameClauses,
+	)
+	if prefixOverflow {
+		return false
+	}
+	remaining := maxInertQuotedReviewFrameClauses - len(prefixClauses)
+	suffixClauses, suffixOverflow := metaOverrideDirectiveClausesBoundedWithLimit(suffix, remaining)
+	if suffixOverflow || len(prefixClauses)+len(suffixClauses) == 0 {
+		return false
+	}
+
+	outside := prefix
+	if outside != "" && suffix != "" {
+		outside += "\n"
+	}
+	outside += suffix
+	if c.inertQuotedSafetyReviewOutsideHasExecution(outside) {
+		return false
+	}
+
+	sawGovernor := false
+	sawAssessment := false
+	sawBoundary := false
+	residual := make([]string, 0, len(prefixClauses)+len(suffixClauses))
+	inspect := func(clause string, adjacent bool) {
+		governed := adjacent && inertQuotedSafetyAnalysisGovernor(clause, true)
+		assessment := inertQuotedSafetyAssessment(clause)
+		boundary := inertQuotedNonExecutionBoundary(clause)
+		sawGovernor = sawGovernor || governed
+		sawAssessment = sawAssessment || assessment
+		sawBoundary = sawBoundary || boundary
+		if !governed && !assessment && !boundary {
+			residual = append(residual, clause)
+		}
+	}
+	for index, clause := range prefixClauses {
+		inspect(clause.text, len(prefixClauses)-index <= 2)
+	}
+	for index, clause := range suffixClauses {
+		inspect(clause.text, index < 2)
+	}
+	return sawGovernor && sawAssessment && sawBoundary &&
+		c.inertQuotedSafetyReviewResidualIsBenign(residual)
+}
+
+func (c *Classifier) inertQuotedSafetyReviewOutsideHasExecution(outside string) bool {
+	if outside == "" {
+		return false
+	}
+	if hasIndependentMaliciousExecutionClause(outside) ||
+		quotedReviewFollowUpDisposition(outside, c.implementationStarts, c.implementationPatterns) == quotedReviewContinuationActive {
+		return true
+	}
+	for _, connector := range append([]string{
+		". ", "; ", "\n", "\r", " while ", " after that ", " additionally ",
+	}, quotedReviewContinuationConnectors...) {
+		for searchAt := 0; searchAt < len(outside); {
+			index := strings.Index(outside[searchAt:], connector)
+			if index < 0 {
+				break
+			}
+			index += searchAt
+			tail := strings.TrimSpace(outside[index+len(connector):])
+			if candidateCurrentExecutionTail(tail) &&
+				(candidateTailHasHarmfulObject(tail) ||
+					hasAffirmativeQuotedReviewContinuation(tail) ||
+					c.hasAffirmativeImplementationRequest(tail) ||
+					containsAnyLiteral(tail, "working code", "source code", "commands", "script", "payload", "operational steps")) {
+				return true
+			}
+			searchAt = index + len(connector)
+		}
+	}
+	return false
+}
+
+func (c *Classifier) inertQuotedSafetyReviewResidualIsBenign(clauses []string) bool {
+	if len(clauses) == 0 {
+		return true
+	}
+	text := strings.Join(clauses, ". ")
+	if text == "" || hasNegationReversalFraming(text) {
+		return text == ""
+	}
+	runes := []rune(text)
+	signals := make([]bool, c.signalCount)
+	c.standardMatcher.match(runes, signals)
+	if c.compactMatcher != nil {
+		compactScratch := make([]bool, c.compactMatcher.maxPatternLength)
+		c.compactMatcher.matchCompactWithScratch(runes, signals, compactScratch)
+	}
+	if signals[c.implementationRequest] || c.hasMetaOverrideSignal(signals) {
+		return false
+	}
+	for _, rule := range c.rules {
+		if signals[rule.intent] || signals[rule.object] {
+			return false
+		}
+	}
+	return true
 }
 
 func quotedSafetyReviewSpanContent(text string, span metaOverrideQuotedSpan) (string, bool) {
@@ -3539,7 +3649,7 @@ func (c *Classifier) isRawInertQuotedSafetyReview(text string) bool {
 }
 
 func (c *Classifier) rawInertQuotedSafetyReviewReferent(text string) (string, bool) {
-	if text == "" || !strings.ContainsAny(text, "\"'`") {
+	if text == "" || !inertQuotedSafetyReviewHasDelimiter(text) {
 		return "", false
 	}
 	var scratch normalizationScratch
@@ -4612,32 +4722,101 @@ func (c *Classifier) priorPartsAllowInertQuotedSafetyReview(parts []string, curr
 }
 
 func inertQuotedSafetyReviewPrefix(prefix string) bool {
-	prefix = strings.Join(strings.Fields(prefix), " ")
-	for _, allowed := range []string{
-		"explain why the quoted request", "explain why this quoted request",
-		"analyze why the quoted request", "analyze why this quoted request",
-		"analyse why the quoted request", "analyse why this quoted request",
-		"review why the quoted request", "review why this quoted request",
-		"explain why the quoted prompt", "explain why this quoted prompt",
-		"analyze why the quoted prompt", "analyze why this quoted prompt",
-		"analyse why the quoted prompt", "analyse why this quoted prompt",
-		"review why the quoted prompt", "review why this quoted prompt",
-	} {
-		if prefix == allowed || prefix == "for a defensive review, "+allowed {
+	clauses, overflow := metaOverrideDirectiveClausesBoundedWithLimit(prefix, maxInertQuotedReviewFrameClauses)
+	if overflow {
+		return false
+	}
+	for index := len(clauses) - 1; index >= 0 && len(clauses)-index <= 2; index-- {
+		if inertQuotedSafetyAnalysisGovernor(clauses[index].text, true) {
 			return true
 		}
 	}
 	return false
 }
 
+// inertQuotedSafetyAnalysisGovernor requires a directive-head analytical verb
+// bound to the neighboring quotation. A free-floating occurrence of "analyze"
+// or "review" is not enough, and operational "how to" framing is excluded.
+func inertQuotedSafetyAnalysisGovernor(clause string, quoteAdjacent bool) bool {
+	clause = inertQuotedSafetyTrimAnalysisIntro(clause)
+	if clause == "" || quotedReviewOperationalExplanationGovernor(clause) ||
+		hasNegationReversalFraming(clause) || containsAnyLiteral(clause,
+		"how to ", "step by step", "step-by-step", "exact steps", "detailed steps",
+		"working code", "ready-to-run", "ready to run", "source code", "give commands", "provide commands",
+	) {
+		return false
+	}
+	analyticalHead := hasAnyPrefix(clause,
+		"explain ", "analyze ", "analyse ", "review ", "assess ", "evaluate ", "audit ", "inspect ",
+		"classify ", "summarize ", "summarise ", "describe ",
+		"perform a security review of ", "perform a safety review of ", "perform a risk assessment of ",
+		"conduct a security review of ", "conduct a safety review of ", "conduct a risk assessment of ",
+	)
+	if !analyticalHead {
+		return false
+	}
+	explicitReference := containsAnyLiteral(clause,
+		"quoted request", "quoted prompt", "quoted instruction", "quoted text", "quoted sample", "quoted example", "quoted material",
+		"following request", "following prompt", "following instruction", "following text", "following sample", "following example",
+		"request below", "prompt below", "instruction below", "text below", "sample below", "example below",
+		"request above", "prompt above", "text above", "sample above", "example above",
+		"this request", "this prompt", "this instruction", "the request", "the prompt", "the instruction",
+		"code block", "fenced block", "the passage", "the excerpt",
+	)
+	return explicitReference || quoteAdjacent &&
+		(containsASCIIWord(clause, "it") || containsASCIIWord(clause, "this") || containsASCIIWord(clause, "that"))
+}
+
+func inertQuotedSafetyTrimAnalysisIntro(clause string) string {
+	clause = strings.Join(strings.Fields(clause), " ")
+	clause = quotedReviewTrimIntroductoryGovernors(clause)
+	for pass := 0; pass < 2; pass++ {
+		before := clause
+		for _, prefix := range []string{
+			"for a security audit, ", "for a safety audit, ", "for a defensive audit, ",
+			"for a security review, ", "for a safety review, ", "for a defensive review, ",
+			"as a security audit, ", "as a safety review, ", "as a defensive review, ",
+		} {
+			if strings.HasPrefix(clause, prefix) {
+				clause = quotedReviewTrimIntroductoryGovernors(strings.TrimSpace(clause[len(prefix):]))
+				break
+			}
+		}
+		if clause == before {
+			break
+		}
+	}
+	return clause
+}
+
 func inertQuotedSafetyAssessment(clause string) bool {
-	switch strings.Join(strings.Fields(clause), " ") {
+	clause = strings.Join(strings.Fields(clause), " ")
+	switch clause {
 	case "is harmful", "is unsafe", "is dangerous", "is abusive", "is malicious",
 		"should be refused", "should be declined", "must be refused":
 		return true
-	default:
+	}
+	safetyPurpose := containsAnyLiteral(clause,
+		"security audit", "safety audit", "defensive audit", "security review", "safety review", "defensive review", "risk assessment",
+		"risk", "harm", "harmful", "unsafe", "dangerous", "abusive", "malicious", "threat",
+		"policy violation", "security implication", "safety implication", "security concern", "safety concern",
+		"detection gap", "warning sign", "mitigation", "remediation", "defensive control", "safeguard",
+	)
+	clause = inertQuotedSafetyTrimAnalysisIntro(clause)
+	if clause == "" || quotedReviewOperationalExplanationGovernor(clause) ||
+		hasNegationReversalFraming(clause) || containsAnyLiteral(clause,
+		"how to ", "step by step", "step-by-step", "exact steps", "detailed steps", "working code", "ready-to-run", "source code",
+	) {
 		return false
 	}
+	if !safetyPurpose {
+		return false
+	}
+	return hasAnyPrefix(clause,
+		"explain ", "analyze ", "analyse ", "review ", "assess ", "evaluate ", "audit ", "inspect ",
+		"classify ", "summarize ", "summarise ", "describe ", "identify ", "list ", "recommend ",
+		"is ", "why ", "security risk", "safety risk", "abuse risk", "risk assessment", "mitigation", "remediation", "defensive control",
+	)
 }
 
 func inertQuotedNonExecutionBoundary(clause string) bool {
@@ -4662,9 +4841,31 @@ func inertQuotedNonExecutionBoundary(clause string) bool {
 		"keep the quoted request inert",
 		"keep the quoted prompt inert":
 		return true
-	default:
+	}
+	if clause == "" || metaOverrideHasDoubleNegatedInertDirective(clause) || hasNegationReversalFraming(clause) {
 		return false
 	}
+	if containsAnyLiteral(clause,
+		"keep the quoted", "keep this quoted", "keep the sample", "keep the example", "keep it", "keep the request", "keep the response",
+	) &&
+		containsAnyLiteral(clause, " inert", " non-operational", " nonoperational") {
+		return true
+	}
+	nonExecutionTarget := containsAnyLiteral(clause,
+		"execute", "implement", "apply", "follow", "obey", "carry out", "act on", "run it", "deploy", "build it", "reproduce",
+		"code", "source", "commands", "script", "payload", "instruction", "operational detail", "operational step", "execution step", "operations",
+	)
+	if !nonExecutionTarget {
+		return false
+	}
+	directNegative := hasAnyPrefix(clause,
+		"do not ", "don't ", "never ", "must not ", "should not ", "cannot ", "can't ",
+		"will not ", "would not ", "could not ", "may not ", "without ", "no ",
+	)
+	return directNegative || containsAnyLiteral(clause,
+		" without executing", " without implementing", " without applying", " without following",
+		" without code", " without commands", " without operational", " without adding operations",
+	)
 }
 
 // isLegitimateCategoryWorkflow recognizes a narrow set of ordinary identity

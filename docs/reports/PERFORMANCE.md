@@ -1,22 +1,24 @@
 # Performance Report — Round 9 status and historical development evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
-Last updated: 2026-07-24 (Asia/Shanghai)
+Last updated: 2026-07-25 (Asia/Shanghai)
 
 ## Round 9 current status
 
-The final Round 9 classifier/source snapshot has not been frozen. The latest
-Linux amd64 development benchmark binds the current working-tree identity
-`classifier-policy-v8` /
-`b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`
+The final Round 9 classifier/source snapshot has not been frozen. The current
+working-tree identity is `classifier-policy-v9` /
+`06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`
 and ruleset `1.0.10` /
-`e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`,
-but it is not bound to a final commit/tree, reproducible Linux `.so`, or any
-counted-Mock/Host boundary.
+`e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
+The latest Linux amd64 development benchmark below instead binds predecessor
+`classifier-policy-v8` /
+`b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`;
+it is retained development history and is not evidence for the v9 working tree,
+a final commit/tree, a reproducible Linux `.so`, or any counted-Mock/Host boundary.
 
 | Round 9 evidence | Current status |
 |---|---|

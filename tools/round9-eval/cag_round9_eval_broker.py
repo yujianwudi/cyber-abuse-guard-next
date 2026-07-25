@@ -750,8 +750,8 @@ def validate_dispatch(args: argparse.Namespace, repository: str) -> None:
     require_pattern(
         args.classifier_policy_version, IDENTIFIER, "candidate classifier policy version"
     )
-    if not args.classifier_policy_version.startswith("classifier-policy-v8"):
-        fail("candidate classifier policy is not a Round 9 v8 identity")
+    if not args.classifier_policy_version.startswith("classifier-policy-v9"):
+        fail("candidate classifier policy is not a Round 9 v9 identity")
     require_pattern(
         args.classifier_policy_sha256, HEX64, "candidate classifier policy SHA-256"
     )

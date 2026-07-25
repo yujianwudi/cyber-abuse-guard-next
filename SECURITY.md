@@ -1,8 +1,8 @@
 # Security Policy
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 ## Supported versions

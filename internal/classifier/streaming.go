@@ -553,13 +553,17 @@ type ScanSession struct {
 	refusedHistoryHadBestBefore   bool
 	profiledActiveTurnIndex       int
 	profiledMaxTurnIndex          int
+	profiledMaxConversationIndex  int
 	profiledSawCurrentTurn        bool
 	profiledGroupKey              profiledSegmentGroupKey
 	profiledGroupSet              bool
 	profiledGroupParts            []string
 	profiledGroupRefs             []profiledSegmentRef
+	profiledGroupRisk             []bool
 	profiledGroupActiveDirective  bool
 	profiledGroupStructuredTool   bool
+	profiledGroupAuthorityScope   EnforcementScope
+	profiledGroupAuthorityConv    int
 	profiledHistoricalKey         profiledSegmentGroupKey
 	profiledHistoricalSet         bool
 	profiledHistoricalResult      Result
@@ -572,6 +576,11 @@ type ScanSession struct {
 	profiledPendingToolResult     Result
 	profiledPendingToolHasResult  bool
 	profiledPendingToolTurnIndex  int
+	profiledPendingToolConvIndex  int
+	profiledPendingToolScope      EnforcementScope
+	profiledPendingToolIncomplete bool
+	profiledPendingIncompleteTurn int
+	profiledPendingIncompleteConv int
 	quotedOrInertSuppressed       bool
 
 	aborted  bool
@@ -592,16 +601,20 @@ func (c *Classifier) NewScanSession(mode Mode, thresholds Thresholds, policy Pol
 		return nil, fmt.Errorf("%w: compiled overlap %d must be smaller than WindowBytes %d", ErrInvalidScanLimits, overlap, normalized.WindowBytes)
 	}
 	return &ScanSession{
-		classifier:                   c,
-		mode:                         mode,
-		thresholds:                   validThresholdsOrDefault(thresholds),
-		policy:                       policy,
-		limits:                       normalized,
-		overlap:                      overlap,
-		coverage:                     Coverage{State: CoverageComplete},
-		profiledActiveTurnIndex:      -1,
-		profiledMaxTurnIndex:         -1,
-		profiledPendingToolTurnIndex: -1,
+		classifier:                    c,
+		mode:                          mode,
+		thresholds:                    validThresholdsOrDefault(thresholds),
+		policy:                        policy,
+		limits:                        normalized,
+		overlap:                       overlap,
+		coverage:                      Coverage{State: CoverageComplete},
+		profiledActiveTurnIndex:       -1,
+		profiledMaxTurnIndex:          -1,
+		profiledMaxConversationIndex:  -1,
+		profiledPendingToolTurnIndex:  -1,
+		profiledPendingToolConvIndex:  -1,
+		profiledPendingIncompleteTurn: -1,
+		profiledPendingIncompleteConv: -1,
 	}, nil
 }
 
@@ -637,6 +650,9 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 	}
 	if chunk.TurnIndex > s.profiledMaxTurnIndex {
 		s.profiledMaxTurnIndex = chunk.TurnIndex
+	}
+	if chunk.ConversationIndex > s.profiledMaxConversationIndex {
+		s.profiledMaxConversationIndex = chunk.ConversationIndex
 	}
 	if chunk.IsCurrentTurn {
 		s.profiledSawCurrentTurn = true
@@ -690,11 +706,37 @@ func (s *ScanSession) Finish() Result {
 	if s.coverage.State == CoverageComplete {
 		s.flushProfiledCurrentReferentScope()
 	}
+	if s.coverage.State == CoverageComplete && s.profiledPendingToolIncomplete &&
+		profiledTerminalConversationPosition(
+			s.profiledPendingIncompleteConv, s.profiledPendingIncompleteTurn,
+			s.profiledMaxConversationIndex, s.profiledMaxTurnIndex,
+		) {
+		// Tool-result authority is provisional while the request is streaming. A
+		// later conversation item makes this carrier historical and inert; only a
+		// result that is still terminal at Finish may turn lost cross-window/group
+		// proof into request-level incomplete inspection.
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+	}
 	if s.coverage.State == CoverageComplete {
 		s.flushIsolatedUserRun(nil)
-		if !s.profiledSawCurrentTurn && s.profiledPendingToolHasResult &&
-			s.profiledPendingToolTurnIndex == s.profiledMaxTurnIndex {
-			s.consider(s.profiledPendingToolResult, FindingOriginNonUserOrUntrusted)
+		pendingToolIsTerminal := s.profiledDeferredToolIsTerminal(
+			s.profiledPendingToolConvIndex, s.profiledPendingToolTurnIndex,
+			s.profiledPendingToolScope,
+		)
+		if s.profiledPendingToolHasResult {
+			if pendingToolIsTerminal {
+				s.considerWithEnforcementScope(
+					s.profiledPendingToolResult,
+					FindingOriginNonUserOrUntrusted,
+					s.profiledPendingToolScope,
+				)
+			} else {
+				// A provisional tool carrier becomes historical once a later
+				// conversation/current-user item is observed. Preserve that
+				// suppression in the request-level explanation instead of silently
+				// returning a clean result with no provenance boundary.
+				s.quotedOrInertSuppressed = true
+			}
 		}
 	}
 	result := s.best
@@ -861,16 +903,28 @@ func (s *ScanSession) finishField(field *streamingField) {
 	field.safetyRiskFacts.reset()
 	fieldSegment := s.profiledStreamingEffectiveSegment(streamingSegmentForField(field, ""))
 	profiledField := hasProfiledSegmentMetadata([]extract.Segment{fieldSegment})
-	if profiledField && profiledContentInert(fieldSegment.ContentKind) && field.totalBytes > 0 {
+	if profiledField && profiledContentInert(fieldSegment.ContentKind) &&
+		!s.profiledStreamingPendingTool(fieldSegment) && field.totalBytes > 0 {
 		s.quotedOrInertSuppressed = true
 	}
+	fieldEnforcementScope := EnforcementScopeNone
+	if profiledField {
+		fieldEnforcementScope = enforcementScopeForProfiledGroup(
+			[]profiledSegmentRef{{index: int(field.id), segment: fieldSegment}},
+		)
+	}
+	requestLocalSystem := fieldEnforcementScope == EnforcementScopeRequestLocalSystem
+	deferredRequestLocalTool := fieldEnforcementScope == EnforcementScopeRequestLocalTool &&
+		s.profiledStreamingPendingTool(fieldSegment)
 	actorMayRequireIncomplete := field.role == extract.RoleUnknown ||
 		field.role == extract.RoleUser && field.provenance == extract.ProvenanceContent &&
-			field.userAttribution == extract.UserAttributionTrusted
+			field.userAttribution == extract.UserAttributionTrusted ||
+		requestLocalSystem || deferredRequestLocalTool
 	currentTrustedUser := field.role == extract.RoleUser && field.provenance == extract.ProvenanceContent &&
 		field.userAttribution == extract.UserAttributionTrusted && (!profiledField || fieldSegment.IsCurrentTurn)
 	profiledActionable := completeQuotedReferent == "" && actorMayRequireIncomplete && (!profiledField ||
-		(s.profiledStreamingClassifiable(fieldSegment) && profiledStreamingActiveDirective(fieldSegment)))
+		((s.profiledStreamingClassifiable(fieldSegment) || deferredRequestLocalTool) &&
+			profiledStreamingActiveDirective(fieldSegment)))
 	ordinaryCandidate := field.riskFacts.riskContributions > 1 && !field.riskFacts.windowBlocked
 	controlPlaneCandidate := field.riskFacts.controlPlaneContributions > 1 && !field.riskFacts.windowBlocked
 	if profiledActionable && (ordinaryCandidate || controlPlaneCandidate) {
@@ -879,10 +933,21 @@ func (s *ScanSession) finishField(field *streamingField) {
 			field.riskFacts.controlPlaneIngredients[0] &&
 			(field.riskFacts.controlPlaneIngredients[1] || field.riskFacts.controlPlaneIngredients[2] ||
 				field.riskFacts.controlPlaneIngredients[3])
-		if ordinaryCandidate && aggregatePotential.ordinaryRequiresIncompleteInspection(s.mode, s.thresholds) ||
-			controlPlaneCandidate && (aggregatePotential.meta.controlPlaneBlock || persistentControlProofUnavailable) {
-			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
-			return
+		ordinaryIncomplete := ordinaryCandidate &&
+			aggregatePotential.ordinaryRequiresIncompleteInspection(s.mode, s.thresholds)
+		// Request-local non-user carriers keep standalone prompt-control wrappers
+		// audit-only. Only a possibly complete ordinary cyber-abuse core can make
+		// their cross-window proof unavailable.
+		requestLocalNonUser := requestLocalSystem || deferredRequestLocalTool
+		controlPlaneIncomplete := !requestLocalNonUser && controlPlaneCandidate &&
+			(aggregatePotential.meta.controlPlaneBlock || persistentControlProofUnavailable)
+		if ordinaryIncomplete || controlPlaneIncomplete {
+			if deferredRequestLocalTool {
+				s.rememberProfiledPendingToolIncomplete(fieldSegment)
+			} else {
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return
+			}
 		}
 	}
 	// Preserve the established "older abuse never ages out" behavior unless
@@ -907,15 +972,19 @@ func (s *ScanSession) finishField(field *streamingField) {
 		origin := findingOriginForSegment(segment)
 		if profiledField {
 			pendingTool := s.profiledStreamingPendingTool(segment)
-			ownedSegment := segment
-			if pendingTool {
-				ownedSegment.IsCurrentTurn = true
-			}
-			refs := []profiledSegmentRef{{index: int(field.id), segment: ownedSegment}}
+			refs := []profiledSegmentRef{{index: int(field.id), segment: segment}}
 			candidate := field.best
 			if pendingTool {
 				candidate = s.prepareProfiledCandidate(candidate, refs, true)
-				s.rememberProfiledPendingToolCandidate(candidate, segment.TurnIndex)
+				s.rememberProfiledPendingToolCandidate(
+					candidate, segment.ConversationIndex, segment.TurnIndex,
+					enforcementScopeForProfiledGroup(refs),
+				)
+				if profiledHistoricalReferentEligible(segment) {
+					s.clearProfiledHistoricalCandidate()
+					s.rememberProfiledHistoricalCandidate(candidate, len(refs))
+					hasHistoricalWindowCandidate = resultHasEligibleMaliciousWinner(candidate, s.thresholds)
+				}
 			} else if profiledHistoricalReferentEligible(segment) {
 				s.classifier.annotateProfiledResult(&candidate, refs, false, s.policy, s.mode, s.thresholds)
 			} else {
@@ -931,7 +1000,9 @@ func (s *ScanSession) finishField(field *streamingField) {
 				s.rememberProfiledHistoricalCandidate(candidate, len(refs))
 				hasHistoricalWindowCandidate = resultHasEligibleMaliciousWinner(candidate, s.thresholds)
 			} else if s.profiledStreamingClassifiable(segment) || unclosedSafetyCommitted {
-				s.consider(candidate, origin)
+				s.considerWithEnforcementScope(
+					candidate, origin, enforcementScopeForProfiledGroup(refs),
+				)
 			}
 		} else if knownStreamingRoleSegment(segment) {
 			s.consider(field.best, origin)
@@ -1149,7 +1220,9 @@ func profiledStreamingHistoricalUser(segment extract.Segment) bool {
 }
 
 func profiledStreamingActiveDirective(segment extract.Segment) bool {
-	return profiledContentActiveDirective(segment.ContentKind)
+	return profiledContentActiveDirective(segment.ContentKind) ||
+		segment.Role == extract.RoleTool && segment.Provenance == extract.ProvenanceContent &&
+			segment.ContentKind == extract.ContentKindToolResult
 }
 
 func (s *ScanSession) profiledStreamingClassifiable(segment extract.Segment) bool {
@@ -1183,8 +1256,7 @@ func (s *ScanSession) profiledStreamingPendingStandaloneTool(segment extract.Seg
 	if s == nil || s.profiledSawCurrentTurn || segment.IsCurrentTurn || segment.TurnIndex >= 0 {
 		return false
 	}
-	return segment.ContentKind == extract.ContentKindToolCallArguments ||
-		segment.Provenance == extract.ProvenanceToolPayload
+	return profiledStreamingDeferredToolCarrier(segment)
 }
 
 func (s *ScanSession) profiledStreamingPendingFallbackTool(segment extract.Segment) bool {
@@ -1194,26 +1266,88 @@ func (s *ScanSession) profiledStreamingPendingFallbackTool(segment extract.Segme
 	// Batch classification can inspect the complete request before selecting the
 	// highest turn. Streaming cannot know whether a later trusted-user turn will
 	// arrive, so keep this structured tool candidate provisional until Finish.
+	return profiledStreamingDeferredToolCarrier(segment)
+}
+
+func profiledStreamingDeferredToolCarrier(segment extract.Segment) bool {
 	return segment.ContentKind == extract.ContentKindToolCallArguments ||
-		segment.Provenance == extract.ProvenanceToolPayload
+		segment.Provenance == extract.ProvenanceToolPayload ||
+		segment.Role == extract.RoleTool && segment.Provenance == extract.ProvenanceContent &&
+			segment.ContentKind == extract.ContentKindToolResult
 }
 
 func (s *ScanSession) profiledStreamingPendingTool(segment extract.Segment) bool {
+	if s == nil {
+		return false
+	}
+	// A provider-native tool result remains provisional until Finish can compare
+	// its conversation item with the complete request. A trusted-user text block
+	// in the same Claude item must not suppress it, while a later item still
+	// makes it historical. Keep the older current-turn rule for executable tool
+	// arguments and other structured carriers.
+	if profiledRequestLocalToolResultCarrier(segment) {
+		return true
+	}
 	return s.profiledStreamingPendingStandaloneTool(segment) ||
 		s.profiledStreamingPendingFallbackTool(segment)
 }
 
-func (s *ScanSession) rememberProfiledPendingToolCandidate(candidate Result, turnIndex int) {
+func (s *ScanSession) rememberProfiledPendingToolCandidate(
+	candidate Result,
+	conversationIndex int,
+	turnIndex int,
+	scope EnforcementScope,
+) {
 	if s == nil || candidate.Score < AuditThreshold {
 		return
 	}
-	if !s.profiledPendingToolHasResult || turnIndex > s.profiledPendingToolTurnIndex ||
-		turnIndex == s.profiledPendingToolTurnIndex &&
-			roleResultBetter(candidate, s.profiledPendingToolResult) {
+	if !s.profiledPendingToolHasResult || conversationIndex > s.profiledPendingToolConvIndex ||
+		conversationIndex == s.profiledPendingToolConvIndex &&
+			(turnIndex > s.profiledPendingToolTurnIndex || turnIndex == s.profiledPendingToolTurnIndex &&
+				roleResultBetter(candidate, s.profiledPendingToolResult)) {
 		s.profiledPendingToolResult = candidate
 		s.profiledPendingToolHasResult = true
+		s.profiledPendingToolConvIndex = conversationIndex
 		s.profiledPendingToolTurnIndex = turnIndex
+		s.profiledPendingToolScope = scope
 	}
+}
+
+func (s *ScanSession) rememberProfiledPendingToolIncomplete(segment extract.Segment) {
+	if s == nil {
+		return
+	}
+	if !s.profiledPendingToolIncomplete ||
+		segment.ConversationIndex > s.profiledPendingIncompleteConv ||
+		segment.ConversationIndex == s.profiledPendingIncompleteConv &&
+			segment.TurnIndex > s.profiledPendingIncompleteTurn {
+		s.profiledPendingToolIncomplete = true
+		s.profiledPendingIncompleteConv = segment.ConversationIndex
+		s.profiledPendingIncompleteTurn = segment.TurnIndex
+	}
+}
+
+func (s *ScanSession) profiledDeferredToolIsTerminal(
+	conversationIndex int,
+	turnIndex int,
+	scope EnforcementScope,
+) bool {
+	if s == nil {
+		return false
+	}
+	if scope == EnforcementScopeRequestLocalTool {
+		return profiledTerminalConversationPosition(
+			conversationIndex, turnIndex,
+			s.profiledMaxConversationIndex, s.profiledMaxTurnIndex,
+		)
+	}
+	if s.profiledSawCurrentTurn {
+		return false
+	}
+	if conversationIndex >= 0 || s.profiledMaxConversationIndex >= 0 {
+		return conversationIndex == s.profiledMaxConversationIndex
+	}
+	return turnIndex == s.profiledMaxTurnIndex
 }
 
 func (s *ScanSession) profiledStreamingInspectable(segment extract.Segment) bool {
@@ -1636,18 +1770,55 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	s.profiledGroupRefs = append(s.profiledGroupRefs, profiledSegmentRef{
 		index: int(current.id), segment: segment,
 	})
+	s.profiledGroupRisk = append(s.profiledGroupRisk, currentRisk != nil && currentRisk.hasRisk())
 	s.profiledGroupActiveDirective = s.profiledGroupActiveDirective ||
 		profiledStreamingActiveDirective(segment)
 	s.profiledGroupStructuredTool = s.profiledGroupStructuredTool ||
 		segment.Provenance == extract.ProvenanceToolPayload ||
 		segment.ContentKind == extract.ContentKindToolCallArguments
+	if s.profiledGroupAuthorityScope != EnforcementScopeNone &&
+		segment.ConversationIndex != s.profiledGroupAuthorityConv {
+		s.profiledGroupAuthorityScope = EnforcementScopeNone
+	}
+	if scope := enforcementScopeForProfiledGroup(s.profiledGroupRefs); scope != EnforcementScopeNone {
+		s.profiledGroupAuthorityScope = scope
+		s.profiledGroupAuthorityConv = segment.ConversationIndex
+	}
 	if len(s.profiledGroupParts) > maxRoleClassifierSegments {
+		evictedRisk := len(s.profiledGroupRisk) != 0 && s.profiledGroupRisk[0]
+		independentBlock := s.hasBest && resultHasEligibleBlockingCandidate(s.best, s.thresholds)
+		if evictedRisk && !independentBlock {
+			switch s.profiledGroupAuthorityScope {
+			case EnforcementScopeRequestLocalTool:
+				// A same-group tool result is not known to be terminal until the
+				// complete request has arrived. Retain only its coordinates and defer
+				// the incomplete disposition to Finish.
+				s.rememberProfiledPendingToolIncomplete(segment)
+			case EnforcementScopeRequestLocalSystem:
+				// Only request-local non-user authority needs this additional
+				// overflow guard. Current-user and unknown groups continue through
+				// the established Round 8 overflow ledger, which preserves benign
+				// owner and cancellation proofs without false incomplete results.
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return
+			}
+		}
 		copy(s.profiledGroupParts, s.profiledGroupParts[len(s.profiledGroupParts)-maxRoleClassifierSegments:])
 		clear(s.profiledGroupParts[maxRoleClassifierSegments:])
 		s.profiledGroupParts = s.profiledGroupParts[:maxRoleClassifierSegments]
 		copy(s.profiledGroupRefs, s.profiledGroupRefs[len(s.profiledGroupRefs)-maxRoleClassifierSegments:])
 		clear(s.profiledGroupRefs[maxRoleClassifierSegments:])
 		s.profiledGroupRefs = s.profiledGroupRefs[:maxRoleClassifierSegments]
+		copy(s.profiledGroupRisk, s.profiledGroupRisk[len(s.profiledGroupRisk)-maxRoleClassifierSegments:])
+		clear(s.profiledGroupRisk[maxRoleClassifierSegments:])
+		s.profiledGroupRisk = s.profiledGroupRisk[:maxRoleClassifierSegments]
+	}
+	// A fenced/configuration field is ordinarily retained as inert historical
+	// evidence. Once the same profiled group proves a request-local system
+	// directive owner, however, that carrier belongs to the active system input
+	// and must take the same grouped path as batch classification.
+	if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem {
+		historicalReferent = false
 	}
 	if historicalReferent && len(s.profiledGroupRefs) != 0 {
 		owner := s.profiledGroupRefs[len(s.profiledGroupRefs)-1].segment
@@ -1668,11 +1839,19 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	}
 	if pendingTool {
 		refs := append([]profiledSegmentRef(nil), s.profiledGroupRefs...)
-		for index := range refs {
-			refs[index].segment.IsCurrentTurn = true
-		}
+		// Terminality is request-local authority, not current-user ownership.
+		// Preserve the provider's non-current tool-result metadata while the
+		// candidate is provisional so the final explanation and occurrences can
+		// pass the same audit provenance contract as batch classification.
 		candidate = s.prepareProfiledCandidate(candidate, refs, true)
-		s.rememberProfiledPendingToolCandidate(candidate, segment.TurnIndex)
+		s.rememberProfiledPendingToolCandidate(
+			candidate, segment.ConversationIndex, segment.TurnIndex,
+			s.profiledGroupAuthorityScope,
+		)
+		if historicalReferent {
+			s.clearProfiledHistoricalCandidate()
+			s.rememberProfiledHistoricalCandidate(candidate, len(refs))
+		}
 		return
 	}
 	if historicalReferent {
@@ -1688,7 +1867,9 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		candidate, s.profiledGroupRefs, s.profiledGroupActiveDirective,
 	)
 	if s.profiledStreamingClassifiable(segment) {
-		s.consider(candidate, findingOriginForSegment(segment))
+		s.considerWithEnforcementScope(
+			candidate, findingOriginForSegment(segment), s.profiledGroupAuthorityScope,
+		)
 	}
 }
 
@@ -2705,8 +2886,12 @@ func (s *ScanSession) clearProfiledGroup() {
 	s.profiledGroupParts = nil
 	clear(s.profiledGroupRefs)
 	s.profiledGroupRefs = nil
+	clear(s.profiledGroupRisk)
+	s.profiledGroupRisk = nil
 	s.profiledGroupActiveDirective = false
 	s.profiledGroupStructuredTool = false
+	s.profiledGroupAuthorityScope = EnforcementScopeNone
+	s.profiledGroupAuthorityConv = 0
 }
 
 // considerRoleSummary incrementally preserves the bounded role-aware
@@ -3363,8 +3548,14 @@ func (s *ScanSession) clearRoleState() {
 	s.profiledLastCurrentUnitSet = false
 	s.profiledPendingToolResult = Result{}
 	s.profiledPendingToolHasResult = false
+	s.profiledPendingToolConvIndex = -1
 	s.profiledPendingToolTurnIndex = -1
+	s.profiledPendingToolScope = EnforcementScopeNone
+	s.profiledPendingToolIncomplete = false
+	s.profiledPendingIncompleteConv = -1
+	s.profiledPendingIncompleteTurn = -1
 	s.profiledMaxTurnIndex = -1
+	s.profiledMaxConversationIndex = -1
 	s.profiledSawCurrentTurn = false
 	s.quotedOrInertSuppressed = false
 	clear(s.isolatedUserRun)
@@ -3919,7 +4110,15 @@ func (s *ScanSession) considerAdjacent(previous, current *streamingFieldSummary)
 }
 
 func (s *ScanSession) consider(candidate Result, origin FindingOrigin) {
-	candidate = withRoleAwareFindingOrigin(candidate, origin, s.mode, s.thresholds)
+	s.considerWithEnforcementScope(candidate, origin, EnforcementScopeNone)
+}
+
+func (s *ScanSession) considerWithEnforcementScope(
+	candidate Result,
+	origin FindingOrigin,
+	scope EnforcementScope,
+) {
+	candidate = withRoleAwareFindingOriginAndScope(candidate, origin, scope, s.mode, s.thresholds)
 	s.considerRanked(candidate)
 }
 

@@ -64,8 +64,8 @@ PUBLIC_DEVELOPMENT_METRICS = {
     "direct_allowed": 12,
     "quoted_blocked": 0,
     "historical_blocked": 0,
-    "system_blocked": 0,
-    "tool_blocked": 0,
+    "system_blocked": 2,
+    "tool_blocked": 2,
 }
 PUBLIC_HOST_CONTRACT = {
     "payload_records": 24,
@@ -184,8 +184,8 @@ def policy_identity(path: Path) -> dict[str, str]:
     digest = POLICY_SHA256.findall(text)
     if len(version) != 1 or len(digest) != 1:
         fail("classifier policy identity source is not exact")
-    if not version[0].startswith("classifier-policy-v8"):
-        fail("Round 9 requires classifier-policy-v8 or a reviewed v8 successor")
+    if not version[0].startswith("classifier-policy-v9"):
+        fail("Round 9 requires classifier-policy-v9 or a reviewed v9 successor")
     return {"version": version[0], "sha256": digest[0]}
 
 

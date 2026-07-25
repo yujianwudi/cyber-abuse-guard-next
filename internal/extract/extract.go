@@ -1976,7 +1976,7 @@ func isToolArgumentCanonical(key string) bool {
 
 func isMetadataKeyCanonical(key string) bool {
 	switch key {
-	case "role", "type", "name", "id", "model", "status", "index", "mimetype", "mediatype", "encoding", "url", "callid", "toolcallid", "finishreason":
+	case "role", "type", "name", "id", "model", "status", "index", "mimetype", "mediatype", "encoding", "url", "callid", "toolcallid", "tooluseid", "finishreason":
 		return true
 	default:
 		return false

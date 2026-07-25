@@ -1,8 +1,8 @@
 # v0.16 Round 9 release evidence — current candidate contract plus frozen history
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -10,7 +10,7 @@ Last updated: 2026-07-25 (Asia/Shanghai)
 ## Current Round 9 source-tree status — not a release PASS
 
 The active development target is Linux amd64 `v0.16-rc.4`,
-classifier-policy-v8, ruleset 1.0.10, audit schema v6, and CPA
+classifier-policy-v9, ruleset 1.0.10, audit schema v6, and CPA
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
 counted Mock. Final classifier/public-corpus freeze, exact-main CI, reproducible

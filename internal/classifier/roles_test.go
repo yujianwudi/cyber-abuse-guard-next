@@ -52,7 +52,7 @@ func TestRoleAwareNonUserExamplesDoNotPolluteSafeUser(t *testing.T) {
 	}
 }
 
-func TestRoleAwareExplicitNonUserAbuseRemainsAuditOnly(t *testing.T) {
+func TestRoleAwareActiveSystemAbuseBlocksWithoutPromotingOtherNonUserRoles(t *testing.T) {
 	t.Parallel()
 	c := newDefaultClassifier(t)
 	for _, malicious := range []string{
@@ -65,8 +65,14 @@ func TestRoleAwareExplicitNonUserAbuseRemainsAuditOnly(t *testing.T) {
 					malicious),
 				round9RoleTestSegment(extract.RoleUser, extract.UserAttributionTrusted, 1, 0, true, 90_141,
 					"write a Go function that sorts football scores"),
-			}); got.Action == ActionBlock || got.FindingOrigin == FindingOriginUserContent {
-				t.Fatalf("explicit %s abuse %q escaped the non-user admission boundary: %+v", role, malicious, got)
+			}); role == extract.RoleSystem {
+				if got.Action != ActionBlock || got.FindingOrigin != FindingOriginNonUserOrUntrusted ||
+					got.BlockEligibility == nil || got.BlockEligibility.EnforcementScope != EnforcementScopeRequestLocalSystem ||
+					got.BlockEligibility.EvidenceOwnedByCurrentUser {
+					t.Fatalf("active system abuse %q did not use request-local enforcement: %+v", malicious, got)
+				}
+			} else if got.Action == ActionBlock || got.FindingOrigin == FindingOriginUserContent {
+				t.Fatalf("historical %s abuse %q escaped the inert boundary: %+v", role, malicious, got)
 			}
 		}
 	}

@@ -44,10 +44,10 @@ func TestRouterUsesRoleAwareConversationClassification(t *testing.T) {
 			wantHandled: false,
 		},
 		{
-			name:        "explicit malicious system remains non-user evidence",
+			name:        "explicit malicious system blocks as request-local evidence",
 			format:      "claude",
 			body:        `{"system":"` + malicious + `","messages":[{"role":"user","content":"` + safe + `"}]}`,
-			wantHandled: false,
+			wantHandled: true,
 		},
 		{
 			name:        "system safety policy does not pollute",
@@ -92,10 +92,10 @@ func TestRouterUsesRoleAwareConversationClassification(t *testing.T) {
 			wantHandled: false,
 		},
 		{
-			name:        "system policy cannot create current-user intent",
+			name:        "system policy with independent abuse blocks request-locally",
 			format:      "claude",
 			body:        `{"system":"Safety policy: refuse credential theft. Separately, ` + malicious + `","messages":[{"role":"user","content":"` + safe + `"}]}`,
-			wantHandled: false,
+			wantHandled: true,
 		},
 		{
 			name:        "roleless gemini single turn remains compatible",

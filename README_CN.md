@@ -1,8 +1,8 @@
 # CPA Cyber Abuse Guard
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 > **RC 身份说明：** `v0.16-rc.3` 是不可移动的 Phase 1 失败 Tag，没有候选产物或
@@ -60,7 +60,7 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | CPA 固定目标 | 仅 v7.2.95；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 独立审计 | `NOT_RUN / NOT_PROVIDED`，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前 main 快照为 `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`；最终候选绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`；Host 与发行绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 
@@ -119,10 +119,13 @@ Observe 只更新有界 counters：不阻断、不累计主体风险、不持久
 event，也不会为审计关联而扫描完整请求 Body 计算哈希。
 
 Incomplete 请求不进入 subject risk。半截 prefix 不能在 `balanced` 下产生策略阻断。
-恶意文本阻断和主体累计都要求显式的当前可信用户归因证明；未知/未来字段以及
-system、assistant、tool 来源文本只保留可检查、可审计状态，不能直接产生恶意文本
-阻断，也不能污染滚动主体风险。只有后续当前用户通过完整、有界的 referent 证明
-重新激活载荷，并再次通过同一候选 eligibility gate，载荷才可进入阻断判定。
+恶意文本阻断必须具备一个闭集请求权限证明：当前可信用户的 `current_user` ownership，
+或对独立完整有害候选的结构化 `request_local_system` / `request_local_tool` 权限。
+只有 `current_user` finding 可以累计滚动主体风险；request-local system/tool 阻断绝不
+归因给已认证用户。未知/未来字段、assistant 历史、tool schema 与非终端 tool result
+只保留可检查、可审计状态，不能直接阻断。只有后续当前用户通过完整、有界的
+referent 证明重新激活历史载荷，并再次通过同一候选 eligibility gate，载荷才可进入
+阻断判定。
 嵌套 history/content 数组、provider content 数组中的标量成员，以及 Responses 未知或
 非字符串 `type` 仍会接受扫描，但不能获得可信 user attribution；精确 Responses `type`
 是传输层判别字段，不作为模型可见 prompt 文本。

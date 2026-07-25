@@ -36,7 +36,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         self.so.write_bytes(b"round9-so")
         self.policy = self.root / "policy_identity.go"
         self.policy.write_text(
-            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v8"\n'
+            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v9"\n'
             f'const ClassifierPolicySHA256 = "{H64}"\n',
             encoding="utf-8",
         )
@@ -105,7 +105,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         return {
             "commit": H40,
             "tree": TREE,
-            "policy_version": "classifier-policy-v8",
+            "policy_version": "classifier-policy-v9",
             "policy_sha256": H64,
             "ruleset": "1.0.10",
         }
@@ -605,6 +605,13 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         value["metrics"]["candidate_executions"] = 2
         value["metrics"]["serialized_route_executions"] = 121
         value["metrics"]["direct_blocked"] = 13
+        self.rewrite(self.public, value)
+        with self.assertRaisesRegex(contract.ContractError, "frozen v13 contract"):
+            contract.assemble(self.assemble_args())
+
+        value = self.public_report()
+        value["metrics"]["system_blocked"] = 0
+        value["metrics"]["tool_blocked"] = 0
         self.rewrite(self.public, value)
         with self.assertRaisesRegex(contract.ContractError, "frozen v13 contract"):
             contract.assemble(self.assemble_args())

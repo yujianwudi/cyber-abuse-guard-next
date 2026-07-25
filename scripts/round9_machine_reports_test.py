@@ -64,7 +64,7 @@ class Round9MachineReportsTest(unittest.TestCase):
         ):
             directory.mkdir(parents=True)
         (root / "internal/classifier/policy_identity.go").write_text(
-            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v8"\n'
+            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v9"\n'
             f'const ClassifierPolicySHA256 = "{"3" * 64}"\n',
             encoding="utf-8",
         )
@@ -130,7 +130,7 @@ class Round9MachineReportsTest(unittest.TestCase):
         candidate = {
             "commit": commit,
             "tree": tree,
-            "policy_version": "classifier-policy-v8",
+            "policy_version": "classifier-policy-v9",
             "policy_sha256": "3" * 64,
             "ruleset": "1.0.10",
         }
@@ -145,7 +145,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "corpus_cases_bytes": self.identity(benign_cases)["bytes"],
             "corpus_cases_sha256": self.identity(benign_cases)["sha256"],
             "runtime_identity": {
-                "classifier_policy_version": "classifier-policy-v8",
+                "classifier_policy_version": "classifier-policy-v9",
                 "classifier_policy_sha256": "3" * 64,
                 "ruleset_version": "1.0.10",
             },
@@ -185,7 +185,7 @@ class Round9MachineReportsTest(unittest.TestCase):
                 "candidate_carriers=1 candidate_executions=1 not_provided=0 "
                 "scenario_payload_executions=24 serialized_route_executions=120 "
                 "direct_block=12 direct_allow=12 quoted_block=0 historical_block=0 "
-                "system_block=0 tool_block=0\n"
+                "system_block=2 tool_block=2\n"
             ).encode()
         )
         audit_log.write_bytes(b"audit producer log\n")
@@ -223,7 +223,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "benign_corpus_manifest": self.identity(benign_root / "manifest.json"),
             "benign_corpus_cases": self.identity(benign_cases),
             "candidate": {
-                "policy_version": "classifier-policy-v8",
+                "policy_version": "classifier-policy-v9",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             },
@@ -416,7 +416,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "benign_corpus_manifest": identity(benign_root / "manifest.json"),
             "benign_corpus_cases": identity(benign_root / "cases.jsonl"),
             "candidate": {
-                "policy_version": "classifier-policy-v8",
+                "policy_version": "classifier-policy-v9",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             },
@@ -459,7 +459,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "candidate_carriers=1 candidate_executions=1 not_provided=0 "
             "scenario_payload_executions=24 serialized_route_executions=120 "
             "direct_block=12 direct_allow=12 quoted_block=0 "
-            "historical_block=0 system_block=0 tool_block=0\n"
+            "historical_block=0 system_block=2 tool_block=2\n"
         )
         match = reports.PUBLIC_RESULT.fullmatch(line)
         self.assertIsNotNone(match)
@@ -488,7 +488,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v8",
+                "policy_version": "classifier-policy-v9",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }
@@ -497,7 +497,7 @@ class Round9MachineReportsTest(unittest.TestCase):
                 "candidate_carriers=1 candidate_executions=1 not_provided=0 "
                 "scenario_payload_executions=24 serialized_route_executions=120 "
                 "direct_block=12 direct_allow=12 quoted_block=0 historical_block=0 "
-                "system_block=0 tool_block=0\n"
+                "system_block=2 tool_block=2\n"
             ).encode()
             with mock.patch.object(
                 reports, "candidate_identity", return_value=candidate
@@ -509,6 +509,45 @@ class Round9MachineReportsTest(unittest.TestCase):
             self.assertEqual(value["metrics"], reports.PUBLIC_METRICS)
             self.assertEqual(output.read_bytes(), reports.canonical_bytes(value))
             self.assertEqual(log.read_bytes(), line)
+
+    def test_public_report_rejects_pre_v9_active_carrier_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "repo"
+            corpus_root = root / "testdata/round9-public-adversarial-v13"
+            corpus_root.mkdir(parents=True)
+            shutil.copyfile(
+                REPOSITORY_ROOT / "testdata/round9-public-adversarial-v13/manifest.json",
+                corpus_root / "manifest.json",
+            )
+            args = SimpleNamespace(
+                root=str(root),
+                commit="1" * 40,
+                tree="2" * 40,
+                go="go",
+                output=str(Path(temporary) / "public.json"),
+                log=str(Path(temporary) / "public.log"),
+            )
+            candidate = {
+                "commit": "1" * 40,
+                "tree": "2" * 40,
+                "policy_version": "classifier-policy-v9",
+                "policy_sha256": "3" * 64,
+                "ruleset": "1.0.10",
+            }
+            stale_line = (
+                "round9 public corpus PASS: payload_records=24 formal_unique=23 "
+                "candidate_carriers=1 candidate_executions=1 not_provided=0 "
+                "scenario_payload_executions=24 serialized_route_executions=120 "
+                "direct_block=12 direct_allow=12 quoted_block=0 historical_block=0 "
+                "system_block=0 tool_block=0\n"
+            ).encode()
+            with mock.patch.object(
+                reports, "candidate_identity", return_value=candidate
+            ), mock.patch.object(reports, "run_command", return_value=stale_line):
+                with self.assertRaisesRegex(
+                    reports.ReportError, "metrics differ from the frozen Round 9 contract"
+                ):
+                    reports.public_report(args)
 
     def test_audit_contract_includes_eligible_audit_kind(self) -> None:
         self.assertEqual(
@@ -911,7 +950,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             (root / "internal/classifier").mkdir(parents=True)
             (root / "internal/classifier/policy_identity.go").write_text(
                 'package classifier\n\n'
-                'const ClassifierPolicyVersion = "classifier-policy-v8-lookalike"\n'
+                'const ClassifierPolicyVersion = "classifier-policy-v9-lookalike"\n'
                 f'const ClassifierPolicySHA256 = "{"3" * 64}"\n',
                 encoding="utf-8",
             )
@@ -1092,7 +1131,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v8",
+                "policy_version": "classifier-policy-v9",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }
@@ -1131,7 +1170,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v8",
+                "policy_version": "classifier-policy-v9",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }

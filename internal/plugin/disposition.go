@@ -69,7 +69,7 @@ func eligibleMaliciousWinner(result classifier.Result) bool {
 		}
 	}
 	return winnerCount == 1 && gate.Eligible && gate.PrimaryReason == classifier.GateEligibleExplicitMalice &&
-		gate.InspectionComplete && gate.EvidenceOwnedByCurrentUser &&
+		gate.InspectionComplete && gate.RequestBlockAuthorityProven() &&
 		gate.CurrentExecutionActProven && gate.HarmfulCoreComplete && gate.OperationallyActionable &&
 		!gate.DefensiveScopeConflict && !gate.QuotedOrAnalyticalScope && !gate.CrossScopeComposition &&
 		gate.ReferentProofComplete && !gate.EvidenceAmbiguous &&
@@ -84,8 +84,9 @@ func eligibleMaliciousWinner(result classifier.Result) bool {
 // from manufacturing a blockable Result; these checks additionally keep the
 // winner, explanation counts, and exported occurrences in one closed contract.
 func candidateOccurrencesComplete(result classifier.Result) bool {
+	gate := result.BlockEligibility
 	explanation := result.DecisionExplanation
-	if explanation == nil || len(result.EvidenceOccurrences) == 0 ||
+	if gate == nil || explanation == nil || len(result.EvidenceOccurrences) == 0 ||
 		explanation.EvidenceOccurrenceCount != len(result.EvidenceOccurrences) ||
 		explanation.EvidenceSegmentCount <= 0 {
 		return false
@@ -102,8 +103,24 @@ func candidateOccurrencesComplete(result classifier.Result) bool {
 	for _, occurrence := range result.EvidenceOccurrences {
 		evidenceID := strings.TrimSpace(occurrence.EvidenceID)
 		ruleID := strings.TrimSpace(occurrence.RuleID)
+		// Provider-native top-level system envelopes and the explicit unindexed
+		// terminal-tool fallback do not belong to a numbered conversation item, so
+		// -1 is their valid SegmentID sentinel. Accept it only when the closed
+		// request-local scope, role, provenance, attribution, current-turn marker,
+		// and directive owner all agree; every other negative coordinate remains
+		// fail-closed as unbound evidence.
+		unindexedRequestLocalCarrier := occurrence.SegmentID == -1 &&
+			occurrence.Provenance == extract.ProvenanceContent &&
+			occurrence.UserAttribution == extract.UserAttributionUntrusted &&
+			!occurrence.CurrentTurn &&
+			(gate.EnforcementScope == classifier.EnforcementScopeRequestLocalSystem &&
+				occurrence.Role == extract.RoleSystem &&
+				occurrence.DirectiveOwner == classifier.DirectiveOwnerSystem ||
+				gate.EnforcementScope == classifier.EnforcementScopeRequestLocalTool &&
+					occurrence.Role == extract.RoleTool &&
+					occurrence.DirectiveOwner == classifier.DirectiveOwnerTool)
 		if evidenceID == "" || ruleID == "" || strings.TrimSpace(occurrence.Dimension) == "" ||
-			occurrence.SegmentID < 0 || occurrence.FieldID < 0 ||
+			occurrence.SegmentID < 0 && !unindexedRequestLocalCarrier || occurrence.FieldID < 0 ||
 			occurrence.DirectiveOwner == classifier.DirectiveOwnerUnknown ||
 			occurrence.Polarity == "" {
 			return false
@@ -138,6 +155,7 @@ func eligibilityExplanationMatches(
 		explanation.EligibilityReasonFlags == gate.ReasonFlags &&
 		explanation.InspectionComplete == gate.InspectionComplete &&
 		explanation.EvidenceOwnedByCurrentUser == gate.EvidenceOwnedByCurrentUser &&
+		explanation.EnforcementScope == gate.EnforcementScope &&
 		explanation.CurrentExecutionActProven == gate.CurrentExecutionActProven &&
 		explanation.HarmfulCoreComplete == gate.HarmfulCoreComplete &&
 		explanation.OperationallyActionable == gate.OperationallyActionable &&
@@ -222,7 +240,9 @@ func inspectionDisposition(mode config.Mode, outcome inspectionOutcome, opaquePo
 
 	decision := inspectionDecision{Code: "allow_clean", Kind: decisionAllowClean}
 	eligibleWinner := eligibleMaliciousWinner(outcome.Classification)
-	if eligibleWinner && outcome.Classification.Action != classifier.ActionAllow {
+	if eligibleWinner && outcome.Classification.Action != classifier.ActionAllow &&
+		outcome.Classification.BlockEligibility != nil &&
+		outcome.Classification.BlockEligibility.EvidenceOwnedByCurrentUser {
 		switch mode {
 		case config.ModeAudit, config.ModeBalanced, config.ModeStrict:
 			decision.EvaluateSubject = true

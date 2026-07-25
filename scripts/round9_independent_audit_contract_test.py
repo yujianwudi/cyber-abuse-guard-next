@@ -122,7 +122,7 @@ class Fixture:
             "round9": {
                 "release_lane": "round9",
                 "classifier": {
-                    "version": "classifier-policy-v8",
+                    "version": "classifier-policy-v9",
                     "sha256": "8" * 64,
                 },
                 "ruleset": {"version": "1.0.10", "sha256": "9" * 64},
@@ -172,7 +172,7 @@ class Fixture:
             "ruleset_manifest_sha256": self.asset_identity["ruleset-manifest.json"][
                 "sha256"
             ],
-            "classifier_policy_version": "classifier-policy-v8",
+            "classifier_policy_version": "classifier-policy-v9",
             "classifier_policy_sha256": "8" * 64,
             "ruleset_version": "1.0.10",
             "ruleset_sha256": "9" * 64,

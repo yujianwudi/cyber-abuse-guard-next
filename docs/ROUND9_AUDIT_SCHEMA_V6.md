@@ -1,8 +1,8 @@
 # Round 9 audit schema v6
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 This document defines the durable audit contract introduced for Round 9. It is
@@ -51,6 +51,7 @@ column described above.
 | `eligibility_reason_flags` | `CandidateBlockEligibility.ReasonFlags` | Same JSON member; unknown bits and evidence contradictions are rejected |
 | `inspection_complete` | `CandidateBlockEligibility.InspectionComplete` | Same JSON member |
 | `evidence_owned_by_current_user` | `CandidateBlockEligibility.EvidenceOwnedByCurrentUser` | Same JSON member; proves text provenance only, not real-world target ownership |
+| `enforcement_scope` | `CandidateBlockEligibility.EnforcementScope` | Same JSON member; closed values are `current_user`, `request_local_system`, and `request_local_tool` |
 | `current_execution_act_proven` | `CandidateBlockEligibility.CurrentExecutionActProven` | Same JSON member |
 | `harmful_core_complete` | `CandidateBlockEligibility.HarmfulCoreComplete` | Same JSON member |
 | `operationally_actionable` | `CandidateBlockEligibility.OperationallyActionable` | Same JSON member |
@@ -79,6 +80,17 @@ scope, referent-chain, field, and occurrence identities are used internally to
 prevent cross-candidate evidence borrowing; raw text, spans, offsets, field
 paths, arbitrary maps, and the internal identity coordinates are deliberately
 not persisted.
+
+Every newly written eligible malicious explanation has a nonempty
+`enforcement_scope`. `current_user` requires the exact owned user-content,
+current-turn provenance tuple. `request_local_system` and `request_local_tool`
+require non-user content provenance and never prove subject ownership; the tool
+scope is limited to a structurally terminal tool result. For read compatibility,
+an older eligible v2 row may omit the field only when
+`evidence_owned_by_current_user=true`, `winning_role=user`,
+`winning_provenance=content`, and `current_turn_evidence=true`. Empty-scope
+system/tool rows and every contradictory tuple are rejected. Ineligible v2
+history may retain an empty scope because it asserts no blocking authority.
 
 There are no independent SQLite columns for the eligibility booleans, malicious
 predicates, hard-floor fields, or evidence counts. Consequently the supported
@@ -119,9 +131,11 @@ discriminated union with exactly four variants:
 malicious explanation with a logged winning category and winning rule. The
 former requires a real block disposition; the latter is reserved for Observe,
 Audit, or below-threshold non-blocking handling of the same eligible candidate.
-Eligibility must prove complete inspection, current-user ownership, a current
-execution act, a complete and actionable harmful core, resolved scope/referent
-state, and no defensive, quoted, cross-scope, or ambiguous conflict.
+Eligibility must prove complete inspection, one closed request authority scope,
+a current execution act, a complete and actionable harmful core, resolved
+scope/referent state, and no defensive, quoted, cross-scope, or ambiguous
+conflict. `current_user` is ownership-bound; request-local system/tool authority
+is non-user and cannot enter rolling subject state.
 `audit_ineligible_risk` may carry an ineligible classifier explanation but must
 never carry `block_eligible=true`. An ineligible explanation cannot apply a
 hard floor.

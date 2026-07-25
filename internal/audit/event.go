@@ -72,6 +72,18 @@ const (
 	eligibilityReasonExplicitMalice       = "eligible_explicit_malice"
 )
 
+// EnforcementScope is the closed, content-free reason an eligible malicious
+// candidate may be enforced at the request boundary. It records classifier
+// provenance without persisting request text, provider paths, or offsets.
+type EnforcementScope string
+
+const (
+	EnforcementScopeNone               EnforcementScope = ""
+	EnforcementScopeCurrentUser        EnforcementScope = "current_user"
+	EnforcementScopeRequestLocalSystem EnforcementScope = "request_local_system"
+	EnforcementScopeRequestLocalTool   EnforcementScope = "request_local_tool"
+)
+
 const (
 	eligibilityFlagIncompleteInspection uint64 = 1 << iota
 	eligibilityFlagUntrustedOwnership
@@ -171,6 +183,7 @@ type DecisionExplanation struct {
 	EligibilityReasonFlags     uint64           `json:"eligibility_reason_flags"`
 	InspectionComplete         bool             `json:"inspection_complete"`
 	EvidenceOwnedByCurrentUser bool             `json:"evidence_owned_by_current_user"`
+	EnforcementScope           EnforcementScope `json:"enforcement_scope,omitempty"`
 	CurrentExecutionActProven  bool             `json:"current_execution_act_proven"`
 	HarmfulCoreComplete        bool             `json:"harmful_core_complete"`
 	OperationallyActionable    bool             `json:"operationally_actionable"`
@@ -988,6 +1001,7 @@ func hasEligibilityContract(explanation *DecisionExplanation) bool {
 		explanation.EligibilityReasonFlags != 0 ||
 		explanation.InspectionComplete ||
 		explanation.EvidenceOwnedByCurrentUser ||
+		explanation.EnforcementScope != EnforcementScopeNone ||
 		explanation.CurrentExecutionActProven ||
 		explanation.HarmfulCoreComplete ||
 		explanation.OperationallyActionable ||
@@ -1009,6 +1023,9 @@ func validateEligibilityExplanation(explanation *DecisionExplanation) error {
 	if !hasEligibilityContract(explanation) {
 		return nil
 	}
+	if err := validateEnforcementScopeContract(explanation); err != nil {
+		return err
+	}
 	if !validEligibilityReason(explanation.PrimaryEligibilityReason) {
 		return errors.New("audit: decision explanation primary_eligibility_reason is unsupported")
 	}
@@ -1024,7 +1041,7 @@ func validateEligibilityExplanation(explanation *DecisionExplanation) error {
 	}
 
 	eligibleConditions := explanation.InspectionComplete &&
-		explanation.EvidenceOwnedByCurrentUser &&
+		auditRequestBlockAuthorityProven(explanation) &&
 		explanation.CurrentExecutionActProven &&
 		explanation.HarmfulCoreComplete &&
 		explanation.OperationallyActionable &&
@@ -1065,7 +1082,7 @@ func validateEligibilityExplanation(explanation *DecisionExplanation) error {
 	case eligibilityReasonIncompleteInspection:
 		consistent = !explanation.InspectionComplete
 	case eligibilityReasonUntrustedOwnership:
-		consistent = !explanation.EvidenceOwnedByCurrentUser
+		consistent = !auditRequestBlockAuthorityProven(explanation)
 	case eligibilityReasonNoCurrentDirective:
 		consistent = !explanation.CurrentExecutionActProven
 	case eligibilityReasonQuotedOrAnalytical:
@@ -1098,7 +1115,7 @@ func expectedEligibilityReasonFlags(explanation *DecisionExplanation) uint64 {
 		}
 	}
 	add(!explanation.InspectionComplete, eligibilityFlagIncompleteInspection)
-	add(!explanation.EvidenceOwnedByCurrentUser, eligibilityFlagUntrustedOwnership)
+	add(!auditRequestBlockAuthorityProven(explanation), eligibilityFlagUntrustedOwnership)
 	add(!explanation.CurrentExecutionActProven, eligibilityFlagNoCurrentDirective)
 	add(explanation.QuotedOrAnalyticalScope, eligibilityFlagQuotedOrAnalytical)
 	add(explanation.DefensiveScopeConflict, eligibilityFlagDefensivePurpose)
@@ -1110,6 +1127,79 @@ func expectedEligibilityReasonFlags(explanation *DecisionExplanation) uint64 {
 		flags |= eligibilityFlagExplicitMalice
 	}
 	return flags
+}
+
+// validateEnforcementScopeContract checks the exact persisted projection of the
+// occurrence proof already enforced by the plugin. Current-user winners must be
+// current user content. Request-local system winners must be non-user system
+// content; CurrentTurnEvidence is deliberately false so provider-native
+// top-level Responses instructions retain their valid -1 segment sentinel.
+// Request-local tool winners use the same non-current marker because only a
+// structurally terminal tool-result content segment can receive that scope.
+//
+// Empty scope is retained for non-eligible v2 history and for eligible legacy
+// current-user rows written before enforcement_scope existed. That legacy path
+// requires the exact current user-content authority tuple and can never admit a
+// non-user system/tool winner. V1 explanations do not carry an eligibility
+// contract at all. New eligible malicious-text events persist a positive scope.
+func validateEnforcementScopeContract(explanation *DecisionExplanation) error {
+	if explanation == nil {
+		return errors.New("audit: decision explanation enforcement_scope requires an explanation")
+	}
+	switch explanation.EnforcementScope {
+	case EnforcementScopeNone:
+		if explanation.BlockEligible && !currentUserAuthorityTupleProven(explanation) {
+			return errors.New("audit: eligible decision explanation requires enforcement_scope or legacy current-user authority")
+		}
+		return nil
+	case EnforcementScopeCurrentUser:
+		if !currentUserAuthorityTupleProven(explanation) {
+			return errors.New("audit: current_user enforcement_scope requires current user-content provenance")
+		}
+	case EnforcementScopeRequestLocalSystem:
+		if explanation.EvidenceOwnedByCurrentUser || explanation.WinningRole != "system" ||
+			explanation.WinningProvenance != "content" || explanation.CurrentTurnEvidence {
+			return errors.New("audit: request_local_system enforcement_scope requires non-user system-content provenance")
+		}
+	case EnforcementScopeRequestLocalTool:
+		if explanation.EvidenceOwnedByCurrentUser || explanation.WinningRole != "tool" ||
+			explanation.WinningProvenance != "content" || explanation.CurrentTurnEvidence {
+			return errors.New("audit: request_local_tool enforcement_scope requires terminal non-user tool-result provenance")
+		}
+	default:
+		return errors.New("audit: decision explanation enforcement_scope is unsupported")
+	}
+	return nil
+}
+
+// currentUserAuthorityTupleProven is the narrow legacy compatibility proof for
+// eligible decision-explanation-v2 rows written before enforcement_scope was
+// added. Keep all four checks together: an empty scope must never manufacture
+// authority for a non-user system/tool record. Explicit current_user scopes use
+// the same tuple so the two acceptance paths cannot drift.
+func currentUserAuthorityTupleProven(explanation *DecisionExplanation) bool {
+	return explanation != nil &&
+		explanation.EvidenceOwnedByCurrentUser &&
+		explanation.WinningRole == "user" &&
+		explanation.WinningProvenance == "content" &&
+		explanation.CurrentTurnEvidence
+}
+
+// auditRequestBlockAuthorityProven is evaluated only after the exact persisted
+// scope/provenance combination above has been validated. It therefore never
+// infers authority from BlockEligible, avoiding a circular acceptance path.
+func auditRequestBlockAuthorityProven(explanation *DecisionExplanation) bool {
+	if explanation == nil {
+		return false
+	}
+	switch explanation.EnforcementScope {
+	case EnforcementScopeNone, EnforcementScopeCurrentUser:
+		return currentUserAuthorityTupleProven(explanation)
+	case EnforcementScopeRequestLocalSystem, EnforcementScopeRequestLocalTool:
+		return !explanation.EvidenceOwnedByCurrentUser
+	default:
+		return false
+	}
 }
 
 func validEligibilityReason(value string) bool {

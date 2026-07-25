@@ -1157,9 +1157,9 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
   fi'''
 ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "2c71516851b1a2743c3d23434c6e330eafd44ee7cea2930fe8c3697fbb2a979a"
+ROUND9_GATE_WORKFLOW_SHA256 = "c69d3dedbe8fcca4cbbba46e340bb7f6a95fa2fd69524ca1335ecc4a44285ed2"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
-ROUND9_RC_WORKFLOW_SHA256 = "e764ebad26bd11e849774dfa8732e961918b4528d6e4a0108ad8e5b2c127f816"
+ROUND9_RC_WORKFLOW_SHA256 = "086e8c3712d3497203096d492cd1c3ac5ff608e20f8f78bc90c296bbba610681"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
 ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT = (
     "scripts/round9_independent_audit_contract_test.py"
@@ -1169,12 +1169,12 @@ ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256 = {
         "b8e4d8803b9f692bcf49efd074efdc8092cffad303068737e2c2c9b0f36021a7"
     ),
     ROUND9_INDEPENDENT_AUDIT_TEST_SCRIPT: (
-        "abc6f53c090321908c50bc05d888d0a7ca13e9999c046158196280ac631b372f"
+        "f32ff6e257e8ea1cd1a1d8a713d7ac762a860faf2a297f7ea519a717f7e6b84e"
     ),
 }
 ROUND9_MACHINE_REPORT_SCRIPT = "scripts/round9_machine_reports.py"
 ROUND9_MACHINE_REPORT_SCRIPT_SHA256 = (
-    "100c1c6a526dc16c78da0d7e1a6b3a1e5060dd413974087c2c82bd3cbd08e895"
+    "89e7b48edcc41c87bb0f59a7f365b3d103176371eeac75078042e56faeb8bb9d"
 )
 ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
     2,
@@ -1182,7 +1182,7 @@ ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
-    "752c5766423239cd41e640f8e5a23c04379a1bf3ed34063d81b7ab06c91def25"
+    "780433be045f418ba55ac2df501cf89f1a38ba3dd63dfec4b0c5b3917bad54cd"
 )
 ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1357,11 +1357,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "37e2fa439f636884dc3f1620105b43b624e03630e562417d86f4cf2f39fc7a37"
+    "ad47a6c9f5d69f57847a4b5b74a97abff8cb9a05da3fd063581e7580ba85682f"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "a2b9c7046af3eee7d0005e47ede7523621ddae954ac760d54b8bbb8a736bf08b",
-    "scripts/release-doc-consistency.sh": "37bac336034f084b37633c713645faaa1727aaa2838ae3446dce9af0277d420d",
+    "scripts/release-doc-consistency-test.sh": "81326c873b02d6be1301c06735bae88d2763525849b5ea3638feacf3f09ad13b",
+    "scripts/release-doc-consistency.sh": "8bf26d1b86ac4c3bd8457ff440b679f1c9a552dec2934dda0a8c58e741ee223f",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1418,13 +1418,13 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "9c69d17955ce9c572fa5c846e79131af67650af6459d6a287eb64a362dec0c2c",
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "df006d0a36aa68d90350221dd7401be17979c4931cb038cbdc226350a71ea6a5",
-    "tools/round9-eval/cag_round9_eval_broker.py": "73383d83094432689535c0d2a7e9e6dd96e614c4a2822f89e752a391e546c93d",
-    "tools/round9-eval/cag_round9_eval_broker_test.py": "b6d32e69017115531c9c73bbdb59468a0cfd8baeb6f2fd71bf87e4b636c8c1b4",
+    "tools/round9-eval/cag_round9_eval_broker.py": "7962a40fcdecedf89d36cf8bd7daf390183841341019d489b35363d0858a8244",
+    "tools/round9-eval/cag_round9_eval_broker_test.py": "84fdd638c220009465091479963d0f9e45dd98ecda84902c3cef565e2ac3eddf",
     "tools/round9-eval/cag_round9_external_evaluator.py": "0c4b4eb0877824dbea8578845ba2b4da707b6ccfde2ab792e0b3401f44cbfb04",
     "tools/round9-eval/cag_round9_external_evaluator_test.py": "e58e1808c9413a44a547b32cdb0353eeb86275cb1dfe78458f0736b7c3d42ca5",
-    "tools/round9-eval/round9_eval_core.py": "a5bc266d98f8fa81da0e6e99516a2315febcae5557d8811ee1f79370829b0458",
-    "tools/round9-eval/round9_eval_core_test.py": "c831902a6148eff1a4d1989bcf7b85123d24ab79ee418ab3cad3e0085b153bc0",
-    "tools/round9-eval/round9_eval_test_fixtures.py": "0106901b4d1f403e752c082f8fc18fe00f705c4429c2e7552415388440d82229",
+    "tools/round9-eval/round9_eval_core.py": "03ca544f844cfb6397d579f1880173bff5a15847ef0dd9ff077537b192e523b7",
+    "tools/round9-eval/round9_eval_core_test.py": "eb6a1a163482794796c28c1abd3707445a498b63ec0b8901979e22ed2770a4f3",
+    "tools/round9-eval/round9_eval_test_fixtures.py": "8b124e4c68f9576fa1d851bb86141a7d8bf3c216b8f41d3df2058dc2c7abfa62",
 }
 ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": (
@@ -1498,7 +1498,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
         "e11969e711fc5a5c84fd0a7b5ba5317ba2bf6c2f4bf0aa33c5e4e8ac9d65ef88"
     ),
     "docs/reports/ROUND9_MALICIOUS_TEXT_PRODUCER_INVENTORY.json": (
-        "96ffcd050a0896d3b3294aec8fe993c19ad9e05b8be61c7f82317a1c883c9a16"
+        "cc2c104281c23240145a1d74ea7c3c68dbda5993afb28841dd731fdfdcb0df81"
     ),
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
@@ -7292,7 +7292,7 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "test ! -e testdata/round9-independent-benign-v1/cases.jsonl",
         "test ! -e testdata/round9-independent-malicious-v1",
         "independent_corpus_executed=false",
-        "classifier-policy-v8",
+        "classifier-policy-v9",
         "1.0.10",
     ):
         if marker not in text:

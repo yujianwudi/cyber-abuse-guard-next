@@ -1,8 +1,8 @@
 # CPA Cyber Abuse Guard
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -69,10 +69,27 @@ classifier.
 | CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current main snapshot: `classifier-policy-v8` / `b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`; final candidate binding remains pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v9` / `06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`; Host and release binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |
+
+### Latest source-only runtime remediation
+
+- Structurally proven active `system`/`developer`/Responses `instructions` and
+  terminal provider-native tool results now have request-local enforcement
+  authority without being attributed to the authenticated user or entering
+  cross-request subject state.
+- Earlier assistant/tool history, tool schemas and descriptions, and nonterminal
+  tool results remain inert unless a trusted current user explicitly reactivates
+  a bounded referent. Batch and streaming paths use the same terminal
+  conversation boundary.
+- Defensive quoted reviews now use a bounded quote span, an adjacent analytical
+  governor, an explicit non-execution boundary, and an independent-tail check.
+  Variants in quotes, fenced blocks, colons, and newlines can remain review-only,
+  while an appended execution clause still blocks.
+- These changes are source-only. They do not create a Tag, Release, plugin
+  binary, CPA Host result, independent audit, or production approval.
 
 ## Historical v0.15 release record
 
@@ -139,12 +156,15 @@ hash the full request body for audit correlation.
 
 Incomplete requests never update subject risk. A partial prefix cannot produce
 a policy block in `balanced`.
-Malicious-text blocking and subject accumulation both require an explicit
-trusted-current-user attribution proof. Unknown/future fields and non-user or
-tool-originated text remain inspectable and auditable, but cannot directly
-produce a malicious-text block or poison rolling subject state. A later current
-user may reactivate a bounded carrier only through the complete referent proof
-and the same candidate eligibility gate.
+Malicious-text blocking requires one closed request-authority proof: either
+`current_user` ownership or structurally proven `request_local_system` /
+`request_local_tool` authority for an independently complete harmful candidate.
+Only `current_user` findings may accumulate rolling subject risk; request-local
+system/tool blocks are never attributed to the authenticated user. Unknown or
+future fields, assistant history, tool schemas, and nonterminal tool results
+remain inspectable and auditable but cannot directly block. A later current user
+may reactivate a bounded historical carrier only through the complete referent
+proof and the same candidate eligibility gate.
 The proof is bound to the CPA `SourceFormat`: only a matching root provider
 history or Responses scalar `input` can establish user authorship. Nested or
 cross-provider histories, developer/system/tool content, unknown content types,

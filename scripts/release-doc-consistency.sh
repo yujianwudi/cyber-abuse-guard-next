@@ -258,8 +258,14 @@ current_sha256 = sys.argv[3]
 documents = sys.argv[4:]
 active_key = re.compile(
     r"(?<![A-Za-z0-9_])"
-    r"(?P<key>(?:round8|current_release)_classifier_policy_(?:version|sha256))"
+    r"(?P<key>(?:round8|current_release|working_tree)_classifier_policy_(?:version|sha256))"
     r"\s*:\s*(?P<value>[A-Za-z0-9._-]+)"
+)
+active_prose = re.compile(
+    r"\b(?:active\s+(?:development\s+)?target|"
+    r"(?:current\s+)?working-tree(?:\s+development)?\s+(?:identity|classifier))\b"
+    r".{0,240}?\b(?P<version>classifier-policy-v[0-9]+)\b",
+    re.IGNORECASE | re.DOTALL,
 )
 sha256 = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])")
 
@@ -272,6 +278,14 @@ for relative in documents:
             print(
                 f"{relative} contains stale active classifier identity "
                 f"{match.group('key')}: {match.group('value')}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+    for match in active_prose.finditer(normalized):
+        if match.group("version").lower() != current_version.lower():
+            print(
+                f"{relative} contains stale current or working-tree classifier prose "
+                f"{match.group('version')}",
                 file=sys.stderr,
             )
             raise SystemExit(1)

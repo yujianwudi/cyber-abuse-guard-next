@@ -28,6 +28,7 @@ func TestAuditDecisionExplanationIsBoundedAndTextFree(t *testing.T) {
 			WinningRole:             extract.RoleUser,
 			WinningProvenance:       extract.ProvenanceContent,
 			CurrentTurnEvidence:     true,
+			EnforcementScope:        classifier.EnforcementScopeCurrentUser,
 			QuotedOrInertSuppressed: true,
 			HardFloorApplied:        true,
 			HardFloorReason:         "complete_core_owned_active_scope_with_two_strong_qualifiers",
@@ -48,7 +49,7 @@ func TestAuditDecisionExplanationIsBoundedAndTextFree(t *testing.T) {
 	}
 	if explanation.WinningRuleID != "EVADE-002" || explanation.WinningRole != "user" ||
 		explanation.WinningProvenance != "content" || !explanation.HardFloorApplied ||
-		!explanation.QuotedOrInertSuppressed {
+		explanation.EnforcementScope != "current_user" || !explanation.QuotedOrInertSuppressed {
 		t.Fatalf("unexpected audit decision explanation: %+v", explanation)
 	}
 	encoded, err := json.Marshal(explanation)
@@ -143,4 +144,31 @@ func TestAuditDecisionExplanationHonorsIdentifierLoggingPolicy(t *testing.T) {
 			t.Fatalf("enabled rule IDs lost stable evidence identifiers: %s", encoded)
 		}
 	})
+}
+
+func TestAuditDecisionExplanationMapsEnforcementScopeClosed(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		scope classifier.EnforcementScope
+		want  string
+	}{
+		{name: "none", scope: classifier.EnforcementScopeNone, want: ""},
+		{name: "current user", scope: classifier.EnforcementScopeCurrentUser, want: "current_user"},
+		{name: "request-local system", scope: classifier.EnforcementScopeRequestLocalSystem, want: "request_local_system"},
+		{name: "request-local tool", scope: classifier.EnforcementScopeRequestLocalTool, want: "request_local_tool"},
+		{name: "unknown fails closed", scope: classifier.EnforcementScope("future_scope"), want: ""},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			got := auditDecisionExplanation(classifier.Result{
+				DecisionExplanation: &classifier.DecisionExplanation{EnforcementScope: test.scope},
+			})
+			if got == nil || string(got.EnforcementScope) != test.want {
+				t.Fatalf("mapped enforcement scope = %#v, want %q", got, test.want)
+			}
+		})
+	}
 }

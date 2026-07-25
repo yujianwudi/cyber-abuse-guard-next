@@ -265,7 +265,7 @@ def development_evidence(
     tag_object_sha: str = "1" * 40,
     commit: str = "2" * 40,
     tree: str = "3" * 40,
-    classifier_version: str = "classifier-policy-v8-round9-test",
+    classifier_version: str = "classifier-policy-v9-round9-test",
     classifier_sha256: str = "4" * 64,
     ruleset_version: str = "1.0.10",
     ruleset_sha256: str = "5" * 64,

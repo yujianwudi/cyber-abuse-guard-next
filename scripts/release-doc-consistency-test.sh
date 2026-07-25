@@ -9,6 +9,8 @@ classifier_policy_version="classifier-policy-v5"
 classifier_policy_sha256="0e114d98862282d2492fb62e4300297b4746eeaf8165339603d02c48d11bd60b"
 old_classifier_policy_version="classifier-policy-v4"
 old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce20bceff450b4c8"
+stale_round9_policy_version="classifier-policy-v8"
+stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
@@ -318,6 +320,27 @@ printf '\ncurrent_release_classifier_policy_version: %s\ncurrent_release_classif
   "$classifier_policy_version" "$old_classifier_policy_sha256" \
   >>"$work/stale-active-classifier-key/docs/RULES.md"
 must_fail stale-active-classifier-key "$work/stale-active-classifier-key" \
+  'current release documents must not contain stale active classifier identities'
+
+cp -a "$work/pass" "$work/stale-working-tree-classifier-key"
+printf '\nworking_tree_classifier_policy_version: %s\nworking_tree_classifier_policy_sha256: %s\n' \
+  "$stale_round9_policy_version" "$stale_round9_policy_sha256" \
+  >>"$work/stale-working-tree-classifier-key/docs/reports/TEST_REPORT.md"
+must_fail stale-working-tree-classifier-key "$work/stale-working-tree-classifier-key" \
+  'current release documents must not contain stale active classifier identities'
+
+cp -a "$work/pass" "$work/stale-working-tree-classifier-prose"
+printf '\nThe current working-tree identity is `%s` / `%s`.\n' \
+  "$stale_round9_policy_version" "$stale_round9_policy_sha256" \
+  >>"$work/stale-working-tree-classifier-prose/docs/reports/PERFORMANCE.md"
+must_fail stale-working-tree-classifier-prose "$work/stale-working-tree-classifier-prose" \
+  'current release documents must not contain stale active classifier identities'
+
+cp -a "$work/pass" "$work/stale-active-target-classifier-prose"
+printf '\nThe active development target is Linux amd64, %s.\n' \
+  "$stale_round9_policy_version" \
+  >>"$work/stale-active-target-classifier-prose/docs/reports/RELEASE_EVIDENCE.md"
+must_fail stale-active-target-classifier-prose "$work/stale-active-target-classifier-prose" \
   'current release documents must not contain stale active classifier identities'
 
 cp -a "$work/pass" "$work/stale-json-active-classifier-key"

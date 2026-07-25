@@ -1,14 +1,27 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 Source-tree status updated: 2026-07-25 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Introduce request-local enforcement authority for structurally proven active
+  system/developer/Responses-instructions and terminal tool-result carriers,
+  while preserving non-user finding origin and excluding those blocks from
+  subject-risk accumulation.
+- Bind terminal tool-result admission to the final conversation item in both
+  batch and streaming paths so earlier outputs remain historical when a later
+  assistant or user item exists.
+- Replace the fixed defensive-quote sentence template with a bounded structural
+  proof covering quote/fence/newline variants, analytical purpose, an explicit
+  non-execution boundary, and fail-closed independent execution tails.
+- Advance the source behavior identity to `classifier-policy-v9` /
+  `06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4`;
+  the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;
   no candidate asset, attestation, or GitHub Release was created.

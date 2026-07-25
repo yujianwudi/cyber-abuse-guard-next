@@ -60,12 +60,27 @@ const eligibilityKnownReasonFlags = EligibilityReasonIncompleteInspection |
 	EligibilityReasonOperationalCoreAbsent |
 	EligibilityReasonExplicitMalice
 
+// EnforcementScope records why a complete malicious candidate may be enforced
+// at the request boundary. It is deliberately independent from user ownership:
+// request-local system instructions and terminal tool results can contain an
+// active prompt-injection directive, but they must never be attributed to the
+// authenticated user or enter cross-request subject state.
+type EnforcementScope string
+
+const (
+	EnforcementScopeNone               EnforcementScope = ""
+	EnforcementScopeCurrentUser        EnforcementScope = "current_user"
+	EnforcementScopeRequestLocalSystem EnforcementScope = "request_local_system"
+	EnforcementScopeRequestLocalTool   EnforcementScope = "request_local_tool"
+)
+
 // CandidateBlockEligibility is bound to one category/clause/scope/referent
 // candidate. Score and hard-floor code may consume it, but may never create or
 // upgrade it. The fields contain no matched request text.
 type CandidateBlockEligibility struct {
 	InspectionComplete         bool                    `json:"inspection_complete"`
 	EvidenceOwnedByCurrentUser bool                    `json:"evidence_owned_by_current_user"`
+	EnforcementScope           EnforcementScope        `json:"enforcement_scope,omitempty"`
 	CurrentExecutionActProven  bool                    `json:"current_execution_act_proven"`
 	HarmfulCoreComplete        bool                    `json:"harmful_core_complete"`
 	OperationallyActionable    bool                    `json:"operationally_actionable"`
@@ -84,6 +99,22 @@ type CandidateBlockEligibility struct {
 	Eligible                   bool                    `json:"block_eligible"`
 	PrimaryReason              DispositionGate         `json:"primary_eligibility_reason"`
 	ReasonFlags                uint64                  `json:"eligibility_reason_flags"`
+}
+
+// RequestBlockAuthorityProven is the closed request-level authority predicate.
+// The current-user scope remains ownership-bound. Non-user scopes are assigned
+// only by the role-aware classifier after structural provider provenance has
+// been proved; callers cannot manufacture a blocking result because the private
+// candidate identity and occurrence contract are still required downstream.
+func (eligibility CandidateBlockEligibility) RequestBlockAuthorityProven() bool {
+	switch eligibility.EnforcementScope {
+	case EnforcementScopeCurrentUser:
+		return eligibility.EvidenceOwnedByCurrentUser
+	case EnforcementScopeRequestLocalSystem, EnforcementScopeRequestLocalTool:
+		return !eligibility.EvidenceOwnedByCurrentUser
+	default:
+		return false
+	}
 }
 
 type candidateBlockIdentity struct {
@@ -1701,6 +1732,21 @@ func finalizeCandidateBlockEligibility(eligibility CandidateBlockEligibility) Ca
 	if eligibility.AuthorizationClaim == "" {
 		eligibility.AuthorizationClaim = AuthorizationAbsent
 	}
+	// Direct classifier producers start from current-user semantics. Role-aware
+	// binding may later replace that scope with a request-local non-user scope or
+	// clear it entirely. Never let a non-user scope masquerade as user ownership.
+	if eligibility.EvidenceOwnedByCurrentUser {
+		eligibility.EnforcementScope = EnforcementScopeCurrentUser
+	} else if eligibility.EnforcementScope == EnforcementScopeCurrentUser {
+		eligibility.EnforcementScope = EnforcementScopeNone
+	}
+	switch eligibility.EnforcementScope {
+	case EnforcementScopeNone, EnforcementScopeCurrentUser,
+		EnforcementScopeRequestLocalSystem, EnforcementScopeRequestLocalTool:
+	default:
+		eligibility.EnforcementScope = EnforcementScopeNone
+		eligibility.EvidenceAmbiguous = true
+	}
 	// Round 9's block gate is a positive-proof gate. A complete score/core is
 	// insufficient unless the same bounded candidate proves at least one typed
 	// malicious axis. This prevents generic provider composition (for example,
@@ -1720,7 +1766,7 @@ func finalizeCandidateBlockEligibility(eligibility CandidateBlockEligibility) Ca
 		}
 	}
 	addReason(!eligibility.InspectionComplete, EligibilityReasonIncompleteInspection)
-	addReason(!eligibility.EvidenceOwnedByCurrentUser, EligibilityReasonUntrustedOwnership)
+	addReason(!eligibility.RequestBlockAuthorityProven(), EligibilityReasonUntrustedOwnership)
 	addReason(!eligibility.CurrentExecutionActProven, EligibilityReasonNoCurrentDirective)
 	addReason(eligibility.QuotedOrAnalyticalScope, EligibilityReasonQuotedOrAnalytical)
 	addReason(eligibility.DefensiveScopeConflict, EligibilityReasonDefensivePurpose)
@@ -1730,7 +1776,7 @@ func finalizeCandidateBlockEligibility(eligibility CandidateBlockEligibility) Ca
 	addReason(!eligibility.OperationallyActionable, EligibilityReasonOperationalCoreAbsent)
 
 	eligibility.Eligible = eligibility.InspectionComplete &&
-		eligibility.EvidenceOwnedByCurrentUser &&
+		eligibility.RequestBlockAuthorityProven() &&
 		eligibility.CurrentExecutionActProven &&
 		eligibility.HarmfulCoreComplete &&
 		eligibility.OperationallyActionable &&
@@ -1748,7 +1794,7 @@ func finalizeCandidateBlockEligibility(eligibility CandidateBlockEligibility) Ca
 	switch {
 	case !eligibility.InspectionComplete:
 		eligibility.PrimaryReason = GateIncompleteInspection
-	case !eligibility.EvidenceOwnedByCurrentUser:
+	case !eligibility.RequestBlockAuthorityProven():
 		eligibility.PrimaryReason = GateUntrustedOwnership
 	case eligibility.QuotedOrAnalyticalScope:
 		eligibility.PrimaryReason = GateQuotedOrAnalytical
@@ -1853,6 +1899,45 @@ func bindResultCandidateActor(result *Result, actorOwned bool, mode Mode, thresh
 	}
 	eligibility := *result.BlockEligibility
 	eligibility.EvidenceOwnedByCurrentUser = eligibility.EvidenceOwnedByCurrentUser && actorOwned
+	if eligibility.EvidenceOwnedByCurrentUser {
+		eligibility.EnforcementScope = EnforcementScopeCurrentUser
+	} else {
+		eligibility.EnforcementScope = EnforcementScopeNone
+	}
+	eligibility = finalizeCandidateBlockEligibility(eligibility)
+	result.BlockEligibility = &eligibility
+	if !eligibility.Eligible {
+		removeIneligibleHardFloor(result)
+	}
+	result.Action = candidateActionFor(mode, result.Score, thresholds, eligibility)
+	if result.DecisionExplanation != nil {
+		applyEligibilityToExplanation(result.DecisionExplanation, eligibility)
+	}
+}
+
+// bindResultCandidateEnforcementScope admits a structurally proven request-local
+// non-user carrier without rewriting its ownership. It is intentionally separate
+// from bindResultCandidateActor so system/tool blocks cannot poison subject state.
+func bindResultCandidateEnforcementScope(
+	result *Result,
+	scope EnforcementScope,
+	mode Mode,
+	thresholds Thresholds,
+) {
+	if result == nil {
+		return
+	}
+	if scope != EnforcementScopeRequestLocalSystem && scope != EnforcementScopeRequestLocalTool {
+		bindResultCandidateActor(result, false, mode, thresholds)
+		return
+	}
+	enforceResultCandidateEligibility(result, mode, thresholds)
+	if result.BlockEligibility == nil {
+		return
+	}
+	eligibility := *result.BlockEligibility
+	eligibility.EvidenceOwnedByCurrentUser = false
+	eligibility.EnforcementScope = scope
 	eligibility = finalizeCandidateBlockEligibility(eligibility)
 	result.BlockEligibility = &eligibility
 	if !eligibility.Eligible {
@@ -2125,6 +2210,7 @@ func explanationEligibilityMatches(explanation *DecisionExplanation, eligibility
 		explanation.EligibilityReasonFlags == eligibility.ReasonFlags&eligibilityKnownReasonFlags &&
 		explanation.InspectionComplete == eligibility.InspectionComplete &&
 		explanation.EvidenceOwnedByCurrentUser == eligibility.EvidenceOwnedByCurrentUser &&
+		explanation.EnforcementScope == eligibility.EnforcementScope &&
 		explanation.CurrentExecutionActProven == eligibility.CurrentExecutionActProven &&
 		explanation.HarmfulCoreComplete == eligibility.HarmfulCoreComplete &&
 		explanation.OperationallyActionable == eligibility.OperationallyActionable &&
@@ -2151,6 +2237,7 @@ func applyEligibilityToExplanation(explanation *DecisionExplanation, eligibility
 	explanation.EligibilityReasonFlags = eligibility.ReasonFlags & eligibilityKnownReasonFlags
 	explanation.InspectionComplete = eligibility.InspectionComplete
 	explanation.EvidenceOwnedByCurrentUser = eligibility.EvidenceOwnedByCurrentUser
+	explanation.EnforcementScope = eligibility.EnforcementScope
 	explanation.CurrentExecutionActProven = eligibility.CurrentExecutionActProven
 	explanation.HarmfulCoreComplete = eligibility.HarmfulCoreComplete
 	explanation.OperationallyActionable = eligibility.OperationallyActionable

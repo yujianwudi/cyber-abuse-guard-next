@@ -1,8 +1,8 @@
 # v0.16 Round 9 release admission policy
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 ```text
@@ -180,7 +180,7 @@ or treats that Release as success. A new dispatch or `Re-run all jobs` therefore
 either creates a fresh private 17-asset candidate after all admission checks or
 fails closed.
 
-Manifest schema 6 binds `classifier-policy-v8`, ruleset `1.0.10`, audit schema
+Manifest schema 6 binds `classifier-policy-v9`, ruleset `1.0.10`, audit schema
 v6, Raw Capture schema v4, canonical Phase 1 development evidence, paired-v3
 and public-v13 machine reports, independent benign zero-block/zero-hard-policy
 results, exact 100% visible-development paired recall, independent malicious

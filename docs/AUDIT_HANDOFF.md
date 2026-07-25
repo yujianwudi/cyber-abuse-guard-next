@@ -1,14 +1,14 @@
 # 独立审计交接说明 — CPA Cyber Abuse Guard v0.16 Round 9 候选
 
 ```text
-current_classifier_policy_version: classifier-policy-v8
-current_classifier_policy_sha256: b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde
+current_classifier_policy_version: classifier-policy-v9
+current_classifier_policy_sha256: 06cbec97880403268ebd8c41ce3e6f7ff9413e195539c79368d607ed3e86e1b4
 ```
 
 ## 2026-07-25 Round 9 当前交接门禁
 
 当前源码版本为 `0.16`，开发目标为 Linux amd64 非 latest 预发行
-`v0.16-rc.4`、`classifier-policy-v8`、ruleset `1.0.10`、audit schema v6，
+`v0.16-rc.4`、`classifier-policy-v9`、ruleset `1.0.10`、audit schema v6，
 以及唯一 CPA 合同
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`。受保护 Host 作业不做
 source checkout，只把候选与 Phase 1 的不可变身份交给预装的 root-owned broker；
