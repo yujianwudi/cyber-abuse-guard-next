@@ -262,12 +262,52 @@ active_key = re.compile(
     r"\s*:\s*(?P<value>[A-Za-z0-9._-]+)"
 )
 active_prose = re.compile(
-    r"\b(?:active\s+(?:development\s+)?target|"
+    r"(?<![A-Za-z0-9_-])(?:active\s+(?:development\s+)?target|"
     r"(?:current\s+)?working-tree(?:\s+development)?\s+(?:identity|classifier))\b"
     r".{0,240}?\b(?P<version>classifier-policy-v[0-9]+)\b",
     re.IGNORECASE | re.DOTALL,
 )
+policy_version = re.compile(r"\bclassifier-policy-v[0-9]+\b", re.IGNORECASE)
 sha256 = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])")
+policy_digest_value = (
+    r"(?<![0-9A-Fa-f])"
+    r"(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{4,63}(?:\.\.\.|…)[0-9A-Fa-f]{0,63})"
+    r"(?![0-9A-Fa-f])"
+)
+digest_before_identity_claim = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:current|active|working-tree)\b"
+    r"(?:(?!\n\n|[.!?](?=\s|$)|\bruleset\b).){0,200}?"
+    rf"(?P<digest>{policy_digest_value})"
+    r"(?:(?!\n\n|[.!?](?=\s|$)|\bruleset\b).){0,80}?"
+    r"\b(?:(?:classifier\s+)?policy|classifier)\s+identity\b",
+    re.IGNORECASE | re.DOTALL,
+)
+identity_before_digest_claim = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:"
+    r"(?:current\s+)?working-tree(?:\s+development)?\s+(?:identity|classifier)|"
+    r"(?:current|active)\s+(?:(?:classifier\s+)?policy\s+|classifier\s+)?identity"
+    r")\b\s*(?:is|:|=)\s*",
+    re.IGNORECASE,
+)
+
+
+def following_lines(text: str, start: int, count: int = 3) -> str:
+    end = start
+    for _ in range(count):
+        newline = text.find("\n", end)
+        if newline == -1:
+            return text[start:]
+        end = newline + 1
+    return text[start:end]
+
+
+def reject_stale_claim(relative: str, digest: str) -> None:
+    print(
+        f"{relative} contains abbreviated or stale current classifier policy "
+        f"SHA-256 {digest}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
 
 for relative in documents:
     text = (root / relative).read_text(encoding="utf-8")
@@ -289,6 +329,37 @@ for relative in documents:
                 file=sys.stderr,
             )
             raise SystemExit(1)
+    for match in digest_before_identity_claim.finditer(normalized):
+        versions = policy_version.findall(match.group(0))
+        if versions and versions[0].lower() != current_version.lower():
+            print(
+                f"{relative} contains stale current or working-tree classifier prose "
+                f"{versions[0]}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        if match.group("digest") != current_sha256:
+            reject_stale_claim(relative, match.group("digest"))
+    for match in identity_before_digest_claim.finditer(normalized):
+        claim = following_lines(normalized, match.end())
+        versions = policy_version.findall(claim)
+        if versions and versions[0].lower() != current_version.lower():
+            print(
+                f"{relative} contains stale current or working-tree classifier prose "
+                f"{versions[0]}",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        digests = re.findall(policy_digest_value, claim)
+        if not digests:
+            print(
+                f"{relative} presents a current or working-tree classifier identity "
+                "without a full SHA-256",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        if digests[0] != current_sha256:
+            reject_stale_claim(relative, digests[0])
     lines = text.splitlines()
     for line_number, line in enumerate(lines, start=1):
         if current_version not in line:

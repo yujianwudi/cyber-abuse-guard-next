@@ -1641,19 +1641,23 @@ func round8StreamingReferentUncheckedWithFieldIDs(
 			fieldID = fieldIDs[index]
 		}
 		if err := session.AddSegment(extract.SegmentChunk{
-			Role:              segment.Role,
-			Provenance:        segment.Provenance,
-			UserAttribution:   segment.UserAttribution,
-			ConversationIndex: segment.ConversationIndex,
-			TurnIndex:         segment.TurnIndex,
-			IsCurrentTurn:     segment.IsCurrentTurn,
-			ScopeID:           segment.ScopeID,
-			ContentKind:       segment.ContentKind,
-			FieldPathHash:     segment.FieldPathHash,
-			FieldID:           fieldID,
-			Start:             true,
-			End:               true,
-			Text:              []byte(segment.Text),
+			Role:                      segment.Role,
+			Provenance:                segment.Provenance,
+			UserAttribution:           segment.UserAttribution,
+			ToolAssociation:           segment.ToolAssociation,
+			ConversationIndex:         segment.ConversationIndex,
+			TurnIndex:                 segment.TurnIndex,
+			IsCurrentTurn:             segment.IsCurrentTurn,
+			TerminalConversationIndex: segment.TerminalConversationIndex,
+			TerminalTurnIndex:         segment.TerminalTurnIndex,
+			HasTerminalCoordinates:    segment.HasTerminalCoordinates,
+			ScopeID:                   segment.ScopeID,
+			ContentKind:               segment.ContentKind,
+			FieldPathHash:             segment.FieldPathHash,
+			FieldID:                   fieldID,
+			Start:                     true,
+			End:                       true,
+			Text:                      []byte(segment.Text),
 		}); err != nil {
 			t.Fatalf("AddSegment(%d) error = %v", index, err)
 		}

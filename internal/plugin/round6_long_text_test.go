@@ -28,13 +28,30 @@ const (
 )
 
 func TestRound6LongText270KiBActiveRolePositionMatrixBlocks(t *testing.T) {
-	for _, role := range []string{"system", "user", "tool"} {
+	for _, role := range []string{"system", "developer", "user", "tool"} {
 		for _, position := range []string{"start", "middle", "end"} {
 			text := round6PaddedText(t, round6LongTextBytes, round6CredentialCanary, position)
 			messages := []any{map[string]any{
 				"role":    role,
 				"content": text,
 			}}
+			if role == "tool" {
+				messages = []any{
+					map[string]any{
+						"role": "assistant",
+						"tool_calls": []any{map[string]any{
+							"id":   "call_round6_long_text",
+							"type": "function",
+							"function": map[string]any{
+								"name": "load_long_text_fixture", "arguments": `{}`,
+							},
+						}},
+					},
+					map[string]any{
+						"role": "tool", "tool_call_id": "call_round6_long_text", "content": text,
+					},
+				}
+			}
 			body := round6JSON(t, map[string]any{
 				"model":    "gpt-test",
 				"messages": messages,
@@ -276,18 +293,39 @@ func TestRound6MetadataPaddingBeforeAndAfterDoesNotCreateScanLimit(t *testing.T)
 }
 
 func TestRound6LongStreamingRequestBlocksDuringPreRoute(t *testing.T) {
-	text := round6PaddedText(t, round6LongTextBytes, round6CredentialCanary, "end")
-	body := round6JSON(t, map[string]any{
-		"model":    "gpt-test",
-		"stream":   true,
-		"messages": []any{map[string]any{"role": "user", "content": text}},
-	})
-	p := round6Plugin(t, "balanced")
-	route := round6CallRoute(t, p, "openai", body, "application/json", true)
-	round6AssertCredentialBlock(t, p, body, route)
-	round6AssertCompleteCoverage(t, p, round6LegacyWindowBytes)
-	if got := p.counters.snapshot()["executor_blocks"]; got != 0 {
-		t.Fatalf("executor_blocks=%d before executor callback, want pre-route block only", got)
+	for _, role := range []string{"system", "developer", "user", "tool"} {
+		role := role
+		t.Run(role, func(t *testing.T) {
+			text := round6PaddedText(t, round6LongTextBytes, round6CredentialCanary, "end")
+			messages := []any{map[string]any{"role": role, "content": text}}
+			if role == "tool" {
+				messages = []any{
+					map[string]any{
+						"role": "assistant",
+						"tool_calls": []any{map[string]any{
+							"id":   "call_round6_long_stream",
+							"type": "function",
+							"function": map[string]any{
+								"name": "load_long_stream_fixture", "arguments": `{}`,
+							},
+						}},
+					},
+					map[string]any{
+						"role": "tool", "tool_call_id": "call_round6_long_stream", "content": text,
+					},
+				}
+			}
+			body := round6JSON(t, map[string]any{
+				"model": "gpt-test", "stream": true, "messages": messages,
+			})
+			p := round6Plugin(t, "balanced")
+			route := round6CallRoute(t, p, "openai", body, "application/json", true)
+			round6AssertCredentialBlock(t, p, body, route)
+			round6AssertCompleteCoverage(t, p, round6LegacyWindowBytes)
+			if got := p.counters.snapshot()["executor_blocks"]; got != 0 {
+				t.Fatalf("executor_blocks=%d before executor callback, want pre-route block only", got)
+			}
+		})
 	}
 }
 

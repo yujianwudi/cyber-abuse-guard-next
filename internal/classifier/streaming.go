@@ -175,9 +175,13 @@ type streamingField struct {
 	role                            extract.Role
 	provenance                      extract.SegmentProvenance
 	userAttribution                 extract.UserAttribution
+	toolAssociation                 extract.ToolResultAssociation
 	conversationIndex               int
 	turnIndex                       int
 	isCurrentTurn                   bool
+	terminalConversationIndex       int
+	terminalTurnIndex               int
+	hasTerminalCoordinates          bool
 	scopeID                         uint64
 	contentKind                     extract.ContentKind
 	fieldPathHash                   string
@@ -217,9 +221,13 @@ type streamingFieldSummary struct {
 	role                            extract.Role
 	provenance                      extract.SegmentProvenance
 	userAttribution                 extract.UserAttribution
+	toolAssociation                 extract.ToolResultAssociation
 	conversationIndex               int
 	turnIndex                       int
 	isCurrentTurn                   bool
+	terminalConversationIndex       int
+	terminalTurnIndex               int
+	hasTerminalCoordinates          bool
 	scopeID                         uint64
 	contentKind                     extract.ContentKind
 	fieldPathHash                   string
@@ -534,71 +542,74 @@ type ScanSession struct {
 	best     Result
 	hasBest  bool
 
-	previousUser                  string
-	hasPreviousUser               bool
-	previousUserTrusted           bool
-	recentUsers                   []string
-	recentUsersTrusted            []bool
-	linkedMetaUsers               []string
-	linkedMetaUsersTrusted        []bool
-	mappedToolControls            []string
-	untrustedParts                []string
-	untrustedRiskFacts            streamingFieldRiskFacts
-	hasUntrustedRisk              bool
-	untrustedRiskIncomplete       bool
-	untrustedRiskDirty            bool
-	untrustedControlDirty         bool
-	untrustedExactBlocked         bool
-	lastMetaUser                  string
-	pendingNonUserControl         string
-	lastUserControl               string
-	isolatedUserRun               []rune
-	isolatedUserRunTrusted        bool
-	previousUserRisk              streamingFieldRiskFacts
-	hasPreviousUserRisk           bool
-	previousUserComplete          bool
-	profiledPreviousUserRisk      streamingFieldRiskFacts
-	profiledPreviousUserRiskScope profiledCurrentReferentScopeKey
-	profiledHasPreviousUserRisk   bool
-	profiledPreviousUserComplete  bool
-	previousQuotedReferent        Result
-	hasPreviousQuotedReferent     bool
-	previousQuotedReferentTrusted bool
-	refusedHistoryState           refusedHistoryClosureState
-	refusedHistoryBestBefore      Result
-	refusedHistoryHadBestBefore   bool
-	profiledActiveTurnIndex       int
-	profiledMaxTurnIndex          int
-	profiledMaxConversationIndex  int
-	profiledSawCurrentTurn        bool
-	profiledGroupKey              profiledSegmentGroupKey
-	profiledGroupSet              bool
-	profiledGroupParts            []string
-	profiledGroupRefs             []profiledSegmentRef
-	profiledGroupRisk             []bool
-	profiledGroupActiveDirective  bool
-	profiledGroupStructuredTool   bool
-	profiledGroupAuthorityScope   EnforcementScope
-	profiledGroupAuthorityConv    int
-	profiledHistoricalKey         profiledSegmentGroupKey
-	profiledHistoricalSet         bool
-	profiledHistoricalResult      Result
-	profiledHistoricalHasResult   bool
-	profiledHistoricalRefCount    int
-	profiledCurrentReferents      []profiledCurrentReferentScope
-	profiledCurrentUnitOrdinal    int
-	profiledLastCurrentUnit       profiledCurrentReferentUnit
-	profiledLastCurrentUnitSet    bool
-	profiledPendingToolResult     Result
-	profiledPendingToolHasResult  bool
-	profiledPendingToolTurnIndex  int
-	profiledPendingToolConvIndex  int
-	profiledPendingToolScope      EnforcementScope
-	profiledPendingToolIncomplete bool
-	profiledPendingIncompleteTurn int
-	profiledPendingIncompleteConv int
-	profiledRequest               bool
-	quotedOrInertSuppressed       bool
+	previousUser                   string
+	hasPreviousUser                bool
+	previousUserTrusted            bool
+	recentUsers                    []string
+	recentUsersTrusted             []bool
+	linkedMetaUsers                []string
+	linkedMetaUsersTrusted         []bool
+	mappedToolControls             []string
+	untrustedParts                 []string
+	untrustedRiskFacts             streamingFieldRiskFacts
+	hasUntrustedRisk               bool
+	untrustedRiskIncomplete        bool
+	untrustedRiskDirty             bool
+	untrustedControlDirty          bool
+	untrustedExactBlocked          bool
+	lastMetaUser                   string
+	pendingNonUserControl          string
+	lastUserControl                string
+	isolatedUserRun                []rune
+	isolatedUserRunTrusted         bool
+	previousUserRisk               streamingFieldRiskFacts
+	hasPreviousUserRisk            bool
+	previousUserComplete           bool
+	profiledPreviousUserRisk       streamingFieldRiskFacts
+	profiledPreviousUserRiskScope  profiledCurrentReferentScopeKey
+	profiledHasPreviousUserRisk    bool
+	profiledPreviousUserComplete   bool
+	previousQuotedReferent         Result
+	hasPreviousQuotedReferent      bool
+	previousQuotedReferentTrusted  bool
+	refusedHistoryState            refusedHistoryClosureState
+	refusedHistoryBestBefore       Result
+	refusedHistoryHadBestBefore    bool
+	profiledActiveTurnIndex        int
+	profiledMaxTurnIndex           int
+	profiledMaxConversationIndex   int
+	profiledSawCurrentTurn         bool
+	profiledGroupKey               profiledSegmentGroupKey
+	profiledGroupSet               bool
+	profiledGroupParts             []string
+	profiledGroupRefs              []profiledSegmentRef
+	profiledGroupRisk              []bool
+	profiledGroupComplete          []bool
+	profiledGroupActiveDirective   bool
+	profiledGroupStructuredTool    bool
+	profiledGroupAuthorityScope    EnforcementScope
+	profiledGroupAuthorityConv     int
+	profiledPendingSystemCarrier   Result
+	profiledPendingSystemHasResult bool
+	profiledHistoricalKey          profiledSegmentGroupKey
+	profiledHistoricalSet          bool
+	profiledHistoricalResult       Result
+	profiledHistoricalHasResult    bool
+	profiledHistoricalRefCount     int
+	profiledCurrentReferents       []profiledCurrentReferentScope
+	profiledCurrentUnitOrdinal     int
+	profiledLastCurrentUnit        profiledCurrentReferentUnit
+	profiledLastCurrentUnitSet     bool
+	profiledPendingToolResult      Result
+	profiledPendingToolHasResult   bool
+	profiledPendingToolTurnIndex   int
+	profiledPendingToolConvIndex   int
+	profiledPendingToolScope       EnforcementScope
+	profiledPendingToolIncomplete  bool
+	profiledPendingIncompleteTurn  int
+	profiledPendingIncompleteConv  int
+	profiledRequest                bool
+	quotedOrInertSuppressed        bool
 
 	aborted  bool
 	finished bool
@@ -670,22 +681,30 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 			}
 		}
 		s.active = &streamingField{
-			id:                chunk.FieldID,
-			role:              chunk.Role,
-			provenance:        chunk.Provenance,
-			userAttribution:   chunk.UserAttribution,
-			conversationIndex: chunk.ConversationIndex,
-			turnIndex:         chunk.TurnIndex,
-			isCurrentTurn:     chunk.IsCurrentTurn,
-			scopeID:           chunk.ScopeID,
-			contentKind:       chunk.ContentKind,
-			fieldPathHash:     chunk.FieldPathHash,
-			roleComplete:      true,
+			id:                        chunk.FieldID,
+			role:                      chunk.Role,
+			provenance:                chunk.Provenance,
+			userAttribution:           chunk.UserAttribution,
+			toolAssociation:           chunk.ToolAssociation,
+			conversationIndex:         chunk.ConversationIndex,
+			turnIndex:                 chunk.TurnIndex,
+			isCurrentTurn:             chunk.IsCurrentTurn,
+			terminalConversationIndex: chunk.TerminalConversationIndex,
+			terminalTurnIndex:         chunk.TerminalTurnIndex,
+			hasTerminalCoordinates:    chunk.HasTerminalCoordinates,
+			scopeID:                   chunk.ScopeID,
+			contentKind:               chunk.ContentKind,
+			fieldPathHash:             chunk.FieldPathHash,
+			roleComplete:              true,
 		}
 	} else if s.active == nil || s.active.id != chunk.FieldID || s.active.role != chunk.Role ||
 		s.active.provenance != chunk.Provenance || s.active.userAttribution != chunk.UserAttribution ||
+		s.active.toolAssociation != chunk.ToolAssociation ||
 		s.active.conversationIndex != chunk.ConversationIndex || s.active.turnIndex != chunk.TurnIndex ||
 		s.active.isCurrentTurn != chunk.IsCurrentTurn || s.active.scopeID != chunk.ScopeID ||
+		s.active.terminalConversationIndex != chunk.TerminalConversationIndex ||
+		s.active.terminalTurnIndex != chunk.TerminalTurnIndex ||
+		s.active.hasTerminalCoordinates != chunk.HasTerminalCoordinates ||
 		s.active.contentKind != chunk.ContentKind || s.active.fieldPathHash != chunk.FieldPathHash {
 		return ErrInvalidSegmentOrder
 	}
@@ -694,6 +713,14 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 	}
 	if chunk.ConversationIndex > s.profiledMaxConversationIndex {
 		s.profiledMaxConversationIndex = chunk.ConversationIndex
+	}
+	if chunk.HasTerminalCoordinates {
+		if chunk.TerminalTurnIndex > s.profiledMaxTurnIndex {
+			s.profiledMaxTurnIndex = chunk.TerminalTurnIndex
+		}
+		if chunk.TerminalConversationIndex > s.profiledMaxConversationIndex {
+			s.profiledMaxConversationIndex = chunk.TerminalConversationIndex
+		}
 	}
 	if chunk.IsCurrentTurn {
 		s.profiledSawCurrentTurn = true
@@ -743,6 +770,9 @@ func (s *ScanSession) Finish() Result {
 	if s.active != nil {
 		s.setCoverage(CoverageUnavailable, CoverageReasonAborted)
 		s.clearActive()
+	}
+	if s.coverage.State == CoverageComplete {
+		s.flushProfiledRequestLocalSystemCarrierGroup()
 	}
 	if s.coverage.State == CoverageComplete {
 		s.flushProfiledCurrentReferentScope()
@@ -1013,7 +1043,8 @@ func (s *ScanSession) finishField(field *streamingField) {
 		if text, complete := s.completeStreamingRequestLocalOwnerText(field, fieldEnforcementScope); complete {
 			// Single-field request-local ownership needs the same bounded text that
 			// batch classification receives. Recover it only for a complete field
-			// whose ordinary core independently reaches the hard admission gate.
+			// whose ordinary core reaches the hard admission gate or whose active
+			// META control plane may satisfy the narrow request-local takeover gate.
 			segment.Text = text
 		}
 		origin := findingOriginForSegment(segment)
@@ -1068,9 +1099,13 @@ func (s *ScanSession) finishField(field *streamingField) {
 		role:                            field.role,
 		provenance:                      field.provenance,
 		userAttribution:                 field.userAttribution,
+		toolAssociation:                 field.toolAssociation,
 		conversationIndex:               field.conversationIndex,
 		turnIndex:                       field.turnIndex,
 		isCurrentTurn:                   field.isCurrentTurn,
+		terminalConversationIndex:       field.terminalConversationIndex,
+		terminalTurnIndex:               field.terminalTurnIndex,
+		hasTerminalCoordinates:          field.hasTerminalCoordinates,
 		scopeID:                         field.scopeID,
 		contentKind:                     field.contentKind,
 		fieldPathHash:                   field.fieldPathHash,
@@ -1086,6 +1121,18 @@ func (s *ScanSession) finishField(field *streamingField) {
 	}
 	if summary.sampleComplete {
 		summary.sample = append([]byte(nil), field.roleSummary...)
+	}
+	if profiledField && !summary.sampleComplete &&
+		profiledRequestLocalSystemCarrier(fieldSegment) &&
+		profiledSelfContainedCarrierKind(fieldSegment.ContentKind) &&
+		field.totalBytes <= maxCompactIntentProofBytes &&
+		field.totalBytes == int64(len(field.buffer)) {
+		// The generic role summary remains capped at 512 bytes. A request-local
+		// system carrier that still fits the classifier's direct-intent proof bound
+		// can nevertheless be proved exactly by its dedicated producer. Keep this
+		// copy only in the bounded current group; it is cleared when that scope closes.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
 	}
 	if field.role == extract.RoleUser && field.provenance == extract.ProvenanceContent {
 		summary.quotedFollowUp = field.quotedFollowUp
@@ -1234,19 +1281,26 @@ func (s *ScanSession) completeStreamingRequestLocalOwnerText(
 		(scope != EnforcementScopeRequestLocalSystem && scope != EnforcementScopeRequestLocalTool) {
 		return "", false
 	}
+	text, complete := completeStreamingFieldText(field)
+	if !complete {
+		if int64(len(field.buffer)) != field.totalBytes {
+			return "", false
+		}
+		// The current field still fits in the bounded scan window. Reuse it only
+		// for this transient ownership proof; no request text survives finalization.
+		text = string(field.buffer)
+	}
+
 	potential := s.classifier.streamingRiskPotential(field.riskFacts.facts, s.policy, s.thresholds)
-	if !potential.hasQualifiedOrdinary || potential.qualifiedOrdinaryScore < s.thresholds.HardBlock {
+	ordinaryHard := potential.hasQualifiedOrdinary &&
+		potential.qualifiedOrdinaryScore >= s.thresholds.HardBlock
+	metaHard := field.hasBest && s.classifier.requestLocalStandaloneMetaControlEnforceable(
+		field.best, field.riskFacts.facts, text, s.policy, s.thresholds,
+	)
+	if !ordinaryHard && !potential.meta.controlPlaneBlock && !metaHard {
 		return "", false
 	}
-	if text, complete := completeStreamingFieldText(field); complete {
-		return text, true
-	}
-	if int64(len(field.buffer)) != field.totalBytes {
-		return "", false
-	}
-	// The current field still fits in the bounded scan window. Reuse it only for
-	// this transient ownership proof; no request text survives finalization.
-	return string(field.buffer), true
+	return text, true
 }
 
 func streamingSegmentForField(field *streamingField, text string) extract.Segment {
@@ -1254,27 +1308,33 @@ func streamingSegmentForField(field *streamingField, text string) extract.Segmen
 		return extract.Segment{Text: text}
 	}
 	return extract.Segment{
-		Role:              field.role,
-		Provenance:        field.provenance,
-		UserAttribution:   field.userAttribution,
-		ConversationIndex: field.conversationIndex,
-		TurnIndex:         field.turnIndex,
-		IsCurrentTurn:     field.isCurrentTurn,
-		ScopeID:           field.scopeID,
-		ContentKind:       field.contentKind,
-		FieldPathHash:     field.fieldPathHash,
-		Text:              text,
+		Role:                      field.role,
+		Provenance:                field.provenance,
+		UserAttribution:           field.userAttribution,
+		ToolAssociation:           field.toolAssociation,
+		ConversationIndex:         field.conversationIndex,
+		TurnIndex:                 field.turnIndex,
+		IsCurrentTurn:             field.isCurrentTurn,
+		TerminalConversationIndex: field.terminalConversationIndex,
+		TerminalTurnIndex:         field.terminalTurnIndex,
+		HasTerminalCoordinates:    field.hasTerminalCoordinates,
+		ScopeID:                   field.scopeID,
+		ContentKind:               field.contentKind,
+		FieldPathHash:             field.fieldPathHash,
+		Text:                      text,
 	}
 }
 
 func segmentChunkDeclaresProfiledMetadata(chunk extract.SegmentChunk) bool {
 	return segmentDeclaresProfiledMetadata(extract.Segment{
-		ConversationIndex: chunk.ConversationIndex,
-		TurnIndex:         chunk.TurnIndex,
-		IsCurrentTurn:     chunk.IsCurrentTurn,
-		ScopeID:           chunk.ScopeID,
-		ContentKind:       chunk.ContentKind,
-		FieldPathHash:     chunk.FieldPathHash,
+		ToolAssociation:        chunk.ToolAssociation,
+		ConversationIndex:      chunk.ConversationIndex,
+		TurnIndex:              chunk.TurnIndex,
+		IsCurrentTurn:          chunk.IsCurrentTurn,
+		ScopeID:                chunk.ScopeID,
+		ContentKind:            chunk.ContentKind,
+		FieldPathHash:          chunk.FieldPathHash,
+		HasTerminalCoordinates: chunk.HasTerminalCoordinates,
 	})
 }
 
@@ -1283,16 +1343,20 @@ func streamingSegmentForSummary(summary *streamingFieldSummary, text string) ext
 		return extract.Segment{Text: text}
 	}
 	return extract.Segment{
-		Role:              summary.role,
-		Provenance:        summary.provenance,
-		UserAttribution:   summary.userAttribution,
-		ConversationIndex: summary.conversationIndex,
-		TurnIndex:         summary.turnIndex,
-		IsCurrentTurn:     summary.isCurrentTurn,
-		ScopeID:           summary.scopeID,
-		ContentKind:       summary.contentKind,
-		FieldPathHash:     summary.fieldPathHash,
-		Text:              text,
+		Role:                      summary.role,
+		Provenance:                summary.provenance,
+		UserAttribution:           summary.userAttribution,
+		ToolAssociation:           summary.toolAssociation,
+		ConversationIndex:         summary.conversationIndex,
+		TurnIndex:                 summary.turnIndex,
+		IsCurrentTurn:             summary.isCurrentTurn,
+		TerminalConversationIndex: summary.terminalConversationIndex,
+		TerminalTurnIndex:         summary.terminalTurnIndex,
+		HasTerminalCoordinates:    summary.hasTerminalCoordinates,
+		ScopeID:                   summary.scopeID,
+		ContentKind:               summary.contentKind,
+		FieldPathHash:             summary.fieldPathHash,
+		Text:                      text,
 	}
 }
 
@@ -1362,8 +1426,7 @@ func (s *ScanSession) profiledStreamingPendingFallbackTool(segment extract.Segme
 func profiledStreamingDeferredToolCarrier(segment extract.Segment) bool {
 	return segment.ContentKind == extract.ContentKindToolCallArguments ||
 		segment.Provenance == extract.ProvenanceToolPayload ||
-		segment.Role == extract.RoleTool && segment.Provenance == extract.ProvenanceContent &&
-			segment.ContentKind == extract.ContentKindToolResult
+		profiledRequestLocalToolResultCarrier(segment)
 }
 
 func (s *ScanSession) profiledStreamingPendingTool(segment extract.Segment) bool {
@@ -1459,7 +1522,8 @@ func (s *ScanSession) profiledStreamingInspectable(segment extract.Segment) bool
 func profiledStreamingGroupKey(segment extract.Segment, unique int) profiledSegmentGroupKey {
 	key := profiledSegmentGroupKey{
 		role: segment.Role, provenance: segment.Provenance, attribution: segment.UserAttribution,
-		turnIndex: segment.TurnIndex, currentTurn: segment.IsCurrentTurn, scopeID: segment.ScopeID,
+		toolAssociation: segment.ToolAssociation,
+		turnIndex:       segment.TurnIndex, currentTurn: segment.IsCurrentTurn, scopeID: segment.ScopeID,
 	}
 	if segment.ScopeID == 0 || segment.ContentKind == extract.ContentKindToolSchema {
 		key.zeroScopeUnique = unique
@@ -1863,6 +1927,89 @@ func (field *streamingField) crossWindowQuotedReviewStructureProven() bool {
 		inertQuotedNonExecutionBoundary(clauses[1].text)
 }
 
+func (s *ScanSession) beginProfiledStreamingGroup(key profiledSegmentGroupKey) bool {
+	if s == nil || s.coverage.State != CoverageComplete {
+		return false
+	}
+	if s.profiledGroupSet && s.profiledGroupKey != key {
+		s.flushProfiledRequestLocalSystemCarrierGroup()
+		if s.coverage.State != CoverageComplete {
+			return false
+		}
+		s.clearProfiledGroup()
+	}
+	if !s.profiledGroupSet {
+		s.profiledGroupKey = key
+		s.profiledGroupSet = true
+	}
+	return true
+}
+
+func (s *ScanSession) closeProfiledStreamingGroup() bool {
+	if s == nil || s.coverage.State != CoverageComplete {
+		return false
+	}
+	if s.profiledGroupSet {
+		s.flushProfiledRequestLocalSystemCarrierGroup()
+		if s.coverage.State != CoverageComplete {
+			return false
+		}
+		s.clearProfiledGroup()
+	}
+	return true
+}
+
+func (s *ScanSession) appendProfiledStreamingGroupUnit(
+	physicalIndex int,
+	text string,
+	segment extract.Segment,
+	risky bool,
+	complete bool,
+) {
+	if s == nil {
+		return
+	}
+	s.profiledGroupParts = append(s.profiledGroupParts, text)
+	s.profiledGroupRefs = append(s.profiledGroupRefs, profiledSegmentRef{
+		index: physicalIndex, segment: segment,
+	})
+	s.profiledGroupRisk = append(s.profiledGroupRisk, risky)
+	s.profiledGroupComplete = append(s.profiledGroupComplete, complete)
+	s.profiledGroupActiveDirective = s.profiledGroupActiveDirective ||
+		profiledStreamingActiveDirective(segment)
+	s.profiledGroupStructuredTool = s.profiledGroupStructuredTool ||
+		segment.Provenance == extract.ProvenanceToolPayload ||
+		segment.ContentKind == extract.ContentKindToolCallArguments
+	if s.profiledGroupAuthorityScope != EnforcementScopeNone &&
+		segment.ConversationIndex != s.profiledGroupAuthorityConv {
+		s.profiledGroupAuthorityScope = EnforcementScopeNone
+	}
+	if scope := enforcementScopeForProfiledGroup(s.profiledGroupRefs); scope != EnforcementScopeNone {
+		s.profiledGroupAuthorityScope = scope
+		s.profiledGroupAuthorityConv = segment.ConversationIndex
+	}
+}
+
+func profiledStreamingGenericGroupView(
+	parts []string,
+	refs []profiledSegmentRef,
+	includeHistoricalInert bool,
+) ([]string, []profiledSegmentRef) {
+	if len(parts) == 0 || len(parts) != len(refs) {
+		return nil, nil
+	}
+	genericParts := make([]string, 0, len(parts))
+	genericRefs := make([]profiledSegmentRef, 0, len(refs))
+	for index, ref := range refs {
+		if !includeHistoricalInert && profiledContentInert(ref.segment.ContentKind) {
+			continue
+		}
+		genericParts = append(genericParts, parts[index])
+		genericRefs = append(genericRefs, ref)
+	}
+	return genericParts, genericRefs
+}
+
 func (s *ScanSession) considerProfiledRoleSummary(
 	current *streamingFieldSummary,
 	currentRisk *streamingFieldRiskFacts,
@@ -1882,8 +2029,10 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	}
 	pendingTool := s.profiledStreamingPendingTool(segment)
 	historicalReferent := profiledHistoricalReferentEligible(segment)
+	requestLocalSystemCarrier := profiledRequestLocalSystemCarrier(segment) &&
+		profiledSelfContainedCarrierKind(segment.ContentKind)
 	if (profiledContentInert(segment.ContentKind) || profiledStreamingCurrentTrustedCarrier(segment)) &&
-		!historicalReferent {
+		!historicalReferent && !requestLocalSystemCarrier {
 		s.quotedOrInertSuppressed = true
 		return
 	}
@@ -1922,8 +2071,21 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			// produced a blockable, privacy-safe window Result.
 			s.clearProfiledHistoricalCandidate()
 		}
-		if !s.profiledGroupSet || s.profiledGroupKey != key {
-			s.clearProfiledGroup()
+		if requestLocalSystemCarrier {
+			if !s.beginProfiledStreamingGroup(key) {
+				return
+			}
+			s.quotedOrInertSuppressed = true
+			s.appendProfiledStreamingGroupUnit(
+				int(current.id), "", segment, currentRisk != nil && currentRisk.hasRisk(), false,
+			)
+			if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem {
+				s.resetProfiledPendingSystemCarrier()
+			}
+			return
+		}
+		if s.profiledGroupSet && s.profiledGroupKey != key {
+			s.closeProfiledStreamingGroup()
 		}
 		return
 	}
@@ -1941,8 +2103,11 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		s.clearProfiledPreviousUserRisk()
 	}
 	batch := &roleClassificationBatch{session: s}
+	segmentOrigin := findingOriginForSegment(segment)
+	segmentScope := enforcementScopeForSegment(segment)
 	if segment.ContentKind == extract.ContentKindNaturalLanguageDirective &&
-		findingOriginForSegment(segment) == FindingOriginUserContent &&
+		(segmentOrigin == FindingOriginUserContent ||
+			segmentScope == EnforcementScopeRequestLocalSystem) &&
 		profiledNaturalLanguageMayContainLocalSubcandidate(text) {
 		var scratch normalizationScratch
 		views := normalizePartsInto([]string{text}, nil, &scratch)
@@ -1959,21 +2124,28 @@ func (s *ScanSession) considerProfiledRoleSummary(
 				return
 			}
 			ref := profiledSegmentRef{index: int(current.id), segment: segment}
-			candidate = withRoleAwareFindingOrigin(
-				candidate, FindingOriginUserContent, s.mode, s.thresholds,
-			)
-			s.classifier.annotateProfiledResult(
-				&candidate, []profiledSegmentRef{ref}, false,
-				s.policy, s.mode, s.thresholds,
-			)
-			markResultReferentActivated(&candidate, true, true, s.mode, s.thresholds)
-			bindResultCandidateReferentAnchor(&candidate, ref, true, s.mode, s.thresholds)
-			if candidate.DecisionExplanation != nil {
-				candidate.DecisionExplanation.CurrentTurnEvidence = true
-				candidate.DecisionExplanation.ReferentLinkUsed = true
-				candidate.DecisionExplanation.EvidenceSegmentCount = 1
+			if segmentOrigin == FindingOriginUserContent {
+				candidate = withRoleAwareFindingOrigin(
+					candidate, FindingOriginUserContent, s.mode, s.thresholds,
+				)
+				s.classifier.annotateProfiledResult(
+					&candidate, []profiledSegmentRef{ref}, false,
+					s.policy, s.mode, s.thresholds,
+				)
+				markResultReferentActivated(&candidate, true, true, s.mode, s.thresholds)
+				bindResultCandidateReferentAnchor(&candidate, ref, true, s.mode, s.thresholds)
+				if candidate.DecisionExplanation != nil {
+					candidate.DecisionExplanation.CurrentTurnEvidence = true
+					candidate.DecisionExplanation.ReferentLinkUsed = true
+					candidate.DecisionExplanation.EvidenceSegmentCount = 1
+				}
+			} else {
+				candidate = s.classifier.bindProfiledRequestLocalSystemReactivation(
+					candidate, []profiledSegmentRef{ref}, ref,
+					s.policy, s.mode, s.thresholds,
+				)
 			}
-			s.consider(candidate, FindingOriginUserContent)
+			s.considerRanked(candidate)
 		}
 	}
 	if segment.Provenance == extract.ProvenanceToolPayload {
@@ -1982,28 +2154,19 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		clear(s.mappedToolControls)
 		s.mappedToolControls = s.mappedToolControls[:0]
 	}
-	if !s.profiledGroupSet || s.profiledGroupKey != key {
-		s.clearProfiledGroup()
-		s.profiledGroupKey = key
-		s.profiledGroupSet = true
+	if !s.beginProfiledStreamingGroup(key) {
+		return
 	}
-	s.profiledGroupParts = append(s.profiledGroupParts, text)
-	s.profiledGroupRefs = append(s.profiledGroupRefs, profiledSegmentRef{
-		index: int(current.id), segment: segment,
-	})
-	s.profiledGroupRisk = append(s.profiledGroupRisk, currentRisk != nil && currentRisk.hasRisk())
-	s.profiledGroupActiveDirective = s.profiledGroupActiveDirective ||
-		profiledStreamingActiveDirective(segment)
-	s.profiledGroupStructuredTool = s.profiledGroupStructuredTool ||
-		segment.Provenance == extract.ProvenanceToolPayload ||
-		segment.ContentKind == extract.ContentKindToolCallArguments
-	if s.profiledGroupAuthorityScope != EnforcementScopeNone &&
-		segment.ConversationIndex != s.profiledGroupAuthorityConv {
-		s.profiledGroupAuthorityScope = EnforcementScopeNone
-	}
-	if scope := enforcementScopeForProfiledGroup(s.profiledGroupRefs); scope != EnforcementScopeNone {
-		s.profiledGroupAuthorityScope = scope
-		s.profiledGroupAuthorityConv = segment.ConversationIndex
+	s.appendProfiledStreamingGroupUnit(
+		int(current.id), text, segment, currentRisk != nil && currentRisk.hasRisk(), true,
+	)
+	systemCarrierGroup := s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem &&
+		profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs)
+	if systemCarrierGroup {
+		s.resetProfiledPendingSystemCarrier()
+		if !s.considerProfiledRequestLocalSystemCarrierReactivation(batch) {
+			return
+		}
 	}
 	if len(s.profiledGroupParts) > maxRoleClassifierSegments {
 		evictedRisk := len(s.profiledGroupRisk) != 0 && s.profiledGroupRisk[0]
@@ -2033,6 +2196,9 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		copy(s.profiledGroupRisk, s.profiledGroupRisk[len(s.profiledGroupRisk)-maxRoleClassifierSegments:])
 		clear(s.profiledGroupRisk[maxRoleClassifierSegments:])
 		s.profiledGroupRisk = s.profiledGroupRisk[:maxRoleClassifierSegments]
+		copy(s.profiledGroupComplete, s.profiledGroupComplete[len(s.profiledGroupComplete)-maxRoleClassifierSegments:])
+		clear(s.profiledGroupComplete[maxRoleClassifierSegments:])
+		s.profiledGroupComplete = s.profiledGroupComplete[:maxRoleClassifierSegments]
 	}
 	// A fenced/configuration field is ordinarily retained as inert historical
 	// evidence. Once the same profiled group proves a request-local system
@@ -2051,7 +2217,19 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		}
 	}
 
-	candidate, ok := batch.classify(s.profiledGroupParts, s.profiledGroupStructuredTool)
+	genericParts, genericRefs := profiledStreamingGenericGroupView(
+		s.profiledGroupParts, s.profiledGroupRefs, historicalReferent,
+	)
+	if len(genericParts) == 0 {
+		if historicalReferent && !current.hasHistoricalWindowCandidate {
+			// A newer inert historical field is still the nearest bare referent.
+			// Generic classification must not consume its text, but a benign field
+			// must terminate an older malicious carrier just as the batch path does.
+			s.clearProfiledHistoricalCandidate()
+		}
+		return
+	}
+	candidate, ok := batch.classify(genericParts, s.profiledGroupStructuredTool)
 	if !ok {
 		if historicalReferent {
 			s.clearProfiledHistoricalCandidate()
@@ -2059,7 +2237,7 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		return
 	}
 	if pendingTool {
-		refs := append([]profiledSegmentRef(nil), s.profiledGroupRefs...)
+		refs := append([]profiledSegmentRef(nil), genericRefs...)
 		// Terminality is request-local authority, not current-user ownership.
 		// Preserve the provider's non-current tool-result metadata while the
 		// candidate is provisional so the final explanation and occurrences can
@@ -2079,19 +2257,184 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		if current.hasInertQuotedReferent {
 			candidate = current.inertQuotedReferent
 		}
-		s.classifier.annotateProfiledResult(&candidate, s.profiledGroupRefs, false, s.policy, s.mode, s.thresholds)
+		s.classifier.annotateProfiledResult(&candidate, genericRefs, false, s.policy, s.mode, s.thresholds)
 		s.clearProfiledHistoricalCandidate()
-		s.rememberProfiledHistoricalCandidate(candidate, len(s.profiledGroupRefs))
+		s.rememberProfiledHistoricalCandidate(candidate, len(genericRefs))
 		return
 	}
 	candidate = s.prepareProfiledCandidate(
-		candidate, s.profiledGroupRefs, s.profiledGroupActiveDirective,
+		candidate, genericRefs, s.profiledGroupActiveDirective,
 	)
 	if s.profiledStreamingClassifiable(segment) {
-		s.considerWithEnforcementScope(
-			candidate, findingOriginForSegment(segment), s.profiledGroupAuthorityScope,
-		)
+		if systemCarrierGroup {
+			candidate = withRoleAwareFindingOriginAndScope(
+				candidate, findingOriginForSegment(segment), s.profiledGroupAuthorityScope,
+				s.mode, s.thresholds,
+			)
+			s.rememberProfiledPendingSystemCarrier(candidate)
+		} else {
+			s.considerWithEnforcementScope(
+				candidate, findingOriginForSegment(segment), s.profiledGroupAuthorityScope,
+			)
+		}
 	}
+}
+
+func (s *ScanSession) considerProfiledRequestLocalSystemCarrierReactivation(
+	batch *roleClassificationBatch,
+) bool {
+	if s == nil || s.classifier == nil || batch == nil ||
+		s.profiledGroupAuthorityScope != EnforcementScopeRequestLocalSystem {
+		return true
+	}
+	proofs, complete := s.classifier.profiledRequestLocalSystemCarrierReactivationProofs(
+		s.profiledGroupRefs, false,
+	)
+	if !complete {
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return false
+	}
+	for _, proof := range proofs {
+		candidate, ok := batch.classify(proof.parts, false)
+		if !ok {
+			return false
+		}
+		if !profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+			continue
+		}
+		if len(proof.carrierRefs) > 1 {
+			profiledCarrierRunClearOccurrenceOffsets(&candidate)
+		}
+		candidate = s.classifier.bindProfiledRequestLocalSystemReactivation(
+			candidate, proof.carrierRefs, proof.anchor,
+			s.policy, s.mode, s.thresholds,
+		)
+		if resultHasEligibleMaliciousWinner(candidate, s.thresholds) {
+			s.rememberProfiledPendingSystemCarrier(candidate)
+		}
+	}
+	return true
+}
+
+func profiledRequestLocalSystemGroupHasCarrier(refs []profiledSegmentRef) bool {
+	for _, ref := range refs {
+		if profiledRequestLocalSystemCarrier(ref.segment) &&
+			profiledSelfContainedCarrierKind(ref.segment.ContentKind) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ScanSession) resetProfiledPendingSystemCarrier() {
+	if s == nil {
+		return
+	}
+	s.profiledPendingSystemCarrier = Result{}
+	s.profiledPendingSystemHasResult = false
+}
+
+func (s *ScanSession) rememberProfiledPendingSystemCarrier(candidate Result) {
+	if s == nil {
+		return
+	}
+	if !s.profiledPendingSystemHasResult ||
+		roleResultBetter(candidate, s.profiledPendingSystemCarrier) {
+		s.profiledPendingSystemCarrier = candidate
+		s.profiledPendingSystemHasResult = true
+	}
+}
+
+func (s *ScanSession) profiledRequestLocalSystemCarrierProofUnavailable() bool {
+	if s == nil || s.profiledGroupAuthorityScope != EnforcementScopeRequestLocalSystem ||
+		!profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs) {
+		return false
+	}
+	if len(s.profiledGroupRefs) != len(s.profiledGroupRisk) ||
+		len(s.profiledGroupRefs) != len(s.profiledGroupComplete) {
+		return true
+	}
+	survivingOwners, complete := s.classifier.profiledRequestLocalSystemSurvivingOwnerIndexes(
+		s.profiledGroupRefs,
+	)
+	if !complete {
+		return true
+	}
+	for index, ref := range s.profiledGroupRefs {
+		if s.profiledGroupComplete[index] || !s.profiledGroupRisk[index] ||
+			!profiledRequestLocalSystemCarrier(ref.segment) ||
+			!profiledSelfContainedCarrierKind(ref.segment.ContentKind) {
+			continue
+		}
+		ownerAt := func(ownerIndex int) (profiledSegmentRef, bool) {
+			if ownerIndex < 0 || ownerIndex >= len(s.profiledGroupRefs) {
+				return profiledSegmentRef{}, false
+			}
+			owner := s.profiledGroupRefs[ownerIndex]
+			if !profiledSegmentsShareLogicalTextField(ref.segment, owner.segment) ||
+				!profiledRequestLocalSystemDirective(owner.segment) {
+				return profiledSegmentRef{}, false
+			}
+			return owner, true
+		}
+		before, beforeOK := ownerAt(index - 1)
+		after, afterOK := ownerAt(index + 1)
+		beforeDisposition := quotedReviewContinuationNone
+		afterDisposition := quotedReviewContinuationNone
+		if beforeOK {
+			var complete bool
+			beforeDisposition, complete = s.classifier.profiledCarrierLocalOwnerDisposition(before.segment)
+			if !complete {
+				return true
+			}
+		}
+		if afterOK {
+			var proofComplete bool
+			afterDisposition, proofComplete = s.classifier.profiledCarrierLocalOwnerDisposition(after.segment)
+			if !proofComplete {
+				return true
+			}
+		}
+		if beforeDisposition == quotedReviewContinuationActive && !survivingOwners[index-1] {
+			beforeDisposition = quotedReviewContinuationNone
+		}
+		if afterDisposition == quotedReviewContinuationActive && !survivingOwners[index+1] {
+			afterDisposition = quotedReviewContinuationNone
+		}
+		active := false
+		switch {
+		case afterDisposition == quotedReviewContinuationActive:
+			active = true
+		case afterDisposition == quotedReviewContinuationCancelled:
+		case beforeDisposition == quotedReviewContinuationActive:
+			active = true
+		case afterDisposition == quotedReviewContinuationInert:
+		case beforeDisposition == quotedReviewContinuationCancelled ||
+			beforeDisposition == quotedReviewContinuationInert:
+		}
+		if active {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ScanSession) flushProfiledRequestLocalSystemCarrierGroup() {
+	if s == nil {
+		return
+	}
+	if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem &&
+		profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs) {
+		if s.profiledRequestLocalSystemCarrierProofUnavailable() {
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			s.resetProfiledPendingSystemCarrier()
+			return
+		}
+		if s.profiledPendingSystemHasResult {
+			s.considerRanked(s.profiledPendingSystemCarrier)
+		}
+	}
+	s.resetProfiledPendingSystemCarrier()
 }
 
 func profiledStreamingCurrentReferentDirective(segment extract.Segment) bool {
@@ -3364,6 +3707,7 @@ func profiledSegmentsShareLogicalTextField(left, right extract.Segment) bool {
 	return left.FieldPathHash != "" && left.FieldPathHash == right.FieldPathHash &&
 		left.Role == right.Role && left.Provenance == right.Provenance &&
 		left.UserAttribution == right.UserAttribution &&
+		left.ToolAssociation == right.ToolAssociation &&
 		left.ConversationIndex == right.ConversationIndex && left.TurnIndex == right.TurnIndex &&
 		left.IsCurrentTurn == right.IsCurrentTurn && left.ScopeID == right.ScopeID
 }
@@ -3641,10 +3985,14 @@ func (s *ScanSession) clearProfiledGroup() {
 	s.profiledGroupRefs = nil
 	clear(s.profiledGroupRisk)
 	s.profiledGroupRisk = nil
+	clear(s.profiledGroupComplete)
+	s.profiledGroupComplete = nil
 	s.profiledGroupActiveDirective = false
 	s.profiledGroupStructuredTool = false
 	s.profiledGroupAuthorityScope = EnforcementScopeNone
 	s.profiledGroupAuthorityConv = 0
+	s.profiledPendingSystemCarrier = Result{}
+	s.profiledPendingSystemHasResult = false
 }
 
 // considerRoleSummary incrementally preserves the bounded role-aware
@@ -5018,9 +5366,13 @@ func (c *Classifier) classifyStreamingSegmentsCompat(segments []extract.Segment,
 	for index, segment := range segments {
 		if err := session.AddSegment(extract.SegmentChunk{
 			Role: segment.Role, Provenance: segment.Provenance, UserAttribution: segment.UserAttribution,
+			ToolAssociation:   segment.ToolAssociation,
 			ConversationIndex: segment.ConversationIndex, TurnIndex: segment.TurnIndex,
 			IsCurrentTurn: segment.IsCurrentTurn, ScopeID: segment.ScopeID,
-			ContentKind: segment.ContentKind, FieldPathHash: segment.FieldPathHash,
+			TerminalConversationIndex: segment.TerminalConversationIndex,
+			TerminalTurnIndex:         segment.TerminalTurnIndex,
+			HasTerminalCoordinates:    segment.HasTerminalCoordinates,
+			ContentKind:               segment.ContentKind, FieldPathHash: segment.FieldPathHash,
 			FieldID: uint64(index + 1), Start: true, End: true, Text: []byte(segment.Text),
 		}); err != nil {
 			session.Abort()

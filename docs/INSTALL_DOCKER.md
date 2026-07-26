@@ -2,33 +2,32 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
-## Round 8 release warning
+## Current source status
 
-The current source version is `0.16`; the only Round 8 artifact target is the
-Linux amd64 prerelease `v0.16-rc.2`. It must be published as non-latest and does
-not authorize production deployment or Balanced mode. Stable `v0.16` does not
-exist. The earlier local `v0.16-rc.1` package and all v0.15 procedures below are
-historical evidence and must not be overwritten or reused as the Round 8
-candidate.
+This checkout is the source-only Round 9 development candidate. No current
+plugin release, production approval, or Balanced-mode admission is implied.
+Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
+reuse or relabel them as a build of the current source.
 
-Only isolated counted-Mock sandbox validation is in scope. The exact candidate
-must be tested on CPA v7.2.95
-(`f71ec0eb6776854457892452cf28c47f0d658251`) without a real Provider. A sandbox
-PASS is engineering evidence only; independent source/artifact audit and the
-external admission policy remain required before production canary discussion.
+Linux amd64 and CPA v7.2.95
+(`f71ec0eb6776854457892452cf28c47f0d658251`) are the only compatibility target.
+Runtime validation must use an isolated counted-Mock upstream with no real
+Provider or account pool. A sandbox PASS is engineering evidence only and does
+not replace independent source review or the external admission policy.
 
 Development artifacts containing `-dirty` are test-only. Do not place them in
 any production plugin directory. Do not enable Raw Capture merely to validate
 the candidate, and never include a capture database in CI or release assets.
 
-See [RELEASE_POLICY.md](RELEASE_POLICY.md) and
-[ROUND8_RELEASE_READINESS.md](reports/ROUND8_RELEASE_READINESS.md) for the
-authoritative current status. The command sequence later in this file is a
-historical v0.15 operations reference unless a future release-specific document
-explicitly supersedes it.
+See [RELEASE_POLICY.md](RELEASE_POLICY.md),
+[ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md), and
+[ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md) for the current
+status. Later v0.15/Round 8 command sequences are historical operations
+references unless a future release-specific document explicitly supersedes
+them.
 
 ## Host controls outside the Router boundary
 

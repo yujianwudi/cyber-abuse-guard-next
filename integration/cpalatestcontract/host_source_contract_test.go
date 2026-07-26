@@ -144,6 +144,8 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 
 	handlerTests := []string{
 		"TestNormalizeResponsesWebsocketRequestReplacesCodexLocalCompactionTranscript",
+		"TestNormalizeResponsesWebsocketRequestWithPreviousResponseIDIncremental",
+		"TestNormalizeResponsesWebsocketRequestInjectsPreviousResponseIDForIncremental",
 		"TestCodexLocalCompactionSummaryAdditionalToolsConstraints",
 	}
 	for _, upstreamTest := range handlerTests {

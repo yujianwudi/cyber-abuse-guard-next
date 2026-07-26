@@ -1867,6 +1867,16 @@ func classifyScenarios(
 
 		tool, err := classifyBody(engine, map[string]any{
 			"model": "round9-public-corpus", "messages": []any{
+				map[string]any{
+					"role": "assistant",
+					"tool_calls": []any{map[string]any{
+						"id":   "round9-public",
+						"type": "function",
+						"function": map[string]any{
+							"name": "load_public_corpus_payload", "arguments": `{}`,
+						},
+					}},
+				},
 				map[string]any{"role": "tool", "tool_call_id": "round9-public", "content": text},
 			},
 		})

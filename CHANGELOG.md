@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
 Source-tree status updated: 2026-07-26 (Asia/Shanghai)
@@ -75,6 +75,47 @@ Source-tree status updated: 2026-07-26 (Asia/Shanghai)
   system/developer/Responses-instructions and terminal tool-result carriers,
   while preserving non-user finding origin and excluding those blocks from
   subject-risk accumulation.
+- Close provider-native tool authority around complete request-local
+  transactions. OpenAI Chat, OpenAI Responses, and Claude now require adjacent,
+  complete call/result groups with one-to-one IDs; Responses function/custom
+  subtypes cannot cross-authorize. Gemini requires one adjacent terminal group
+  with equal cardinality and either matching nonempty ID+name pairs or all
+  ID-free name+ordinal matches. Mixed, partial, wrong-owner, orphaned,
+  malformed, intervened, and nonterminal groups remain unassociated.
+  Responses continuations containing only `previous_response_id` plus a result
+  remain non-authoritative because Host pending/consumed/replay state is
+  unavailable to the plugin.
+- Restrict provider-native result authority to the exact Chat `content`,
+  Responses `output`, Claude `tool_result.content`, or Gemini
+  `functionResponse.response` boundary. Gemini authorizes string descendants of
+  that exact response object, including CPA v7.2.95 `result` and `output`
+  carriers, while siblings on `functionResponse` remain untrusted. Claude text
+  blocks accept a CPA-preserved `cache_control` object without authorizing its
+  metadata strings; arbitrary block siblings, aliases, and scalar cache-control
+  lookalikes still fail closed. Chat calls retain the exact canonical function
+  shape rather than an ID-only or legacy lookalike.
+- Keep association planning linear in retained text spans by collecting exact
+  authorized result-span IDs first and applying them in one span pass. ID/name
+  fields are suppressed only inside proven provider-native call/result objects;
+  unknown or malformed objects remain inspectable text.
+- Add disarmed NERV regressions for credential/session theft,
+  persistence/C2/evasion, ransomware, phishing, covert keylogging,
+  unauthorized exploitation, and post-exploitation exfiltration. Cover
+  Balanced/Strict batch/stream routes, four-provider roughly 7 KiB
+  front/middle/back system and terminal-tool carriers, and low-false-positive
+  repository, defensive-analysis, authorized-operations, and consented-
+  telemetry neighbors. Exact-main five-repository counted-Mock evidence remains
+  pending and is not inferred from source tests.
+- Restore bounded Chinese defense-evasion eligibility for an affirmative
+  `致盲` action tied to an active production/execute speech act. Explicitly
+  negated actions, defensive incident analysis, quoted review, and authorized
+  maintenance remain nonblocking.
+- Bind creation and deployment verbs to their direct artifact: building or
+  deploying a detector/scanner for a recovered persistence agent remains
+  nonblocking, while a later independent instruction to create or deploy the
+  agent still blocks. Reading or recovering a credential-exposure alert/finding
+  for incident triage likewise remains distinct from reading and exfiltrating
+  passwords.
 - Bind terminal tool-result admission to the final conversation item in both
   batch and streaming paths so earlier outputs remain historical when a later
   assistant or user item exists.
@@ -82,7 +123,7 @@ Source-tree status updated: 2026-07-26 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Advance the source behavior identity to `classifier-policy-v9` /
-  `840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`;
+  `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;

@@ -194,11 +194,28 @@ expected_round9_audit_entries=(
   TestRound9MigrationBackupCleanupRejectsSymlinkArtifacts
 )
 expected_round9_extract_entries=(
+	BenchmarkRound9ToolAssociationPlanning
   TestRound9DirectUserProfilesSeparateCurrentInputFromAuthorityAndTools
   TestRound9MediaPromptProfilesMarkOnlyExactPromptAsCurrentUser
   TestRound9AlphaSearchQueriesAreCurrentButScopeIndependent
   TestRound9DirectUserProfileAliasesRemainIncomplete
   TestRound9OnlyTerminalHistoryUserCanBeCurrent
+  TestRound9OpenAIToolResultAssociationRequiresUniquePriorCall
+  TestRound9ProviderToolResultAssociationContract
+  TestRound9StructuredToolResultAuthorityBudgetTruncationFailsClosed
+  TestRound9StructuredToolResultAuthorityDoesNotCrossTerminalTransactionBoundary
+  TestRound9StructuredToolResultAuthorityFailsClosedAndDoesNotPartiallyCommit
+  TestRound9StructuredToolResultAuthorityRejectsNonterminalAndMismatchedTransactions
+  TestRound9StructuredToolResultTextLeavesAreAtomicAndProviderExact
+  TestRound9ToolAssociationFieldNamesRemainVisibleOutsideClosedProviderObjects
+  TestRound9GeminiDuplicateWrappersFailClosed
+  TestRound9GeminiExplicitToolAssociationRequiresMatchingNames
+  TestRound9GeminiWrapperMultiplicityIsScopedPerPart
+  TestRound9OpenAIChatToolAssociationRequiresCanonicalFunctionShape
+  TestRound9ProviderToolAssociationTransactionsAreAdjacentAndComplete
+  TestRound9ResponsesToolAssociationRequiresExactSubtype
+  TestRound9ToolAssociationAuthorityUsesExactProviderTextPath
+  TestRound9ToolAssociationDuplicateKeysFailClosed
 )
 expected_round9_plugin_entries=(
   TestInspectionDispositionIncompleteOverridesMaliciousPrefix
@@ -223,6 +240,16 @@ expected_round9_plugin_entries=(
   TestRound9ManagementMigrationBackupInventoryWorksWithAuditDisabled
   TestRound9PublicRunnerDefensiveQuotedAmbiguityFullRouteRegression
   TestRound9RequestLocalToolBlockPersistsEndToEnd
+  TestIncidentResponseRoleMatrix
+  TestNERVExplicitIntentRoutesBlockAcrossRolesAndTransports
+  TestNERVProviderLongSystemAndTerminalToolRoutesBlock
+  TestNERVNeutralAndDefensiveRequestsRouteUpstream
+  TestProviderToolAuthorityRoutingContract
+  TestProviderToolAuthorityRoutePersistsCanonicalAuditFields
+  TestProviderStructuredToolAuthorityCompositionBoundary
+  TestRequestLocalStandaloneMetaTakeoverRoutesBlockBatchAndStream
+  TestRequestLocalMetaQuotedConcealmentDoesNotRouteBlock
+  TestRequestLocalToolResultRequiresUniqueMatchingTerminalCall
   TestRound6LongText270KiBActiveRolePositionMatrixBlocks
   TestAuthenticatedRequestLocalSystemBlocksWithoutPoisoningCleanFollowUp
   TestToolPayloadMetadataNamedFieldsDoNotCreateCurrentUserEligibility
@@ -233,9 +260,9 @@ require_reviewed_entries ./internal/audit "round-nine audit" \
   '^(TestRound9[A-Za-z0-9_]*|TestEnforcementScope[A-Za-z0-9_]*|TestV5MigrationRejectsDecisionExplanationPrivacyBypassBeforeBackup|TestV4MigrationBackupIsExactBeforeV6RawCaptureCleanup)$' \
   "${expected_round9_audit_entries[@]}"
 require_reviewed_entries ./internal/extract "round-nine extractor" \
-  '^TestRound9[A-Za-z0-9_]*$' "${expected_round9_extract_entries[@]}"
+	'^(Test|Benchmark)Round9[A-Za-z0-9_]*$' "${expected_round9_extract_entries[@]}"
 require_reviewed_entries ./internal/plugin "round-nine plugin" \
-  '^(TestRound9[A-Za-z0-9_]*|TestInspectionDisposition[A-Za-z0-9_]*|TestFourRepositoryRequestLocalAuthorityAndInertCarrierBoundaries|TestManagementAuditEndpointsDistinguishDisabledFromUnavailable|TestAuthorizationPolicyCannotCreateOrRemoveMaliciousEligibility|TestRound6LongText270KiBActiveRolePositionMatrixBlocks|TestAuthenticatedRequestLocalSystemBlocksWithoutPoisoningCleanFollowUp|TestToolPayloadMetadataNamedFieldsDoNotCreateCurrentUserEligibility|TestAdjacentNegationProofBudgetCannotCreateRolelessMaliciousEligibility|TestLargeTopLevelToolDefinitionDoesNotCreateBlockingEligibility)$' \
+  '^(TestRound9[A-Za-z0-9_]*|TestInspectionDisposition[A-Za-z0-9_]*|TestFourRepositoryRequestLocalAuthorityAndInertCarrierBoundaries|TestManagementAuditEndpointsDistinguishDisabledFromUnavailable|TestAuthorizationPolicyCannotCreateOrRemoveMaliciousEligibility|TestIncidentResponseRoleMatrix|TestNERVExplicitIntentRoutesBlockAcrossRolesAndTransports|TestNERVProviderLongSystemAndTerminalToolRoutesBlock|TestNERVNeutralAndDefensiveRequestsRouteUpstream|TestProviderToolAuthorityRoutingContract|TestProviderToolAuthorityRoutePersistsCanonicalAuditFields|TestProviderStructuredToolAuthorityCompositionBoundary|TestRequestLocalStandaloneMetaTakeoverRoutesBlockBatchAndStream|TestRequestLocalMetaQuotedConcealmentDoesNotRouteBlock|TestRequestLocalToolResultRequiresUniqueMatchingTerminalCall|TestRound6LongText270KiBActiveRolePositionMatrixBlocks|TestAuthenticatedRequestLocalSystemBlocksWithoutPoisoningCleanFollowUp|TestToolPayloadMetadataNamedFieldsDoNotCreateCurrentUserEligibility|TestAdjacentNegationProofBudgetCannotCreateRolelessMaliciousEligibility|TestLargeTopLevelToolDefinitionDoesNotCreateBlockingEligibility)$' \
   "${expected_round9_plugin_entries[@]}"
 
 expected_round8_classifier_entries=(
@@ -387,6 +414,16 @@ expected_round9_classifier_entries=(
   TestRound9ExplicitMaliciousRelationRejectsNegatedAndFloodInputs
   TestRound9ExplicitMaliciousFallbackDoesNotComposeAcrossClauses
   TestRound9ExplicitMaliciousFallbackBindsIndependentClause
+  TestRound9DefensiveArtifactActionsRemainBoundToTheArtifact
+  TestRound9ClauseLocalDestructiveDataRelation
+  TestRound9ExplicitMaliciousRelationOverflowPositions
+  TestRound9ExplicitMaliciousRelationOverflowUsesOnlyAdjacentSoftWindows
+  TestRound9ExplicitMaliciousRelationOverflowRetainsSoftChainAxes
+  TestRound9ExplicitMaliciousRelationOverflowTaxonomyDominanceIsSoftChainLocal
+  TestRound9ExplicitMaliciousRelationOverflowHonorsWholeFieldOwners
+  TestRound9ExplicitMaliciousRelationOverflowBatchStreamingParity
+  TestRound9ExplicitRelationTypedAxesHavePhysicalOccurrences
+  TestRound9ExplicitRelationRejectsUnownedEligibilityAxisOccurrence
   TestLinkedPhishingRealCredentialVictimDoesNotBroadenBenignScopes
   TestRound9CurrentUserMetaAndQuotedReferentRemainBlockable
   TestRound9ExplicitRelationHonorsCandidateLocalDefensiveOwner
@@ -395,8 +432,37 @@ expected_round9_classifier_entries=(
   TestRound9QuotedActivationVerbInsideCarrierCannotSelfActivate
   TestRound9EncryptedBackupAdjectiveDoesNotBecomeRansomware
   TestRound9RansomwareRequiresOwnedDestructiveAction
+	TestRound9MalwareCreationBindsItsDirectArtifact
+  TestExplicitMalwareControlSurvivesDefensiveDetectorTarget
   TestRound9DevelopmentGeneralizationReview
   TestRound9QuotedInstructionCarrierGrammar
+  TestIncidentResponseNaturalDefensiveReviewGrammar
+  TestIncidentResponseContinuationLastEffectiveState
+  TestIncidentResponseSameClauseAlternativeCancellationState
+  TestIncidentResponsePerspectiveAndBoundaryFailClosed
+  TestDevelopmentPrepChineseDefenseEvasionWrapperBlocks
+  TestDevelopmentPrepChineseDefenseEvasionBenignNeighborsRemainNonBlocking
+  TestNERVCarrierMatrixLongFieldPositionsBatchStreamingParity
+  TestNERVCarrierMatrixProviderLongSystemAndTerminalToolPositions
+  TestNERVCarrierMatrixBenignNearNeighborsRemainNonBlocking
+  TestNERVActivationCarrierArchetypeRoleModeBatchStreamingMatrix
+  TestNERVActivationCarrierAloneAndBenignPairsRemainNonBlocking
+  TestNERVChunkParentToChildGroundTruthProviderMatrix
+  TestNERVChunkNonUserOverflowStreamingRepresentatives
+  TestNERVExplicitIntentRoleBatchStreamingMatrix
+  TestNERVNamesDocumentationAndDefensiveReviewRemainNonBlocking
+  TestRound9RequestLocalSystemCarrierKindMatrix
+  TestRound9RequestLocalSystemCarrier512BoundaryBatchStreamingParity
+  TestRound9RequestLocalSystemCarrierBeyondWindowIsExplicitlyIncomplete
+  TestRound9RequestLocalSystemCarrierStreamingCancellationIsProvisional
+  TestRound9RequestLocalSystemCarrierStreamingScopeClosureCommits
+  TestRound9RequestLocalStandaloneMetaTakeoverBatchStreamingParity
+  TestRound9RequestLocalMetaTakeoverFalsePositiveBoundaries
+  TestRound9RequestLocalSystemIncidentResponseTransactionBatchStreamingParity
+  TestRound9RequestLocalSystemIncidentResponseIsolation
+  TestRound9RequestLocalToolAuthorityRequiresUniqueMatchingCall
+  TestRound9ProviderToolAuthorityContractMatrix
+  TestRound9StreamingSegmentAdaptersPreserveTerminalMetadata
 )
 
 # Every classifier test-like entry visible without the consumed_evaluation build
@@ -732,9 +798,9 @@ case "$mode" in
     "$go_bin" test -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier
     "$go_bin" -C "$round9_counted_mock_module" test -count=1 .
     ;;
-  race)
-    CGO_ENABLED=1 "$go_bin" test -race -tags="$test_tags" -count=1 "${safe_packages[@]}"
-    CGO_ENABLED=1 "$go_bin" test -race -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier
+	race)
+		CGO_ENABLED=1 "$go_bin" test -race -timeout=15m -tags="$test_tags" -count=1 "${safe_packages[@]}"
+		CGO_ENABLED=1 "$go_bin" test -race -timeout=15m -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier
     CGO_ENABLED=1 "$go_bin" -C "$round9_counted_mock_module" test -race -count=1 .
     ;;
   boundary)

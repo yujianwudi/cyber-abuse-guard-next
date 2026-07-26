@@ -11,6 +11,7 @@ old_classifier_policy_version="classifier-policy-v4"
 old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce20bceff450b4c8"
 stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
+stale_abbreviated_policy_sha256="dc869ac9...e045"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
@@ -336,6 +337,44 @@ printf '\nThe current working-tree identity is `%s` / `%s`.\n' \
 must_fail stale-working-tree-classifier-prose "$work/stale-working-tree-classifier-prose" \
   'current release documents must not contain stale active classifier identities'
 
+cp -a "$work/pass" "$work/stale-abbreviated-current-classifier-prose"
+printf '\nThe source checks are evidence for the current `%s` policy identity.\n' \
+  "$stale_abbreviated_policy_sha256" \
+  >>"$work/stale-abbreviated-current-classifier-prose/docs/reports/PERFORMANCE.md"
+must_fail stale-abbreviated-current-classifier-prose \
+  "$work/stale-abbreviated-current-classifier-prose" \
+  "contains abbreviated or stale current classifier policy SHA-256 $stale_abbreviated_policy_sha256"
+
+cp -a "$work/pass" "$work/stale-abbreviated-working-tree-classifier-prose"
+printf '\nThe current working-tree identity is `%s` / `%s`.\n' \
+  "$classifier_policy_version" "$stale_abbreviated_policy_sha256" \
+  >>"$work/stale-abbreviated-working-tree-classifier-prose/docs/reports/PERFORMANCE.md"
+must_fail stale-abbreviated-working-tree-classifier-prose \
+  "$work/stale-abbreviated-working-tree-classifier-prose" \
+  "contains abbreviated or stale current classifier policy SHA-256 $stale_abbreviated_policy_sha256"
+
+cp -a "$work/pass" "$work/missing-working-tree-classifier-sha"
+printf '\nThe current working-tree identity is `%s`.\n' \
+  "$classifier_policy_version" \
+  >>"$work/missing-working-tree-classifier-sha/docs/reports/PERFORMANCE.md"
+must_fail missing-working-tree-classifier-sha \
+  "$work/missing-working-tree-classifier-sha" \
+  'presents a current or working-tree classifier identity without a full SHA-256'
+
+cp -a "$work/pass" "$work/current-full-classifier-prose"
+printf '\nThe current working-tree identity is `%s` / `%s`.\n' \
+  "$classifier_policy_version" "$classifier_policy_sha256" \
+  >>"$work/current-full-classifier-prose/docs/reports/PERFORMANCE.md"
+run_gate "$work/current-full-classifier-prose"
+printf 'release document consistency allowed an exact full current classifier policy identity\n'
+
+cp -a "$work/pass" "$work/historical-abbreviated-classifier-prose"
+printf '\nHistorical evidence retained a pre-current `%s` policy identity as chronology.\n' \
+  "$stale_abbreviated_policy_sha256" \
+  >>"$work/historical-abbreviated-classifier-prose/docs/reports/PERFORMANCE.md"
+run_gate "$work/historical-abbreviated-classifier-prose"
+printf 'release document consistency allowed clearly historical abbreviated identity evidence\n'
+
 cp -a "$work/pass" "$work/stale-active-target-classifier-prose"
 printf '\nThe active development target is Linux amd64, %s.\n' \
   "$stale_round9_policy_version" \
@@ -384,6 +423,13 @@ printf '\n| Ruleset SHA-256 | `%s` |\n| Classifier policy | `%s` / `%s` |\n' \
   >>"$work/ruleset-before-current-classifier/docs/reports/TEST_REPORT.md"
 run_gate "$work/ruleset-before-current-classifier"
 printf 'release document consistency allowed a distinct ruleset hash immediately before the correct classifier identity\n'
+
+cp -a "$work/pass" "$work/classifier-before-ruleset"
+printf '\nThe current working-tree identity is `%s` /\n`%s`\nand ruleset `1.0.10` /\n`%s`.\n' \
+  "$classifier_policy_version" "$classifier_policy_sha256" "$ruleset_sha256" \
+  >>"$work/classifier-before-ruleset/docs/reports/PERFORMANCE.md"
+run_gate "$work/classifier-before-ruleset"
+printf 'release document consistency allowed the correct classifier identity immediately before a distinct ruleset hash\n'
 
 cp -a "$work/pass" "$work/quoted-current-active-classifier"
 printf '\n{"current_release_classifier_policy_sha256":"%s"}\n' \

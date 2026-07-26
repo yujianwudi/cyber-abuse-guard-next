@@ -643,8 +643,12 @@ func round8AssertChunkMatchesSegment(t *testing.T, chunk SegmentChunk, segment S
 	t.Helper()
 	if chunk.Role != segment.Role || chunk.Provenance != segment.Provenance ||
 		chunk.UserAttribution != segment.UserAttribution ||
+		chunk.ToolAssociation != segment.ToolAssociation ||
 		chunk.ConversationIndex != segment.ConversationIndex || chunk.TurnIndex != segment.TurnIndex ||
 		chunk.IsCurrentTurn != segment.IsCurrentTurn || chunk.ScopeID != segment.ScopeID ||
+		chunk.TerminalConversationIndex != segment.TerminalConversationIndex ||
+		chunk.TerminalTurnIndex != segment.TerminalTurnIndex ||
+		chunk.HasTerminalCoordinates != segment.HasTerminalCoordinates ||
 		chunk.ContentKind != segment.ContentKind || chunk.FieldPathHash != segment.FieldPathHash {
 		t.Fatalf("chunk metadata=%#v segment metadata=%#v", chunk, segment)
 	}

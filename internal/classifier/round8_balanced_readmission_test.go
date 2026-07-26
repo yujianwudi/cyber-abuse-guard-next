@@ -539,19 +539,23 @@ func classifyRound8StreamingSegments(t testing.TB, classifier *Classifier, segme
 	}
 	for index, segment := range segments {
 		if err := session.AddSegment(extract.SegmentChunk{
-			Role:              segment.Role,
-			Provenance:        segment.Provenance,
-			UserAttribution:   segment.UserAttribution,
-			ConversationIndex: segment.ConversationIndex,
-			TurnIndex:         segment.TurnIndex,
-			IsCurrentTurn:     segment.IsCurrentTurn,
-			ScopeID:           segment.ScopeID,
-			ContentKind:       segment.ContentKind,
-			FieldPathHash:     segment.FieldPathHash,
-			FieldID:           uint64(index + 1),
-			Start:             true,
-			End:               true,
-			Text:              []byte(segment.Text),
+			Role:                      segment.Role,
+			Provenance:                segment.Provenance,
+			UserAttribution:           segment.UserAttribution,
+			ToolAssociation:           segment.ToolAssociation,
+			ConversationIndex:         segment.ConversationIndex,
+			TurnIndex:                 segment.TurnIndex,
+			IsCurrentTurn:             segment.IsCurrentTurn,
+			TerminalConversationIndex: segment.TerminalConversationIndex,
+			TerminalTurnIndex:         segment.TerminalTurnIndex,
+			HasTerminalCoordinates:    segment.HasTerminalCoordinates,
+			ScopeID:                   segment.ScopeID,
+			ContentKind:               segment.ContentKind,
+			FieldPathHash:             segment.FieldPathHash,
+			FieldID:                   uint64(index + 1),
+			Start:                     true,
+			End:                       true,
+			Text:                      []byte(segment.Text),
 		}); err != nil {
 			t.Fatalf("AddSegment(%d) error = %v", index, err)
 		}
@@ -1154,10 +1158,16 @@ func round8Segment(
 	contentKind extract.ContentKind,
 	text string,
 ) extract.Segment {
+	toolAssociation := extract.ToolResultAssociationNone
+	if role == extract.RoleTool && provenance == extract.ProvenanceContent &&
+		contentKind == extract.ContentKindToolResult {
+		toolAssociation = extract.ToolResultAssociationUnique
+	}
 	return extract.Segment{
 		Role:              role,
 		Provenance:        provenance,
 		UserAttribution:   attribution,
+		ToolAssociation:   toolAssociation,
 		ConversationIndex: conversationIndex,
 		TurnIndex:         turnIndex,
 		IsCurrentTurn:     current,

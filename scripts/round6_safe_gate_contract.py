@@ -1157,7 +1157,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
   fi'''
 ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "c69d3dedbe8fcca4cbbba46e340bb7f6a95fa2fd69524ca1335ecc4a44285ed2"
+ROUND9_GATE_WORKFLOW_SHA256 = "f156bc02f01f530ec272d520ce9412f74c99ea1a350007fc16eb236e25983dd1"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "086e8c3712d3497203096d492cd1c3ac5ff608e20f8f78bc90c296bbba610681"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1357,11 +1357,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "ad47a6c9f5d69f57847a4b5b74a97abff8cb9a05da3fd063581e7580ba85682f"
+    "2a361058b614d934196750e9493ed8db26df1e5a6f851ff681438c719a3195d3"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "81326c873b02d6be1301c06735bae88d2763525849b5ea3638feacf3f09ad13b",
-    "scripts/release-doc-consistency.sh": "8bf26d1b86ac4c3bd8457ff440b679f1c9a552dec2934dda0a8c58e741ee223f",
+    "scripts/release-doc-consistency-test.sh": "d58060aba51d050f8e2890ddcd08eb2c9826691807d39cc40539e0cfe5b6302a",
+    "scripts/release-doc-consistency.sh": "fd7034fa0b43bfbabbb9f929f2092a054f78b9bd1a1c53f9c51e0cb789e2632e",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1498,7 +1498,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
         "e11969e711fc5a5c84fd0a7b5ba5317ba2bf6c2f4bf0aa33c5e4e8ac9d65ef88"
     ),
     "docs/reports/ROUND9_MALICIOUS_TEXT_PRODUCER_INVENTORY.json": (
-        "cc2c104281c23240145a1d74ea7c3c68dbda5993afb28841dd731fdfdcb0df81"
+        "def42b49e18fd373dbaa2730af9fc5006ba8c2c5a83e42984e78fa9c241e34aa"
     ),
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
@@ -9388,7 +9388,8 @@ def validate_round6_makefile_contract(text: str, source: Path) -> None:
     expected_benchmark_commands = (
         "$(GO) test ./internal/classifier -run='^(TestCandidateRichMaxPartsAllocationBound|TestCandidateRichProfiledMaxPartsPerformanceBound|TestClassifier(Adversarial)?PerformanceAcceptance|TestClassifierDirectiveAllocationAcceptance|TestDirectiveClauseOverflowPerformanceBoundary|TestRound5MetaOverridePerformanceAcceptance|TestRound5AdjacentNegationCandidateFloodPerformanceAcceptance)$$' -count=1 -v",
         "$(GO) test ./internal/classifier -run='^$$' -bench=. -benchmem -count=3",
-        "$(GO) test ./internal/extract -run='^$$' -bench='^(BenchmarkExtractRequest(ReverseOrderedMedia|Multipart|ScalarCarrierPermutation).*|BenchmarkMultipartUnknownFileField(1MiB|8MiB))$$' -benchmem -benchtime=3x",
+        "@$(GO) test ./internal/extract -list='^BenchmarkRound9ToolAssociationPlanning$$' | grep -Fxq 'BenchmarkRound9ToolAssociationPlanning' || { echo 'required Round9 tool-association planning benchmark is missing' >&2; exit 1; }",
+        "$(GO) test ./internal/extract -run='^$$' -bench='^(BenchmarkExtractRequest(ReverseOrderedMedia|Multipart|ScalarCarrierPermutation).*|BenchmarkMultipartUnknownFileField(1MiB|8MiB)|BenchmarkRound9ToolAssociationPlanning)$$' -benchmem -benchtime=3x",
     )
     if benchmark_commands != expected_benchmark_commands:
         raise ContractError(

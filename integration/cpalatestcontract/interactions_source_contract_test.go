@@ -12,9 +12,12 @@ import (
 )
 
 const (
-	cpaLatestHandlersPackage       = cpaLatestModulePath + "/sdk/api/handlers"
-	cpaLatestGeminiHandlersPackage = cpaLatestHandlersPackage + "/gemini"
-	cpaLatestInternalAPIPackage    = cpaLatestModulePath + "/internal/api"
+	cpaLatestHandlersPackage           = cpaLatestModulePath + "/sdk/api/handlers"
+	cpaLatestGeminiHandlersPackage     = cpaLatestHandlersPackage + "/gemini"
+	cpaLatestInternalAPIPackage        = cpaLatestModulePath + "/internal/api"
+	cpaLatestGeminiInteractionsPackage = cpaLatestModulePath + "/internal/translator/gemini/interactions"
+	cpaLatestGeminiGeminiPackage       = cpaLatestModulePath + "/internal/translator/gemini/gemini"
+	cpaLatestOpenAIGeminiPackage       = cpaLatestModulePath + "/internal/translator/openai/gemini"
 
 	cpaLatestInteractionsHandlerFixture       = "latest_interactions_handler_overlay_test.go.txt"
 	cpaLatestInteractionsHandlerFixtureSHA256 = "5f099850bdb6462b0daca4a730d0bde92739dc2435a9c33dfa38bd2eb0dafa66"
@@ -50,6 +53,29 @@ var latestOfficialInteractionsTests = []struct {
 			"TestExecuteProtocolStreamWithAuthManagerAgentUsesSelectionModelForAuth",
 			"TestExecuteProtocolWithAuthManagerAgentUsesSelectionModelForAuth",
 			"TestExecuteProtocolWithAuthManagerUsesForcedProvider",
+		},
+	},
+	{
+		packagePath: cpaLatestGeminiInteractionsPackage,
+		testNames: []string{
+			"TestConvertGeminiRequestToInteractionsFunctionCall",
+		},
+	},
+	{
+		packagePath: cpaLatestGeminiGeminiPackage,
+		testNames: []string{
+			"TestBackfillEmptyFunctionResponseNames_Parallel",
+			"TestBackfillEmptyFunctionResponseNames_MoreResponsesThanCalls",
+			"TestBackfillEmptyFunctionResponseNames_MultipleGroups",
+		},
+	},
+	{
+		packagePath: cpaLatestOpenAIGeminiPackage,
+		testNames: []string{
+			"TestConvertGeminiRequestToOpenAI_FunctionResponsesConsumeToolCallIDsFIFO",
+			"TestConvertGeminiRequestToOpenAI_FunctionResponseWithoutPriorCallGetsFallbackID",
+			"TestConvertGeminiRequestToOpenAI_ExtraFunctionResponsesUseFallbackID",
+			"TestConvertGeminiRequestToOpenAI_PreservesExplicitFunctionCallIDs",
 		},
 	},
 }

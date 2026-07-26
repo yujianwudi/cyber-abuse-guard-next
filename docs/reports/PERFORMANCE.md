@@ -2,35 +2,48 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
-Last updated: 2026-07-26 (Asia/Shanghai)
+Last updated: 2026-07-27 (Asia/Shanghai)
 
 ## Round 9 current status
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
 working-tree identity is `classifier-policy-v9` /
-`840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`
+`fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
-No complete performance recipe has been rerun for the current `840b921c...a74d`
-identity; current exact-source performance evidence is therefore
-`NOT_PROVIDED`. The latest Linux amd64 complete development benchmark below
-instead binds predecessor `classifier-policy-v8` /
-`b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde`;
-it is retained development history and is not evidence for the v9 working tree,
-a final commit/tree, a reproducible Linux `.so`, or any counted-Mock/Host boundary.
+The complete `make round6-benchmark` recipe was rerun for the working-tree
+identity stated above under WSL Ubuntu 26.04, Go 1.26.4 linux/amd64, and GNU Make
+4.4.1, and exited 0. The hard acceptance lane recorded classifier
+P50/P95/P99 `424.779/535.251/677.264 us`, candidate-rich and near-budget
+adversarial cases `37.159/20.408 ms/op`, the approximately 1 MiB META wrapper
+at `148.155 ms/op`, `6,338,756 B/op`, and 112 allocations, and the 1,024-clause
+negated-prohibition flood at `33.986 ms/op`, `4,357,794 B/op`, and 6,003
+allocations. At 64 complete call/result pairs, the request-local association
+planner measured OpenAI Chat/Responses, Claude, and Gemini at
+`1.917/1.586/1.301/1.367 ms/op`, `845,989/784,565/568,114/736,338 B/op`, and
+`16,981/15,552/14,046/15,005 allocs/op`. Long JSON extraction, raw-capture
+admission/management, and four-repository full-route acceptance also passed in
+the same recipe. This is
+source-only development evidence for the current policy identity, not a final
+commit/tree, CPA Host, reproducible Linux `.so`, release, or independent result.
+The isolated classifier latency comparison and predecessor complete benchmark
+below remain useful supporting history but are not substituted for the current
+recipe.
 
 | Round 9 evidence | Current status |
 |---|---|
+| Current complete local Linux development recipe | **SOURCE-ONLY DEVELOPMENT PASS.** `make round6-benchmark` exited 0 for `classifier-policy-v9` / `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c` under WSL Ubuntu 26.04, Go 1.26.4 linux/amd64, and GNU Make 4.4.1. Classifier P50/P95/P99 were `424.779/535.251/677.264 us`; candidate-rich/near-budget were `37.159/20.408 ms/op`; the long META wrapper was `148.155 ms/op`, `6,338,756 B/op`, 112 allocs; the negated-prohibition flood was `33.986 ms/op`, `4,357,794 B/op`, 6,003 allocs. At 64 complete tool call/result pairs, OpenAI Chat/Responses, Claude, and Gemini association planning measured `1.917/1.586/1.301/1.367 ms/op`, `845,989/784,565/568,114/736,338 B/op`, and `16,981/15,552/14,046/15,005 allocs/op`. Extract, raw-capture, and plugin-route acceptance lanes passed. No raw log is checked in, and no CPA Host, final artifact, or independent claim is inferred |
+| Current isolated classifier latency gate | **SOURCE-ONLY DEVELOPMENT PASS.** Fourteen current-tree runs and five clean-HEAD controls all passed P95 `<2 ms` / P99 `<5 ms`. The stable current median was P50 `391.237 us`, P95 `468.491 us`, P99 `620.655 us`, and about `28,041 B/classification`; one whole-process WSL noise round reached P99 `4.871859 ms` but still passed. Thresholds remain unchanged. This is not CPA Host or release evidence |
 | Historical complete local Linux development recipe (pre-current identity) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** `GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go make round6-benchmark` with `GOFLAGS=-mod=readonly` exited successfully. Raw log: `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063` |
-| Historical role-aware maximum-parts path (pre-current identity) | **HISTORICAL DEVELOPMENT REGRESSION PASS.** Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. The checked-in hard-bound test remains part of CI, but its timing/allocation result was not rerun for `840b921c...a74d` |
+| Historical role-aware maximum-parts path (pre-current identity) | **HISTORICAL DEVELOPMENT REGRESSION PASS.** Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. The checked-in hard-bound test remains part of CI, but its timing/allocation result was not rerun for the working-tree identity stated above |
 | Pre-fix v9 WSL source self-check (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Linux amd64 Go 1.26.4 recorded classifier p50/p95/p99 of 454.800 µs / 764.214 µs / 1.007808 ms over 10,000 samples; adversarial candidate-rich and near-budget cases were 42.930 ms/op and 24.744 ms/op. One-iteration streaming samples were 51.037 ms for 270 KiB, 197.453 ms for 1 MiB, 803.990 ms for 4 MiB, and 1.616 s near 8 MiB. These numbers predate the current policy identity and are not CPA Host or release evidence |
 | Pre-fix normalized multilingual long-frame signal pass (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Three isolated Go 1.26.4 `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` runs measured 0.355-0.363 ms/op at 16 KiB (45.15-46.21 MB/s, 810-813 B/op, 2 allocs/op) and 22.230-22.564 ms/op at 1 MiB (46.47-47.17 MB/s, 841-847 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path measured 7.873-8.598 ms/op at 16 KiB (543,028-563,462 B/op, 108-110 allocs/op) and 250.230-259.302 ms/op at 1 MiB (16,886,254-17,299,688 B/op, 333-339 allocs/op). These are historical WSL source microbenchmarks, not current-identity or CPA Host evidence |
 | Pre-fix directive-clause overflow wall-clock boundary (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS WITH LIMITED CONCURRENT HEADROOM.** Three isolated Go 1.26.4 runs measured the 1,024-unique-prohibition case at 93.324-97.670 ms/op, and a later exact-commit isolated rerun measured 99.842 ms/op, 449,483 B/op, and 2,103 allocs/op against the `<175 ms/op` gate. The independent audit also observed 184-198 ms/op when unrelated package work ran concurrently. Keep the deterministic wall-clock gate isolated and treat Host concurrency, RSS, P95/P99, and near-8 MiB fields as a separate acceptance lane; no current-policy or CPA Host latency/throughput result is inferred |
 | Pre-fix diagnostic retained as history | The earlier working-tree snapshot recorded 14.948-16.418 s/op, approximately 397 MB/op, and about 1.077 million allocs/op. Its CPU profile (`6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69`) and memory profile (`fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6`) remain diagnostic chronology only and are not attributed to the current classifier identity |
-| Classifier latency and allocation acceptance on the final source freeze | `NOT_PROVIDED`; earlier snapshots passed hard bounds, but the current identity, final commit/tree, and exact candidate have not been benchmark-rerun |
+| Classifier latency and allocation acceptance on the current source identity | **SOURCE-ONLY DEVELOPMENT PASS** through the complete recipe above; final commit/tree and exact candidate artifact binding remain `NOT_PROVIDED` |
 | Standalone and CPA Host RSS on the exact candidate | `NOT_PROVIDED` |
 | CPA Host latency, throughput, concurrency, and first-byte behavior | `NOT_PROVIDED` |
 | Repository-local counted-Mock runtime performance | `NOT_PROVIDED` |
@@ -51,9 +64,9 @@ The defensive-quote parity repair runs only when a current profiled scope has
 both directive and carrier units. Ordinary short requests avoid reconstruction;
 long fields retain a three-bit signal set. A single carrier is no longer
 classified twice, and a reconstructed proof is capped at 66,080 bytes. Tight
-`MaxChunks` regression passes as a source behavior check; the historical
-performance-acceptance suite passed for an earlier identity and was not rerun
-for `840b921c...a74d`. The
+`MaxChunks` regression passes as a source behavior check; the complete current-
+identity performance recipe and the isolated short classifier latency gate both
+passed at the source boundary. The
 over-512-byte signal path performs one multi-pattern scan and shares the main
 normalized view when no compact carry was injected; the conservative fallback
 normalizes independently. Chinese, Japanese, Korean, and mixed-language terms
@@ -64,11 +77,12 @@ classification only when capacity eviction is required, allowing complete safe
 scopes to leave the window. No exact CPA Host latency, RSS, or throughput result
 is inferred from those source-only checks.
 
-The incident-response false-positive repair changes only a short exact-prefix
-table and does not alter the long-frame matcher or streaming data structures.
-That is a code-shape observation, not timing evidence; the current policy still
-requires a fresh isolated benchmark and a separate CPA Host concurrency/RSS/
-tail-latency run before any performance claim.
+The incident-response false-positive repair changes only bounded analytical and
+non-execution grammar and does not alter the long-frame matcher or streaming
+data structures. The current policy now has both the complete source benchmark
+recipe and isolated classifier latency evidence above, but still requires
+separate CPA Host concurrency/RSS/tail-latency evidence before any broader
+performance claim.
 
 A CPU profile of the historical `f37a25dd` overflow fixture measured about
 130.066 ms/op with profiling overhead. The overlapping cumulative samples put

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -69,7 +69,7 @@ classifier.
 | CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v9` / `840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`; Host and release binding remain pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v9` / `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`; Host and release binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |
@@ -87,6 +87,23 @@ classifier.
   terminal provider-native tool results now have request-local enforcement
   authority without being attributed to the authenticated user or entering
   cross-request subject state.
+- Tool-result authority is transaction-closed: OpenAI Chat, Responses, Claude,
+  and Gemini require their native call/result shape and owner. Gemini accepts
+  only one adjacent terminal transaction whose whole group is either explicit-
+  ID matched or ID-free name+ordinal matched; all strings below its exact
+  `functionResponse.response` object, including CPA v7.2.95 `result` and
+  `output`, are scanned, but outer siblings remain inert. Claude permits the
+  CPA-preserved `cache_control` object on a text block without treating its
+  metadata as result text. A Responses
+  `previous_response_id` continuation alone remains non-authoritative because
+  the plugin cannot prove Host pending-call, consumption, or replay state.
+- Disarmed NERV regressions now cover credential/session theft,
+  persistence/C2/evasion, ransomware, phishing, covert keylogging,
+  unauthorized exploitation, and post-exploitation exfiltration. Four-provider
+  roughly 7 KiB front/middle/back system and terminal-tool routes are exercised,
+  while repository references and bounded defensive/authorized neighbors remain
+  nonblocking. This is source-only coverage; an exact-main five-repository
+  counted-Mock rerun is still required.
 - Earlier assistant/tool history, tool schemas and descriptions, and nonterminal
   tool results remain inert unless a trusted current user explicitly reactivates
   a bounded referent. Batch and streaming paths use the same terminal

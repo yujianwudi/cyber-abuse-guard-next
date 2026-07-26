@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
 Last updated: 2026-07-26 (Asia/Shanghai)
@@ -98,6 +98,16 @@ for any of the three missing runtime evidence classes.
    is still a deterministic bounded parser rather than unrestricted natural-
    language understanding. An unusual but valid explicit referent may be missed,
    while a sufficiently ambiguous directive may remain audit-only.
+
+   Provider-native tool authority is deliberately narrower than every valid
+   Host conversation. In particular, a Responses request containing only
+   `previous_response_id` and a function/custom output cannot be elevated: the
+   plugin cannot independently verify the Host session, pending call, consumed
+   state, or replay status. Gemini ID-free results are elevated only for one
+   complete adjacent terminal transaction whose calls and results have equal
+   cardinality and match by name+ordinal. These restrictions may leave some
+   legitimate continuation outputs audit-only, but prevent request-local
+   metadata from forging tool authority.
 
 8. **CPA router failures are host-level fail-open.** The required Host matrix is
    CPA v7.2.95. CPA may continue other Routers or native routing if
@@ -303,7 +313,7 @@ for any of the three missing runtime evidence classes.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
     `classifier-policy-v9` / SHA-256
-`840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`,
+`fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical

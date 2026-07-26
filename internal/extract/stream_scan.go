@@ -2,6 +2,7 @@ package extract
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -40,59 +41,128 @@ const (
 )
 
 type plannedText struct {
-	id                uint64
-	rawStart          int
-	rawEnd            int
-	owned             string
-	role              Role
-	provenance        SegmentProvenance
-	userAttribution   UserAttribution
-	encryptedContent  bool
-	skip              bool
-	scalarCarrier     bool
-	messageOwner      uint64
-	conversationIndex int
-	turnIndex         int
-	isCurrentTurn     bool
-	scopeID           uint64
-	contentKind       ContentKind
-	fieldPathHash     string
-	roleEligible      bool
-	semanticOrdinal   int
-	fallbackText      bool
-	exactKey          string
+	id                        uint64
+	rawStart                  int
+	rawEnd                    int
+	owned                     string
+	role                      Role
+	provenance                SegmentProvenance
+	userAttribution           UserAttribution
+	toolAssociation           ToolResultAssociation
+	encryptedContent          bool
+	skip                      bool
+	scalarCarrier             bool
+	messageOwner              uint64
+	conversationIndex         int
+	turnIndex                 int
+	isCurrentTurn             bool
+	terminalConversationIndex int
+	terminalTurnIndex         int
+	hasTerminalCoordinates    bool
+	scopeID                   uint64
+	contentKind               ContentKind
+	fieldPathHash             string
+	roleEligible              bool
+	semanticOrdinal           int
+	fallbackText              bool
+	exactKey                  string
 }
 
 type planContext struct {
-	role                Role
-	provenance          SegmentProvenance
-	userAttribution     UserAttribution
-	historyTrusted      bool
-	directUserInput     bool
-	messageOwner        uint64
-	conversationIndex   int
-	scopeID             uint64
-	contentKind         ContentKind
-	fieldPath           string
-	independentScope    bool
-	independentItems    bool
-	roleEligible        bool
-	roleContent         bool
-	roleTextValue       bool
-	historyArray        bool
-	messageObject       bool
-	directMessageMember bool
-	atRoot              bool
-	fallbackText        bool
-	unknownRoot         bool
-	metadata            bool
-	exactKey            string
+	role                 Role
+	provenance           SegmentProvenance
+	userAttribution      UserAttribution
+	historyTrusted       bool
+	directUserInput      bool
+	messageOwner         uint64
+	conversationIndex    int
+	scopeID              uint64
+	contentKind          ContentKind
+	fieldPath            string
+	independentScope     bool
+	independentItems     bool
+	roleEligible         bool
+	roleContent          bool
+	roleTextValue        bool
+	historyArray         bool
+	toolCallArray        bool
+	toolCallObject       bool
+	toolCallArrayObject  bool
+	toolCallShapeScope   uint64
+	toolCallFunction     bool
+	toolAssociationKind  toolAssociationObjectKind
+	geminiResponseObject bool
+	geminiResponseValue  bool
+	messageObject        bool
+	directMessageMember  bool
+	atRoot               bool
+	fallbackText         bool
+	unknownRoot          bool
+	metadata             bool
+	exactKey             string
 }
 
 type valueSummary struct {
 	text    string
 	isText  bool
 	bounded bool
+}
+
+type toolAssociationObjectKind uint8
+
+const (
+	toolAssociationObjectNone toolAssociationObjectKind = iota
+	toolAssociationObjectCall
+	toolAssociationObjectResult
+)
+
+type toolAssociationSubtype uint8
+
+const (
+	toolAssociationSubtypeNone toolAssociationSubtype = iota
+	toolAssociationSubtypeOpenAIChatFunction
+	toolAssociationSubtypeOpenAIResponsesFunction
+	toolAssociationSubtypeOpenAIResponsesCustom
+	toolAssociationSubtypeClaudeTool
+	toolAssociationSubtypeGeminiFunction
+)
+
+type toolAssociationIDCandidate struct {
+	seen      bool
+	ambiguous bool
+	valid     bool
+	digest    [sha256.Size]byte
+}
+
+type toolAssociationIDs struct {
+	id         toolAssociationIDCandidate
+	toolCallID toolAssociationIDCandidate
+	callID     toolAssociationIDCandidate
+	toolUseID  toolAssociationIDCandidate
+	name       toolAssociationIDCandidate
+}
+
+type toolAssociationRecord struct {
+	kind toolAssociationObjectKind
+	// subtype keeps provider-native call/output variants from collapsing into
+	// one generic ID namespace (notably Responses function vs custom tools).
+	subtype           toolAssociationSubtype
+	shapeValid        bool
+	digest            [sha256.Size]byte
+	validID           bool
+	ambiguousID       bool
+	identifierSeen    bool
+	nameDigest        [sha256.Size]byte
+	validName         bool
+	ambiguousName     bool
+	messageOwner      uint64
+	conversationIndex int
+	scopeID           uint64
+	// authoritySpanIDs are only the exact provider-native string leaves proved
+	// by this result object. Association never grants the surrounding subtree.
+	authoritySpanIDs    []uint64
+	authorityStructured bool
+	ordinal             int
 }
 
 type shadowPlanner struct {
@@ -112,6 +182,12 @@ type shadowPlanner struct {
 	trustRoles               bool
 	terminalHistoryItemIndex int
 	hasTerminalHistoryItem   bool
+	toolAssociations         []toolAssociationRecord
+	messageRoles             map[uint64]Role
+	ambiguousFieldPaths      map[string]struct{}
+	invalidToolCallMessages  map[uint64]struct{}
+	invalidToolCallScopes    map[uint64]struct{}
+	invalidGeminiPartScopes  map[uint64]struct{}
 }
 
 // ScanProfiledRequest performs complete envelope validation, builds a bounded
@@ -335,6 +411,7 @@ func scanRequestJSON(body []byte, limits Limits, initial contextKind, trustRoles
 			owned[index].userAttribution = UserAttributionUntrusted
 		}
 	}
+	planner.finalizeToolAssociations(selected)
 	finalizeConversationMetadata(
 		selected,
 		planner.source,
@@ -452,6 +529,7 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 	if depth > p.limits.MaxJSONDepth {
 		return valueSummary{}, p.exhaust(IncompleteJSONDepthLimit)
 	}
+	objectStart := p.position
 	p.position++
 	p.shadow = append(p.shadow, '{')
 	messageOwner := uint64(0)
@@ -474,7 +552,16 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 	blockWrapperType := ""
 	blockWrapperAmbiguous := false
 	blockHasToolPayloadKey := false
+	effectiveBlockType := ""
+	toolCallTypeValue := ""
+	toolCallTypeSeen := false
+	toolCallTypeAmbiguous := false
+	toolIDs := toolAssociationIDs{}
 	seenClosedKeys := make(map[string]struct{}, 8)
+	seenAssociationKeys := make(map[string]struct{}, 8)
+	chatToolCallsAmbiguous := false
+	chatToolCallShapeAmbiguous := false
+	chatToolFunctionShapeAmbiguous := false
 	blockTextKeys := make([]string, 0, 2)
 	first := true
 	for {
@@ -508,6 +595,42 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 			keyValue = shadowUnknownKey
 		}
 		canonical := canonicalKey(keyValue)
+		if isToolAssociationCarrierKey(canonical) {
+			if _, duplicate := seenAssociationKeys[canonical]; duplicate {
+				if p.ambiguousFieldPaths == nil {
+					p.ambiguousFieldPaths = make(map[string]struct{})
+				}
+				p.ambiguousFieldPaths[appendObjectFieldPath(ctx.fieldPath, canonical)] = struct{}{}
+			}
+			seenAssociationKeys[canonical] = struct{}{}
+		}
+		if ctx.messageObject && p.source == SourceProfileOpenAI && canonical == "toolcalls" {
+			identity := canonical + "/chat-container"
+			if _, duplicate := seenAssociationKeys[identity]; duplicate {
+				chatToolCallsAmbiguous = true
+			}
+			seenAssociationKeys[identity] = struct{}{}
+		}
+		if ctx.toolCallArrayObject {
+			switch canonical {
+			case "id", "type", "function":
+				identity := canonical + "/chat-call-shape"
+				if _, duplicate := seenAssociationKeys[identity]; duplicate {
+					chatToolCallShapeAmbiguous = true
+				}
+				seenAssociationKeys[identity] = struct{}{}
+			}
+		}
+		if ctx.toolCallFunction {
+			switch canonical {
+			case "name", "arguments":
+				identity := canonical + "/chat-function-shape"
+				if _, duplicate := seenAssociationKeys[identity]; duplicate {
+					chatToolFunctionShapeAmbiguous = true
+				}
+				seenAssociationKeys[identity] = struct{}{}
+			}
+		}
 		if identity, exact, closed := closedSchemaObjectKey(p.source, ctx, keyValue, canonical); closed {
 			if !exact {
 				p.unsafeRole = true
@@ -533,6 +656,9 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 		summary, err := p.parseValue(child, canonical, depth)
 		if err != nil {
 			return valueSummary{}, err
+		}
+		if isToolAssociationKeyCanonical(canonical) {
+			toolIDs.observe(keyValue, canonical, summary)
 		}
 		if ctx.messageObject && canonical == "role" {
 			if roleSeen {
@@ -563,6 +689,17 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 				}
 			}
 		}
+		if ctx.toolCallArrayObject && canonical == "type" {
+			if toolCallTypeSeen {
+				toolCallTypeAmbiguous = true
+			}
+			toolCallTypeSeen = true
+			if keyValue != "type" || !summary.isText || !summary.bounded {
+				toolCallTypeAmbiguous = true
+			} else {
+				toolCallTypeValue = summary.text
+			}
+		}
 		if ctx.roleContent && canonical == "type" {
 			if blockTypeSeen {
 				blockTypeAmbiguous = true
@@ -582,14 +719,13 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 			blockHasToolPayloadKey = true
 		}
 		if ctx.roleContent && (canonical == "functioncall" || canonical == "functionresponse") {
-			if blockWrapperType != "" && blockWrapperType != canonical {
+			if blockWrapperType != "" && (blockWrapperType != canonical || p.source == SourceProfileGemini) {
 				blockWrapperAmbiguous = true
 			}
 			blockWrapperType = canonical
 		}
 	}
 	if ctx.roleContent {
-		effectiveBlockType := ""
 		if blockTypeAmbiguous || blockWrapperAmbiguous {
 			effectiveBlockType = "unknown"
 		} else if blockTypeSeen {
@@ -752,7 +888,1379 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 			}
 		}
 	}
+	resolvedRole, resolvedRoleKnown := resolvedToolAssociationMessageRole(
+		p.source,
+		roleValue, roleSeen, roleAmbiguous,
+		messageTypeValue, messageTypeSeen, messageTypeAmbiguous,
+	)
+	if ctx.messageObject && messageOwner != 0 && resolvedRoleKnown {
+		if p.messageRoles == nil {
+			p.messageRoles = make(map[uint64]Role)
+		}
+		p.messageRoles[messageOwner] = resolvedRole
+	}
+	if chatToolCallsAmbiguous && messageOwner != 0 {
+		if p.invalidToolCallMessages == nil {
+			p.invalidToolCallMessages = make(map[uint64]struct{})
+		}
+		p.invalidToolCallMessages[messageOwner] = struct{}{}
+	}
+	if (chatToolCallShapeAmbiguous || chatToolFunctionShapeAmbiguous) && ctx.toolCallShapeScope != 0 {
+		if p.invalidToolCallScopes == nil {
+			p.invalidToolCallScopes = make(map[uint64]struct{})
+		}
+		p.invalidToolCallScopes[ctx.toolCallShapeScope] = struct{}{}
+	}
+	if p.source == SourceProfileGemini && ctx.roleContent && blockWrapperAmbiguous && ctx.scopeID != 0 {
+		// A direct Gemini part proves at most one native wrapper. Duplicate JSON
+		// members are commonly collapsed with last-key-wins semantics downstream,
+		// so invalidate every association record from this part-local scope.
+		if p.invalidGeminiPartScopes == nil {
+			p.invalidGeminiPartScopes = make(map[uint64]struct{})
+		}
+		p.invalidGeminiPartScopes[ctx.scopeID] = struct{}{}
+	}
+	p.recordToolAssociationObject(
+		ctx, effectiveBlockType,
+		messageTypeValue, messageTypeSeen && !messageTypeAmbiguous,
+		toolCallTypeValue, toolCallTypeSeen && !toolCallTypeAmbiguous,
+		roleValue, roleSeen && !roleAmbiguous,
+		resolvedRole, resolvedRoleKnown,
+		toolIDs, spanStart, objectStart, p.position,
+	)
 	return valueSummary{}, nil
+}
+
+func isToolAssociationKeyCanonical(key string) bool {
+	switch key {
+	case "id", "toolcallid", "callid", "tooluseid", "name":
+		return true
+	default:
+		return false
+	}
+}
+
+func isToolAssociationCarrierKey(key string) bool {
+	switch key {
+	case "content", "output", "response", "result":
+		return true
+	default:
+		return false
+	}
+}
+
+func exactToolAssociationKey(key string) string {
+	switch key {
+	case "id":
+		return "id"
+	case "tool_call_id":
+		return "toolcallid"
+	case "call_id":
+		return "callid"
+	case "tool_use_id":
+		return "tooluseid"
+	case "name":
+		return "name"
+	default:
+		return ""
+	}
+}
+
+func (ids *toolAssociationIDs) candidate(key string) *toolAssociationIDCandidate {
+	if ids == nil {
+		return nil
+	}
+	switch key {
+	case "id":
+		return &ids.id
+	case "toolcallid":
+		return &ids.toolCallID
+	case "callid":
+		return &ids.callID
+	case "tooluseid":
+		return &ids.toolUseID
+	case "name":
+		return &ids.name
+	default:
+		return nil
+	}
+}
+
+func (ids *toolAssociationIDs) observe(rawKey, canonical string, summary valueSummary) {
+	candidate := ids.candidate(canonical)
+	if candidate == nil {
+		return
+	}
+	if candidate.seen {
+		candidate.ambiguous = true
+		candidate.valid = false
+		return
+	}
+	candidate.seen = true
+	if exactToolAssociationKey(rawKey) != canonical || !summary.isText || !summary.bounded ||
+		strings.TrimSpace(summary.text) == "" {
+		candidate.ambiguous = true
+		return
+	}
+	candidate.digest = sha256.Sum256([]byte(summary.text))
+	candidate.valid = true
+}
+
+func (ids toolAssociationIDs) selectID(keys ...string) ([sha256.Size]byte, bool, bool) {
+	var digest [sha256.Size]byte
+	seen := 0
+	valid := false
+	ambiguous := false
+	for _, key := range keys {
+		candidate := ids.candidate(key)
+		if candidate == nil || !candidate.seen {
+			continue
+		}
+		seen++
+		if candidate.ambiguous || !candidate.valid {
+			ambiguous = true
+			continue
+		}
+		digest = candidate.digest
+		valid = true
+	}
+	if seen != 1 || !valid {
+		return [sha256.Size]byte{}, false, ambiguous || seen > 1
+	}
+	return digest, true, false
+}
+
+func (ids toolAssociationIDs) anyIdentifierSeen() bool {
+	return ids.id.seen || ids.toolCallID.seen || ids.callID.seen || ids.toolUseID.seen
+}
+
+func resolvedToolAssociationMessageRole(
+	source SourceProfile,
+	roleValue string,
+	roleSeen bool,
+	roleAmbiguous bool,
+	messageTypeValue string,
+	messageTypeSeen bool,
+	messageTypeAmbiguous bool,
+) (Role, bool) {
+	if source == SourceProfileOpenAIResponse && messageTypeSeen && !messageTypeAmbiguous {
+		if role, _, known := rolelessResponseItemRole(messageTypeValue); known {
+			compatible := !roleSeen ||
+				(messageTypeValue == "additional_tools" && roleValue == "developer")
+			if compatible {
+				return role, true
+			}
+			return RoleUnknown, false
+		}
+	}
+	if !roleSeen || roleAmbiguous {
+		return RoleUnknown, false
+	}
+	role, ok := normalizedMessageRole(source, roleValue)
+	return role, ok
+}
+
+func toolAssociationObjectShape(
+	source SourceProfile,
+	ctx planContext,
+	effectiveBlockType string,
+	messageTypeValue string,
+	messageTypeKnown bool,
+	roleValue string,
+	roleKnown bool,
+	resolvedRole Role,
+	resolvedRoleKnown bool,
+) (toolAssociationObjectKind, toolAssociationSubtype, []string) {
+	if ctx.toolAssociationKind != toolAssociationObjectNone {
+		if source == SourceProfileGemini {
+			return ctx.toolAssociationKind, toolAssociationSubtypeGeminiFunction, []string{"id", "callid"}
+		}
+		return toolAssociationObjectNone, toolAssociationSubtypeNone, nil
+	}
+	if source == SourceProfileOpenAI && ctx.toolCallArrayObject {
+		return toolAssociationObjectCall, toolAssociationSubtypeOpenAIChatFunction, []string{"id"}
+	}
+	if ctx.roleContent {
+		// Anthropic is the only supported provider whose native call/result
+		// transaction is represented by typed blocks in the enclosing message
+		// content array. Other providers use a dedicated message field, a roleless
+		// Responses item, or the exact Gemini functionCall/functionResponse wrapper.
+		if source == SourceProfileClaude {
+			switch effectiveBlockType {
+			case "tooluse":
+				return toolAssociationObjectCall, toolAssociationSubtypeClaudeTool, []string{"id"}
+			case "toolresult":
+				return toolAssociationObjectResult, toolAssociationSubtypeClaudeTool, []string{"tooluseid"}
+			}
+		}
+		return toolAssociationObjectNone, toolAssociationSubtypeNone, nil
+	}
+	if !ctx.messageObject {
+		return toolAssociationObjectNone, toolAssociationSubtypeNone, nil
+	}
+	if source == SourceProfileOpenAIResponse && messageTypeKnown {
+		switch messageTypeValue {
+		case "function_call":
+			return toolAssociationObjectCall, toolAssociationSubtypeOpenAIResponsesFunction, []string{"callid"}
+		case "function_call_output":
+			return toolAssociationObjectResult, toolAssociationSubtypeOpenAIResponsesFunction, []string{"callid"}
+		case "custom_tool_call":
+			return toolAssociationObjectCall, toolAssociationSubtypeOpenAIResponsesCustom, []string{"callid"}
+		case "custom_tool_call_output":
+			return toolAssociationObjectResult, toolAssociationSubtypeOpenAIResponsesCustom, []string{"callid"}
+		}
+	}
+	if source == SourceProfileOpenAI && roleKnown && roleValue == "tool" &&
+		resolvedRoleKnown && resolvedRole == RoleTool {
+		return toolAssociationObjectResult, toolAssociationSubtypeOpenAIChatFunction, []string{"toolcallid"}
+	}
+	return toolAssociationObjectNone, toolAssociationSubtypeNone, nil
+}
+
+func (p *shadowPlanner) recordToolAssociationObject(
+	ctx planContext,
+	effectiveBlockType string,
+	messageTypeValue string,
+	messageTypeKnown bool,
+	toolCallTypeValue string,
+	toolCallTypeKnown bool,
+	roleValue string,
+	roleKnown bool,
+	resolvedRole Role,
+	resolvedRoleKnown bool,
+	ids toolAssociationIDs,
+	spanStart int,
+	objectStart int,
+	objectEnd int,
+) {
+	if p == nil {
+		return
+	}
+	kind, subtype, keys := toolAssociationObjectShape(
+		p.source, ctx, effectiveBlockType,
+		messageTypeValue, messageTypeKnown,
+		roleValue, roleKnown,
+		resolvedRole, resolvedRoleKnown,
+	)
+	if kind == toolAssociationObjectNone {
+		return
+	}
+	shapeValid := true
+	if subtype == toolAssociationSubtypeOpenAIChatFunction && kind == toolAssociationObjectCall {
+		shapeValid = p.validOpenAIChatToolCallShape(
+			ctx, toolCallTypeValue, toolCallTypeKnown, spanStart,
+		)
+	}
+	var authoritySpanIDs []uint64
+	authorityStructured := false
+	if kind == toolAssociationObjectResult {
+		if path := toolAssociationResultTextPath(subtype, ctx.fieldPath); path != "" {
+			if p.toolAssociationCarrierPathAmbiguous(path) {
+				shapeValid = false
+			} else {
+				var authorityValid bool
+				authoritySpanIDs, authorityStructured, authorityValid = p.toolAssociationResultAuthoritySpanIDs(
+					subtype, spanStart, objectStart, objectEnd,
+				)
+				shapeValid = shapeValid && authorityValid
+			}
+		}
+	}
+	if shapeValid {
+		p.suppressDirectToolAssociationMetadata(ctx, keys, spanStart)
+	}
+	digest, valid, ambiguous := ids.selectID(keys...)
+	nameDigest, validName, ambiguousName := ids.selectID("name")
+	p.toolAssociations = append(p.toolAssociations, toolAssociationRecord{
+		kind:                kind,
+		subtype:             subtype,
+		shapeValid:          shapeValid,
+		digest:              digest,
+		validID:             valid,
+		ambiguousID:         ambiguous,
+		identifierSeen:      ids.anyIdentifierSeen(),
+		nameDigest:          nameDigest,
+		validName:           validName,
+		ambiguousName:       ambiguousName,
+		messageOwner:        ctx.messageOwner,
+		conversationIndex:   ctx.conversationIndex,
+		scopeID:             ctx.scopeID,
+		authoritySpanIDs:    authoritySpanIDs,
+		authorityStructured: authorityStructured,
+		ordinal:             len(p.toolAssociations),
+	})
+}
+
+func (p *shadowPlanner) validOpenAIChatToolCallShape(
+	ctx planContext,
+	typeValue string,
+	typeKnown bool,
+	spanStart int,
+) bool {
+	if p == nil || !ctx.toolCallArrayObject || !typeKnown || typeValue != "function" {
+		return false
+	}
+	if _, invalid := p.invalidToolCallScopes[ctx.scopeID]; invalid {
+		return false
+	}
+	functionPath := appendObjectFieldPath(ctx.fieldPath, "function")
+	namePath := appendObjectFieldPath(functionPath, "name")
+	argumentsPath := appendObjectFieldPath(functionPath, "arguments")
+	return p.uniquePlannedTextSpanID(spanStart, namePath) != 0 &&
+		p.uniquePlannedTextSpanID(spanStart, argumentsPath) != 0
+}
+
+func (p *shadowPlanner) toolAssociationCarrierPathAmbiguous(path string) bool {
+	if p == nil || path == "" {
+		return false
+	}
+	_, ambiguous := p.ambiguousFieldPaths[path]
+	return ambiguous
+}
+
+func toolAssociationResultTextPath(subtype toolAssociationSubtype, objectPath string) string {
+	switch subtype {
+	case toolAssociationSubtypeOpenAIChatFunction, toolAssociationSubtypeClaudeTool:
+		return appendObjectFieldPath(objectPath, "content")
+	case toolAssociationSubtypeOpenAIResponsesFunction, toolAssociationSubtypeOpenAIResponsesCustom:
+		return appendObjectFieldPath(objectPath, "output")
+	case toolAssociationSubtypeGeminiFunction:
+		// CPA v7.2.95 preserves provider-native Gemini response objects and
+		// accepts result, output, and other structured response members. The
+		// exact response object is the authority boundary; siblings on the
+		// surrounding functionResponse remain untrusted.
+		return appendObjectFieldPath(objectPath, "response")
+	default:
+		return ""
+	}
+}
+
+type toolAuthorityRawValue struct {
+	start int
+	end   int
+}
+
+type toolAuthorityJSONCursor struct {
+	body     []byte
+	position int
+	end      int
+}
+
+func (p *shadowPlanner) toolAssociationResultAuthoritySpanIDs(
+	subtype toolAssociationSubtype,
+	spanStart int,
+	objectStart int,
+	objectEnd int,
+) ([]uint64, bool, bool) {
+	if p == nil || objectStart < 0 || objectEnd > len(p.body) || objectStart >= objectEnd {
+		return nil, false, false
+	}
+	object := toolAuthorityRawValue{start: objectStart, end: objectEnd}
+	var carrier toolAuthorityRawValue
+	var valid bool
+	switch subtype {
+	case toolAssociationSubtypeOpenAIChatFunction, toolAssociationSubtypeClaudeTool:
+		carrier, valid = exactToolAuthorityObjectMember(p.body, object, "content")
+	case toolAssociationSubtypeOpenAIResponsesFunction, toolAssociationSubtypeOpenAIResponsesCustom:
+		carrier, valid = exactToolAuthorityObjectMember(p.body, object, "output")
+	case toolAssociationSubtypeGeminiFunction:
+		carrier, valid = exactToolAuthorityObjectMember(p.body, object, "response")
+		if valid && !toolAuthorityRawValueIsObject(p.body, carrier) {
+			return nil, false, false
+		}
+	default:
+		return nil, false, false
+	}
+	if !valid {
+		return nil, false, false
+	}
+
+	var leaves []toolAuthorityRawValue
+	structured := false
+	if subtype == toolAssociationSubtypeGeminiFunction {
+		cursor := toolAuthorityJSONCursor{body: p.body, position: carrier.start, end: carrier.end}
+		cursor.skipWhitespace()
+		if cursor.position >= cursor.end {
+			return nil, false, false
+		}
+		structured = cursor.body[cursor.position] == '{' || cursor.body[cursor.position] == '['
+		if !cursor.collectGeminiResponseStringLeaves(&leaves, 0) {
+			return nil, false, false
+		}
+		cursor.skipWhitespace()
+		if cursor.position != cursor.end {
+			return nil, false, false
+		}
+	} else {
+		cursor := toolAuthorityJSONCursor{body: p.body, position: carrier.start, end: carrier.end}
+		cursor.skipWhitespace()
+		if cursor.position >= cursor.end {
+			return nil, false, false
+		}
+		switch cursor.body[cursor.position] {
+		case '"':
+			leaf, ok := cursor.takeString()
+			if !ok {
+				return nil, false, false
+			}
+			leaves = append(leaves, leaf)
+		case '[':
+			structured = true
+			if !cursor.collectTypedToolResultTextLeaves(subtype, &leaves, 0) {
+				return nil, false, false
+			}
+		default:
+			return nil, false, false
+		}
+		cursor.skipWhitespace()
+		if cursor.position != cursor.end {
+			return nil, false, false
+		}
+	}
+	spanIDs, valid := p.toolAuthoritySpanIDs(spanStart, leaves)
+	return spanIDs, structured, valid
+}
+
+func exactToolAuthorityObjectMember(
+	body []byte,
+	object toolAuthorityRawValue,
+	target string,
+) (toolAuthorityRawValue, bool) {
+	if object.start < 0 || object.end > len(body) || object.start >= object.end {
+		return toolAuthorityRawValue{}, false
+	}
+	cursor := toolAuthorityJSONCursor{body: body, position: object.start, end: object.end}
+	cursor.skipWhitespace()
+	if cursor.position >= cursor.end || cursor.body[cursor.position] != '{' {
+		return toolAuthorityRawValue{}, false
+	}
+	cursor.position++
+	targetCanonical := canonicalKey(target)
+	seenTarget := false
+	invalidTarget := false
+	var found toolAuthorityRawValue
+	first := true
+	for {
+		cursor.skipWhitespace()
+		if cursor.position >= cursor.end {
+			return toolAuthorityRawValue{}, false
+		}
+		if cursor.body[cursor.position] == '}' {
+			cursor.position++
+			break
+		}
+		if !first {
+			if cursor.body[cursor.position] != ',' {
+				return toolAuthorityRawValue{}, false
+			}
+			cursor.position++
+			cursor.skipWhitespace()
+		}
+		first = false
+		keyRaw, ok := cursor.takeString()
+		if !ok {
+			return toolAuthorityRawValue{}, false
+		}
+		key, bounded := decodeShortJSONString(body[keyRaw.start:keyRaw.end], maxShadowKeyBytes)
+		if !bounded {
+			return toolAuthorityRawValue{}, false
+		}
+		cursor.skipWhitespace()
+		if cursor.position >= cursor.end || cursor.body[cursor.position] != ':' {
+			return toolAuthorityRawValue{}, false
+		}
+		cursor.position++
+		cursor.skipWhitespace()
+		valueStart := cursor.position
+		if !cursor.skipValue(0) {
+			return toolAuthorityRawValue{}, false
+		}
+		value := toolAuthorityRawValue{start: valueStart, end: cursor.position}
+		if canonicalKey(key) == targetCanonical {
+			if key != target || seenTarget {
+				invalidTarget = true
+			} else {
+				seenTarget = true
+				found = value
+			}
+		}
+	}
+	cursor.skipWhitespace()
+	return found, seenTarget && !invalidTarget && cursor.position == cursor.end
+}
+
+func (c *toolAuthorityJSONCursor) collectTypedToolResultTextLeaves(
+	subtype toolAssociationSubtype,
+	leaves *[]toolAuthorityRawValue,
+	depth int,
+) bool {
+	if c == nil || depth > HardMaxJSONDepth {
+		return false
+	}
+	c.skipWhitespace()
+	if c.position >= c.end || c.body[c.position] != '[' {
+		return false
+	}
+	c.position++
+	first := true
+	for {
+		c.skipWhitespace()
+		if c.position >= c.end {
+			return false
+		}
+		if c.body[c.position] == ']' {
+			c.position++
+			return true
+		}
+		if !first {
+			if c.body[c.position] != ',' {
+				return false
+			}
+			c.position++
+			c.skipWhitespace()
+		}
+		first = false
+		leaf, hasLeaf, ok := c.collectTypedToolResultBlock(subtype, depth+1)
+		if !ok {
+			return false
+		}
+		if hasLeaf {
+			*leaves = append(*leaves, leaf)
+		}
+	}
+}
+
+func (c *toolAuthorityJSONCursor) collectTypedToolResultBlock(
+	subtype toolAssociationSubtype,
+	depth int,
+) (toolAuthorityRawValue, bool, bool) {
+	if c == nil || depth > HardMaxJSONDepth {
+		return toolAuthorityRawValue{}, false, false
+	}
+	c.skipWhitespace()
+	if c.position >= c.end || c.body[c.position] != '{' {
+		return toolAuthorityRawValue{}, false, false
+	}
+	c.position++
+	memberCount := 0
+	unknownField := false
+	typeSeen := false
+	textSeen := false
+	cacheControlSeen := false
+	typeValue := ""
+	var textValue toolAuthorityRawValue
+	first := true
+	for {
+		c.skipWhitespace()
+		if c.position >= c.end {
+			return toolAuthorityRawValue{}, false, false
+		}
+		if c.body[c.position] == '}' {
+			c.position++
+			break
+		}
+		if !first {
+			if c.body[c.position] != ',' {
+				return toolAuthorityRawValue{}, false, false
+			}
+			c.position++
+			c.skipWhitespace()
+		}
+		first = false
+		memberCount++
+		keyRaw, ok := c.takeString()
+		if !ok {
+			return toolAuthorityRawValue{}, false, false
+		}
+		key, bounded := decodeShortJSONString(c.body[keyRaw.start:keyRaw.end], maxShadowKeyBytes)
+		if !bounded {
+			return toolAuthorityRawValue{}, false, false
+		}
+		c.skipWhitespace()
+		if c.position >= c.end || c.body[c.position] != ':' {
+			return toolAuthorityRawValue{}, false, false
+		}
+		c.position++
+		c.skipWhitespace()
+		valueStart := c.position
+		if !c.skipValue(depth) {
+			return toolAuthorityRawValue{}, false, false
+		}
+		value := toolAuthorityRawValue{start: valueStart, end: c.position}
+		switch canonicalKey(key) {
+		case "type":
+			if key != "type" || typeSeen {
+				return toolAuthorityRawValue{}, false, false
+			}
+			typeSeen = true
+			decoded, validString := exactToolAuthorityString(c.body, value, maxShadowValueBytes)
+			if !validString {
+				return toolAuthorityRawValue{}, false, false
+			}
+			typeValue = decoded
+		case "text":
+			if key != "text" || textSeen || !toolAuthorityRawValueIsString(c.body, value) {
+				return toolAuthorityRawValue{}, false, false
+			}
+			textSeen = true
+			textValue = value
+		case "cachecontrol":
+			// CPA v7.2.95 preserves Claude-compatible cache_control objects on
+			// text blocks. Treat the field as structure only: its metadata
+			// strings never become authorized tool-result text.
+			if subtype != toolAssociationSubtypeClaudeTool || key != "cache_control" ||
+				cacheControlSeen || !toolAuthorityRawValueIsObject(c.body, value) {
+				return toolAuthorityRawValue{}, false, false
+			}
+			cacheControlSeen = true
+		default:
+			unknownField = true
+		}
+	}
+	if !typeSeen {
+		return toolAuthorityRawValue{}, false, false
+	}
+	if exactToolAuthorityTextBlockType(subtype, typeValue) {
+		expectedMembers := 2
+		if cacheControlSeen {
+			expectedMembers++
+		}
+		if memberCount != expectedMembers || unknownField || !textSeen {
+			return toolAuthorityRawValue{}, false, false
+		}
+		return textValue, true, true
+	}
+	if exactToolAuthorityMediaBlockType(typeValue) && !textSeen {
+		return toolAuthorityRawValue{}, false, true
+	}
+	return toolAuthorityRawValue{}, false, false
+}
+
+func exactToolAuthorityTextBlockType(subtype toolAssociationSubtype, value string) bool {
+	switch subtype {
+	case toolAssociationSubtypeOpenAIChatFunction, toolAssociationSubtypeClaudeTool:
+		return value == "text"
+	case toolAssociationSubtypeOpenAIResponsesFunction, toolAssociationSubtypeOpenAIResponsesCustom:
+		return value == "input_text" || value == "output_text"
+	default:
+		return false
+	}
+}
+
+func exactToolAuthorityMediaBlockType(value string) bool {
+	switch value {
+	case "image", "image_url", "input_image", "output_image",
+		"audio", "input_audio", "output_audio",
+		"video", "input_video", "output_video",
+		"file", "input_file", "output_file", "document", "attachment", "inline_data":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *toolAuthorityJSONCursor) collectGeminiResponseStringLeaves(
+	leaves *[]toolAuthorityRawValue,
+	depth int,
+) bool {
+	if c == nil || depth > HardMaxJSONDepth {
+		return false
+	}
+	c.skipWhitespace()
+	if c.position >= c.end {
+		return false
+	}
+	switch c.body[c.position] {
+	case '"':
+		leaf, ok := c.takeString()
+		if ok {
+			*leaves = append(*leaves, leaf)
+		}
+		return ok
+	case '{':
+		c.position++
+		seenKeys := make(map[string]struct{})
+		first := true
+		for {
+			c.skipWhitespace()
+			if c.position >= c.end {
+				return false
+			}
+			if c.body[c.position] == '}' {
+				c.position++
+				return true
+			}
+			if !first {
+				if c.body[c.position] != ',' {
+					return false
+				}
+				c.position++
+				c.skipWhitespace()
+			}
+			first = false
+			keyRaw, ok := c.takeString()
+			if !ok {
+				return false
+			}
+			key, bounded := decodeShortJSONString(c.body[keyRaw.start:keyRaw.end], maxShadowKeyBytes)
+			if !bounded {
+				return false
+			}
+			if _, duplicate := seenKeys[key]; duplicate {
+				return false
+			}
+			seenKeys[key] = struct{}{}
+			c.skipWhitespace()
+			if c.position >= c.end || c.body[c.position] != ':' {
+				return false
+			}
+			c.position++
+			if !c.collectGeminiResponseStringLeaves(leaves, depth+1) {
+				return false
+			}
+		}
+	case '[':
+		c.position++
+		first := true
+		for {
+			c.skipWhitespace()
+			if c.position >= c.end {
+				return false
+			}
+			if c.body[c.position] == ']' {
+				c.position++
+				return true
+			}
+			if !first {
+				if c.body[c.position] != ',' {
+					return false
+				}
+				c.position++
+			}
+			first = false
+			if !c.collectGeminiResponseStringLeaves(leaves, depth+1) {
+				return false
+			}
+		}
+	default:
+		return c.skipPrimitive()
+	}
+}
+
+func (p *shadowPlanner) toolAuthoritySpanIDs(
+	spanStart int,
+	leaves []toolAuthorityRawValue,
+) ([]uint64, bool) {
+	if p == nil || len(leaves) == 0 {
+		return nil, false
+	}
+	if spanStart < 0 || spanStart > len(p.spans) {
+		return nil, false
+	}
+	byRawValue := make(map[toolAuthorityRawValue]uint64, len(p.spans)-spanStart)
+	for index := spanStart; index < len(p.spans); index++ {
+		span := p.spans[index]
+		value := toolAuthorityRawValue{start: span.rawStart, end: span.rawEnd}
+		if _, duplicate := byRawValue[value]; duplicate {
+			return nil, false
+		}
+		byRawValue[value] = span.id
+	}
+	spanIDs := make([]uint64, 0, len(leaves))
+	seenSpanIDs := make(map[uint64]struct{}, len(leaves))
+	for _, leaf := range leaves {
+		spanID, found := byRawValue[leaf]
+		if !found {
+			if value, bounded := decodeShortJSONString(p.body[leaf.start:leaf.end], maxShadowValueBytes); bounded &&
+				strings.TrimSpace(value) == "" {
+				continue
+			}
+			return nil, false
+		}
+		if spanID == 0 {
+			return nil, false
+		}
+		if _, duplicate := seenSpanIDs[spanID]; duplicate {
+			return nil, false
+		}
+		seenSpanIDs[spanID] = struct{}{}
+		spanIDs = append(spanIDs, spanID)
+	}
+	return spanIDs, len(spanIDs) > 0
+}
+
+func exactToolAuthorityString(
+	body []byte,
+	value toolAuthorityRawValue,
+	limit int,
+) (string, bool) {
+	if !toolAuthorityRawValueIsString(body, value) {
+		return "", false
+	}
+	return decodeShortJSONString(body[value.start:value.end], limit)
+}
+
+func toolAuthorityRawValueIsString(body []byte, value toolAuthorityRawValue) bool {
+	return value.start >= 0 && value.end <= len(body) && value.start < value.end &&
+		body[value.start] == '"' && body[value.end-1] == '"'
+}
+
+func toolAuthorityRawValueIsObject(body []byte, value toolAuthorityRawValue) bool {
+	return value.start >= 0 && value.end <= len(body) && value.start < value.end &&
+		body[value.start] == '{' && body[value.end-1] == '}'
+}
+
+func (c *toolAuthorityJSONCursor) skipValue(depth int) bool {
+	if c == nil || depth > HardMaxJSONDepth {
+		return false
+	}
+	c.skipWhitespace()
+	if c.position >= c.end {
+		return false
+	}
+	switch c.body[c.position] {
+	case '"':
+		_, ok := c.takeString()
+		return ok
+	case '{':
+		c.position++
+		first := true
+		for {
+			c.skipWhitespace()
+			if c.position >= c.end {
+				return false
+			}
+			if c.body[c.position] == '}' {
+				c.position++
+				return true
+			}
+			if !first {
+				if c.body[c.position] != ',' {
+					return false
+				}
+				c.position++
+				c.skipWhitespace()
+			}
+			first = false
+			if _, ok := c.takeString(); !ok {
+				return false
+			}
+			c.skipWhitespace()
+			if c.position >= c.end || c.body[c.position] != ':' {
+				return false
+			}
+			c.position++
+			if !c.skipValue(depth + 1) {
+				return false
+			}
+		}
+	case '[':
+		c.position++
+		first := true
+		for {
+			c.skipWhitespace()
+			if c.position >= c.end {
+				return false
+			}
+			if c.body[c.position] == ']' {
+				c.position++
+				return true
+			}
+			if !first {
+				if c.body[c.position] != ',' {
+					return false
+				}
+				c.position++
+			}
+			first = false
+			if !c.skipValue(depth + 1) {
+				return false
+			}
+		}
+	default:
+		return c.skipPrimitive()
+	}
+}
+
+func (c *toolAuthorityJSONCursor) skipPrimitive() bool {
+	if c == nil || c.position >= c.end {
+		return false
+	}
+	start := c.position
+	for c.position < c.end {
+		switch c.body[c.position] {
+		case ',', '}', ']', ' ', '\t', '\r', '\n':
+			return c.position > start
+		default:
+			c.position++
+		}
+	}
+	return c.position > start
+}
+
+func (c *toolAuthorityJSONCursor) takeString() (toolAuthorityRawValue, bool) {
+	if c == nil || c.position >= c.end || c.body[c.position] != '"' {
+		return toolAuthorityRawValue{}, false
+	}
+	start := c.position
+	c.position++
+	for c.position < c.end {
+		switch c.body[c.position] {
+		case '\\':
+			c.position += 2
+		case '"':
+			c.position++
+			return toolAuthorityRawValue{start: start, end: c.position}, true
+		default:
+			c.position++
+		}
+	}
+	return toolAuthorityRawValue{}, false
+}
+
+func (c *toolAuthorityJSONCursor) skipWhitespace() {
+	if c == nil {
+		return
+	}
+	for c.position < c.end {
+		switch c.body[c.position] {
+		case ' ', '\t', '\r', '\n':
+			c.position++
+		default:
+			return
+		}
+	}
+}
+
+func (p *shadowPlanner) uniquePlannedTextSpanID(spanStart int, path string) uint64 {
+	if p == nil || path == "" {
+		return 0
+	}
+	if spanStart < 0 || spanStart > len(p.spans) {
+		spanStart = len(p.spans)
+	}
+	want := structuralFieldPathHash(p.source, path)
+	match := uint64(0)
+	for index := spanStart; index < len(p.spans); index++ {
+		if p.spans[index].fieldPathHash != want {
+			continue
+		}
+		if match != 0 {
+			return 0
+		}
+		match = p.spans[index].id
+	}
+	return match
+}
+
+func (p *shadowPlanner) suppressDirectToolAssociationMetadata(ctx planContext, keys []string, spanStart int) {
+	if p == nil || ctx.fieldPath == "" {
+		return
+	}
+	if spanStart < 0 || spanStart > len(p.spans) {
+		spanStart = len(p.spans)
+	}
+	allowed := make(map[string]struct{}, len(keys)+1)
+	allowed["name"] = struct{}{}
+	for _, key := range keys {
+		allowed[key] = struct{}{}
+	}
+	for index := spanStart; index < len(p.spans); index++ {
+		span := &p.spans[index]
+		canonical := exactToolAssociationKey(span.exactKey)
+		if _, ok := allowed[canonical]; !ok {
+			continue
+		}
+		directPath := appendObjectFieldPath(ctx.fieldPath, span.exactKey)
+		if span.fieldPathHash == structuralFieldPathHash(p.source, directPath) {
+			span.skip = true
+			continue
+		}
+		// OpenAI Chat keeps the function name one exact object level below the
+		// provider-native tool-call record. Suppress only that proven structural
+		// path; arbitrary nested name fields remain visible fallback text.
+		if p.source == SourceProfileOpenAI && ctx.toolCallObject && canonical == "name" {
+			functionNamePath := appendObjectFieldPath(
+				appendObjectFieldPath(ctx.fieldPath, "function"),
+				"name",
+			)
+			if span.fieldPathHash == structuralFieldPathHash(p.source, functionNamePath) {
+				span.skip = true
+			}
+		}
+	}
+}
+
+func (p *shadowPlanner) finalizeToolAssociations(spans []plannedText) {
+	if p == nil || len(spans) == 0 || len(p.toolAssociations) == 0 {
+		return
+	}
+	authorizedSpanIDs := make(map[uint64]struct{})
+	// Match only provider-native call/result groups inside their adjacent local
+	// transaction. Reused IDs in another transaction neither authorize a stale
+	// result nor make a valid local pair ambiguous.
+	groupsByConversation := p.toolAssociationGroupsByConversation()
+	switch p.source {
+	case SourceProfileOpenAI:
+		p.collectOpenAIChatToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+	case SourceProfileOpenAIResponse:
+		p.collectOpenAIResponsesToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+	case SourceProfileClaude:
+		p.collectClaudeToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+	case SourceProfileGemini:
+		p.collectGeminiToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+	}
+	markToolAssociations(spans, authorizedSpanIDs)
+}
+
+type toolAssociationGroup struct {
+	messageOwner      uint64
+	conversationIndex int
+	kind              toolAssociationObjectKind
+	subtype           toolAssociationSubtype
+	records           []toolAssociationRecord
+	valid             bool
+}
+
+func (p *shadowPlanner) toolAssociationGroupsByConversation() map[int][]*toolAssociationGroup {
+	groupsByOwner := make(map[uint64]*toolAssociationGroup)
+	groupsByConversation := make(map[int][]*toolAssociationGroup)
+	for _, record := range p.toolAssociations {
+		if record.messageOwner == 0 || record.scopeID == 0 || record.conversationIndex < 0 {
+			continue
+		}
+		group := groupsByOwner[record.messageOwner]
+		if group == nil {
+			group = &toolAssociationGroup{
+				messageOwner:      record.messageOwner,
+				conversationIndex: record.conversationIndex,
+				kind:              record.kind,
+				subtype:           record.subtype,
+				valid:             true,
+			}
+			groupsByOwner[record.messageOwner] = group
+			groupsByConversation[record.conversationIndex] = append(
+				groupsByConversation[record.conversationIndex], group,
+			)
+		}
+		ownerRole, ownerKnown := p.messageRoles[record.messageOwner]
+		chatShapeInvalid := false
+		if record.subtype == toolAssociationSubtypeOpenAIChatFunction &&
+			record.kind == toolAssociationObjectCall {
+			_, messageInvalid := p.invalidToolCallMessages[record.messageOwner]
+			_, scopeInvalid := p.invalidToolCallScopes[record.scopeID]
+			chatShapeInvalid = messageInvalid || scopeInvalid
+		}
+		geminiPartShapeInvalid := false
+		if record.subtype == toolAssociationSubtypeGeminiFunction {
+			_, geminiPartShapeInvalid = p.invalidGeminiPartScopes[record.scopeID]
+		}
+		if group.conversationIndex != record.conversationIndex || group.kind != record.kind ||
+			group.subtype != record.subtype || !record.shapeValid || chatShapeInvalid || geminiPartShapeInvalid ||
+			!ownerKnown || !toolAssociationOwnerAllowed(p.source, record.kind, ownerRole) {
+			group.valid = false
+		}
+		group.records = append(group.records, record)
+	}
+	return groupsByConversation
+}
+
+func singleToolAssociationGroup(
+	groupsByConversation map[int][]*toolAssociationGroup,
+	conversationIndex int,
+) *toolAssociationGroup {
+	groups := groupsByConversation[conversationIndex]
+	if len(groups) != 1 {
+		return nil
+	}
+	return groups[0]
+}
+
+func toolAssociationGroupMatches(
+	group *toolAssociationGroup,
+	kind toolAssociationObjectKind,
+	subtypes ...toolAssociationSubtype,
+) bool {
+	if group == nil || !group.valid || group.kind != kind || len(group.records) == 0 {
+		return false
+	}
+	for _, subtype := range subtypes {
+		if group.subtype == subtype {
+			return true
+		}
+	}
+	return false
+}
+
+func toolAssociationRecordsMatch(
+	calls []toolAssociationRecord,
+	results []toolAssociationRecord,
+	requireMatchingNames bool,
+) bool {
+	if len(calls) == 0 || len(calls) != len(results) {
+		return false
+	}
+	callsByID := make(map[[sha256.Size]byte]toolAssociationRecord, len(calls))
+	for _, call := range calls {
+		if call.kind != toolAssociationObjectCall || call.subtype == toolAssociationSubtypeNone ||
+			!call.shapeValid || !call.identifierSeen || !call.validID || call.ambiguousID ||
+			requireMatchingNames && (!call.validName || call.ambiguousName) {
+			return false
+		}
+		if _, duplicate := callsByID[call.digest]; duplicate {
+			return false
+		}
+		callsByID[call.digest] = call
+	}
+	seenResults := make(map[[sha256.Size]byte]struct{}, len(results))
+	for _, result := range results {
+		if result.kind != toolAssociationObjectResult || result.subtype == toolAssociationSubtypeNone ||
+			!result.shapeValid || !result.identifierSeen || !result.validID || result.ambiguousID ||
+			requireMatchingNames && (!result.validName || result.ambiguousName) {
+			return false
+		}
+		call, matched := callsByID[result.digest]
+		if !matched || call.subtype != result.subtype || call.ordinal >= result.ordinal ||
+			requireMatchingNames && call.nameDigest != result.nameDigest {
+			return false
+		}
+		if _, duplicate := seenResults[result.digest]; duplicate {
+			return false
+		}
+		seenResults[result.digest] = struct{}{}
+	}
+	return len(seenResults) == len(callsByID)
+}
+
+func authorizeToolAssociationResults(
+	results []toolAssociationRecord,
+	authorizedSpanIDs map[uint64]struct{},
+) {
+	if len(results) == 0 {
+		return
+	}
+	pending := make([]uint64, 0, len(results))
+	seen := make(map[uint64]struct{})
+	for _, result := range results {
+		if !result.shapeValid || len(result.authoritySpanIDs) == 0 {
+			return
+		}
+		for _, spanID := range result.authoritySpanIDs {
+			if spanID == 0 {
+				return
+			}
+			if _, duplicate := seen[spanID]; duplicate {
+				return
+			}
+			seen[spanID] = struct{}{}
+			pending = append(pending, spanID)
+		}
+	}
+	for _, spanID := range pending {
+		authorizedSpanIDs[spanID] = struct{}{}
+	}
+}
+
+func (p *shadowPlanner) collectOpenAIChatToolAssociationSpans(
+	groupsByConversation map[int][]*toolAssociationGroup,
+	authorizedSpanIDs map[uint64]struct{},
+) {
+	if p == nil || !p.hasTerminalHistoryItem {
+		return
+	}
+	for conversationIndex := 0; conversationIndex <= p.terminalHistoryItemIndex; {
+		callGroup := singleToolAssociationGroup(groupsByConversation, conversationIndex)
+		if !toolAssociationGroupMatches(
+			callGroup, toolAssociationObjectCall, toolAssociationSubtypeOpenAIChatFunction,
+		) {
+			conversationIndex++
+			continue
+		}
+
+		resultRecords := make([]toolAssociationRecord, 0, len(callGroup.records))
+		nextIndex := conversationIndex + 1
+		for nextIndex <= p.terminalHistoryItemIndex {
+			resultGroup := singleToolAssociationGroup(groupsByConversation, nextIndex)
+			if !toolAssociationGroupMatches(
+				resultGroup, toolAssociationObjectResult, toolAssociationSubtypeOpenAIChatFunction,
+			) || len(resultGroup.records) != 1 {
+				break
+			}
+			resultRecords = append(resultRecords, resultGroup.records[0])
+			nextIndex++
+		}
+		if toolAssociationRecordsMatch(callGroup.records, resultRecords, false) &&
+			nextIndex-1 == p.terminalHistoryItemIndex {
+			authorizeToolAssociationResults(resultRecords, authorizedSpanIDs)
+		}
+		if nextIndex > conversationIndex+1 {
+			conversationIndex = nextIndex
+		} else {
+			conversationIndex++
+		}
+	}
+}
+
+func (p *shadowPlanner) collectOpenAIResponsesToolAssociationSpans(
+	groupsByConversation map[int][]*toolAssociationGroup,
+	authorizedSpanIDs map[uint64]struct{},
+) {
+	if p == nil || !p.hasTerminalHistoryItem {
+		return
+	}
+	allowedSubtypes := []toolAssociationSubtype{
+		toolAssociationSubtypeOpenAIResponsesFunction,
+		toolAssociationSubtypeOpenAIResponsesCustom,
+	}
+	for conversationIndex := 0; conversationIndex <= p.terminalHistoryItemIndex; {
+		callRecords := make([]toolAssociationRecord, 0, 2)
+		nextIndex := conversationIndex
+		for nextIndex <= p.terminalHistoryItemIndex {
+			callGroup := singleToolAssociationGroup(groupsByConversation, nextIndex)
+			if !toolAssociationGroupMatches(callGroup, toolAssociationObjectCall, allowedSubtypes...) ||
+				len(callGroup.records) != 1 {
+				break
+			}
+			callRecords = append(callRecords, callGroup.records[0])
+			nextIndex++
+		}
+		if len(callRecords) == 0 {
+			conversationIndex++
+			continue
+		}
+
+		resultRecords := make([]toolAssociationRecord, 0, len(callRecords))
+		for nextIndex <= p.terminalHistoryItemIndex {
+			resultGroup := singleToolAssociationGroup(groupsByConversation, nextIndex)
+			if !toolAssociationGroupMatches(resultGroup, toolAssociationObjectResult, allowedSubtypes...) ||
+				len(resultGroup.records) != 1 {
+				break
+			}
+			resultRecords = append(resultRecords, resultGroup.records[0])
+			nextIndex++
+		}
+		if toolAssociationRecordsMatch(callRecords, resultRecords, false) &&
+			nextIndex-1 == p.terminalHistoryItemIndex {
+			authorizeToolAssociationResults(resultRecords, authorizedSpanIDs)
+		}
+		conversationIndex = nextIndex
+	}
+}
+
+func (p *shadowPlanner) collectClaudeToolAssociationSpans(
+	groupsByConversation map[int][]*toolAssociationGroup,
+	authorizedSpanIDs map[uint64]struct{},
+) {
+	if p == nil || !p.hasTerminalHistoryItem {
+		return
+	}
+	for conversationIndex := 0; conversationIndex < p.terminalHistoryItemIndex; conversationIndex++ {
+		callGroup := singleToolAssociationGroup(groupsByConversation, conversationIndex)
+		resultGroup := singleToolAssociationGroup(groupsByConversation, conversationIndex+1)
+		if !toolAssociationGroupMatches(
+			callGroup, toolAssociationObjectCall, toolAssociationSubtypeClaudeTool,
+		) || !toolAssociationGroupMatches(
+			resultGroup, toolAssociationObjectResult, toolAssociationSubtypeClaudeTool,
+		) {
+			continue
+		}
+		if toolAssociationRecordsMatch(callGroup.records, resultGroup.records, false) &&
+			conversationIndex+1 == p.terminalHistoryItemIndex {
+			authorizeToolAssociationResults(resultGroup.records, authorizedSpanIDs)
+		}
+	}
+}
+
+func (p *shadowPlanner) collectGeminiToolAssociationSpans(
+	groupsByConversation map[int][]*toolAssociationGroup,
+	authorizedSpanIDs map[uint64]struct{},
+) {
+	if p == nil || !p.hasTerminalHistoryItem || p.terminalHistoryItemIndex < 1 {
+		return
+	}
+
+	resultGroups := groupsByConversation[p.terminalHistoryItemIndex]
+	callGroups := groupsByConversation[p.terminalHistoryItemIndex-1]
+	if len(resultGroups) != 1 || len(callGroups) != 1 {
+		return
+	}
+	callGroup, resultGroup := callGroups[0], resultGroups[0]
+	if !toolAssociationGroupMatches(
+		callGroup, toolAssociationObjectCall, toolAssociationSubtypeGeminiFunction,
+	) || !toolAssociationGroupMatches(
+		resultGroup, toolAssociationObjectResult, toolAssociationSubtypeGeminiFunction,
+	) ||
+		len(callGroup.records) != len(resultGroup.records) {
+		return
+	}
+
+	explicitIDs := true
+	nameOrdinal := true
+	for _, group := range []*toolAssociationGroup{callGroup, resultGroup} {
+		for _, record := range group.records {
+			if !record.identifierSeen || !record.validID || record.ambiguousID ||
+				!record.validName || record.ambiguousName {
+				explicitIDs = false
+			}
+			if record.identifierSeen || record.validID || record.ambiguousID ||
+				!record.validName || record.ambiguousName {
+				nameOrdinal = false
+			}
+		}
+	}
+
+	switch {
+	case explicitIDs:
+		if !toolAssociationRecordsMatch(callGroup.records, resultGroup.records, true) {
+			return
+		}
+	case nameOrdinal:
+		for index := range callGroup.records {
+			call := callGroup.records[index]
+			result := resultGroup.records[index]
+			if call.ordinal >= result.ordinal || call.nameDigest != result.nameDigest {
+				return
+			}
+		}
+	default:
+		return
+	}
+	authorizeToolAssociationResults(resultGroup.records, authorizedSpanIDs)
+}
+
+func markToolAssociations(spans []plannedText, authorizedSpanIDs map[uint64]struct{}) {
+	if len(authorizedSpanIDs) == 0 {
+		return
+	}
+	for index := range spans {
+		if _, authorized := authorizedSpanIDs[spans[index].id]; authorized && spans[index].role == RoleTool &&
+			spans[index].provenance == ProvenanceContent &&
+			spans[index].contentKind == ContentKindToolResult {
+			spans[index].toolAssociation = ToolResultAssociationUnique
+		}
+	}
+}
+
+func toolAssociationOwnerAllowed(
+	source SourceProfile,
+	kind toolAssociationObjectKind,
+	owner Role,
+) bool {
+	switch kind {
+	case toolAssociationObjectCall:
+		return owner == RoleAssistant
+	case toolAssociationObjectResult:
+		switch source {
+		case SourceProfileOpenAI, SourceProfileOpenAIResponse:
+			return owner == RoleTool
+		case SourceProfileClaude, SourceProfileGemini:
+			return owner == RoleUser
+		default:
+			return false
+		}
+	default:
+		return false
+	}
 }
 
 func (p *shadowPlanner) parseArray(ctx planContext, depth int) (valueSummary, error) {
@@ -794,6 +2302,13 @@ func (p *shadowPlanner) parseArray(ctx planContext, depth int) (valueSummary, er
 		// messageObject proves only a direct element of the provider history
 		// array. Never carry that proof through a nested array.
 		child.historyArray = false
+		child.toolCallArray = false
+		child.toolCallObject = ctx.toolCallArray
+		child.toolCallArrayObject = ctx.toolCallArray
+		child.toolCallShapeScope = 0
+		child.toolCallFunction = false
+		child.toolAssociationKind = toolAssociationObjectNone
+		child.geminiResponseObject = false
 		child.messageObject = false
 		child.roleTextValue = false
 		if ctx.historyArray && ctx.historyTrusted && p.trustRoles {
@@ -807,9 +2322,12 @@ func (p *shadowPlanner) parseArray(ctx planContext, depth int) (valueSummary, er
 		} else if ctx.independentItems || ctx.roleContent && ctx.directMessageMember {
 			p.nextOwner++
 			child.scopeID = p.nextOwner
-			if ctx.independentItems {
+			if ctx.independentItems && !ctx.toolCallArray {
 				child.conversationIndex = itemIndex
 			}
+		}
+		if ctx.toolCallArray {
+			child.toolCallShapeScope = child.scopeID
 		}
 		if ctx.roleContent {
 			child.directMessageMember = false
@@ -843,6 +2361,12 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 	child := parent
 	child.atRoot = false
 	child.historyArray = false
+	child.toolCallArray = false
+	child.toolCallObject = false
+	child.toolCallArrayObject = false
+	child.toolCallFunction = false
+	child.toolAssociationKind = toolAssociationObjectNone
+	child.geminiResponseObject = false
 	child.messageObject = false
 	child.roleTextValue = false
 	child.directMessageMember = parent.messageObject
@@ -851,7 +2375,39 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 	child.fieldPath = appendObjectFieldPath(parent.fieldPath, exactKey)
 	child.independentScope = false
 	child.independentItems = false
+	if source == SourceProfileGemini && parent.toolAssociationKind == toolAssociationObjectResult &&
+		exactKey == "response" {
+		child.geminiResponseObject = true
+	}
+	if source == SourceProfileGemini && parent.geminiResponseObject {
+		// Every direct member of the exact provider-native response object is
+		// tool-result payload. The flag intentionally propagates through nested
+		// objects and arrays, but never to functionResponse siblings.
+		child.geminiResponseValue = true
+	}
 	if parent.metadata {
+		return child
+	}
+	if isToolAssociationKeyCanonical(key) {
+		// ID- and name-shaped fields are structural only after the enclosing
+		// provider object has been proved. Until then they remain inspectable
+		// fallback text, including for unknown schemas and malformed role blocks.
+		child.fallbackText = true
+		if exactKey == "name" && exactToolCallFunctionNamePath(child.fieldPath) {
+			// The exact tool_calls[].function.name wrapper is an established
+			// transport identifier even for the legacy unknown-profile entry point.
+			// Nested arguments/parameters named "name" do not match this path and
+			// remain inspectable payload text.
+			child.fallbackText = false
+		}
+	}
+	if rootMember && source == SourceProfileOpenAIResponse && exactKey == "previous_response_id" {
+		child.messageOwner = 0
+		child.roleEligible = false
+		child.fallbackText = false
+		child.unknownRoot = false
+		child.metadata = true
+		child.contentKind = ContentKindUnknown
 		return child
 	}
 	if isProviderMetadataContainerCanonical(key) && parent.provenance != ProvenanceToolPayload {
@@ -928,6 +2484,11 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 		child.provenance = ProvenanceContent
 		child.userAttribution = UserAttributionUntrusted
 		child.contentKind = ContentKindToolSchema
+		if isToolAssociationKeyCanonical(key) {
+			// Proven tool-definition identifiers remain structural metadata. The
+			// global fallback rule applies only outside a closed schema/object.
+			child.fallbackText = false
+		}
 		return child
 	}
 	if parent.messageOwner != 0 {
@@ -937,6 +2498,13 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 				child.roleEligible = true
 				child.roleContent = true
 				child.roleTextValue = true
+			case exactNestedToolAssociationKind(source, exactKey) != toolAssociationObjectNone:
+				child.roleEligible = true
+				child.roleContent = false
+				child.provenance = ProvenanceToolPayload
+				child.contentKind = ContentKindToolCallArguments
+				child.userAttribution = UserAttributionUntrusted
+				child.toolAssociationKind = exactNestedToolAssociationKind(source, exactKey)
 			case isToolWrapperKeyCanonical(key) || isToolArgumentCanonical(key):
 				child.roleEligible = true
 				child.roleContent = false
@@ -946,7 +2514,9 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 			case isMetadataKeyCanonical(key):
 				child.roleEligible = false
 				child.roleContent = false
-				child.fallbackText = false
+				if !isToolAssociationKeyCanonical(key) {
+					child.fallbackText = false
+				}
 			default:
 				child.roleEligible = false
 				child.roleContent = false
@@ -957,6 +2527,13 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 			return child
 		}
 		switch {
+		case parent.toolCallArrayObject && exactKey == "function":
+			child.roleEligible = true
+			child.roleContent = false
+			child.provenance = ProvenanceToolPayload
+			child.contentKind = ContentKindToolCallArguments
+			child.userAttribution = UserAttributionUntrusted
+			child.toolCallFunction = true
 		case parent.messageObject && exactMessageToolCallArrayKey(source, exactKey):
 			child.roleEligible = true
 			child.roleContent = false
@@ -964,6 +2541,7 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 			child.contentKind = ContentKindToolCallArguments
 			child.userAttribution = UserAttributionUntrusted
 			child.independentItems = true
+			child.toolCallArray = true
 		case parent.messageObject && exactMessageToolCallValueKey(source, exactKey):
 			child.roleEligible = true
 			child.roleContent = false
@@ -971,6 +2549,7 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 			child.contentKind = ContentKindToolCallArguments
 			child.userAttribution = UserAttributionUntrusted
 			child.independentScope = true
+			child.toolCallObject = true
 		case parent.messageObject && exactMessageContentKey(source, exactKey):
 			child.roleEligible = true
 			child.roleContent = true
@@ -1008,6 +2587,34 @@ func derivePlanContext(parent planContext, key, exactKey string, rootMember bool
 		child.contentKind = ContentKindUnknown
 	}
 	return child
+}
+
+func exactNestedToolAssociationKind(source SourceProfile, exactKey string) toolAssociationObjectKind {
+	if source != SourceProfileGemini {
+		return toolAssociationObjectNone
+	}
+	switch exactKey {
+	case "functionCall":
+		return toolAssociationObjectCall
+	case "functionResponse":
+		return toolAssociationObjectResult
+	default:
+		return toolAssociationObjectNone
+	}
+}
+
+func exactToolCallFunctionNamePath(path string) bool {
+	const suffix = "/\"function\"/\"name\""
+	if !strings.HasSuffix(path, suffix) {
+		return false
+	}
+	prefix := strings.TrimSuffix(path, suffix)
+	lastSlash := strings.LastIndexByte(prefix, '/')
+	if lastSlash < 0 || !strings.HasSuffix(prefix[:lastSlash], "/\"tool_calls\"") {
+		return false
+	}
+	_, err := strconv.Atoi(prefix[lastSlash+1:])
+	return err == nil
 }
 
 func exactMessageToolCallArrayKey(source SourceProfile, key string) bool {
@@ -1344,7 +2951,7 @@ func (p *shadowPlanner) appendStringValue(ctx planContext, key string, start, en
 		p.shadow = append(p.shadow, '"', '"')
 		return valueSummary{}
 	}
-	if shouldPreserveSemanticString(key) {
+	if shouldPreserveSemanticString(key) && !ctx.geminiResponseValue {
 		p.shadow = strconv.AppendQuote(p.shadow, compactShadowSemanticValue(p.source, key, value, bounded))
 		return valueSummary{text: value, isText: true, bounded: bounded}
 	}
@@ -1353,7 +2960,7 @@ func (p *shadowPlanner) appendStringValue(ctx planContext, key string, start, en
 		return valueSummary{text: value, isText: true, bounded: true}
 	}
 	id := uint64(len(p.spans) + 1)
-	fallbackText := ctx.fallbackText && fallbackPlanTextKey(key)
+	fallbackText := ctx.geminiResponseValue || ctx.fallbackText && fallbackPlanTextKey(key)
 	scalarCarrier := isScalarMediaCarrierKeyCanonical(key)
 	encryptedContent := p.source == SourceProfileOpenAIResponse && ctx.messageOwner != 0 &&
 		ctx.directMessageMember && key == "encryptedcontent" && ctx.exactKey == "encrypted_content"
@@ -1403,13 +3010,14 @@ func (p *shadowPlanner) appendStringValue(ctx planContext, key string, start, en
 		fallbackText:      fallbackText,
 		exactKey:          ctx.exactKey,
 	})
-	return valueSummary{text: marker, isText: true, bounded: true}
+	return valueSummary{text: value, isText: true, bounded: bounded}
 }
 
 func fallbackPlanTextKey(key string) bool {
-	return !isMetadataKeyCanonical(key) && !isProviderMetadataContainerCanonical(key) &&
-		!isMediaMetadataKeyCanonical(key) && !isMediaContainerKeyCanonical(key) &&
-		!isScalarMediaCarrierKeyCanonical(key) && !isOpaquePayloadKeyCanonical(key)
+	return isToolAssociationKeyCanonical(key) ||
+		!isMetadataKeyCanonical(key) && !isProviderMetadataContainerCanonical(key) &&
+			!isMediaMetadataKeyCanonical(key) && !isMediaContainerKeyCanonical(key) &&
+			!isScalarMediaCarrierKeyCanonical(key) && !isOpaquePayloadKeyCanonical(key)
 }
 
 func opaqueScalarCarrierRepresentative(key, value string, bounded bool, raw []byte, id uint64) (string, bool) {
@@ -1785,6 +3393,7 @@ func finalizeConversationMetadata(
 		return ordered[left].conversationIndex < ordered[right].conversationIndex
 	})
 	turnIndex := -1
+	terminalTurnIndex := -1
 	currentScope := uint64(0)
 	for _, state := range ordered {
 		if state.trustedUser {
@@ -1794,8 +3403,16 @@ func finalizeConversationMetadata(
 			}
 		}
 		state.turnIndex = turnIndex
+		if hasTerminalHistoryItem && state.conversationIndex <= terminalHistoryItemIndex {
+			terminalTurnIndex = state.turnIndex
+		}
 	}
 	for index := range spans {
+		if hasTerminalHistoryItem {
+			spans[index].terminalConversationIndex = terminalHistoryItemIndex
+			spans[index].terminalTurnIndex = terminalTurnIndex
+			spans[index].hasTerminalCoordinates = true
+		}
 		state := byScope[spans[index].scopeID]
 		if state == nil {
 			continue
@@ -1926,19 +3543,23 @@ func (s *streamEmitter) emitSpan(raw []byte, span plannedText) error {
 				fieldID = contentPieceFieldID(span.id, pieceIndex)
 			}
 			if err := s.sink.AddSegment(SegmentChunk{
-				Role:              defaultRole(span.role),
-				Provenance:        span.provenance,
-				UserAttribution:   span.userAttribution,
-				ConversationIndex: span.conversationIndex,
-				TurnIndex:         span.turnIndex,
-				IsCurrentTurn:     span.isCurrentTurn,
-				ScopeID:           span.scopeID,
-				ContentKind:       piece.kind,
-				FieldPathHash:     span.fieldPathHash,
-				FieldID:           fieldID,
-				Start:             decodedOffset == piece.start,
-				End:               decodedOffset+partLength == piece.end,
-				Text:              part,
+				Role:                      defaultRole(span.role),
+				Provenance:                span.provenance,
+				UserAttribution:           span.userAttribution,
+				ToolAssociation:           span.toolAssociation,
+				ConversationIndex:         span.conversationIndex,
+				TurnIndex:                 span.turnIndex,
+				IsCurrentTurn:             span.isCurrentTurn,
+				TerminalConversationIndex: span.terminalConversationIndex,
+				TerminalTurnIndex:         span.terminalTurnIndex,
+				HasTerminalCoordinates:    span.hasTerminalCoordinates,
+				ScopeID:                   span.scopeID,
+				ContentKind:               piece.kind,
+				FieldPathHash:             span.fieldPathHash,
+				FieldID:                   fieldID,
+				Start:                     decodedOffset == piece.start,
+				End:                       decodedOffset+partLength == piece.end,
+				Text:                      part,
 			}); err != nil {
 				return err
 			}
@@ -2009,19 +3630,23 @@ func (s *streamEmitter) emitDecoded(value []byte, span plannedText) error {
 			return nil
 		}
 		if err := s.sink.AddSegment(SegmentChunk{
-			Role:              defaultRole(span.role),
-			Provenance:        span.provenance,
-			UserAttribution:   span.userAttribution,
-			ConversationIndex: span.conversationIndex,
-			TurnIndex:         span.turnIndex,
-			IsCurrentTurn:     span.isCurrentTurn,
-			ScopeID:           span.scopeID,
-			ContentKind:       span.contentKind,
-			FieldPathHash:     span.fieldPathHash,
-			FieldID:           span.id,
-			Start:             offset == 0,
-			End:               end == len(value),
-			Text:              chunk,
+			Role:                      defaultRole(span.role),
+			Provenance:                span.provenance,
+			UserAttribution:           span.userAttribution,
+			ToolAssociation:           span.toolAssociation,
+			ConversationIndex:         span.conversationIndex,
+			TurnIndex:                 span.turnIndex,
+			IsCurrentTurn:             span.isCurrentTurn,
+			TerminalConversationIndex: span.terminalConversationIndex,
+			TerminalTurnIndex:         span.terminalTurnIndex,
+			HasTerminalCoordinates:    span.hasTerminalCoordinates,
+			ScopeID:                   span.scopeID,
+			ContentKind:               span.contentKind,
+			FieldPathHash:             span.fieldPathHash,
+			FieldID:                   span.id,
+			Start:                     offset == 0,
+			End:                       end == len(value),
+			Text:                      chunk,
 		}); err != nil {
 			return s.operational(err)
 		}

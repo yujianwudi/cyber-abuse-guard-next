@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
 ## Active compatibility target
@@ -87,6 +87,9 @@ The current single-primary-profile matrix covers:
   format contracts;
 - Raw Capture management-response transport and HTML-sanitization contracts on
   the pinned CPA v7.2.95 source;
+- official v7.2.95 Responses continuation selectors for
+  `previous_response_id`, Gemini interactions function calls and response-name
+  backfill, and Gemini-to-OpenAI FIFO/fallback/explicit-ID translation paths;
 - CPA Store archive naming, root layout, checksum, installation, repeat-install,
   overwrite, and published-artifact identity;
 - an available native Linux integration target for plugin load and pre-upstream
@@ -98,6 +101,16 @@ The current single-primary-profile matrix covers:
 The shared test fixtures under `integration/pluginstorecontract/testfixtures/`
 remain the current v7.2.95 contract inputs and must not be treated as
 unsupported legacy fixtures.
+
+For the 2026-07-26 working tree, the nested `integration/cpalatestcontract`
+module compiled with Linux Go 1.26.4 using `go test . -run a^ -count=1` after
+the official selector additions. A later remote-verification attempt genuinely
+refreshed and validated the module `Origin`; no Origin was fabricated. The
+complete compatibility gate was still not credited because subsequent pinned
+dependency downloads and official GitHub connections timed out before the full
+source/compile matrix completed. A network-backed
+`CPA_COMPAT_VERIFY_REMOTE=1 make cpa-latest-compat` rerun therefore remains
+required for the final working tree.
 
 ## Historical pre-cleanup baseline (not the current RC target)
 

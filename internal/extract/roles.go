@@ -47,6 +47,19 @@ const (
 	UserAttributionTrusted
 )
 
+// ToolResultAssociation records the bounded structural proof that makes a
+// provider-native tool result part of the request currently being answered.
+// The value is content-free: raw call IDs, function names, response IDs, and
+// tool payloads never leave the bounded extraction planner.
+type ToolResultAssociation uint8
+
+const (
+	ToolResultAssociationNone ToolResultAssociation = iota
+	// ToolResultAssociationUnique links one result to one earlier provider call
+	// by an exact ID, or by Gemini's exact adjacent name-and-ordinal group.
+	ToolResultAssociationUnique
+)
+
 // ContentKind is a closed, structural classification of model-visible text.
 // It does not decide whether the text is safe; it preserves the boundary that
 // downstream classifiers need in order to avoid composing unrelated evidence.
@@ -110,6 +123,7 @@ type Segment struct {
 	Role            Role
 	Provenance      SegmentProvenance
 	UserAttribution UserAttribution
+	ToolAssociation ToolResultAssociation
 	// ConversationIndex is the zero-based provider history item. TurnIndex is
 	// the zero-based trusted-user turn and is inherited by following assistant
 	// and tool items until the next trusted user item. Values are -1 when the
@@ -117,6 +131,13 @@ type Segment struct {
 	ConversationIndex int
 	TurnIndex         int
 	IsCurrentTurn     bool
+	// TerminalConversationIndex and TerminalTurnIndex are the true terminal
+	// coordinates of the provider history, including empty assistant/model/tool
+	// items that emit no Segment. HasTerminalCoordinates distinguishes a valid
+	// zero coordinate from legacy callers that do not provide this proof.
+	TerminalConversationIndex int
+	TerminalTurnIndex         int
+	HasTerminalCoordinates    bool
 	// ScopeID is a request-local directive ownership boundary. FieldPathHash is
 	// a one-way, content-free digest of the structural JSON/multipart field path.
 	ScopeID       uint64

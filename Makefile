@@ -36,8 +36,10 @@ ROUND6_SAFE_PACKAGES := \
 	./internal/classifier \
 	./internal/config \
 	./internal/extract \
+	./internal/explanation \
 	./internal/fixturepublish \
 	./internal/plugin \
+	./internal/round8test \
 	./internal/round9corpus \
 	./internal/rules \
 	./internal/subject \
@@ -369,8 +371,12 @@ benchmark:
 	$(GO) test ./internal/classifier \
 		-run='^(TestCandidateRichMaxPartsAllocationBound|TestCandidateRichProfiledMaxPartsPerformanceBound|TestClassifier(Adversarial)?PerformanceAcceptance|TestClassifierDirectiveAllocationAcceptance|TestDirectiveClauseOverflowPerformanceBoundary|TestRound5MetaOverridePerformanceAcceptance|TestRound5AdjacentNegationCandidateFloodPerformanceAcceptance)$$' -count=1 -v
 	$(GO) test ./internal/classifier -run='^$$' -bench=. -benchmem -count=3
+	@$(GO) test ./internal/extract -list='^BenchmarkRound9ToolAssociationPlanning$$' | \
+		grep -Fxq 'BenchmarkRound9ToolAssociationPlanning' || { \
+		echo 'required Round9 tool-association planning benchmark is missing' >&2; exit 1; \
+		}
 	$(GO) test ./internal/extract -run='^$$' \
-		-bench='^(BenchmarkExtractRequest(ReverseOrderedMedia|Multipart|ScalarCarrierPermutation).*|BenchmarkMultipartUnknownFileField(1MiB|8MiB))$$' \
+		-bench='^(BenchmarkExtractRequest(ReverseOrderedMedia|Multipart|ScalarCarrierPermutation).*|BenchmarkMultipartUnknownFileField(1MiB|8MiB)|BenchmarkRound9ToolAssociationPlanning)$$' \
 		-benchmem -benchtime=3x
 
 round6-benchmark: benchmark

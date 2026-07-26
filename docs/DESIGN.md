@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
 ## Scope, release state, and invariants
@@ -290,6 +290,15 @@ user evidence. A structurally proven active system/developer instruction or
 terminal provider-native tool result may block only its own independently
 complete harmful candidate under `request_local_system` or
 `request_local_tool`; it is never user-owned and never enters subject state.
+Provider-native tool authority is closed over one request-local transaction.
+OpenAI Chat, Responses, and Claude require their exact native identifier and
+owner shapes. Gemini additionally requires one adjacent call/result message
+pair ending at the terminal history item, equal call/result cardinality, and an
+entire group that is either explicit-ID matched or wholly ID-free and matched by
+name+ordinal. Mixed-ID, partial, duplicate, wrong-owner, malformed, orphaned, or
+nonterminal groups are inert. A Responses `previous_response_id` plus an output
+alone is also inert because the plugin cannot prove Host session ownership,
+pending-call state, prior consumption, or replay protection.
 Assistant history, tool schemas, nonterminal tool results, and other carrier
 content remain inert or auditable unless a later current trusted-user directive
 proves the bounded referent chain and the reactivated candidate passes the same

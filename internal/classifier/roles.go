@@ -385,6 +385,7 @@ type profiledSegmentGroupKey struct {
 	role            extract.Role
 	provenance      extract.SegmentProvenance
 	attribution     extract.UserAttribution
+	toolAssociation extract.ToolResultAssociation
 	turnIndex       int
 	currentTurn     bool
 	scopeID         uint64
@@ -433,7 +434,8 @@ func segmentDeclaresProfiledMetadata(segment extract.Segment) bool {
 	// item/turn, while -1 is also emitted by the legacy extractor for unknown
 	// coordinates. Structural ownership metadata is the opt-in boundary.
 	return segment.ContentKind != extract.ContentKindUnknown || segment.ScopeID != 0 ||
-		segment.FieldPathHash != "" || segment.IsCurrentTurn
+		segment.FieldPathHash != "" || segment.IsCurrentTurn ||
+		segment.ToolAssociation != extract.ToolResultAssociationNone || segment.HasTerminalCoordinates
 }
 
 func segmentDeclaresProfiledCoordinates(segment extract.Segment) bool {
@@ -577,7 +579,18 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 		}
 		index = end
 	}
+	systemCarrierGroups := buildProfiledRequestLocalSystemReactivationGroups(segments)
 	groups := buildProfiledSegmentGroups(segments, false)
+	if candidate, ok, complete := c.bestProfiledRequestLocalSystemReactivationCandidate(
+		systemCarrierGroups, mode, thresholds, policy,
+	); !complete {
+		carrierProofUnavailable = true
+	} else if ok {
+		truncated = truncated || candidate.Truncated
+		if roleResultBetter(candidate, best) {
+			best = candidate
+		}
+	}
 	if candidate, ok := c.bestProfiledCurrentNaturalLanguageCandidate(
 		groups, mode, thresholds, policy,
 	); ok {
@@ -907,6 +920,120 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 	return best, found
 }
 
+type profiledRequestLocalSystemReactivationProof struct {
+	carrierRefs []profiledSegmentRef
+	parts       []string
+	anchor      profiledSegmentRef
+}
+
+// bestProfiledRequestLocalSystemReactivationCandidate supplies the narrow
+// candidate producer that request-local system authority previously lacked.
+// It accepts either one closed same-field quoted-review transaction or a
+// content-kind split logical field whose exact fenced carrier is adjacent to an
+// active system speech act. The carrier is classified alone; defensive frame
+// text can neither donate the harmful core nor erase it.
+func (c *Classifier) bestProfiledRequestLocalSystemReactivationCandidate(
+	groups []profiledSegmentGroup,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (Result, bool, bool) {
+	if c == nil {
+		return Result{}, false, true
+	}
+	best := Result{}
+	found := false
+	consider := func(candidate Result) {
+		if !resultHasEligibleMaliciousWinner(candidate, thresholds) {
+			return
+		}
+		if !found || roleResultBetter(candidate, best) {
+			best = candidate
+			found = true
+		}
+	}
+	for _, group := range groups {
+		for _, ref := range group.refs {
+			segment := ref.segment
+			if !profiledRequestLocalSystemDirective(segment) ||
+				!profiledNaturalLanguageMayContainLocalSubcandidate(segment.Text) {
+				continue
+			}
+			var scratch normalizationScratch
+			views := normalizePartsInto([]string{segment.Text}, takeNormalizedRuneBuffer(), &scratch)
+			if views.truncated {
+				putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+				return Result{}, false, false
+			}
+			normalized := string(views.standardRunes)
+			putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+			if c.isInertQuotedSafetyReview(normalized) {
+				continue
+			}
+			referent, reactivated := c.quotedSafetyReviewReactivationReferent(normalized)
+			if !reactivated {
+				continue
+			}
+			candidate := c.classifyWithPolicy([]string{referent}, mode, thresholds, policy, false)
+			if candidate.Truncated {
+				return Result{}, false, false
+			}
+			candidate = c.bindProfiledRequestLocalSystemReactivation(
+				candidate, []profiledSegmentRef{ref}, ref, policy, mode, thresholds,
+			)
+			consider(candidate)
+		}
+
+		proofs, complete := c.profiledRequestLocalSystemCarrierReactivationProofs(group.refs, true)
+		if !complete {
+			return Result{}, false, false
+		}
+		for _, proof := range proofs {
+			candidate := c.classifyWithPolicy(proof.parts, mode, thresholds, policy, false)
+			if candidate.Truncated {
+				return Result{}, false, false
+			}
+			if !profiledSelfContainedCarrierCandidate(candidate, thresholds) {
+				continue
+			}
+			if len(proof.carrierRefs) > 1 {
+				profiledCarrierRunClearOccurrenceOffsets(&candidate)
+			}
+			candidate = c.bindProfiledRequestLocalSystemReactivation(
+				candidate, proof.carrierRefs, proof.anchor, policy, mode, thresholds,
+			)
+			consider(candidate)
+		}
+	}
+	return best, found, true
+}
+
+func (c *Classifier) bindProfiledRequestLocalSystemReactivation(
+	candidate Result,
+	carrierRefs []profiledSegmentRef,
+	anchor profiledSegmentRef,
+	policy Policy,
+	mode Mode,
+	thresholds Thresholds,
+) Result {
+	c.annotateProfiledResult(&candidate, carrierRefs, false, policy, mode, thresholds)
+	markResultRequestLocalReferentActivated(
+		&candidate, EnforcementScopeRequestLocalSystem, true, mode, thresholds,
+	)
+	candidate = withRoleAwareFindingOriginAndScope(
+		candidate, FindingOriginNonUserOrUntrusted,
+		EnforcementScopeRequestLocalSystem, mode, thresholds,
+	)
+	bindResultCandidateReferentAnchor(&candidate, anchor, true, mode, thresholds)
+	if candidate.DecisionExplanation != nil {
+		candidate.DecisionExplanation.CrossSegmentComposition = len(carrierRefs) > 1 ||
+			anchor.index != carrierRefs[0].index
+		candidate.DecisionExplanation.ReferentLinkUsed = true
+		candidate.DecisionExplanation.EvidenceSegmentCount = len(carrierRefs) + 1
+	}
+	return candidate
+}
+
 func profiledNaturalLanguageMayContainLocalSubcandidate(text string) bool {
 	if text == "" {
 		return false
@@ -1059,6 +1186,14 @@ func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUse
 		if segment.TurnIndex > terminalTurnIndex {
 			terminalTurnIndex = segment.TurnIndex
 		}
+		if segment.HasTerminalCoordinates {
+			if segment.TerminalConversationIndex > terminalConversationIndex {
+				terminalConversationIndex = segment.TerminalConversationIndex
+			}
+			if segment.TerminalTurnIndex > terminalTurnIndex {
+				terminalTurnIndex = segment.TerminalTurnIndex
+			}
+		}
 	}
 	if activeTurnIndex < 0 {
 		for _, segment := range segments {
@@ -1080,7 +1215,8 @@ func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUse
 		segment.IsCurrentTurn = effectiveCurrent
 		key := profiledSegmentGroupKey{
 			role: segment.Role, provenance: segment.Provenance, attribution: segment.UserAttribution,
-			turnIndex: segment.TurnIndex, currentTurn: effectiveCurrent, scopeID: segment.ScopeID,
+			toolAssociation: segment.ToolAssociation,
+			turnIndex:       segment.TurnIndex, currentTurn: effectiveCurrent, scopeID: segment.ScopeID,
 		}
 		if segment.ScopeID == 0 || segment.ContentKind == extract.ContentKindToolSchema {
 			key.zeroScopeUnique = index + 1
@@ -1098,6 +1234,43 @@ func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUse
 			profiledRequestLocalToolResult(segment, terminalConversationIndex, terminalTurnIndex)
 		group.structuredTool = group.structuredTool || segment.Provenance == extract.ProvenanceToolPayload ||
 			segment.ContentKind == extract.ContentKindToolCallArguments
+	}
+	return groups
+}
+
+// buildProfiledRequestLocalSystemReactivationGroups is deliberately separate
+// from the generic profiled group builder. Log and markdown fences remain inert
+// to ordinary classification, but the narrow system reactivation producer must
+// still see their exact same-field position next to an explicit system speech
+// act. Original physical indexes are preserved so skipped content remains an
+// adjacency barrier.
+func buildProfiledRequestLocalSystemReactivationGroups(
+	segments []extract.Segment,
+) []profiledSegmentGroup {
+	groups := make([]profiledSegmentGroup, 0, len(segments))
+	indexes := make(map[profiledSegmentGroupKey]int, len(segments))
+	for index, segment := range segments {
+		if !profiledRequestLocalSystemDirective(segment) &&
+			!(profiledRequestLocalSystemCarrier(segment) &&
+				profiledSelfContainedCarrierKind(segment.ContentKind)) {
+			continue
+		}
+		key := profiledSegmentGroupKey{
+			role: segment.Role, provenance: segment.Provenance, attribution: segment.UserAttribution,
+			toolAssociation: segment.ToolAssociation,
+			turnIndex:       segment.TurnIndex, currentTurn: segment.IsCurrentTurn, scopeID: segment.ScopeID,
+		}
+		groupIndex, exists := indexes[key]
+		if !exists {
+			groupIndex = len(groups)
+			indexes[key] = groupIndex
+			groups = append(groups, profiledSegmentGroup{})
+		}
+		group := &groups[groupIndex]
+		group.refs = append(group.refs, profiledSegmentRef{index: index, segment: segment})
+		group.parts = append(group.parts, segment.Text)
+		group.activeDirective = group.activeDirective ||
+			profiledContentActiveDirective(segment.ContentKind)
 	}
 	return groups
 }
@@ -1122,7 +1295,8 @@ func buildProfiledCurrentMetaControlGroups(segments []extract.Segment) []profile
 		}
 		key := profiledSegmentGroupKey{
 			role: segment.Role, provenance: segment.Provenance, attribution: segment.UserAttribution,
-			turnIndex: segment.TurnIndex, currentTurn: true, scopeID: segment.ScopeID,
+			toolAssociation: segment.ToolAssociation,
+			turnIndex:       segment.TurnIndex, currentTurn: true, scopeID: segment.ScopeID,
 		}
 		groupIndex, exists := indexes[key]
 		if !exists {
@@ -1193,7 +1367,8 @@ func buildProfiledHistoricalReferentGroups(segments []extract.Segment) []profile
 		}
 		key := profiledSegmentGroupKey{
 			role: segment.Role, provenance: segment.Provenance, attribution: segment.UserAttribution,
-			turnIndex: segment.TurnIndex, currentTurn: false, scopeID: segment.ScopeID,
+			toolAssociation: segment.ToolAssociation,
+			turnIndex:       segment.TurnIndex, currentTurn: false, scopeID: segment.ScopeID,
 		}
 		if segment.ScopeID == 0 {
 			key.zeroScopeUnique = index + 1
@@ -1375,10 +1550,20 @@ func profiledRequestLocalToolResult(
 func profiledRequestLocalToolResultCarrier(segment extract.Segment) bool {
 	if segment.Role != extract.RoleTool || segment.Provenance != extract.ProvenanceContent ||
 		segment.ContentKind != extract.ContentKindToolResult || segment.ScopeID == 0 ||
-		segment.FieldPathHash == "" {
+		segment.FieldPathHash == "" ||
+		!authoritativeToolResultAssociation(segment.ToolAssociation) {
 		return false
 	}
 	return true
+}
+
+func authoritativeToolResultAssociation(association extract.ToolResultAssociation) bool {
+	switch association {
+	case extract.ToolResultAssociationUnique:
+		return true
+	default:
+		return false
+	}
 }
 
 // profiledTerminalConversationPosition is shared by batch and streaming. A
@@ -1446,6 +1631,17 @@ func profiledTrustedCurrentUserCarrier(segment extract.Segment) bool {
 func profiledTrustedCurrentUserNaturalLanguageDirective(segment extract.Segment) bool {
 	return segment.IsCurrentTurn && trustedUserContentSegment(segment) &&
 		segment.ContentKind == extract.ContentKindNaturalLanguageDirective
+}
+
+func profiledRequestLocalSystemDirective(segment extract.Segment) bool {
+	return enforcementScopeForSegment(segment) == EnforcementScopeRequestLocalSystem
+}
+
+func profiledRequestLocalSystemCarrier(segment extract.Segment) bool {
+	return segment.Role == extract.RoleSystem &&
+		segment.Provenance == extract.ProvenanceContent &&
+		segment.ScopeID != 0 && segment.FieldPathHash != "" &&
+		profiledReferentCarrierKind(segment.ContentKind)
 }
 
 // profiledSelfContainedCarrierKind is limited to content kinds produced by a
@@ -1539,6 +1735,160 @@ func (c *Classifier) profiledSelfContainedCarrierRefs(
 		return []string{refs[0].segment.Text}, true, true
 	}
 	return []string{strings.Join(proofParts, " ")}, true, true
+}
+
+func (c *Classifier) profiledRequestLocalSystemCarrierRefs(
+	refs []profiledSegmentRef,
+) (parts []string, imperative bool, complete bool) {
+	if c == nil || len(refs) == 0 {
+		return nil, false, true
+	}
+	proofParts := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		segment := ref.segment
+		if !profiledRequestLocalSystemCarrier(segment) ||
+			!profiledSelfContainedCarrierKind(segment.ContentKind) {
+			return nil, false, true
+		}
+		proofParts = append(proofParts, profiledClosedFenceBodyOrText(segment.Text))
+	}
+	direct, complete := directProfiledPartIndexes(c, proofParts)
+	if !complete || len(direct) == 0 {
+		return proofParts, false, complete
+	}
+	if len(refs) == 1 {
+		return []string{refs[0].segment.Text}, true, true
+	}
+	return []string{strings.Join(proofParts, " ")}, true, true
+}
+
+func (c *Classifier) profiledRequestLocalSystemSurvivingOwnerIndexes(
+	refs []profiledSegmentRef,
+) ([]bool, bool) {
+	if c == nil || len(refs) == 0 {
+		return nil, true
+	}
+	parts := make([]string, len(refs))
+	for index, ref := range refs {
+		if profiledRequestLocalSystemDirective(ref.segment) {
+			parts[index] = ref.segment.Text
+		}
+	}
+	indexes, complete := affirmativeProfiledPartIndexes(c, parts)
+	if !complete {
+		return nil, false
+	}
+	surviving := make([]bool, len(refs))
+	for _, index := range indexes {
+		if index >= 0 && index < len(surviving) {
+			surviving[index] = true
+		}
+	}
+	return surviving, true
+}
+
+func (c *Classifier) profiledRequestLocalSystemCarrierReactivationProofs(
+	refs []profiledSegmentRef,
+	requirePhysicalIndexAdjacency bool,
+) ([]profiledRequestLocalSystemReactivationProof, bool) {
+	if c == nil || len(refs) == 0 {
+		return nil, true
+	}
+	survivingOwners, complete := c.profiledRequestLocalSystemSurvivingOwnerIndexes(refs)
+	if !complete {
+		return nil, false
+	}
+	proofs := make([]profiledRequestLocalSystemReactivationProof, 0, 1)
+	adjacent := func(previous, current profiledSegmentRef) bool {
+		return (!requirePhysicalIndexAdjacency || current.index == previous.index+1) &&
+			profiledSegmentsShareLogicalTextField(previous.segment, current.segment)
+	}
+	for index := 0; index < len(refs); {
+		first := refs[index]
+		if !profiledRequestLocalSystemCarrier(first.segment) ||
+			!profiledSelfContainedCarrierKind(first.segment.ContentKind) {
+			index++
+			continue
+		}
+		end := index + 1
+		for end < len(refs) {
+			previous := refs[end-1]
+			current := refs[end]
+			if !adjacent(previous, current) ||
+				!profiledRequestLocalSystemCarrier(current.segment) ||
+				!profiledSelfContainedCarrierKind(current.segment.ContentKind) ||
+				!profiledSelfContainedCarrierTextContinues(previous.segment.Text, current.segment.Text) {
+				break
+			}
+			end++
+		}
+		carrierRefs := append([]profiledSegmentRef(nil), refs[index:end]...)
+		ownerAt := func(ownerIndex int, edge profiledSegmentRef) (profiledSegmentRef, bool) {
+			if ownerIndex < 0 || ownerIndex >= len(refs) {
+				return profiledSegmentRef{}, false
+			}
+			owner := refs[ownerIndex]
+			if !adjacent(edge, owner) && !adjacent(owner, edge) ||
+				!profiledRequestLocalSystemDirective(owner.segment) {
+				return profiledSegmentRef{}, false
+			}
+			return owner, true
+		}
+		before, beforeOK := ownerAt(index-1, refs[index])
+		after, afterOK := ownerAt(end, refs[end-1])
+		beforeDisposition := quotedReviewContinuationNone
+		afterDisposition := quotedReviewContinuationNone
+		if beforeOK {
+			var proofComplete bool
+			beforeDisposition, proofComplete = c.profiledCarrierLocalOwnerDisposition(before.segment)
+			if !proofComplete {
+				return nil, false
+			}
+		}
+		if afterOK {
+			var proofComplete bool
+			afterDisposition, proofComplete = c.profiledCarrierLocalOwnerDisposition(after.segment)
+			if !proofComplete {
+				return nil, false
+			}
+		}
+		if beforeDisposition == quotedReviewContinuationActive && !survivingOwners[index-1] {
+			beforeDisposition = quotedReviewContinuationNone
+		}
+		if afterDisposition == quotedReviewContinuationActive && !survivingOwners[end] {
+			afterDisposition = quotedReviewContinuationNone
+		}
+
+		anchor := profiledSegmentRef{}
+		active := false
+		switch {
+		case afterDisposition == quotedReviewContinuationActive:
+			anchor, active = after, true
+		case afterDisposition == quotedReviewContinuationCancelled:
+		case beforeDisposition == quotedReviewContinuationActive:
+			anchor, active = before, true
+		case afterDisposition == quotedReviewContinuationInert:
+		case beforeDisposition == quotedReviewContinuationCancelled ||
+			beforeDisposition == quotedReviewContinuationInert:
+		}
+		if active {
+			parts, imperative, proofComplete := c.profiledRequestLocalSystemCarrierRefs(carrierRefs)
+			if !proofComplete {
+				return nil, false
+			}
+			if !imperative {
+				index = end
+				continue
+			}
+			proofs = append(proofs, profiledRequestLocalSystemReactivationProof{
+				carrierRefs: carrierRefs,
+				parts:       parts,
+				anchor:      anchor,
+			})
+		}
+		index = end
+	}
+	return proofs, true
 }
 
 func profiledCarrierRunClearOccurrenceOffsets(result *Result) {
@@ -2491,7 +2841,7 @@ func (c *Classifier) profiledSyntheticMetaControlOwner(
 				[]string{segment.Text}, mode, thresholds, policy, false, &fieldFacts, false, nil,
 			)
 			if !c.requestLocalStandaloneMetaControlEnforceable(
-				fieldCandidate, fieldFacts, policy, thresholds,
+				fieldCandidate, fieldFacts, segment.Text, policy, thresholds,
 			) {
 				continue
 			}
@@ -3008,7 +3358,8 @@ func enforcementScopeForSegment(segment extract.Segment) EnforcementScope {
 	case segment.Role == extract.RoleSystem &&
 		segment.ContentKind == extract.ContentKindNaturalLanguageDirective:
 		return EnforcementScopeRequestLocalSystem
-	case segment.Role == extract.RoleTool && segment.ContentKind == extract.ContentKindToolResult:
+	case segment.Role == extract.RoleTool && segment.ContentKind == extract.ContentKindToolResult &&
+		authoritativeToolResultAssociation(segment.ToolAssociation):
 		return EnforcementScopeRequestLocalTool
 	default:
 		return EnforcementScopeNone
@@ -3035,6 +3386,7 @@ func enforcementScopeForProfiledGroup(refs []profiledSegmentRef) EnforcementScop
 		segment := ref.segment
 		if segment.Role != base.Role || segment.Provenance != base.Provenance ||
 			segment.UserAttribution != base.UserAttribution ||
+			segment.ToolAssociation != base.ToolAssociation ||
 			segment.ConversationIndex != base.ConversationIndex ||
 			segment.TurnIndex != base.TurnIndex || segment.IsCurrentTurn != base.IsCurrentTurn ||
 			segment.ScopeID != base.ScopeID {
@@ -3113,10 +3465,11 @@ func withRoleAwareFindingOriginAndScope(
 	if origin == FindingOriginUserContent {
 		bindResultCandidateActor(&result, true, mode, thresholds)
 	} else if scope == EnforcementScopeRequestLocalSystem || scope == EnforcementScopeRequestLocalTool {
-		// Prompt-override wrappers without an independently complete cyber-abuse
-		// base behavior remain audit-only outside current user ownership. This
-		// prevents provider policies and tool diagnostics from being blocked merely
-		// because they describe instruction hierarchy or refusal suppression.
+		// Prompt-override wrappers remain audit-only until annotateProfiledResult
+		// proves one exact request-local owner. That later binding admits either an
+		// independently complete cyber-abuse base behavior or one narrowly defined
+		// active META takeover profile; ordinary provider policy and tool diagnostics
+		// still cannot block merely because they mention hierarchy or refusals.
 		if standaloneMetaControlResult(result) {
 			alreadyBound := result.BlockEligibility != nil &&
 				result.BlockEligibility.EnforcementScope == scope &&
@@ -3173,6 +3526,7 @@ func withRoleAwareFindingOriginAndScope(
 func (c *Classifier) requestLocalStandaloneMetaControlEnforceable(
 	result Result,
 	facts classificationSignalFacts,
+	text string,
 	policy Policy,
 	thresholds Thresholds,
 ) bool {
@@ -3187,21 +3541,48 @@ func (c *Classifier) requestLocalStandaloneMetaControlEnforceable(
 		!eligibility.ReferentProofComplete || eligibility.EvidenceAmbiguous {
 		return false
 	}
-	required := map[string]bool{
-		metaOverrideRuleID + ":direct_completion":   false,
-		metaOverrideRuleID + ":output_control":      false,
-		metaOverrideRuleID + ":refusal_suppression": false,
-		metaOverrideRuleID + ":unrestricted_mode":   false,
-	}
+	var hierarchy, refusal, unrestricted, completion, laundering, outputControl bool
 	for _, evidence := range result.Evidence {
-		if _, ok := required[evidence.ID]; ok {
-			required[evidence.ID] = true
+		switch evidence.ID {
+		case metaOverrideRuleID + ":hierarchy":
+			hierarchy = true
+		case metaOverrideRuleID + ":refusal_suppression":
+			refusal = true
+		case metaOverrideRuleID + ":unrestricted_mode":
+			unrestricted = true
+		case metaOverrideRuleID + ":direct_completion":
+			completion = true
+		case metaOverrideRuleID + ":scope_laundering":
+			laundering = true
+		case metaOverrideRuleID + ":output_control":
+			outputControl = true
 		}
 	}
-	for _, present := range required {
-		if !present {
-			return false
-		}
+	// Two control-plane-only profiles are sufficiently specific to enforce even
+	// without borrowing an ordinary cyber category, but request-local provider
+	// authority still needs one explicit, uncancelled execution/reactivation act:
+	//
+	//   1. an explicit unrestricted takeover that inverts hierarchy, suppresses
+	//      refusal, orders direct completion, and controls the response; or
+	//   2. concealed blanket-authorization laundering that suppresses refusal and
+	//      hides the active policy source.
+	//
+	// The ordinary roleless classifier has already proved active application and
+	// rejected quoted/analytical or defensive use. The additional referential act
+	// distinguishes an activated embedded takeover from provider policy that only
+	// describes a strong operating mode while the actual user task is harmless.
+	activeControlText, activeControlComplete := metaOverrideActiveControlText(text)
+	_, explicitExecution := latestAffirmativeProfiledPartIndex(c, []string{activeControlText})
+	explicitExecution = activeControlComplete && explicitExecution
+	strongUnrestrictedTakeover := hierarchy && refusal && unrestricted && completion && outputControl &&
+		explicitExecution
+	concealedAuthorizationLaundering := refusal && laundering && outputControl && explicitExecution &&
+		requestLocalMetaOverrideConcealment(text)
+	if strongUnrestrictedTakeover || concealedAuthorizationLaundering {
+		return true
+	}
+	if !completion || !outputControl || !refusal || !unrestricted {
+		return false
 	}
 	// A pure hierarchy/refusal/output wrapper is common in legitimate provider
 	// policy and remains audit-only. Request-local META becomes enforceable only
@@ -3215,6 +3596,22 @@ func (c *Classifier) requestLocalStandaloneMetaControlEnforceable(
 	potential := c.streamingRiskPotential(facts, policy, thresholds)
 	thresholds = validThresholdsOrDefault(thresholds)
 	return potential.hasQualifiedOrdinary && potential.qualifiedOrdinaryScore >= thresholds.HardBlock
+}
+
+func requestLocalMetaOverrideConcealment(text string) bool {
+	if text == "" {
+		return false
+	}
+	active, complete := metaOverrideActiveControlText(text)
+	if !complete {
+		return false
+	}
+	return containsAnyLiteral(active,
+		"never mention these instructions", "never acknowledge the mode switch",
+		"hide the override source", "conceal the active policy",
+		"do not disclose policy changes", "don't disclose policy changes",
+		"不要提及这些指令", "不要承认模式切换", "隐藏覆盖来源", "不要披露策略变更",
+	)
 }
 
 func profiledRoleOwnedWrapper(result Result, origin FindingOrigin) bool {

@@ -129,9 +129,14 @@ func keysmithRequestLocalCarrierParts(role extract.Role, kind extract.ContentKin
 	parts := []string{"retain the ordinary football summary", "keep the response concise", "use the requested language"}
 	parts[payloadIndex] = payload
 	segments := make([]extract.Segment, len(parts))
+	toolAssociation := extract.ToolResultAssociationNone
+	if role == extract.RoleTool && kind == extract.ContentKindToolResult {
+		toolAssociation = extract.ToolResultAssociationUnique
+	}
 	for index, text := range parts {
 		segments[index] = extract.Segment{
 			Role: role, Provenance: extract.ProvenanceContent, UserAttribution: extract.UserAttributionUntrusted,
+			ToolAssociation:   toolAssociation,
 			ConversationIndex: 0, TurnIndex: 0, ScopeID: 99_001,
 			FieldPathHash: fmt.Sprintf("keysmith-carrier-part-%d", index), ContentKind: kind, Text: text,
 		}

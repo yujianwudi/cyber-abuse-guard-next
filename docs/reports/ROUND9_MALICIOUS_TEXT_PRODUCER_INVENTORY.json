@@ -193,7 +193,7 @@
     {
       "id": "action-014-referent-candidate",
       "path": "internal/classifier/eligibility.go",
-      "function": "markResultReferentActivated",
+      "function": "markResultReferentActivatedWithScope",
       "kind": "block_capable_call",
       "symbol": "candidateActionFor",
       "ordinal": 1,

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d
+current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
 ```
 
 > **RC 身份说明：** `v0.16-rc.3` 是不可移动的 Phase 1 失败 Tag，没有候选产物或
@@ -60,7 +60,7 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | CPA 固定目标 | 仅 v7.2.95；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 当前源码独立审计 | 外部评估仍为 `NOT_RUN`；仓库外的 `f37a25dd` 报告不能替代当前源码精确重审，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `840b921cf23f9da7793c44205d0a6655680094bfc430256af51076cc94d8a74d`；Host 与发行绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`；Host 与发行绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 
@@ -69,6 +69,8 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 - 精确支持“仅做防御性事件响应训练/分析、解释风险、提供检测与修复建议、明确不要执行”的单一闭合引用审查。
 - 该修复只扩展有限英文引导语，不会把泛化的“防御、训练、事件响应”关键词当作放行条件；第二引用、超预算、跨字段/跨 scope、缺少终止边界和后续执行指令仍不能获得抑制。
 - 已补批处理、内容类型拆分、整段/二分/逐字节流式，以及 Balanced/Strict × OpenAI Chat/Responses/Claude/Gemini 模拟路由回归；仍不等同于最终 `.so` 或 CPA Host 证据。
+- provider-native tool result 只有在请求内完整事务被证明后才具有 request-local 权限。Gemini 整组只能是全显式 ID 匹配，或全无 ID 且按 name+ordinal 完整匹配；混合、缺项、错 owner、非终端和孤立结果均无权。只有 `previous_response_id` 的 Responses continuation 仍无权，因为插件无法验证 Host 的 pending call、已消费状态与防重放状态。
+- 去武器化 NERV 回归已覆盖凭证/会话窃取、持久化/C2/规避、勒索、钓鱼、隐蔽键盘记录、未授权利用和入侵后外传，并覆盖四 Provider 约 7 KiB 前/中/后 system 与终端 tool 路由；仓库名、授权运维、检测工程和闭合防御分析近邻保持不阻断。当前仍只是源码回归，精确 main 的五仓 counted-Mock 复测尚未提供。
 
 ## 历史 v0.15 发布记录
 

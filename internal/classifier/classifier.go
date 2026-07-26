@@ -2453,18 +2453,33 @@ func (c *Classifier) adjacentNegationReversalResult(
 	objectText := string(objectRunes)
 	joinedText := intentText + " " + objectText
 	typedExplicitMalice := adjacentNegationReversalExplicitMalice(rule.category, joinedText)
+	var typedAxes candidateTypedMaliciousAxes
+	if typedExplicitMalice {
+		// The adjacent-negation parser has already proved one bounded active
+		// category relation across the intent/object pair. Preserve the same
+		// typed malicious axes used by the explicit-relation fallback; otherwise
+		// the positive-proof finalizer sees a bare boolean core, clears
+		// HarmfulCoreComplete, and downgrades an explicit reversal to audit.
+		typedAxes = candidateExplicitRelationTypedAxes(rule.category, strings.ToLower(joinedText))
+	}
 	eligibility := assessCandidateBlockEligibility(candidateEligibilityInput{
-		category:               rule.category,
-		ruleID:                 rule.id,
-		text:                   joinedText,
-		coreComplete:           true,
-		activeDirective:        true,
-		currentExecutionProven: true,
-		operational:            typedExplicitMalice || candidateOperationallyActionable(rule.category, joinedText),
-		ownershipProven:        true,
-		inspectionComplete:     true,
-		referentProofComplete:  true,
-		typedExplicitMalice:    typedExplicitMalice,
+		category:                    rule.category,
+		ruleID:                      rule.id,
+		text:                        joinedText,
+		coreComplete:                true,
+		activeDirective:             true,
+		currentExecutionProven:      true,
+		operational:                 typedExplicitMalice || candidateOperationallyActionable(rule.category, joinedText),
+		ownershipProven:             true,
+		inspectionComplete:          true,
+		referentProofComplete:       true,
+		typedExplicitMalice:         typedExplicitMalice,
+		typedExplicitVictim:         typedAxes.explicitVictim,
+		typedCovertAcquisition:      typedAxes.covert,
+		typedExfiltration:           typedAxes.exfiltration,
+		typedMaliciousPersistence:   typedAxes.persistence,
+		typedDestructiveOutcome:     typedAxes.destructive,
+		typedSecurityControlEvasion: typedAxes.evasion,
 	})
 	evidence := []Evidence{
 		{ID: rule.id + ":intent", Kind: "intent"},
@@ -3799,6 +3814,8 @@ var quotedReviewSpecificContinuationIntents = []string{
 	"run it", "run that", "run the quoted request", "run quoted request",
 	"deploy it", "deploy that", "deploy the quoted request", "deploy quoted request",
 	"build it", "build that", "build the quoted request", "build quoted request",
+	"operationalize it", "operationalize that", "operationalize the above", "operationalize the request", "operationalize the quoted request", "operationalize quoted request",
+	"operationalise it", "operationalise that", "operationalise the above", "operationalise the request", "operationalise the quoted request", "operationalise quoted request",
 	"执行它", "执行该内容", "执行上述", "执行上面的请求", "执行前面的请求", "执行前述请求",
 	"照做", "按上述执行", "按前述方案部署", "继续执行", "实施它", "实施上述",
 	"应用它", "应用上述", "实现它", "实现上述", "运行它", "运行上述", "部署它", "部署上述",
@@ -4031,17 +4048,27 @@ func quotedReviewEvaluateContinuationOccurrence(
 		return decision
 	}
 	found, negated := ruleIntentOccurrenceNegation(clause, occurrence.index)
-	coordinatedNegation := found && coordinatedRuleIntentNegation(
-		clause, occurrence.index, occurrence.intent, allIntents,
+	closedCoordination, coordinatedAlternative := quotedReviewCoordinatedCancellationAtIndex(
+		clause, occurrence.index, occurrence.intent,
 	)
-	if found && !negated && coordinatedNegation {
+	coordinatedNegation := closedCoordination
+	if !coordinatedNegation && found {
+		coordinatedNegation = coordinatedRuleIntentNegation(
+			clause, occurrence.index, occurrence.intent, allIntents,
+		)
+	}
+	if closedCoordination {
+		found = true
+		negated = true
+	} else if found && !negated && coordinatedNegation {
 		negated = true
 	}
 	if found && negated {
 		decision.disposition = quotedReviewContinuationCancelled
-		decision.alternative = !coordinatedNegation &&
-			(quotedReviewOccurrenceUsesAlternative(clause, occurrence) ||
-				quotedReviewClauseStartsWithAlternative(segment))
+		decision.alternative = coordinatedAlternative ||
+			(!coordinatedNegation &&
+				(quotedReviewOccurrenceUsesAlternative(clause, occurrence) ||
+					quotedReviewClauseStartsWithAlternative(segment)))
 		return decision
 	}
 	decision.disposition = quotedReviewContinuationActive
@@ -4112,6 +4139,8 @@ func quotedReviewContinuationIntentFamily(intent string) string {
 		return "implement"
 	case hasAnyPrefix(intent, "deploy", "部署"):
 		return "deploy"
+	case hasAnyPrefix(intent, "operationalize", "operationalise"):
+		return "operationalize"
 	case hasAnyPrefix(intent, "build"):
 		return "build"
 	case hasAnyPrefix(intent, "proceed", "go ahead"):
@@ -4146,6 +4175,84 @@ func quotedReviewClauseStartsWithAlternative(clause string) bool {
 		"or else ", "alternatively ", "otherwise ", "if not ", "or ",
 		"或者", "否则", "要么", "或",
 	)
+}
+
+// quotedReviewCoordinatedCancellationAtIndex distinguishes the connector that
+// introduces a closed cancellation branch from the connectors governed by the
+// cancellation itself. In "run it or do not execute or operationalize it",
+// the first "or" is alternative while the second remains inside one negative
+// action family state.
+func quotedReviewCoordinatedCancellationAtIndex(
+	clause string,
+	intentIndex int,
+	currentIntent string,
+) (bool, bool) {
+	if intentIndex < 0 || intentIndex > len(clause) {
+		return false, false
+	}
+	if quotedReviewCoordinatedCancellationTailCoversIndex(clause, 0, intentIndex, currentIntent) {
+		return true, false
+	}
+	for _, prefix := range []string{"or else ", "alternatively ", "otherwise ", "if not ", "or "} {
+		if strings.HasPrefix(clause, prefix) &&
+			quotedReviewCoordinatedCancellationTailCoversIndex(clause, len(prefix), intentIndex, currentIntent) {
+			return true, true
+		}
+	}
+	for _, boundary := range []struct {
+		literal     string
+		alternative bool
+	}{
+		{literal: " or else ", alternative: true},
+		{literal: " alternatively ", alternative: true},
+		{literal: " otherwise ", alternative: true},
+		{literal: " if not ", alternative: true},
+		{literal: " or ", alternative: true},
+		{literal: ", and "}, {literal: "; and "}, {literal: " and "},
+		{literal: ", then "}, {literal: "; then "}, {literal: " then "},
+		{literal: " but "},
+	} {
+		for offset := 0; offset <= len(clause)-len(boundary.literal); {
+			relative := strings.Index(clause[offset:], boundary.literal)
+			if relative < 0 {
+				break
+			}
+			start := offset + relative + len(boundary.literal)
+			if quotedReviewCoordinatedCancellationTailCoversIndex(
+				clause, start, intentIndex, currentIntent,
+			) {
+				return true, boundary.alternative
+			}
+			offset = start
+		}
+	}
+	return false, false
+}
+
+func quotedReviewCoordinatedCancellationTailCoversIndex(
+	clause string,
+	start, intentIndex int,
+	currentIntent string,
+) bool {
+	if start < 0 || start >= len(clause) || intentIndex < start {
+		return false
+	}
+	var actions [maxInertQuotedNonExecutionActions]inertQuotedNonExecutionAction
+	actionCount, complete := inertQuotedCoordinatedNonExecutionActions(clause[start:], &actions)
+	if !complete {
+		return false
+	}
+	for index := 0; index < actionCount; index++ {
+		if start+actions[index].start == intentIndex {
+			for prior := 0; prior < index; prior++ {
+				if quotedReviewContinuationIntentsEquivalent(actions[prior].term, currentIntent) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 func quotedReviewStandaloneAlternativeClause(clause string) bool {
@@ -4321,6 +4428,31 @@ func quotedReviewContinuationOccurrences(
 			occurrences = append(occurrences, occurrence)
 		}
 	}
+	if quotedReviewMayContainCoordinatedCancellation(clause) {
+		var overflow bool
+		occurrences, overflow = appendQuotedReviewCoordinatedCancellationOccurrences(
+			clause, 0, occurrences, maxOccurrences,
+		)
+		if overflow {
+			return occurrences, true
+		}
+		for _, connector := range []string{", and ", "; and ", " and "} {
+			for offset := 0; offset <= len(clause)-len(connector); {
+				index := strings.Index(clause[offset:], connector)
+				if index < 0 {
+					break
+				}
+				tailStart := offset + index + len(connector)
+				occurrences, overflow = appendQuotedReviewCoordinatedCancellationOccurrences(
+					clause, tailStart, occurrences, maxOccurrences,
+				)
+				if overflow {
+					return occurrences, true
+				}
+				offset = tailStart
+			}
+		}
+	}
 	for index := 1; index < len(occurrences); index++ {
 		current := occurrences[index]
 		position := index
@@ -4330,6 +4462,54 @@ func quotedReviewContinuationOccurrences(
 			position--
 		}
 		occurrences[position] = current
+	}
+	return occurrences, false
+}
+
+func quotedReviewMayContainCoordinatedCancellation(clause string) bool {
+	return len(clause) >= len("do not x or y") &&
+		containsAnyLiteral(clause, " or ", " nor ", " and ") &&
+		containsAnyLiteral(clause,
+			"do not ", "don't ", "never ", "must not ", "should not ",
+			"cannot ", "can't ", "will not ", "would not ", "could not ", "may not ",
+		)
+}
+
+func appendQuotedReviewCoordinatedCancellationOccurrences(
+	clause string,
+	tailStart int,
+	occurrences []quotedReviewContinuationOccurrence,
+	limit int,
+) ([]quotedReviewContinuationOccurrence, bool) {
+	if tailStart < 0 || tailStart >= len(clause) {
+		return occurrences, false
+	}
+	var actions [maxInertQuotedNonExecutionActions]inertQuotedNonExecutionAction
+	actionCount, complete := inertQuotedCoordinatedNonExecutionActions(clause[tailStart:], &actions)
+	if !complete {
+		return occurrences, false
+	}
+	for index := 0; index < actionCount; index++ {
+		action := actions[index]
+		occurrence := quotedReviewContinuationOccurrence{
+			index:  tailStart + action.start,
+			end:    tailStart + action.end,
+			intent: action.term,
+		}
+		duplicate := false
+		for _, existing := range occurrences {
+			if existing.index == occurrence.index && existing.end == occurrence.end {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		if len(occurrences) >= limit {
+			return occurrences, true
+		}
+		occurrences = append(occurrences, occurrence)
 	}
 	return occurrences, false
 }
@@ -4884,6 +5064,7 @@ func inertQuotedSafetyTrimAnalysisIntro(clause string) string {
 	clause = quotedReviewTrimIntroductoryGovernors(clause)
 	for pass := 0; pass < 2; pass++ {
 		before := clause
+		clause = inertQuotedSafetyTrimPerspectiveIntro(clause)
 		for _, prefix := range []string{
 			"for a security audit, ", "for a safety audit, ", "for a defensive audit, ",
 			"for a security review, ", "for a safety review, ", "for a defensive review, ",
@@ -4911,6 +5092,58 @@ func inertQuotedSafetyTrimAnalysisIntro(clause string) string {
 		}
 	}
 	return clause
+}
+
+// inertQuotedSafetyTrimPerspectiveIntro accepts one bounded defensive
+// perspective governor without enumerating whole sentence prefixes. The text
+// after the comma must still begin with the ordinary analytical grammar, and
+// operational/how-to language is rejected by the caller. Mixed offensive or
+// adversarial perspectives are deliberately not trimmed.
+func inertQuotedSafetyTrimPerspectiveIntro(clause string) string {
+	const perspectiveOf = "from the perspective of "
+	if strings.HasPrefix(clause, perspectiveOf) {
+		rest := clause[len(perspectiveOf):]
+		comma := strings.Index(rest, ", ")
+		if comma <= 0 || comma > 96 || !inertQuotedSafetyDefensivePerspective(strings.TrimSpace(rest[:comma])) {
+			return clause
+		}
+		return quotedReviewTrimIntroductoryGovernors(strings.TrimSpace(rest[comma+2:]))
+	}
+	for _, prefix := range []string{"from a ", "from an ", "from the "} {
+		if !strings.HasPrefix(clause, prefix) {
+			continue
+		}
+		rest := clause[len(prefix):]
+		comma := strings.Index(rest, ", ")
+		if comma <= 0 || comma > 96 {
+			return clause
+		}
+		perspective := strings.TrimSpace(rest[:comma])
+		if !strings.HasSuffix(perspective, " perspective") {
+			return clause
+		}
+		perspective = strings.TrimSpace(strings.TrimSuffix(perspective, " perspective"))
+		if !inertQuotedSafetyDefensivePerspective(perspective) {
+			return clause
+		}
+		return quotedReviewTrimIntroductoryGovernors(strings.TrimSpace(rest[comma+2:]))
+	}
+	return clause
+}
+
+func inertQuotedSafetyDefensivePerspective(perspective string) bool {
+	perspective = strings.TrimSpace(perspective)
+	if perspective == "" || strings.ContainsAny(perspective, "\"'`") || containsAnyLiteral(perspective,
+		"red team", "red-team", "offensive", "attacker", "adversary", "adversarial",
+		"exploit development", "weaponization", "weaponisation",
+	) {
+		return false
+	}
+	return containsAnyLiteral(perspective,
+		"blue team", "blue-team", "incident response", "incident-response",
+		"security operations", "security-operations", "soc analyst", "soc team",
+		"defensive security", "defender", "threat hunting", "threat-hunting",
+	)
 }
 
 func inertQuotedSafetyAssessment(clause string) bool {
@@ -4984,9 +5217,161 @@ func inertQuotedTerminalConjunctBoundary(clause string) bool {
 		"do not apply the request",
 		"do not apply the quoted request":
 		return true
-	default:
+	}
+	return inertQuotedCoordinatedNonExecutionBoundary(clause)
+}
+
+// inertQuotedCoordinatedNonExecutionBoundary accepts a bounded coordination
+// whose single negative governor applies to every operational action, such as
+// "do not execute or operationalize it". Every conjunct must remain inside a
+// closed action-and-referent grammar; modal grants, reversal connectors,
+// punctuation, or free-form suffixes therefore fail closed.
+type inertQuotedNonExecutionAction struct {
+	start int
+	end   int
+	term  string
+}
+
+const maxInertQuotedNonExecutionActions = 4
+
+func inertQuotedCoordinatedNonExecutionBoundary(clause string) bool {
+	var actions [maxInertQuotedNonExecutionActions]inertQuotedNonExecutionAction
+	count, complete := inertQuotedCoordinatedNonExecutionActions(clause, &actions)
+	return complete && count >= 2
+}
+
+// inertQuotedCoordinatedNonExecutionActions returns every action governed by
+// one closed negative coordination. Keeping the byte offsets lets the
+// continuation state machine record each cancelled action family, including a
+// leading bare verb whose referent is shared by the final conjunct in phrases
+// such as "do not execute or operationalize it".
+func inertQuotedCoordinatedNonExecutionActions(
+	clause string,
+	actions *[maxInertQuotedNonExecutionActions]inertQuotedNonExecutionAction,
+) (int, bool) {
+	if len(clause) == 0 || len(clause) > 160 {
+		return 0, false
+	}
+	leadingSpace := len(clause) - len(strings.TrimLeft(clause, " \t"))
+	clause = strings.TrimSpace(clause)
+	for _, governor := range []string{
+		"then ", "then, ", "actually ", "actually, ",
+		"however ", "however, ", "nevertheless ", "nevertheless, ",
+		"nonetheless ", "nonetheless, ", "even so ", "even so, ",
+		"that said ", "that said, ",
+	} {
+		if strings.HasPrefix(clause, governor) {
+			leadingSpace += len(governor)
+			clause = strings.TrimSpace(clause[len(governor):])
+			break
+		}
+	}
+	if clause == "" || strings.ContainsAny(clause, "\r\n,;.!?\"'`") ||
+		!containsAnyLiteral(clause, " or ", " nor ", " and ") ||
+		containsAnyLiteral(clause,
+			" but ", " then ", " however ", " instead ", " unless ", " except ",
+			" after ", " before ", " while ", " yet ", " actually ", " rather ",
+		) {
+		return 0, false
+	}
+	bodyStart := -1
+	for _, prefix := range []string{
+		"do not ", "don't ", "never ", "must not ", "should not ",
+		"cannot ", "can't ", "will not ", "would not ", "could not ", "may not ",
+	} {
+		if strings.HasPrefix(clause, prefix) {
+			bodyStart = len(prefix)
+			break
+		}
+	}
+	if bodyStart < 0 || bodyStart >= len(clause) {
+		return 0, false
+	}
+	body := clause[bodyStart:]
+	actionCount := 0
+	partStart := 0
+	for partStart <= len(body) {
+		partEnd := len(body)
+		separatorWidth := 0
+		for _, separator := range []string{" or ", " nor ", " and "} {
+			if index := strings.Index(body[partStart:], separator); index >= 0 && partStart+index < partEnd {
+				partEnd = partStart + index
+				separatorWidth = len(separator)
+			}
+		}
+		trimmedStart := partStart
+		for trimmedStart < partEnd && (body[trimmedStart] == ' ' || body[trimmedStart] == '\t') {
+			trimmedStart++
+		}
+		trimmedEnd := partEnd
+		for trimmedEnd > trimmedStart && (body[trimmedEnd-1] == ' ' || body[trimmedEnd-1] == '\t') {
+			trimmedEnd--
+		}
+		term := body[trimmedStart:trimmedEnd]
+		if !inertQuotedNonExecutionActionTerm(term) || actionCount >= maxInertQuotedNonExecutionActions {
+			return 0, false
+		}
+		actions[actionCount] = inertQuotedNonExecutionAction{
+			start: leadingSpace + bodyStart + trimmedStart,
+			end:   leadingSpace + bodyStart + trimmedEnd,
+			term:  term,
+		}
+		actionCount++
+		if separatorWidth == 0 {
+			break
+		}
+		partStart = partEnd + separatorWidth
+	}
+	if actionCount < 2 {
+		return 0, false
+	}
+	return actionCount, true
+}
+
+func inertQuotedCoordinatedNonExecutionCoversIndex(clause string, intentIndex int) bool {
+	if intentIndex < 0 || intentIndex > len(clause) {
 		return false
 	}
+	start := 0
+	for _, connector := range []string{", and ", "; and ", " and "} {
+		if index := strings.LastIndex(clause[:intentIndex], connector); index >= 0 &&
+			index+len(connector) > start {
+			start = index + len(connector)
+		}
+	}
+	tail := strings.TrimSpace(clause[start:])
+	tail = strings.TrimSpace(strings.TrimPrefix(tail, "and "))
+	return inertQuotedCoordinatedNonExecutionBoundary(tail)
+}
+
+var inertQuotedNonExecutionActionHeads = []string{
+	"provide operational steps", "provide execution steps", "provide working code",
+	"provide source code", "provide commands", "provide code", "carry it out",
+	"operationalize", "operationalise", "implement", "execute", "apply", "follow",
+	"obey", "carry out", "run", "deploy", "build", "reproduce",
+}
+
+var inertQuotedNonExecutionTargets = []string{
+	" it", " this", " that", " the request", " the quoted request",
+	" the prompt", " the quoted prompt", " the instruction", " the quoted instruction",
+	" the material", " the quoted material", " any entry",
+}
+
+func inertQuotedNonExecutionActionTerm(term string) bool {
+	if term == "" {
+		return false
+	}
+	for _, action := range inertQuotedNonExecutionActionHeads {
+		if term == action {
+			return true
+		}
+		for _, target := range inertQuotedNonExecutionTargets {
+			if term == action+target {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func inertQuotedDirectNonExecutionBoundary(clause string) bool {
@@ -6339,6 +6724,9 @@ func compactRuleIntentOutsideLiteralSpansPrepared(
 func coordinatedRuleIntentNegation(clause string, currentIndex int, currentIntent string, intents []string) bool {
 	if currentIndex <= 0 || currentIndex > len(clause) {
 		return false
+	}
+	if inertQuotedCoordinatedNonExecutionCoversIndex(clause, currentIndex) {
+		return true
 	}
 	prefix := strings.TrimSpace(clause[:currentIndex])
 	connector := ""
