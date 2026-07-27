@@ -727,24 +727,15 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 			)
 			if linked && candidate.category == rules.CategoryPhishing &&
 				(!wholeRelationComplete || candidate.category == preferredCategory) {
-				for index := range candidate.occurrences {
-					physical := previousClause
-					if candidate.occurrences[index].Dimension == "harm" ||
-						candidate.occurrences[index].Dimension == "target" {
-						physical = linkedPhysicalClause{
-							text: clauseText, clauseID: currentClauseID, start: start, end: end,
-						}
+				var clauseTexts = [2]string{previousClause.text, clauseText}
+				var clauseIDs = [2]int{previousClause.clauseID, currentClauseID}
+				if bindExplicitRelationCandidateToAdjacentClauses(
+					&candidate, clauseTexts[:], clauseIDs[:],
+				) {
+					candidates = append(candidates, candidate)
+					if wholeRelationComplete && candidate.category == preferredCategory {
+						preferredCategoryEstablished = true
 					}
-					candidate.occurrences[index].ClauseID = physical.clauseID
-					candidate.occurrences[index].SentenceID = physical.clauseID
-					candidate.occurrences[index].Start = 0
-					candidate.occurrences[index].End = len([]rune(physical.text))
-				}
-				candidate.identity = directCandidateIdentityFor(candidate.category, candidate.occurrences, false)
-				candidate.explanation.EvidenceOccurrenceCount = len(candidate.occurrences)
-				candidates = append(candidates, candidate)
-				if wholeRelationComplete && candidate.category == preferredCategory {
-					preferredCategoryEstablished = true
 				}
 			}
 		}
@@ -1513,11 +1504,22 @@ func recordExplicitRelationCandidateChoice(
 func explicitRelationChoiceDominatedBy(
 	primary, secondary explicitRelationCandidateChoice,
 ) bool {
-	return primary.set && secondary.set &&
-		primary.candidate.eligibility.Eligible && secondary.candidate.eligibility.Eligible &&
-		secondary.softChainID == primary.softChainID && explicitRelationClauseRangesOverlap(
+	if !primary.set || !secondary.set ||
+		!primary.candidate.eligibility.Eligible || !secondary.candidate.eligibility.Eligible ||
+		secondary.softChainID != primary.softChainID {
+		return false
+	}
+	if explicitRelationClauseRangesOverlap(
 		primary.firstClause, primary.lastClause, secondary.firstClause, secondary.lastClause,
-	)
+	) {
+		return true
+	}
+	// A distinctive deployment core may be completed in one physical clause
+	// while its generic consequence occupies the immediately adjacent comma or
+	// continuation clause. Treat that direct continuation as the same bounded
+	// speech act; a one-clause gap or strong-chain boundary remains independent.
+	return primary.lastClause+1 == secondary.firstClause ||
+		secondary.lastClause+1 == primary.firstClause
 }
 
 func suppressExplicitRelationChoiceInSoftChain(
@@ -1858,7 +1860,10 @@ func candidateExplicitRelationDimensionOwnedBy(category rules.Category, dimensio
 		return candidateExplicitMaliciousRelationAction(text)
 	case "harm":
 		return candidateExplicitMaliciousHostileScope(text) || candidateCovertAcquisition(text) ||
-			candidateDestructiveOutcome(category, text) || candidateSecurityControlEvasion(category, text)
+			candidateDestructiveOutcome(category, text) || candidateSecurityControlEvasion(category, text) ||
+			category == rules.CategoryPhishing && candidatePhishingCredentialCollectionClause(text) ||
+			category == rules.CategoryEvasion &&
+				(candidateSecurityControlEvasionMaliciousPurpose(text) || candidatePromptInjectionHarmScope(text))
 	case "target":
 		return candidateExplicitMaliciousHostileScope(text) || candidateCovertAcquisition(text) ||
 			candidateExplicitRelationObjectOwnedBy(category, text)
@@ -1872,8 +1877,9 @@ func candidateExplicitRelationDimensionOwnedBy(category rules.Category, dimensio
 				candidateExplicitRelationObjectOwnedBy(category, text)
 	case "evasion":
 		return candidateSecurityControlEvasionMechanism(text) || containsAnyLiteral(text,
-			"override", "ignore", "discard", "reveal", "disclose", "expose", "unrestricted mode",
-			"无视", "忽略", "泄露", "覆盖", "越权指令", "不受限制模式",
+			"override", "ignore", "discard", "reveal", "disclose", "expose", "bypass", "unrestricted mode",
+			"active instructions", "injected instruction", "injection language", "prompt injection",
+			"无视", "忽略", "泄露", "覆盖", "注入", "植入指令", "越权指令", "不受限制模式",
 		)
 	case "object":
 		return candidateExplicitRelationObjectOwnedBy(category, text)
@@ -1907,9 +1913,10 @@ func candidateExplicitRelationObjectOwnedBy(category rules.Category, text string
 	case rules.CategoryEvasion:
 		return containsAnyLiteral(text,
 			"model", "assistant", "prompt", "system instruction", "protected context", "tool result", "instruction file",
-			"security control", "security telemetry", "monitoring", "detection", "sandbox", "endpoint defense",
-			"endpoint protection", "endpoint-protection", "edr", "siem", "antivirus", "audit",
-			"模型", "助手", "系统指令", "受保护上下文", "安全控制", "监控", "检测", "沙箱", "防护",
+			"security control", "security telemetry", "defensive telemetry", "monitoring", "detection", "sandbox", "endpoint defense",
+			"endpoint protection", "endpoint-protection", "endpoint analytics", "scheduled-task analytics", "intrusion alert",
+			"edr", "siem", "antivirus", "audit", "ioc", "yara", "sigma", "signature scanner", "signature scanners",
+			"模型", "助手", "系统指令", "受保护上下文", "安全控制", "安全遥测", "防御遥测", "监控", "检测", "沙箱", "防护", "防护记录", "安全记录",
 		)
 	}
 	return false
@@ -2196,13 +2203,25 @@ func candidateExplicitPromptInjectionRelation(text string, hostile bool) bool {
 	// makes "unrestricted mode" satisfy the hostile-target proof through its
 	// embedded "restricted" suffix, turning a standalone META wrapper into a
 	// synthetic cyber-abuse base behavior on clause-overflow inputs.
-	harm := hostile || candidateExplicitQuotedActivation(text) || candidateCovertAcquisition(text) || candidateExfiltrationOrTakeover(text) ||
-		containsASCIIWord(text, "protected") || containsASCIIWord(text, "restricted") || containsAnyLiteral(text,
-		"safety policy", "safeguard", "production model", "production assistant",
-		"active model", "live assistant", "target model", "target assistant", "受保护", "真实模型", "目标模型",
-		"生产模型", "第三方模型", "私密配置", "隐藏配置", "安全边界",
-	)
+	harm := hostile || candidatePromptInjectionHarmScope(text)
 	return model && control && activation && harm
+}
+
+// candidatePromptInjectionHarmScope is the dimension-local harm half of an
+// already complete prompt-injection relation. It may bind a protected-context
+// consequence to its physical clause, but cannot create a category candidate
+// without the separate model, control, and activation axes above.
+func candidatePromptInjectionHarmScope(text string) bool {
+	return candidateExplicitMaliciousHostileScope(text) || candidateExplicitQuotedActivation(text) ||
+		candidateCovertAcquisition(text) || candidateExfiltrationOrTakeover(text) ||
+		containsAnyLiteral(text,
+			"protected context", "protected instruction", "protected instructions",
+			"restricted context", "restricted instruction", "restricted instructions",
+			"safety policy", "safeguard", "production model", "production assistant",
+			"active model", "live assistant", "target model", "target assistant",
+			"受保护上下文", "受保护指令", "受限上下文", "受限指令", "真实模型", "目标模型",
+			"生产模型", "第三方模型", "私密配置", "隐藏配置", "安全边界",
+		)
 }
 
 func candidateExplicitRansomwareRelation(text string, hostile bool) bool {
@@ -2272,7 +2291,7 @@ func candidatePhishingDeceptionSurface(text string) bool {
 }
 
 func candidateExplicitPhishingRelation(text string, hostile bool) bool {
-	if candidatePhishingSyntheticSimulationScope(text) {
+	if candidatePhishingSyntheticSimulationScope(text) || candidatePhishingSyntheticTelemetryScope(text) {
 		return false
 	}
 	if candidatePhishingCredentialSecurityArtifact(text) {
@@ -3032,7 +3051,8 @@ var candidatePhishingCredentialCollectionIntents = []string{
 	"collect", "collects", "collecting", "capture", "captures", "capturing",
 	"harvest", "harvests", "harvesting", "record", "records", "recording",
 	"gather", "gathers", "gathering", "store", "stores", "storing",
-	"收集", "采集", "截取", "记录", "保存", "获取", "骗取",
+	"steal", "steals", "stealing",
+	"收集", "采集", "截取", "记录", "保存", "获取", "骗取", "窃取",
 }
 
 var candidatePhishingCredentialCollectionIntentPatterns = compileCompactRuleIntentPatterns(
@@ -3042,12 +3062,22 @@ var candidatePhishingCredentialCollectionIntentPatterns = compileCompactRuleInte
 var candidatePhishingDeploymentIntents = []string{
 	"deploy", "deploys", "deploying", "host", "hosts", "hosting", "launch", "launches", "launching",
 	"publish", "publishes", "publishing", "install", "installs", "installing", "place", "places", "placing",
-	"部署", "投放", "上线", "托管", "发布", "安装", "放置",
+	"send", "sends", "sending", "deliver", "delivers", "delivering", "push", "pushes", "pushing",
+	"部署", "投放", "上线", "托管", "发布", "安装", "放置", "发送", "推送",
 }
 
 var candidatePhishingDeploymentIntentPatterns = compileCompactRuleIntentPatterns(
 	candidatePhishingDeploymentIntents,
 )
+
+func candidatePhishingCredentialCollectionClause(text string) bool {
+	return candidateExplicitCredentialMaterial(text) &&
+		containsUnnegatedRuleIntentPrepared(
+			text,
+			candidatePhishingCredentialCollectionIntents,
+			candidatePhishingCredentialCollectionIntentPatterns,
+		)
+}
 
 func candidatePhishingSyntheticSimulationScope(text string) bool {
 	text = strings.ToLower(strings.TrimSpace(text))
@@ -3103,23 +3133,67 @@ func candidateLinkedPhishingSoftPair(previous, current, ownerText string, bounda
 		candidatePermissionOnlyScope(joined) || candidatePhishingSyntheticSimulationScope(ownerText) {
 		return false
 	}
+	// The delivery clause may explicitly deploy a deceptive authentication
+	// surface or directly send it to the target. A passive training-page
+	// description cannot become a delivery proof merely because it names
+	// employees.
 	deployment := candidatePhishingDeceptionSurface(previous) &&
 		containsUnnegatedRuleIntentPrepared(
 			previous,
 			candidatePhishingDeploymentIntents,
 			candidatePhishingDeploymentIntentPatterns,
 		)
-	collection := candidateExplicitCredentialMaterial(current) &&
-		containsAnyLiteral(current,
-			"real user", "real users", "real employee", "real employees", "real customer", "real customers",
-			"victim user", "victim users", "victim employee", "victim employees",
-			"真实用户", "真实员工", "真实客户", "受害用户", "受害员工",
-		) && containsUnnegatedRuleIntentPrepared(
-		current,
-		candidatePhishingCredentialCollectionIntents,
-		candidatePhishingCredentialCollectionIntentPatterns,
+	realTarget := containsAnyLiteral(joined,
+		"real user", "real users", "real employee", "real employees", "real customer", "real customers",
+		"victim user", "victim users", "victim employee", "victim employees",
+		"employee", "employees", "staff member", "staff members", "account holder", "account holders",
+		"真实用户", "真实员工", "真实客户", "受害用户", "受害员工", "员工", "账户所有者",
 	)
+	collection := candidatePhishingCredentialCollectionClause(current) && realTarget &&
+		!candidatePhishingSyntheticTelemetryScope(joined)
 	return deployment && collection
+}
+
+// candidatePhishingSyntheticTelemetryScope keeps awareness telemetry distinct
+// from credential values. It is deliberately narrow: an explicit password,
+// token, cookie, or credential value defeats this exemption even when the
+// request labels the collection as training.
+var candidatePhishingSyntheticTelemetryTerms = []string{
+	"password-entry events", "password-entry event", "password entry events", "password entry event",
+	"login-attempt events", "login-attempt event", "form-submission events", "form-submission event",
+	"click-through events", "click-through event", "密码输入事件", "登录尝试事件", "表单提交事件", "点击事件",
+}
+
+func candidatePhishingSyntheticTelemetryScope(text string) bool {
+	telemetry := containsAnyLiteral(text, candidatePhishingSyntheticTelemetryTerms...)
+	defensivePurpose := containsAnyLiteral(text,
+		"training report", "awareness report", "simulation report", "aggregate metric", "aggregate metrics",
+		"training analytics", "awareness analytics", "training telemetry", "awareness telemetry",
+		"培训报告", "意识培训报告", "演练报告", "汇总指标", "培训分析", "演练遥测",
+	)
+	actualSecret := containsAnyLiteral(text,
+		"session token", "session tokens", "session cookie", "session cookies",
+		"entered password", "entered passwords", "submitted password", "submitted passwords",
+		"password value", "password values", "credential value", "credential values",
+		"raw password", "raw passwords", "actual password", "actual passwords", "real password", "real passwords",
+		"会话令牌", "会话 cookie", "输入的密码", "提交的密码", "密码值", "凭证值", "原始密码", "真实密码",
+	)
+	hostileTransfer := containsAnyLiteral(text,
+		"attacker-controlled", "outside the company", "export the events", "export these events", "exfiltrate the events",
+		"send the events to", "upload the events to", "攻击者控制", "公司外部", "导出这些事件", "外传这些事件", "发送事件到", "上传事件到",
+	)
+	if telemetry && defensivePurpose && !actualSecret {
+		// Remove only the recognized event names before checking for an
+		// independent credential-collection relation. This preserves the benign
+		// "record password-entry events" form while preventing the same training
+		// phrase from hiding a later "collect their passwords" instruction.
+		withoutTelemetry := text
+		for _, term := range candidatePhishingSyntheticTelemetryTerms {
+			withoutTelemetry = strings.ReplaceAll(withoutTelemetry, term, "")
+		}
+		actualSecret = candidatePhishingCredentialCollectionClause(withoutTelemetry)
+	}
+	return telemetry && defensivePurpose && !actualSecret && !hostileTransfer
 }
 
 func mergeCandidateAuthorizationClaims(
@@ -4427,11 +4501,18 @@ func candidateSecurityControlEvasion(category rules.Category, text string) bool 
 	if !candidateSecurityControlEvasionMechanism(text) {
 		return false
 	}
-	maliciousPurpose := containsAnyLiteral(text,
+	return candidateSecurityControlEvasionMaliciousPurpose(text)
+}
+
+// candidateSecurityControlEvasionMaliciousPurpose is kept separate from the
+// control/evasion mechanism so adjacent physical clauses can own distinct
+// dimensions without borrowing request-global evidence.
+func candidateSecurityControlEvasionMaliciousPurpose(text string) bool {
+	return containsAnyLiteral(text,
 		"malware", "malicious payload", "implant", "backdoor", "intrusion", "credential theft", "exfiltrat",
-		"恶意软件", "恶意载荷", "植入程序", "后门", "入侵", "凭证窃取", "外传",
+		"unauthorized access", "unauthorized control", "covert access", "persistent access", "continuing access", "ongoing access", "theft",
+		"恶意软件", "恶意载荷", "植入程序", "后门", "入侵", "凭证窃取", "外传", "未授权访问", "未授权控制", "秘密访问", "持续访问", "窃取",
 	) || hasExplicitHarmConflict(text)
-	return maliciousPurpose
 }
 
 var candidateSecurityControlBlindIntents = []string{"致盲"}
@@ -4449,13 +4530,15 @@ func candidateSecurityControlEvasionMechanism(text string) bool {
 		return true
 	}
 	control := containsAnyLiteral(text,
-		"edr", "antivirus", "endpoint protection", "endpoint-protection", "audit forwarding", "security control", "security telemetry", "detection", "sandbox", "siem", "signature scanner", "signature scanners",
-		"安全控制", "安全遥测", "检测", "杀毒", "沙箱",
+		"edr", "antivirus", "endpoint defense", "endpoint protection", "endpoint-protection", "endpoint analytics", "scheduled-task analytics",
+		"audit forwarding", "intrusion alert", "security control", "security telemetry", "security monitoring", "monitoring", "detection", "sandbox", "siem", "ioc",
+		"protection record", "protection records", "security record", "security records", "signature scanner", "signature scanners",
+		"安全控制", "安全遥测", "安全监控", "检测", "防护", "防护记录", "安全记录", "杀毒", "沙箱",
 	)
 	evasion := containsAnyLiteral(text,
-		"bypass", "evade", "avoid detection", "disable", "suppress alerts", "undetected", "stays undetected", "stay undetected",
-		"cannot detect", "cannot identify", "hide", "hidden", "miss it", "obfuscate",
-		"绕过", "规避", "躲避检测", "禁用", "压制告警", "不被检测", "混淆",
+		"bypass", "evade", "avoid detection", "disable", "suppress", "conceal", "undetected", "stays undetected", "stay undetected",
+		"cannot detect", "cannot identify", "hide", "hidden", "miss it", "obfuscate", "no longer trigger", "stops triggering", "prevent detection",
+		"绕过", "规避", "躲避检测", "躲开", "避开", "禁用", "关闭", "隐藏", "压制", "不被检测", "不再触发", "混淆",
 	) || candidateSecurityControlBlindMechanism(text)
 	return control && evasion
 }

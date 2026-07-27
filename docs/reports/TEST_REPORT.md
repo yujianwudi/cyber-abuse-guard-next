@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
+current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
 ```
 
 Last updated: 2026-07-27 (Asia/Shanghai)
@@ -14,12 +14,16 @@ The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
-`fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`
+`5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging, so no rc.4 final commit/tree, exact Linux
-`.so`, exact-main CI, tag, external evaluation, artifact, or Release PASS is
-claimed. The immutable rc.3 attempt passed exact-main CI at `77cf2de` and then
+`.so`, current-fix exact-main CI, tag, external evaluation, artifact, or
+Release PASS is claimed. The predecessor main snapshot `d23c94ffb7ac3812b2799f0e0cf49dff1da74cde`
+ran exact-main Round 9 gate `30223734797` and failed at 112/120 paired malicious
+semantic samples; the current working-tree repair restores the local visible
+gate to 120/120 and 960/960 while an exact-main rerun remains pending. The
+immutable rc.3 attempt passed exact-main CI at `77cf2de` and then
 failed before asset creation because PyYAML was undeclared in the fixed builder
 container; it supplies failure history, not rc.4 evidence.
 A user-supplied external CPA v7.2.95 counted-Mock report for historical commit
@@ -42,16 +46,18 @@ v8 remains immutable-invalid at 105299 bytes / `5def5330…`, while the
 105298-byte / `2f953da4…` corrected in-place rebind is retained separately as
 rejected evidence. The exact v6 bytes also remain immutable but frozen-invalid.
 
-The retained benign-corpus, paired-malicious, and benchmark rows below were
-produced for the predecessor `classifier-policy-v8`. They were not rerun for
-v9 and must not be relabeled as current-policy or independent evidence.
+The current benign, paired-malicious, and benchmark rows below are Linux
+working-tree development checks for the identity above. The predecessor
+`d23c94f` exact-main 112/120 failure and older checked-in v8 reports remain
+historical evidence; none of these local checks is independent or CPA Host
+evidence.
 
 | Current Round 9 identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v9` / `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
+| Classifier policy | `classifier-policy-v9` / `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03` / **SOURCE-ONLY DEVELOPMENT IDENTITY; HOST AND RELEASE BINDING PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
-| Current Linux source gates | **PASS / SOURCE ONLY.** Under WSL Ubuntu 26.04 and Go 1.26.4, `make test`, `make race`, `make round6-regression`, and `make fuzz-smoke` exited 0. The final race rerun reported no data race; the connector-flood allocation-only acceptance remains enforced by the ordinary Linux lane and is explicitly skipped under race instrumentation, matching the existing performance-test boundary. `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0 make cpa-latest-compat` also passed against pinned CPA `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`; this is source/compile compatibility, not CPA Host execution evidence. |
+| Current Linux source gates | **PASS / SOURCE ONLY.** Under WSL Ubuntu 26.04 and Go 1.26.4, the final working tree passed `make unit-test`, `make round6-vet`, `make round6-module-verify`, `make round6-script-test`, `make round9-corpus-contract`, and `go test -race ./internal/classifier -count=1`; the race run completed in 281.834 seconds with no data race. The script lane included fixed actionlint v1.7.12, ShellCheck v0.10.0, release-document consistency, and repository secret scanning. The connector-flood allocation-only acceptance remains enforced by the ordinary Linux lane and is skipped under race instrumentation by design. No full-tree `make race`, CPA Host execution, or new remote CPA compatibility claim is inferred from this row. |
 | Multilingual defensive-frame remediation | **TARGETED LINUX SOURCE/FULL-ROUTE SELF-CHECK PASS; HOST PENDING.** Chinese, Japanese, Korean, and mixed frames at 511/512/513 bytes, 1 KiB, and 16 KiB block a credential-theft carrier in Balanced and Strict; OpenAI Chat, OpenAI Responses, Claude, and Gemini routes assert complete/block counters, and 16 KiB benign carriers remain complete/nonblocking. Targeted classifier/plugin race checks pass. No CPA process, `.so`, or counted-Mock result is inferred |
 | Defensive incident-response false-positive remediation | **TARGETED LINUX SOURCE/FULL-ROUTE SELF-CHECK PASS; EXACT HOST RE-AUDIT PENDING.** The enumerated English incident-response training/analysis introductions pass the existing exact quoted-review proof in Balanced and Strict. Profiled whole/halves/bytewise content-kind splits and OpenAI Chat/Responses, Claude, and Gemini simulated routes remain complete/nonblocking; an appended execution instruction still blocks |
 | Supplemental NERV and provider-tool authority remediation | **TARGETED LINUX SOURCE/FULL-ROUTE SELF-CHECK PASS; FIVE-REPOSITORY COUNTED-MOCK PENDING.** Repository-neutral credential/session theft, persistence/C2/evasion, ransomware, phishing, covert keylogging, unauthorized exploitation, and post-exploitation exfiltration requests block across user/system/developer/provider-native terminal tool-result carriers in Balanced/Strict and batch/stream. OpenAI Chat, Responses, Claude, and Gemini roughly 7 KiB front/middle/back system and terminal-tool routes plus benign repository/documentation/authorized-operation/consented-telemetry/incident-response neighbors are covered. Cross-provider IDs, wrong result owners, orphaned/malformed/partial/mixed-ID groups, and nonterminal results cannot gain request-local tool authority. A valid Gemini all-ID-free adjacent terminal transaction may gain authority only when call/result counts are equal and every item matches by name+ordinal; Responses `previous_response_id` continuations remain non-authoritative because Host pending/consumed/replay state is unavailable. One routed OpenAI Responses block is persisted and queried with canonical audit fields. The supplied NERV report tested older CAG `fdb47a99` with CPA `7.2.100`, so no current five-repository or CPA v7.2.95 Host PASS is inferred |
@@ -59,15 +65,15 @@ v9 and must not be relabeled as current-policy or independent evidence.
 | Audit database | schema v6; closed decision/explanation contract; mandatory pre-v6 backup and old-SO rollback |
 | Audit unavailable management semantics | **TARGETED LINUX SELF-CHECK PASS** — audit disabled remains a schema-correct empty/no-op result; audit enabled with nil store returns `503 audit_unavailable` for `/events`, `/stats`, and `DELETE /events` |
 | Public adversarial development corpus | Active: `round9-public-adversarial-v13` / 481448 bytes / `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; v12/v11/v10/v9 retained as prior valid history, exact v8 retained as immutable-invalid history, its corrected in-place rebind retained as rejected evidence, v7 retained as earlier valid history, and v6 as frozen-invalid history; v13 records the later MDX Star History storage/source/workflow/test-only default-head advance while retaining five behind non-default branches, 16 reviewed historical Release assets (four with prompt entries), and 199 metadata/digest-only Release assets that were neither downloaded nor opened; public text only, no third-party code execution, not an independent Holdout |
-| Visible benign development corpus | **LATEST DEVELOPMENT SNAPSHOT PASS / NOT INDEPENDENT EVIDENCE** — 0/1200 semantic requests and 0/7200 serialized routes blocked; 166 audit and 7034 allow routes; stream false/true 3600/3600; failures empty. Report: `dist/round9-worklogs/development-benign-post-perf-20260724.json`, 2515 bytes, SHA-256 `607b751defeebd9681170a558528aa1a4827c1c176bce2886a1929b59193af01`. The earlier 2/1200 and 12/7200 failures remain in `ROUND9_EXECUTION_RECORD.md` |
-| Visible paired-malicious v3 | **LATEST DEVELOPMENT SNAPSHOT PASS / NOT INDEPENDENT EVIDENCE** — 120/120 semantic samples blocked and 960/960 routes passed; stream false/true 480/480; failures empty; overall Wilson 95% interval 96.8981%-100%, with per-category intervals in the report. Report: `dist/round9-worklogs/paired-malicious-post-perf-20260724.json`, 7150 bytes, SHA-256 `ba9733503985195204c0bc1eef95f936951ab8947c67ce4d316abcb8c6ab3276`. The earlier 3/120 and 24/960 failures remain in `ROUND9_EXECUTION_RECORD.md` |
-| Current Round 6 benchmark recipe | **PASS / SOURCE ONLY.** `make round6-benchmark` exited 0 for classifier-policy-v9 / `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c` under WSL Ubuntu 26.04, Go 1.26.4 linux/amd64, and GNU Make 4.4.1. Classifier P50/P95/P99 were `424.779/535.251/677.264 us`; candidate-rich/near-budget were `37.159/20.408 ms/op`; long META was `148.155 ms/op`, `6,338,756 B/op`, 112 allocs; the negated-prohibition flood was `33.986 ms/op`, `4,357,794 B/op`, 6,003 allocs. At 64 complete tool call/result pairs, OpenAI Chat/Responses, Claude, and Gemini association planning measured `1.917/1.586/1.301/1.367 ms/op`, `845,989/784,565/568,114/736,338 B/op`, and `16,981/15,552/14,046/15,005 allocs/op`. Extract long-scale, raw-capture, and plugin full-route acceptance lanes passed. This is not CPA Host, final artifact, or independent evidence |
+| Visible benign development corpus | **CURRENT WORKING-TREE PASS / NOT INDEPENDENT EVIDENCE.** Linux amd64 Go 1.26.4 directly reran the frozen v1 runner on 2026-07-27: 0/1200 semantic requests and 0/7200 serialized routes blocked; 166 audit and 7034 allow routes; stream false/true 3600/3600; failures empty. The transient 2,515-byte JSON hashed to `e9fa8fb39e8c9bdefb5d0f198d8684d6b7cb39139b4284fe7efc39eb7008bb10`; it is not checked in. The predecessor report in `dist/round9-worklogs/development-benign-post-perf-20260724.json` remains historical evidence |
+| Visible paired-malicious v3 | **CURRENT WORKING-TREE PASS / NOT INDEPENDENT EVIDENCE.** Linux amd64 Go 1.26.4 directly reran the frozen v3 runner on 2026-07-27: 120/120 semantic samples blocked and 960/960 routes passed; stream false/true 480/480; failures empty; overall Wilson 95% interval 96.8981%-100%. The transient 7,150-byte JSON hashed to `9b5d893df4a459614118664fa8bd55ea0c3a2da1c3fa46fb87bc21d20c7a8f1a`; it is not checked in. This closes the local 112/120 regression observed on exact-main `d23c94f`; exact-main revalidation remains pending |
+| Current Round 6 benchmark recipe | **PASS / SOURCE ONLY.** `make round6-benchmark` exited 0 for classifier-policy-v9 / `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03` under WSL Ubuntu 26.04, Go 1.26.4 linux/amd64, and GNU Make 4.4.1. Classifier P50/P95/P99 were `459.731/563.714/765.255 us`; candidate-rich/near-budget were `41.898827/21.298198 ms/op` with near-budget `308,727 B/op`; long META was `152.808023 ms/op`, `6,339,221 B/op`, 110 allocs; the negated-prohibition flood was `34.427263 ms/op`, `4,358,060 B/op`, 6,003 allocs. At 64 complete tool call/result pairs, OpenAI Chat/Responses, Claude, and Gemini association planning measured `1.382390/1.209921/0.922327/1.093778 ms/op`, `845,978/784,565/568,114/736,338 B/op`, and `16,981/15,552/14,046/15,005 allocs/op`. Extract long-scale, raw-capture, and plugin full-route acceptance lanes passed. The transient 30,674-byte log hashed to `a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`. This is not CPA Host, final artifact, or independent evidence |
 | Historical pre-fix Round 6 benchmark recipe | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** `make round6-benchmark` exited successfully for the earlier snapshot; log: `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063`. Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. It remains predecessor history and is not substituted for the current source-only recipe above |
 | Independent benign/malicious corpus | **NOT_PROVIDED**; the active contract requires an age-encrypted root-owned bundle outside Git and outside the candidate checkout |
 | Protected Host execution boundary | **NO SOURCE CHECKOUT**; a fixed root-owned broker owns corpus decryption, evaluator/adapter paths, keys, image identities, result directory, and protected one-shot ledger |
 | External evidence schemas | evaluation v3, evaluator aggregate v3, ledger event v3, ledger proof v1, external counted-Mock v1, CPA sandbox descriptor v2 |
 | CPA external evaluation | **NOT RUN / PENDING** for the exact v7.2.95 loopback lane; Audit→Balanced→Strict plus database/restart/panic/usage/Raw Capture runtime checks are required for `PASS` |
-| Exact-main GitHub CI / tag / Release | rc.4: **NOT RUN / PENDING**. Historical rc.3 baseline CI/Round 9 gate/CodeQL passed, but Phase 1 run `30118817188` failed before asset creation; rc.3 has no Release and cannot be reused |
+| Exact-main GitHub CI / tag / Release | Current repair: **PENDING PUSH AND REVALIDATION**. Predecessor main `d23c94f` Round 9 run `30223734797` failed at the paired-malicious gate; CodeQL run `30223734789` passed. Historical rc.3 Phase 1 run `30118817188` failed before asset creation; rc.3 has no Release and cannot be reused |
 | Independent audit | User-supplied `f37a25dd` report used as remediation input, but **NOT REPOSITORY-ATTESTED**; current source/commit/plugin re-audit **NOT_PROVIDED / REQUIRED** |
 | Production approval | **NOT_GRANTED** |
 | Overall | **BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT** |
@@ -819,7 +825,7 @@ ledger proof, exact-main CI, or independent audit has passed.
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9
-working_tree_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
+working_tree_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 verification_status: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 ```

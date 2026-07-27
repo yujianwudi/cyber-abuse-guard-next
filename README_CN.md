@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
+current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
 ```
 
 > **RC 身份说明：** `v0.16-rc.3` 是不可移动的 Phase 1 失败 Tag，没有候选产物或
@@ -60,7 +60,7 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | CPA 固定目标 | 仅 v7.2.95；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 当前源码独立审计 | 外部评估仍为 `NOT_RUN`；仓库外的 `f37a25dd` 报告不能替代当前源码精确重审，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`；Host 与发行绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`；Host 与发行绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 

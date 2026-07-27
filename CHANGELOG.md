@@ -2,13 +2,27 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c
+current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
 ```
 
-Source-tree status updated: 2026-07-26 (Asia/Shanghai)
+Source-tree status updated: 2026-07-27 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Repair the exact-main Round 9 paired-malicious regression introduced by the
+  physical-occurrence binder. Defense-evasion, prompt-injection, and phishing
+  relations now reuse narrow clause-local object, mechanism, purpose, harm,
+  delivery, and collection predicates instead of losing an otherwise complete
+  candidate when those dimensions are split across adjacent physical clauses.
+  The strict owner requirement remains fail-closed; no request-global evidence
+  or arbitrary first/last-clause fallback was restored.
+- Add eight paired-malicious reproductions, their benign parents, and a narrow
+  regression proving that training-event telemetry cannot hide a later real
+  password-collection instruction. On Linux amd64 Go 1.26.4, the current
+  working tree blocks 120/120 semantic malicious samples and passes 960/960
+  serialized routes while preserving 0/1200 benign semantic blocks and 0/7200
+  benign route blocks. These are visible development gates, not independent or
+  CPA Host evidence.
 - Restore a narrowly bounded defensive incident-response review form that asks
   only for risk explanation plus detection/remediation advice and explicitly
   forbids execution. The exact comma/colon, hyphenated/non-hyphenated
@@ -122,8 +136,8 @@ Source-tree status updated: 2026-07-26 (Asia/Shanghai)
 - Replace the fixed defensive-quote sentence template with a bounded structural
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
-- Advance the source behavior identity to `classifier-policy-v9` /
-  `fb7cbb7b162b6ada7e4a2aeea2b7da2d54522e2399f2a28518da233e461a225c`;
+- Refresh the source behavior identity for `classifier-policy-v9` to
+  `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;
