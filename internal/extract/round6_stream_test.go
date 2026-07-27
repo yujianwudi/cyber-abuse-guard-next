@@ -1013,6 +1013,35 @@ func TestRound6StreamingRestoresBoundedEncodedTextViews(t *testing.T) {
 	}
 }
 
+func TestRound6DerivedFieldIDsStaySignedAndNamespaceDisjoint(t *testing.T) {
+	seen := make(map[uint64]string)
+	for _, parent := range []uint64{1, DefaultMaxTextParts, HardMaxTextParts} {
+		seen[parent] = fmt.Sprintf("base parent %d", parent)
+		for ordinal := 0; ordinal < 4; ordinal++ {
+			pieceID := contentPieceFieldID(parent, ordinal)
+			seen[pieceID] = fmt.Sprintf("content piece parent=%d ordinal=%d", parent, ordinal)
+		}
+	}
+	for _, parent := range []uint64{1, DefaultMaxTextParts, HardMaxTextParts} {
+		for ordinal := 0; ordinal < 4; ordinal++ {
+			fieldID := derivedFieldID(parent, ordinal)
+			if converted := int(fieldID); converted < 0 || uint64(converted) != fieldID {
+				t.Fatalf("derived FieldID=%d does not round-trip through public int FieldID", fieldID)
+			}
+			if fieldID&derivedFieldIDFlag == 0 {
+				t.Fatalf("derived FieldID=%d is outside the derived namespace", fieldID)
+			}
+			if fieldID&contentPieceFieldIDFlag != 0 {
+				t.Fatalf("derived FieldID=%d collides with the content-piece namespace", fieldID)
+			}
+			if prior, duplicate := seen[fieldID]; duplicate {
+				t.Fatalf("derived FieldID=%d collides with %s", fieldID, prior)
+			}
+			seen[fieldID] = fmt.Sprintf("derived parent=%d ordinal=%d", parent, ordinal)
+		}
+	}
+}
+
 func TestRound6OversizedPrintableBase64IsIncomplete(t *testing.T) {
 	encoded := base64.StdEncoding.EncodeToString([]byte(strings.Repeat("round six bounded decode canary ", 6000)))
 	if len(encoded) <= maxDecodeSourceBytes {

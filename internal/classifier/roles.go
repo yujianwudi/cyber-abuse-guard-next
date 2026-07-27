@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 )
@@ -727,9 +728,9 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 						}
 					}
 				}
-			} else if referent, historical, ok := c.nearestProfiledHistoricalReferent(segments, mode, thresholds, policy); ok {
+			} else if referent, historical, evidenceRefs, ok := c.nearestProfiledHistoricalReferent(segments, mode, thresholds, policy); ok {
 				referent = withRoleAwareFindingOrigin(referent, FindingOriginUserContent, mode, thresholds)
-				c.annotateProfiledResult(&referent, historical.refs, false, policy, mode, thresholds)
+				c.annotateProfiledResult(&referent, evidenceRefs, false, policy, mode, thresholds)
 				markResultReferentActivated(&referent, true, true, mode, thresholds)
 				bindResultCandidateReferentAnchor(&referent, anchor, true, mode, thresholds)
 				if referent.DecisionExplanation != nil {
@@ -1390,26 +1391,21 @@ func buildProfiledHistoricalReferentGroups(segments []extract.Segment) []profile
 }
 
 func profiledHistoricalReferentEligible(segment extract.Segment) bool {
-	if segment.IsCurrentTurn || segment.Provenance == extract.ProvenanceToolPayload ||
-		!segmentDeclaresProfiledCoordinates(segment) {
+	if segment.IsCurrentTurn || !segmentDeclaresProfiledCoordinates(segment) ||
+		!trustedUserContentSegment(segment) {
 		return false
 	}
 	switch segment.ContentKind {
-	case extract.ContentKindToolSchema, extract.ContentKindToolCallArguments:
+	case extract.ContentKindToolSchema, extract.ContentKindToolCallArguments,
+		extract.ContentKindToolResult:
 		return false
-	case extract.ContentKindToolResult:
-		return segment.Role == extract.RoleTool || segment.Role == extract.RoleUnknown
-	case extract.ContentKindCodeBlock, extract.ContentKindQuotedText,
-		extract.ContentKindLogOutput, extract.ContentKindConfiguration,
-		extract.ContentKindDocumentation, extract.ContentKindSecurityAnalysis:
-		return profiledHistoricalEvidenceCarrier(segment)
-	case extract.ContentKindNaturalLanguageDirective, extract.ContentKindUnknown:
-		if trustedUserContentSegment(segment) {
-			return true
-		}
-		return segment.Role == extract.RoleAssistant
 	default:
-		return false
+		// Content kind is not an authority grant. A trusted historical user group
+		// reaches the referent slot only after the complete group proves the exact
+		// closed safety-review frame below. Tool schemas, tool-call arguments, and
+		// tool results stay outside this path even when a provider labels them as
+		// user content.
+		return true
 	}
 }
 
@@ -1432,22 +1428,74 @@ func (c *Classifier) profiledReferentCarrierPossible(segments []extract.Segment)
 	return false
 }
 
-// profiledHistoricalEvidenceCarrier identifies inert historical material that
-// a later explicit user speech act may reactivate. The material remains inert
-// on its own; admitting it here both lets "Execute it" bind to the nearest
-// quoted/code/log/configuration scope and prevents that bare referent from
-// jumping across a newer benign scope to an unrelated older attack. Role is
-// not an allow boundary: inert system material can also become active through
-// an explicit trusted-user referent. Tool-schema declarations remain isolated.
-func profiledHistoricalEvidenceCarrier(segment extract.Segment) bool {
-	switch segment.Role {
-	case extract.RoleUser:
-		return segment.UserAttribution == extract.UserAttributionTrusted
-	case extract.RoleSystem, extract.RoleAssistant, extract.RoleTool, extract.RoleUnknown:
-		return true
-	default:
-		return false
+func (c *Classifier) profiledHistoricalSafetyReviewReferent(
+	group profiledSegmentGroup,
+) (string, []profiledSegmentRef, bool) {
+	if c == nil || len(group.refs) == 0 || len(group.refs) != len(group.parts) {
+		return "", nil, false
 	}
+	for _, ref := range group.refs {
+		if !profiledHistoricalReferentEligible(ref.segment) {
+			return "", nil, false
+		}
+	}
+	quoted, inert := c.rawInertQuotedSafetyReviewReferent(strings.Join(group.parts, "\n"))
+	if !inert {
+		return "", nil, false
+	}
+	return quoted, profiledHistoricalReviewEvidenceRefs(group, quoted), true
+}
+
+// profiledHistoricalReviewEvidenceRefs narrows a split defensive-review group
+// to the one physical field that contains the complete normalized referent when
+// such a field exists. CPA's fenced-content extraction emits the review frame
+// and its closed code block as separate same-scope fields. The classifier runs
+// the harmful core without the defensive frame, so binding its synthetic
+// semantic occurrences against both fields is ambiguous even though the exact
+// closed review already proved one referent. A unique containing field is a
+// stronger physical owner; otherwise retain the full group and require the
+// ordinary multi-field occurrence replay to prove every dimension.
+func profiledHistoricalReviewEvidenceRefs(
+	group profiledSegmentGroup,
+	quoted string,
+) []profiledSegmentRef {
+	if quoted == "" || len(group.refs) <= 1 {
+		return group.refs
+	}
+	maxBytes := 0
+	for _, ref := range group.refs {
+		if len(ref.segment.Text) > maxBytes {
+			maxBytes = len(ref.segment.Text)
+		}
+	}
+	if maxBytes > maxClassifierNormalizedRunes {
+		maxBytes = maxClassifierNormalizedRunes
+	}
+	buffer := takeNormalizedRuneBuffer()
+	if cap(buffer) < maxBytes {
+		buffer = make([]rune, 0, maxBytes)
+	}
+	maxStorage := 0
+	defer func() {
+		putNormalizedRuneBuffer(buffer, maxStorage)
+	}()
+
+	var scratch normalizationScratch
+	matches := make([]profiledSegmentRef, 0, 1)
+	for _, ref := range group.refs {
+		views := normalizePartsInto([]string{ref.segment.Text}, buffer, &scratch)
+		buffer = views.standardRunes
+		if views.storageUsed > maxStorage {
+			maxStorage = views.storageUsed
+		}
+		if !views.truncated && strings.Contains(string(views.standardRunes), quoted) {
+			matches = append(matches, ref)
+		}
+	}
+	if len(matches) == 1 {
+		return matches
+	}
+	return group.refs
 }
 
 func (c *Classifier) nearestProfiledHistoricalReferent(
@@ -1455,37 +1503,37 @@ func (c *Classifier) nearestProfiledHistoricalReferent(
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
-) (Result, profiledSegmentGroup, bool) {
+) (Result, profiledSegmentGroup, []profiledSegmentRef, bool) {
 	groups := buildProfiledHistoricalReferentGroups(segments)
 	for index := len(groups) - 1; index >= 0; index-- {
 		group := groups[index]
 		if len(group.parts) == 0 || len(group.refs) == 0 {
 			continue
 		}
-		owner := group.refs[len(group.refs)-1].segment
-		if owner.Role == extract.RoleAssistant &&
-			isClearNonUserSafetyContent(owner.Role, strings.Join(group.parts, "\n")) {
-			continue
+		// The nearest trusted historical user group owns the bare referent slot,
+		// but it can populate that slot only as one exact, closed safety review.
+		// Plain historical attacks and inert/non-user carriers never acquire a
+		// present-tense execution act from a later pronoun.
+		quoted, evidenceRefs, inert := c.profiledHistoricalSafetyReviewReferent(group)
+		if !inert {
+			return Result{}, profiledSegmentGroup{}, nil, false
 		}
-		candidate := c.classifyWithPolicy(group.parts, mode, thresholds, policy, false)
-		if !resultHasEligibleMaliciousWinner(candidate, thresholds) {
-			// A defensive user review deliberately suppresses the quoted behavior in
-			// its own turn. Keep the closed quotation as the historical referent so
-			// an explicit later "Execute it" can reactivate that behavior without
-			// treating the surrounding safety analysis as active evidence.
-			if quoted, inert := c.rawInertQuotedSafetyReviewReferent(strings.Join(group.parts, "\n")); inert {
-				candidate = c.classifyWithPolicy([]string{quoted}, mode, thresholds, policy, false)
-			}
+		candidate := c.classifyWithPolicy([]string{quoted}, mode, thresholds, policy, false)
+		if !c.rebaseProfiledReconstructedCore(&candidate, evidenceRefs, quoted, policy) {
+			// A closed review may populate the referent slot only when every winning
+			// dimension can be rebound to the exact physical carrier fields. Never
+			// publish reconstructed-core offsets as if they belonged to the wrapper.
+			return Result{}, profiledSegmentGroup{}, nil, false
 		}
 		if !resultHasEligibleMaliciousWinner(candidate, thresholds) ||
 			candidate.FindingConfidence == FindingNone {
-			// The nearest eligible scope owns a bare referent even when it is
-			// benign. Do not skip it and bind "Execute it" to an older attack.
-			return Result{}, profiledSegmentGroup{}, false
+			// A structurally valid but benign latest review still owns the slot. Do
+			// not skip it and bind "Execute it" to an older malicious review.
+			return Result{}, profiledSegmentGroup{}, nil, false
 		}
-		return candidate, group, true
+		return candidate, group, evidenceRefs, true
 	}
-	return Result{}, profiledSegmentGroup{}, false
+	return Result{}, profiledSegmentGroup{}, nil, false
 }
 
 func profiledSegmentClassifiable(segment extract.Segment, activeTurnIndex int) bool {
@@ -1902,6 +1950,196 @@ func profiledCarrierRunClearOccurrenceOffsets(result *Result) {
 		occurrence.Start = -1
 		occurrence.End = -1
 	}
+}
+
+// rebaseProfiledReconstructedCore replaces offsets from a stripped quoted core
+// with clause/span coordinates replayed against the original profiled fields.
+// The reconstructed core is useful for classification, but its clause space is
+// not the clause space of the surrounding safety-review wrapper. Failing to
+// rebind every winning dimension therefore makes the referent proof ineligible.
+func (c *Classifier) rebaseProfiledReconstructedCore(
+	result *Result,
+	refs []profiledSegmentRef,
+	quoted string,
+	policy Policy,
+) bool {
+	if c == nil || result == nil || len(result.EvidenceOccurrences) == 0 || len(refs) == 0 {
+		return false
+	}
+	if c.rebaseProfiledReconstructedCoreWithinField(result, refs, quoted, policy) {
+		return true
+	}
+	profiledCarrierRunClearOccurrenceOffsets(result)
+	sources := c.profiledOccurrenceSourcesWithOptions(
+		result.EvidenceOccurrences, refs, policy, true,
+	)
+	if len(sources) != len(result.EvidenceOccurrences) {
+		return false
+	}
+	for index := range result.EvidenceOccurrences {
+		if !sources[index].valid {
+			return false
+		}
+		occurrence := &result.EvidenceOccurrences[index]
+		occurrence.ClauseID = int(sources[index].occurrence.clauseID)
+		occurrence.SentenceID = occurrence.ClauseID
+		occurrence.Start = int(sources[index].occurrence.start)
+		occurrence.End = int(sources[index].occurrence.end)
+	}
+	return true
+}
+
+type profiledClauseSpan struct {
+	clauseID int32
+	start    int
+	end      int
+}
+
+func (c *Classifier) rebaseProfiledReconstructedCoreWithinField(
+	result *Result,
+	refs []profiledSegmentRef,
+	quoted string,
+	policy Policy,
+) bool {
+	if c == nil || result == nil || quoted == "" || len(refs) == 0 {
+		return false
+	}
+	// rawInertQuotedSafetyReviewReferent already returns the normalized carrier
+	// core. Re-normalizing its boundary sentinel can change that sentinel and
+	// break exact fenced-field placement.
+	coreRunes := []rune(quoted)
+	if len(coreRunes) == 0 || len(coreRunes) > maxClassifierNormalizedRunes {
+		return false
+	}
+	coreAnalysis := c.analyzeDirectives(coreRunes, policy)
+	coreSpans, ok := profiledClauseSpans(coreRunes, coreAnalysis.clauses)
+	if !ok {
+		return false
+	}
+
+	ownerIndex := -1
+	ownerOffset := -1
+	var ownerRunes []rune
+	var ownerStorage int
+	var ownerAnalysis analyzedDirectives
+	var ownerScratch normalizationScratch
+	for index, ref := range refs {
+		views := normalizePartsInto([]string{ref.segment.Text}, nil, &ownerScratch)
+		if views.truncated {
+			putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+			continue
+		}
+		analysis := c.analyzeDirectives(views.standardRunes, policy)
+		offset := profiledRuneSliceIndex(views.standardRunes, coreRunes, 0)
+		if offset < 0 {
+			putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+			continue
+		}
+		if ownerIndex >= 0 {
+			putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+			putNormalizedRuneBuffer(ownerRunes, ownerStorage)
+			return false
+		}
+		ownerIndex = index
+		ownerOffset = offset
+		ownerRunes = views.standardRunes
+		ownerStorage = views.storageUsed
+		ownerAnalysis = analysis
+	}
+	if ownerIndex < 0 {
+		return false
+	}
+	defer putNormalizedRuneBuffer(ownerRunes, ownerStorage)
+	ownerSpans, ok := profiledClauseSpans(ownerRunes, ownerAnalysis.clauses)
+	if !ok {
+		return false
+	}
+
+	rebased := make([]EvidenceOccurrence, len(result.EvidenceOccurrences))
+	copy(rebased, result.EvidenceOccurrences)
+	for index := range rebased {
+		occurrence := &rebased[index]
+		coreSpan, found := profiledClauseSpanByID(coreSpans, int32(occurrence.ClauseID))
+		if !found || occurrence.Start < 0 || occurrence.End <= occurrence.Start ||
+			occurrence.End > coreSpan.end-coreSpan.start {
+			return false
+		}
+		absoluteStart := ownerOffset + coreSpan.start + occurrence.Start
+		absoluteEnd := ownerOffset + coreSpan.start + occurrence.End
+		ownerSpan, found := profiledClauseSpanContaining(ownerSpans, absoluteStart, absoluteEnd)
+		if !found {
+			return false
+		}
+		occurrence.ClauseID = int(ownerSpan.clauseID)
+		occurrence.SentenceID = occurrence.ClauseID
+		occurrence.Start = absoluteStart - ownerSpan.start
+		occurrence.End = absoluteEnd - ownerSpan.start
+	}
+	result.EvidenceOccurrences = rebased
+	return true
+}
+
+func profiledClauseSpans(text []rune, clauses []analyzedDirectiveClause) ([]profiledClauseSpan, bool) {
+	if len(text) == 0 || len(clauses) == 0 {
+		return nil, false
+	}
+	spans := make([]profiledClauseSpan, 0, len(clauses))
+	cursor := 0
+	for _, clause := range clauses {
+		if len(clause.runes) == 0 {
+			continue
+		}
+		start := profiledRuneSliceIndex(text, clause.runes, cursor)
+		if start < 0 {
+			return nil, false
+		}
+		spans = append(spans, profiledClauseSpan{
+			clauseID: clauseIDForOccurrence(clause),
+			start:    start,
+			end:      start + len(clause.runes),
+		})
+		cursor = start + len(clause.runes)
+	}
+	return spans, len(spans) != 0
+}
+
+func profiledRuneSliceIndex(text, target []rune, start int) int {
+	if len(target) == 0 || len(target) > len(text) {
+		return -1
+	}
+	if start < 0 {
+		start = 0
+	}
+	// Directive analysis uses private non-Unicode rune sentinels. Converting both
+	// sides to strings maps those sentinels to the same public replacement rune,
+	// which is also how rawInertQuotedSafetyReviewReferent serializes its core.
+	haystack := string(text[start:])
+	byteOffset := strings.Index(haystack, string(target))
+	if byteOffset < 0 {
+		return -1
+	}
+	return start + utf8.RuneCountInString(haystack[:byteOffset])
+}
+
+func profiledClauseSpanByID(spans []profiledClauseSpan, clauseID int32) (profiledClauseSpan, bool) {
+	for _, span := range spans {
+		if span.clauseID == clauseID {
+			return span, true
+		}
+	}
+	return profiledClauseSpan{}, false
+}
+
+func profiledClauseSpanContaining(
+	spans []profiledClauseSpan,
+	start, end int,
+) (profiledClauseSpan, bool) {
+	for _, span := range spans {
+		if start >= span.start && end <= span.end {
+			return span, true
+		}
+	}
+	return profiledClauseSpan{}, false
 }
 
 func mergeProfiledCarrierRunOwner(
@@ -2894,11 +3132,20 @@ func (c *Classifier) profiledOccurrenceSources(
 	refs []profiledSegmentRef,
 	policy Policy,
 ) []profiledOccurrenceSource {
+	return c.profiledOccurrenceSourcesWithOptions(evidence, refs, policy, false)
+}
+
+func (c *Classifier) profiledOccurrenceSourcesWithOptions(
+	evidence []EvidenceOccurrence,
+	refs []profiledSegmentRef,
+	policy Policy,
+	replaySingle bool,
+) []profiledOccurrenceSource {
 	sources := make([]profiledOccurrenceSource, len(evidence))
 	if c == nil || len(evidence) == 0 || len(refs) == 0 {
 		return sources
 	}
-	if len(refs) == 1 {
+	if len(refs) == 1 && !replaySingle {
 		// Every finding in a one-field group necessarily belongs to that exact
 		// profiled field. Preserve physical offsets when the roleless classifier
 		// has them, but do not replay the matcher merely to replace synthetic

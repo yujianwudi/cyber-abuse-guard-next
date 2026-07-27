@@ -75,10 +75,10 @@ fi
 set_profile_identity() {
   case "$1" in
     primary)
-      cpa_version='v7.2.95'
-      cpa_commit='f71ec0eb6776854457892452cf28c47f0d658251'
-      cpa_module_sum='h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA='
-      cpa_go_mod_sum='h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM='
+      cpa_version='v7.2.102'
+      cpa_commit='8423cce2d1004e80948a9e2c60ee69354c0aabc3'
+      cpa_module_sum='h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA='
+      cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
       ;;
     *)
       printf 'internal error: unsupported CPA profile %s\n' "$1" >&2
@@ -108,35 +108,47 @@ assert_checked_in_module_identity() {
 
 resolve_remote_tag_commit() {
   local tag="$1"
-  local refs expected
+  local attempt refs expected
 
-  if ! refs="$(timeout --signal=KILL 60s git -C "$git_identity_dir" \
-    -c http.lowSpeedLimit=1 -c http.lowSpeedTime=60 \
-    ls-remote --refs "$cpa_origin_git_url" "refs/tags/$tag")"; then
-    printf 'CPA tag %s could not be resolved from the official Git origin within 60 seconds\n' \
-      "$tag" >&2
-    return 1
-  fi
   expected="${cpa_commit}"$'\t'"refs/tags/$tag"
-  [[ "$refs" == "$expected" ]] || {
-    printf 'CPA lightweight tag identity mismatch for %s: got %q want %q\n' \
-      "$tag" "$refs" "$expected" >&2
-    return 1
-  }
-  printf '%s\n' "$cpa_commit"
+  for attempt in 1 2 3; do
+    refs=''
+    if refs="$(timeout --signal=KILL 30s git -C "$git_identity_dir" \
+      -c http.version=HTTP/1.1 \
+      -c http.lowSpeedLimit=1 -c http.lowSpeedTime=30 \
+      ls-remote --refs "$cpa_origin_git_url" "refs/tags/$tag")"; then
+      [[ "$refs" == "$expected" ]] || {
+        printf 'CPA lightweight tag identity mismatch for %s: got %q want %q\n' \
+          "$tag" "$refs" "$expected" >&2
+        return 1
+      }
+      printf '%s\n' "$cpa_commit"
+      return 0
+    fi
+    if [[ "$attempt" != 3 ]]; then
+      printf 'CPA tag %s resolution attempt %s/3 failed; retrying\n' \
+        "$tag" "$attempt" >&2
+      sleep 3
+    fi
+  done
+  printf 'CPA tag %s could not be resolved from the official Git origin after 3 bounded attempts\n' \
+    "$tag" >&2
+  return 1
 }
 
 resolve_remote_latest_release_tag() {
   local response latest_tag
 
   if ! response="$(timeout --signal=KILL 60s curl \
-    --fail --silent --show-error --location \
-    --connect-timeout 15 --max-time 60 \
+    --fail --silent --show-error --location --http1.1 \
+    --retry 2 --retry-delay 2 --retry-max-time 55 \
+    --retry-connrefused --retry-all-errors \
+    --connect-timeout 10 --max-time 18 \
     --header 'Accept: application/vnd.github+json' \
     --header 'X-GitHub-Api-Version: 2022-11-28' \
     --header 'User-Agent: cyber-abuse-guard-cpa-compat' \
     "$cpa_latest_release_api")"; then
-    printf 'CPA latest release could not be resolved from the official GitHub API within 60 seconds\n' >&2
+    printf 'CPA latest release could not be resolved from the official GitHub API after bounded retries\n' >&2
     return 1
   fi
   latest_tag="$(printf '%s\n' "$response" | jq -er \
@@ -169,16 +181,16 @@ fi
 
 assert_checked_in_module_identity \
   "$root" root \
-  v7.2.95 h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA= \
-  h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM=
+  v7.2.102 h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA= \
+  h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/cpalatestcontract" cpalatestcontract \
-  v7.2.95 h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA= \
-  h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM=
+  v7.2.102 h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA= \
+  h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/pluginstorecontract" pluginstorecontract \
-  v7.2.95 h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA= \
-  h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM=
+  v7.2.102 h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA= \
+  h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 verify_primary_latest=0
 for profile in "${profiles[@]}"; do
@@ -297,6 +309,10 @@ for profile in "${profiles[@]}"; do
       "${root_mod_flags[@]}" -mod=readonly \
       -tags=integration,sqlite_omit_load_extension -run='^$' -count=1 \
       ./integration
+    GOWORK=off "$go_bin" test \
+      "${root_mod_flags[@]}" -mod=readonly -count=1 \
+      "$cpa_module/sdk/pluginabi" \
+      "$cpa_module/sdk/pluginapi"
     CPA_COMPAT_PROFILE="$profile" \
       CPA_COMPAT_MODFILE="$contract_modfile" \
       CPA_COMPAT_EXPECTED_COMMIT="$cpa_commit" \

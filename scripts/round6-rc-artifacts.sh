@@ -9,10 +9,19 @@ release_require_commands make git jq sha256sum awk cmp mktemp mv rm chmod mkdir 
 
 rc_release_lane="${RC_RELEASE_LANE:-round8}"
 case "$rc_release_lane" in
-  round8) canonical_repository='yujianwudi/cyber-abuse-guard' ;;
-  round9) canonical_repository='yujianwudi/cyber-abuse-guard-next' ;;
+  round8)
+    canonical_repository='yujianwudi/cyber-abuse-guard'
+    cpa_version='v7.2.95'
+    cpa_commit='f71ec0eb6776854457892452cf28c47f0d658251'
+    ;;
+  round9)
+    canonical_repository='yujianwudi/cyber-abuse-guard-next'
+    cpa_version='v7.2.102'
+    cpa_commit='8423cce2d1004e80948a9e2c60ee69354c0aabc3'
+    ;;
   *) release_die "RC release assets require a reviewed lane identity" ;;
 esac
+cpa_gate_key="rc_gate.cpa_${cpa_version}_primary_source_compatibility=PASS"
 
 [[ "${GITHUB_ACTIONS:-false}" == true ]] || \
   release_die "RC release assets may only be produced by GitHub Actions"
@@ -921,7 +930,7 @@ create_rc_source_archive() {
   local temporary listing restricted_listing verifier_sha verifier_test_sha
   local archive_prefix="cyber-abuse-guard-v${RELEASE_ARTIFACT_VERSION}/"
   local verifier_path='scripts/round9_external_evaluation_contract.py'
-  local verifier_sha256='b632063bed7cdb59ae7d56b5f9634efd4945b8a0c769cb3dd86b9c52de1a2076'
+  local verifier_sha256='1d2cc9c1d1bb68af0fce40fdf5884b528cd32bd05fb9d0a0d518bae9e8147996'
   local verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
   local verifier_test_sha256='7f32dc75f6354777eadf8791cc3b56ba9f9ac8db37334b8a66c7d046ded7ba48'
   local verifier_entry="${archive_prefix}${verifier_path}"
@@ -1230,7 +1239,7 @@ esac
     "exact_main_ci_attempt=$RC_CI_RUN_ATTEMPT" \
     'rc_gate.safe_contract=PASS' \
     'rc_gate.full_linux_quality=PASS' \
-    'rc_gate.cpa_v7.2.95_primary_source_compatibility=PASS' \
+    "$cpa_gate_key" \
     'rc_gate.rc_integration=PASS' \
     'rc_gate.clean_tree=PASS' \
     'dynamic_stdout_included=false' \
@@ -1468,7 +1477,7 @@ finalize_rc_package() {
     )"
     if [[ "$publish_rc_release" == true ]]; then
       round9_release_body="$(cat <<EOF
-Round 9 Linux amd64 prerelease for CPA v7.2.95.
+Round 9 Linux amd64 prerelease for CPA $cpa_version.
 
 - Exact commit: $RELEASE_GIT_COMMIT
 - Classifier: $(jq -r '.version' <<<"$round9_classifier") / $(jq -r '.sha256' <<<"$round9_classifier")
@@ -1478,7 +1487,7 @@ Round 9 Linux amd64 prerelease for CPA v7.2.95.
 - Paired label audit: manifest v$(jq -r '.paired_malicious.corpus_manifest_version' <<<"$round9_corpus"); $(jq -r '.paired_malicious.label_audit.sha256' <<<"$round9_corpus")
 - Public adversarial v13: $(jq -r '.public_adversarial.unique_formal_payloads' <<<"$round9_corpus") formal unique ($(jq -r '.public_adversarial.unique_historical_payloads' <<<"$round9_corpus") historical + $(jq -r '.public_adversarial.unique_branch_head_payloads' <<<"$round9_corpus") branch-head + $(jq -r '.public_adversarial.unique_current_prompt_like_payloads' <<<"$round9_corpus") current prompt-like); $(jq -r '.public_adversarial.payload_records' <<<"$round9_corpus") payload records; $(jq -r '.public_adversarial.unmerged_candidate_carriers' <<<"$round9_corpus") unmerged carrier; $(jq -r '.public_adversarial.nondefault_branch_candidate_carriers' <<<"$round9_corpus") active behind branches; $(jq -r '.public_adversarial.release_assets_reviewed' <<<"$round9_corpus") reviewed historical Release assets / $(jq -r '.public_adversarial.release_assets_with_prompt_entries' <<<"$round9_corpus") with prompt entries; $(jq -r '.public_adversarial.release_asset_metadata_records' <<<"$round9_corpus") Release asset metadata/digest records (none downloaded/opened); $(jq -r '.public_adversarial.candidate_carrier_executions' <<<"$round9_corpus") executed; $(jq -r '.public_adversarial.candidate_carriers_not_provided' <<<"$round9_corpus") NOT_PROVIDED; direct $(jq -r '.public_adversarial.direct_active_blocked' <<<"$round9_corpus") blocked / $(jq -r '.public_adversarial.direct_active_allowed' <<<"$round9_corpus") allowed; $(jq -r '.public_adversarial.serialized_route_executions' <<<"$round9_corpus") serialized routes
 - Independent malicious recall: $(jq -r '.independent_malicious.recall_basis_points' <<<"$round9_corpus") basis points
-- Audit schema v6; Raw Capture schema v4; CPA v7.2.95 counted-Mock PASS
+- Audit schema v6; Raw Capture schema v4; CPA $cpa_version counted-Mock PASS
 
 This is a prerelease with latest=false. It is counted-Mock-only, did not contact a real Provider or production, does not authorize deployment, and still requires independent audit.
 EOF
@@ -1519,13 +1528,15 @@ EOF
     printf -- '- Build runner host image OS/version: %s / %s\n' \
       "$runner_image_unobservable" "$runner_image_unobservable"
     printf -- '- Immutable builder container: %s\n' "$RC_BUILDER_REFERENCE"
-    printf -- '- CPA primary source/compile compatibility: PASS, v7.2.95 at f71ec0eb6776854457892452cf28c47f0d658251\n'
+    printf -- '- CPA primary source/compile compatibility: PASS, %s at %s\n' \
+      "$cpa_version" "$cpa_commit"
     if [[ "$rc_release_lane" == round9 ]]; then
       printf -- '- Signed external evaluation validation: %s\n' "$host_validation"
     else
       printf -- '- Host evidence validation: %s\n' "$host_validation"
     fi
-    printf -- '- CPA v7.2.95 primary counted-Mock validation: %s\n' "$counted_mock_validation"
+    printf -- '- CPA %s primary counted-Mock validation: %s\n' \
+      "$cpa_version" "$counted_mock_validation"
     if [[ "$rc_release_lane" == round9 && "$publish_rc_release" == true ]]; then
       printf -- '- CPA Host listener: 127.0.0.1:18394 -> container 8317/tcp (exact)\n'
     fi
@@ -1660,6 +1671,8 @@ EOF
     --arg host_evidence_origin "$host_evidence_origin" \
     --arg host_evidence_claim "$host_evidence_claim" \
     --arg counted_mock_validation "$counted_mock_validation" \
+    --arg cpa_version "$cpa_version" \
+    --arg cpa_commit "$cpa_commit" \
     --argjson primary_host_results "$primary_host_results" \
     --argjson round9_classifier "$round9_classifier" \
     --argjson round9_ruleset "$round9_ruleset" \
@@ -1721,8 +1734,8 @@ EOF
       artifact_count: $artifact_count,
       cpa: ({
         primary: ({
-          version: "v7.2.95",
-          commit: "f71ec0eb6776854457892452cf28c47f0d658251",
+          version: $cpa_version,
+          commit: $cpa_commit,
           source_compatibility: "PASS",
           counted_mock_validation: $counted_mock_validation
         } + (if $publish_rc_release then {host_results: $primary_host_results} else {} end)),
@@ -1823,8 +1836,8 @@ EOF
           asset_allowlist: $round9_release_assets
         },
         cpa_contract: {
-          version: "v7.2.95",
-          commit: "f71ec0eb6776854457892452cf28c47f0d658251",
+          version: $cpa_version,
+          commit: $cpa_commit,
           upstream_version_policy: "fixed-no-automatic-follow"
         }
       }

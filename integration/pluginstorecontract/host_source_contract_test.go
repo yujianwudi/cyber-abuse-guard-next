@@ -6,17 +6,16 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 )
 
 const (
 	cpaModulePath        = "github.com/router-for-me/CLIProxyAPI/v7"
-	cpaPinnedVersion     = "v7.2.95"
-	cpaPinnedCommit      = "f71ec0eb6776854457892452cf28c47f0d658251"
-	cpaPinnedModuleSum   = "h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA="
-	cpaPinnedGoModSum    = "h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM="
+	cpaPinnedVersion     = "v7.2.102"
+	cpaPinnedCommit      = "8423cce2d1004e80948a9e2c60ee69354c0aabc3"
+	cpaPinnedModuleSum   = "h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA="
+	cpaPinnedGoModSum    = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 	cpaPluginHostPackage = cpaModulePath + "/internal/pluginhost"
 )
 
@@ -39,6 +38,15 @@ var criticalCPAHostTests = []string{
 	"TestHostRouteModelSkipsUnavailableBuiltinProvider",
 	"TestHostRouteModelSkipsUnavailableExecutorTargets",
 	"TestHostRouteModelUsesHighestPriorityFirstMatch",
+	"TestGuardedPluginClientShutdownContextDetachesBlockedCall",
+	"TestHostCanceledBlockedLoadKeepsOneLoaderAndCleanupPerPlugin",
+	"TestHostCanceledInitializationDiscardsBlockedClient",
+	"TestHostCanceledLoadDiscardsLateClientWithoutReplacingCurrentPlugin",
+	"TestHostCanceledRegisterRetainsLoadTokenUntilShutdownReturns",
+	"TestHostCancellationUnderMutationLockDoesNotInsertLoadedPlugin",
+	"TestHostShutdownAllRetainsBlockedLoadTokenUntilCleanup",
+	"TestHostUnloadPluginContextDetachesBlockedCall",
+	"TestOwnsExecutorDistinguishesHostAdapters",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
 }
 
@@ -59,10 +67,10 @@ type resolvedCPAOrigin struct {
 	Ref  string
 }
 
-// TestOfficialCPAHostRoutingSourceContract runs the routing contract tests
+// TestOfficialCPAHostRoutingSourceContract runs the complete Host test suite
 // shipped by the pinned CPA module. It deliberately tests the official source
-// package instead of copying the host's priority, fail-open, fuse, target
-// validation, or executor-readiness implementation into this repository.
+// package instead of copying the host's priority, fail-open, lifecycle, fuse,
+// target validation, or executor-readiness implementation into this repository.
 func TestOfficialCPAHostRoutingSourceContract(t *testing.T) {
 	goBinary, moduleArguments, _ := preparePinnedCPAModule(t)
 
@@ -82,14 +90,13 @@ func TestOfficialCPAHostRoutingSourceContract(t *testing.T) {
 		}
 	}
 
-	exactNames := make([]string, 0, len(criticalCPAHostTests))
-	for _, name := range criticalCPAHostTests {
-		exactNames = append(exactNames, regexp.QuoteMeta(name))
-	}
-	testPattern := "^(" + strings.Join(exactNames, "|") + ")$"
+	// Execute the complete upstream Host suite for the current platform. The
+	// required-name check above keeps the contract explicit, while running the
+	// whole package prevents newly added lifecycle, cancellation, cleanup,
+	// executor-ownership, or routing regressions from silently falling outside
+	// a hand-maintained allowlist.
 	runGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
-		"-run", testPattern,
 		cpaPluginHostPackage,
 	)
 }
@@ -107,7 +114,7 @@ func TestCPAHostFailOpenFixtureContract(t *testing.T) {
 	if _, errFixtureStat := os.Stat(fixturePath); errFixtureStat != nil {
 		t.Fatalf("stat Host fixture: %v", errFixtureStat)
 	}
-	moduleCopy := filepath.Join(t.TempDir(), "cpa-v7.2.95")
+	moduleCopy := filepath.Join(t.TempDir(), "cpa-v7.2.102")
 	if errCopyModule := os.CopyFS(moduleCopy, os.DirFS(module.Dir)); errCopyModule != nil {
 		t.Fatalf("copy pinned CPA module for Host fixture: %v", errCopyModule)
 	}

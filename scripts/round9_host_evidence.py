@@ -48,8 +48,8 @@ ARTIFACT_VERSION = "0.16-rc.4"
 SO_NAME = f"cyber-abuse-guard-v{ARTIFACT_VERSION}.so"
 STORE_NAME = f"cyber-abuse-guard_{ARTIFACT_VERSION}_linux_amd64.zip"
 SOURCE_NAME = f"cyber-abuse-guard-v{ARTIFACT_VERSION}-source.tar.gz"
-PRIMARY_VERSION = "v7.2.95"
-PRIMARY_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
+PRIMARY_VERSION = "v7.2.102"
+PRIMARY_COMMIT = "8423cce2d1004e80948a9e2c60ee69354c0aabc3"
 RUNNER_VERSION = 1
 MOCK_PORT = 18080
 CPA_PORT = 8317
@@ -3761,7 +3761,7 @@ def parser() -> argparse.ArgumentParser:
         description="Linux-only Round 9 counted-Mock Host evidence runner"
     )
     commands = root.add_subparsers(dest="command", required=True)
-    run = commands.add_parser("run", help="execute the isolated CPA v7.2.95 Host lane")
+    run = commands.add_parser("run", help="execute the isolated CPA v7.2.102 Host lane")
     run.add_argument("--execute", action="store_true")
     run.add_argument("--artifacts", required=True)
     run.add_argument("--work", required=True)

@@ -1,4 +1,4 @@
-// Package plugin implements the CPA v7.2.95 schema-v1 RPC surface for the
+// Package plugin implements the CPA v7.2.102 schema-v1 RPC surface for the
 // cyber-abuse guard. The native C boundary in cmd/cyber-abuse-guard is kept
 // deliberately thin; policy state and lifecycle semantics live here so they
 // can be race-tested without loading a shared object.
@@ -58,7 +58,7 @@ var metadata = pluginapi.Metadata{
 		{Name: "hard_block_even_if_authorized", Type: pluginapi.ConfigFieldTypeObject, Description: "Categories whose operational abuse remains protected from authorization score reductions."},
 		{Name: "subject_control", Type: pluginapi.ConfigFieldTypeObject, Description: "Rolling subject-risk, cooldown, and manual-block settings."},
 		{Name: "audit", Type: pluginapi.ConfigFieldTypeObject, Description: "SQLite audit settings plus an explicit default-off, block-only, redacted and truncated operator request-preview capture."},
-		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.95."},
+		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.102."},
 		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v0.16 and rejected."},
 	},
 }
@@ -281,7 +281,7 @@ func (p *Plugin) callOversizedExecutor() ([]byte, int) {
 }
 
 // recoverCallbackPanic is deliberately mode-aware for ModelRouter callbacks.
-// CPA v7.2.95 continues native routing after a router error, so an enforcing
+// CPA v7.2.102 continues native routing after a router error, so an enforcing
 // runtime must turn a recovered panic into a successful local self-route. The
 // recovered value is never logged because it can contain attacker-controlled
 // data. Other RPC methods retain the ABI-level non-zero failure signal.
@@ -598,7 +598,7 @@ func (p *Plugin) reportABICapabilityLimits() {
 	if !p.abiLimitLogged.CompareAndSwap(false, true) {
 		return
 	}
-	p.log("warn", "cyber-abuse-guard cannot verify router ordering or duplicate plugin binaries through the CPA v7.2.95 plugin ABI", map[string]any{
+	p.log("warn", "cyber-abuse-guard cannot verify router ordering or duplicate plugin binaries through the CPA v7.2.102 plugin ABI", map[string]any{
 		"plugin":                                 ID,
 		"code":                                   "cpa_abi_conflict_detection_unavailable",
 		"router_enumeration_supported":           false,
@@ -647,7 +647,7 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		return nil, fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
 	}
 	if cfg.TrustedProxy.Enabled {
-		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.95 does not provide a verified direct peer address")
+		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.102 does not provide a verified direct peer address")
 	}
 	if cfg.Audit.LogOriginalText {
 		return nil, fmt.Errorf("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
@@ -871,7 +871,7 @@ func (p *Plugin) Shutdown() {
 		p.lifecycleMu.Unlock()
 		return
 	}
-	// Publish a terminal router policy before publishing shutdown. CPA v7.2.95
+	// Publish a terminal router policy before publishing shutdown. CPA v7.2.102
 	// continues upstream routing on router RPC errors, so late callbacks must
 	// receive a successful response. A runtime that was enforcing remains
 	// fail-closed; observe/audit/off remains an intentional pass-through.

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 ## Current source status
@@ -12,8 +12,8 @@ plugin release, production approval, or Balanced-mode admission is implied.
 Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
 reuse or relabel them as a build of the current source.
 
-Linux amd64 and CPA v7.2.95
-(`f71ec0eb6776854457892452cf28c47f0d658251`) are the only compatibility target.
+Linux amd64 and CPA v7.2.102
+(`8423cce2d1004e80948a9e2c60ee69354c0aabc3`) are the only compatibility target.
 Runtime validation must use an isolated counted-Mock upstream with no real
 Provider or account pool. A sandbox PASS is engineering evidence only and does
 not replace independent source review or the external admission policy.
@@ -51,7 +51,7 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
 
 ## Preconditions
 
-- Run the candidate bytes against CPA v7.2.95 built with `CGO_ENABLED=1`.
+- Run the candidate bytes against CPA v7.2.102 built with `CGO_ENABLED=1`.
   Assets labelled `_no-plugin`
   cannot load native plugins. Source/compile compatibility does not substitute
   for loading the candidate `.so`. Earlier CPA checks are historical
@@ -390,7 +390,7 @@ Verify New API → CPA using an ordinary harmless request, confirm other plugins
 still behave normally, and compare the current CPA auth-file list with the saved
 inventory. Installation must not create, delete, or modify auth files.
 
-The CPA v7.2.95 Host matrix must cover OpenAI Chat, OpenAI Responses,
+The CPA v7.2.102 Host matrix must cover OpenAI Chat, OpenAI Responses,
 Claude, and Gemini allow/refusal paths, including streaming pre-SSE 403,
 Anthropic/Gemini token-count 403, and zero Auth Selector, Provider, Usage, and
 Mock Upstream counters for blocked requests. Ordinary CI does not execute that

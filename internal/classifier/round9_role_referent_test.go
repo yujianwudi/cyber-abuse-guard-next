@@ -7,7 +7,7 @@ import (
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 )
 
-func TestRound9HistoricalCarrierRequiresExplicitCurrentReferent(t *testing.T) {
+func TestRound9HistoricalAssistantCannotBecomeBareReferent(t *testing.T) {
 	guard := newDefaultClassifier(t)
 	thresholds := DefaultThresholds()
 	historical := extract.Segment{
@@ -31,10 +31,9 @@ func TestRound9HistoricalCarrierRequiresExplicitCurrentReferent(t *testing.T) {
 	withReferent := guard.ClassifySegmentsWithPolicy(
 		[]extract.Segment{historical, directive}, ModeBalanced, thresholds, DefaultPolicy(),
 	)
-	if withReferent.Action != ActionBlock || !resultHasEligibleMaliciousWinner(withReferent, thresholds) ||
-		withReferent.DecisionExplanation == nil || !withReferent.DecisionExplanation.ReferentLinkUsed ||
-		!withReferent.DecisionExplanation.ReferentProofComplete {
-		t.Fatalf("explicit historical referent=%+v, want eligible reactivated block", withReferent)
+	if withReferent.Action == ActionBlock || resultHasEligibleMaliciousWinner(withReferent, thresholds) ||
+		withReferent.DecisionExplanation != nil && withReferent.DecisionExplanation.ReferentLinkUsed {
+		t.Fatalf("assistant history acquired bare-referent authority: %+v", withReferent)
 	}
 }
 

@@ -24,20 +24,25 @@ var (
 )
 
 const (
-	maxShadowKeyBytes     = 128
-	maxShadowValueBytes   = 256
-	shadowUnknownKey      = "_"
-	shadowUnknownValue    = "_"
-	spanMarkerPrefix      = "~c"
-	spanMarkerSuffix      = "~"
-	derivedFieldIDFlag    = uint64(1) << 63
-	encodingSampleBytes   = 64 << 10
-	base64ProbeBlock      = 4 << 10
-	base64ProbeDecoded    = base64ProbeBlock / 4 * 3
-	minDenseEncodings     = 16
-	minEncodingDensity    = 10
-	minEncodedTextRun     = 32
-	minEncodedTextDensity = 90
+	maxShadowKeyBytes   = 128
+	maxShadowValueBytes = 256
+	shadowUnknownKey    = "_"
+	shadowUnknownValue  = "_"
+	spanMarkerPrefix    = "~c"
+	spanMarkerSuffix    = "~"
+	// Derived text views cross the extractor/classifier boundary as uint64
+	// SegmentChunk IDs, but the classifier publishes evidence FieldIDs as int.
+	// Keep the derived namespace below the signed bit on supported 64-bit Linux
+	// hosts. Bit 62 is already reserved for content-piece IDs.
+	derivedFieldIDFlag        = uint64(1) << 61
+	derivedFieldIDOrdinalBits = 8
+	encodingSampleBytes       = 64 << 10
+	base64ProbeBlock          = 4 << 10
+	base64ProbeDecoded        = base64ProbeBlock / 4 * 3
+	minDenseEncodings         = 16
+	minEncodingDensity        = 10
+	minEncodedTextRun         = 32
+	minEncodedTextDensity     = 90
 )
 
 type plannedText struct {
@@ -815,7 +820,7 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 		}
 		if typeDerivedKnown && !typeDerivedRoleCompatible {
 			// Responses call/output/reasoning/additional-tools items have a
-			// closed type-derived role. CPA v7.2.95 Codex Responses Lite is the
+			// closed type-derived role. CPA v7.2.102 Codex Responses Lite is the
 			// sole reviewed exception: additional_tools carries the exact sibling
 			// role "developer". Every other explicit role remains ambiguous and
 			// must never promote runtime/tool text to trusted user content.
@@ -857,7 +862,7 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 			role, ok := normalizedMessageRole(p.source, roleValue)
 			trustedUserRolePath := ctx.historyTrusted
 			if p.source == SourceProfileOpenAIResponse && messageTypeSeen {
-				// CPA v7.2.95 treats only an omitted/empty type or the exact
+				// CPA v7.2.102 treats only an omitted/empty type or the exact
 				// "message" discriminator as a role-bearing Responses message.
 				// Unknown and non-string item types are still scanned, but their
 				// caller-controlled role must not prove authenticated-user origin.
@@ -1225,7 +1230,7 @@ func toolAssociationResultTextPath(subtype toolAssociationSubtype, objectPath st
 	case toolAssociationSubtypeOpenAIResponsesFunction, toolAssociationSubtypeOpenAIResponsesCustom:
 		return appendObjectFieldPath(objectPath, "output")
 	case toolAssociationSubtypeGeminiFunction:
-		// CPA v7.2.95 preserves provider-native Gemini response objects and
+		// CPA v7.2.102 preserves provider-native Gemini response objects and
 		// accepts result, output, and other structured response members. The
 		// exact response object is the authority boundary; siblings on the
 		// surrounding functionResponse remain untrusted.
@@ -1505,7 +1510,7 @@ func (c *toolAuthorityJSONCursor) collectTypedToolResultBlock(
 			textSeen = true
 			textValue = value
 		case "cachecontrol":
-			// CPA v7.2.95 preserves Claude-compatible cache_control objects on
+			// CPA v7.2.102 preserves Claude-compatible cache_control objects on
 			// text blocks. Treat the field as structure only: its metadata
 			// strings never become authorized tool-result text.
 			if subtype != toolAssociationSubtypeClaudeTool || key != "cache_control" ||
@@ -2873,7 +2878,7 @@ func normalizedMessageRole(source SourceProfile, value string) (Role, bool) {
 func rolelessResponseItemRole(value string) (Role, SegmentProvenance, bool) {
 	switch value {
 	case "additional_tools":
-		// CPA v7.2.95 accepts Codex Desktop tool definitions in an input item
+		// CPA v7.2.102 accepts Codex Desktop tool definitions in an input item
 		// instead of the top-level tools field. The entire item is model-visible
 		// authority supplied by the client/runtime, never current user content.
 		return RoleSystem, ProvenanceContent, true
@@ -4281,7 +4286,7 @@ func streamingDataURLKind(value string) (isData bool, textual bool) {
 }
 
 func derivedFieldID(parent uint64, ordinal int) uint64 {
-	return derivedFieldIDFlag | parent<<8 | uint64(ordinal+1)
+	return derivedFieldIDFlag | parent<<derivedFieldIDOrdinalBits | uint64(ordinal+1)
 }
 
 func decodeJSONStringChunks(raw []byte, chunkSize int, emit func([]byte, bool) error) error {

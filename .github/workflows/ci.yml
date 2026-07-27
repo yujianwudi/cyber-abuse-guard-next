@@ -92,8 +92,12 @@ jobs:
         run: make round6-module-verify
       - name: Historical Round 8 counted-Mock regression
         run: make round8-counted-mock-historical-regression
-      - name: CPA pinned Host source and fail-open contract
-        run: make cpa-host-fixture-contract
+      - name: CPA v7.2.102 latest source API and SDK contract
+        env:
+          CPA_COMPAT_PROFILE: "primary"
+          CPA_COMPAT_VERIFY_REMOTE: "1"
+          CPA_COMPAT_REQUIRE_LATEST: "1"
+        run: make cpa-latest-compat
       - name: round4-regression
         run: make round4-regression
       - name: round5-regression
@@ -126,15 +130,11 @@ jobs:
         run: make round6-benchmark
       - name: dependency-vulnerability-gate
         run: make round6-vulncheck
-      - name: build-linux-amd64-and-integration-compile-only
-        env:
-          ALLOW_DIRTY_BUILD: '1'
-        run: make build-linux-amd64 integration-compile
-      - name: Round6-safe-development-artifacts
+      - name: Linux Host loads candidate .so and builds development artifacts
         env:
           ALLOW_DIRTY_BUILD: '1'
           REQUIRE_DIST_ARTIFACTS: '1'
-        run: make round6-development-artifacts round6-cpa-store-contract
+        run: make integration-test round6-development-artifacts round6-cpa-store-contract
       - name: artifact-hash
         env:
           ALLOW_DIRTY_BUILD: '1'
@@ -161,8 +161,8 @@ jobs:
             printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
             sha256sum "$artifact"
           done
-          echo 'integration_summary=CPA v7.2.95 source/fail-open and build checks completed; isolated counted-Mock Host validation pending'
-          echo 'cpa_primary_identity=v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251'
+          echo 'integration_summary=CPA v7.2.102 source/fail-open, SDK ABI/API, and Linux Host .so load checks completed'
+          echo 'cpa_primary_identity=v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3'
       - name: clean-tree-check
         run: make clean-tree-check
       - name: Upload development verification artifacts
@@ -179,12 +179,6 @@ jobs:
             dist/ruleset.sha256
             dist/sbom.cdx.json
           if-no-files-found: error
-      - name: CPA v7.2.95 source/compile contract
-        env:
-          CPA_COMPAT_PROFILE: "primary"
-          CPA_COMPAT_VERIFY_REMOTE: "1"
-        run: bash ./scripts/cpa-latest-compat.sh
-
   reproducibility:
     needs: quality-and-artifacts
     runs-on: ubuntu-24.04

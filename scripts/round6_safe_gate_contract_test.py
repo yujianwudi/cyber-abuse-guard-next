@@ -38,6 +38,12 @@ from round6_safe_gate_contract import (
     ACTIVE_WORKFLOW_PATHS,
     ARCHIVED_RC_WORKFLOW_PATH,
     BLOCKED_PRERELEASE_MARKER,
+    CPA_CURRENT_COMMIT,
+    CPA_CURRENT_GO_MOD_SUM,
+    CPA_CURRENT_MODULE_SUM,
+    CPA_CURRENT_VERSION,
+    CPA_ROUND8_COMMIT,
+    CPA_ROUND8_VERSION,
     CONSUMED_BOUNDARY_LINES,
     EXTERNAL_ATTESTATION_SCRIPT_SHA256,
     FORMAL_OPERATION_SCRIPTS,
@@ -1893,7 +1899,7 @@ jobs:
             ),
             text.replace(
                 "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest",
-                "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/tags/v7.2.95",
+                f"https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/tags/{CPA_CURRENT_VERSION}",
                 1,
             ),
         )
@@ -1922,6 +1928,16 @@ jobs:
                 1,
             ),
             text.replace("export GOFLAGS=-mod=readonly", "export GOFLAGS=-mod=mod", 1),
+            text.replace(
+                '"$cpa_module/sdk/pluginabi"',
+                '"$cpa_module/sdk/unreviewedabi"',
+                1,
+            ),
+            text.replace(
+                '"$cpa_module/sdk/pluginapi"',
+                '"$cpa_module/sdk/unreviewedapi"',
+                1,
+            ),
         )
         for mutation in mutations:
             self.assertNotEqual(mutation, text)
@@ -1929,7 +1945,38 @@ jobs:
             with mock.patch(
                 "round6_safe_gate_contract.CPA_COMPAT_SCRIPT_SHA256", reviewed_hash
             ):
-                with self.assertRaisesRegex(ContractError, "selected Go toolchain"):
+                with self.assertRaisesRegex(
+                    ContractError, "selected Go toolchain|lightweight tag"
+                ):
+                    validate_cpa_compat_script(mutation, source)
+
+    def test_cpa_remote_checks_pin_http11_and_bounded_retries(self):
+        source = Path(__file__).with_name("cpa-latest-compat.sh")
+        text = source.read_text(encoding="utf-8")
+        validate_cpa_compat_script(text, source)
+        mutations = (
+            text.replace("-c http.version=HTTP/1.1", "-c http.version=HTTP/2", 1),
+            text.replace("for attempt in 1 2 3; do", "for attempt in 1; do", 1),
+            text.replace(
+                "--retry 2 --retry-delay 2 --retry-max-time 55",
+                "--retry 0 --retry-delay 2 --retry-max-time 55",
+                1,
+            ),
+            text.replace(
+                "--fail --silent --show-error --location --http1.1",
+                "--fail --silent --show-error --location",
+                1,
+            ),
+        )
+        for mutation in mutations:
+            self.assertNotEqual(mutation, text)
+            reviewed_hash = hashlib.sha256(mutation.encode("utf-8")).hexdigest()
+            with mock.patch(
+                "round6_safe_gate_contract.CPA_COMPAT_SCRIPT_SHA256", reviewed_hash
+            ):
+                with self.assertRaisesRegex(
+                    ContractError, "lightweight tag|bounded retries|official Release"
+                ):
                     validate_cpa_compat_script(mutation, source)
 
     def test_checked_in_cpa_module_pins_cannot_drift(self):
@@ -1952,9 +1999,9 @@ jobs:
         validate_cpa_module_pins(fixture_root)
 
         module_versions = {
-            "go.mod": "v7.2.95",
-            "integration/cpalatestcontract/go.mod": "v7.2.95",
-            "integration/pluginstorecontract/go.mod": "v7.2.95",
+            "go.mod": CPA_CURRENT_VERSION,
+            "integration/cpalatestcontract/go.mod": CPA_CURRENT_VERSION,
+            "integration/pluginstorecontract/go.mod": CPA_CURRENT_VERSION,
         }
         for relative, version in module_versions.items():
             with self.subTest(relative=relative):
@@ -1976,8 +2023,8 @@ jobs:
         original_sum = sum_path.read_text(encoding="utf-8")
         sum_path.write_text(
             original_sum.replace(
-                "github.com/router-for-me/CLIProxyAPI/v7 v7.2.95 h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA=",
-                "github.com/router-for-me/CLIProxyAPI/v7 v7.2.95 h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION} {CPA_CURRENT_MODULE_SUM}",
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION} h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 1,
             ),
             encoding="utf-8",
@@ -1987,13 +2034,13 @@ jobs:
 
         sum_path.write_text(original_sum, encoding="utf-8")
         primary_go_mod_sum = (
-            "github.com/router-for-me/CLIProxyAPI/v7 v7.2.95/go.mod "
-            "h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM="
+            f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
+            f"{CPA_CURRENT_GO_MOD_SUM}"
         )
         sum_path.write_text(
             original_sum.replace(
                 primary_go_mod_sum,
-                "github.com/router-for-me/CLIProxyAPI/v7 v7.2.95/go.mod "
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
                 "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 1,
             ),
@@ -2007,9 +2054,9 @@ jobs:
         original_store_sum = store_sum_path.read_text(encoding="utf-8")
         store_sum_path.write_text(
             original_store_sum.replace(
-                "github.com/router-for-me/CLIProxyAPI/v7 v7.2.95/go.mod "
-                "h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM=",
-                "github.com/router-for-me/CLIProxyAPI/v7 v7.2.95/go.mod "
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
+                f"{CPA_CURRENT_GO_MOD_SUM}",
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
                 "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 1,
             ),
@@ -2796,16 +2843,29 @@ jobs:
             ),
             original.replace('          CPA_COMPAT_VERIFY_REMOTE: "1"\n', "", 1),
             original.replace(
-                "        run: bash ./scripts/cpa-latest-compat.sh\n",
+                '          CPA_COMPAT_REQUIRE_LATEST: "1"\n',
+                '          CPA_COMPAT_REQUIRE_LATEST: "0"\n',
+                1,
+            ),
+            original.replace(
+                '          CPA_COMPAT_REQUIRE_LATEST: "1"\n',
+                '          CPA_LATEST_REQUIRED: "1"\n',
+                1,
+            ),
+            original.replace('          CPA_COMPAT_REQUIRE_LATEST: "1"\n', "", 1),
+            original.replace(
+                "        run: make cpa-latest-compat\n",
                 "        run: true\n",
                 1,
             ),
+            original.replace(CPA_CURRENT_VERSION, CPA_ROUND8_VERSION, 1),
+            original.replace(CPA_CURRENT_COMMIT, CPA_ROUND8_COMMIT, 1),
         )
         for workflow in mutations:
             self.assertNotEqual(workflow, original)
             with self.assertRaisesRegex(
                 ContractError,
-                "v7.2.95 primary profile|remote CPA verification|must be a mapping|exact scalar",
+                rf"{re.escape(CPA_CURRENT_VERSION)} primary profile|latest source API and SDK|remote verification|latest-release drift check|current CPA|historical Round 8 identity|must be a mapping|exact scalar",
             ):
                 validate_ci_workflow(workflow, source)
 
@@ -4818,6 +4878,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "              true\n",
                 1,
             ),
+            original.replace(CPA_CURRENT_VERSION, CPA_ROUND8_VERSION, 1),
+            original.replace(CPA_CURRENT_COMMIT, CPA_ROUND8_COMMIT, 1),
         )
         for mutation in mutations:
             self.assertNotEqual(mutation, original)
@@ -4958,6 +5020,53 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_release_mode_contracts(fixture)
 
+    def test_rc_artifact_cpa_gate_key_is_derived_from_the_reviewed_lane(self):
+        source = (
+            Path(__file__).resolve().parent.parent
+            / "scripts/round6-rc-artifacts.sh"
+        )
+        original = source.read_text(encoding="utf-8")
+        validate_rc_reproducible_release_asset_contract(original, source)
+        mutations = (
+            original.replace(
+                'cpa_gate_key="rc_gate.cpa_${cpa_version}_primary_source_compatibility=PASS"',
+                f'cpa_gate_key="rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS"',
+                1,
+            ),
+            original.replace(
+                '"$cpa_gate_key" \\\n',
+                f"'rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS' \\\n",
+                1,
+            ),
+            original.replace(
+                f"    cpa_version='{CPA_ROUND8_VERSION}'\n",
+                f"    cpa_version='{CPA_CURRENT_VERSION}'\n",
+                1,
+            ),
+            original.replace(
+                f"    cpa_commit='{CPA_ROUND8_COMMIT}'\n",
+                f"    cpa_commit='{CPA_CURRENT_COMMIT}'\n",
+                1,
+            ),
+            original.replace(
+                f"    cpa_version='{CPA_CURRENT_VERSION}'\n",
+                f"    cpa_version='{CPA_ROUND8_VERSION}'\n",
+                1,
+            ),
+            original.replace(
+                f"    cpa_commit='{CPA_CURRENT_COMMIT}'\n",
+                f"    cpa_commit='{CPA_ROUND8_COMMIT}'\n",
+                1,
+            ),
+        )
+        for mutation in mutations:
+            self.assertNotEqual(mutation, original)
+            with self.assertRaisesRegex(
+                ContractError,
+                "lane identities|lane-specific CPA gate key|derive the CPA gate key|canonical test summary",
+            ):
+                validate_rc_reproducible_release_asset_contract(mutation, source)
+
     def test_round8_host_workflow_security_mutations_fail_closed(self):
         workflow_path = (
             Path(__file__).resolve().parent.parent
@@ -5002,6 +5111,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "env:\n  UNREVIEWED_ROOT_ENV: true\n\npermissions:\n",
                 1,
             ),
+            original.replace(CPA_ROUND8_VERSION, CPA_CURRENT_VERSION, 1),
+            original.replace(CPA_ROUND8_COMMIT, CPA_CURRENT_COMMIT, 1),
             original.replace(
                 "    runs-on:\n",
                 "    container: unreviewed.example/host:latest\n    runs-on:\n",
@@ -5282,7 +5393,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             original.replace("--prerelease", "--latest", 1),
             original.replace('[[ "$latest_tag" == v0.15 ]]', '[[ "$latest_tag" != "$TAG" ]]', 1),
             original.replace("ubuntu-24.04", "windows-2025", 1),
-            original.replace("v7.2.95", "v7.2.92", 1),
+            original.replace(CPA_ROUND8_VERSION, "v7.2.92", 1),
             original.replace(".assets | length == 19", ".assets | length >= 1", 1),
             original.replace(
                 "rc-release-manifest.json.sha256",

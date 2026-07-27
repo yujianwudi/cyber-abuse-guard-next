@@ -198,13 +198,18 @@ func TestFourRepositoryNonUserCarrierCrossProduct(t *testing.T) {
 	for _, carrier := range fourRepoInertNonUserCarriers {
 		controlPlaneObservable[carrier] = struct{}{}
 	}
+	for _, carrier := range []fourRepoCarrier{fourRepoChatAssistant, fourRepoResponsesAssistant} {
+		controlPlaneObservable[carrier] = struct{}{}
+	}
 
 	// The first four profiles represent the four public control families. Run
 	// every family through every CPA-visible non-user carrier so a format-specific
 	// role attribution regression cannot turn a global wrapper into user intent.
-	// Active system/developer/instructions carriers and inert schema/description
-	// carriers may emit a bounded control-plane observation. Only the former may
-	// block; historical outputs and call traffic stay fully inert.
+	// Active system/developer/instructions carriers, inert schema/description
+	// carriers, and historical assistant natural-language outputs may emit one
+	// bounded audit-only control-plane observation. Only the active request-local
+	// carriers may block; tool results and tool-call traffic stay count-silent,
+	// and no historical non-user carrier gains execution or referent authority.
 	for profileIndex := 0; profileIndex < 4; profileIndex++ {
 		profile := fourRepoSurrogateProfiles[profileIndex]
 		for carrierIndex, carrier := range fourRepoNonUserCarriers {
@@ -390,7 +395,7 @@ func TestFourRepositoryRequestLocalAuthorityAndInertCarrierBoundaries(t *testing
 	}
 }
 
-func TestFourRepositoryHistoricalNonUserReferentReactivation(t *testing.T) {
+func TestFourRepositoryHistoricalNonUserReferentCannotReactivate(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
@@ -405,9 +410,8 @@ func TestFourRepositoryHistoricalNonUserReferentReactivation(t *testing.T) {
 		t.Run(string(carrier), func(t *testing.T) {
 			body, _ := fourRepoMarshalAndCheckBytes(t, carrier, fourRepoAbuseUser, "Execute it.")
 			route := callRoleRoute(t, p, fourRepoCarrierFormat(carrier), string(body))
-			if !route.Handled || route.TargetKind != pluginapi.ModelRouteTargetSelf ||
-				route.Reason != "cyber_abuse_guard_hard_policy" {
-				t.Fatalf("explicit historical referent was not self-blocked: route=%+v", route)
+			if route.Handled || route.Reason != "" {
+				t.Fatalf("historical non-user carrier acquired bare-referent authority: route=%+v", route)
 			}
 		})
 	}
@@ -611,7 +615,7 @@ func TestCPAResponsesLiteAdditionalToolsDeveloperRoleStrictCompatibility(t *test
 	t.Cleanup(p.Shutdown)
 	register(t, p, "mode: strict\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
 
-	// This is the exact CPA v7.2.95 Responses Lite envelope emitted by the
+	// This is the exact CPA v7.2.102 Responses Lite envelope emitted by the
 	// Codex client when no extra tool is present. It must remain a complete,
 	// clean request rather than becoming an incomplete-role strict block.
 	emptyToolsBody := `{"input":[{"type":"additional_tools","role":"developer","tools":[]},{"type":"message","role":"user","content":"Sort these fictional football scores by date."}]}`

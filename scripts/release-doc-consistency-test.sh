@@ -104,8 +104,8 @@ make_fixture() {
         'current_candidate_status: PENDING_FINAL_SOURCE_FREEZE_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED' \
         'current_platform: linux-amd64' \
         'current_go_contract: 1.26.4' \
-        'current_cpa_version: v7.2.95' \
-        'current_cpa_commit: f71ec0eb6776854457892452cf28c47f0d658251' \
+        'current_cpa_version: v7.2.102' \
+        'current_cpa_commit: 8423cce2d1004e80948a9e2c60ee69354c0aabc3' \
         'current_gate_workflow: .github/workflows/round9-gate.yml' \
         'current_host_workflow: .github/workflows/round9-host-validation.yml' \
         'current_rc_workflow: .github/workflows/round9-release-rc.yml' \
@@ -188,6 +188,8 @@ make_fixture() {
         'historical_round8_rc_manifest_schema: 4' \
         'historical_round8_rc_publish_host_evidence: round8-host-evidence.json' \
         'historical_round8_rc_publish_host_evidence_sidecar: round8-host-evidence.json.sha256' \
+        'historical_round8_host_matrix: v7.2.95' \
+        'historical_round8_host_matrix_commit: f71ec0eb6776854457892452cf28c47f0d658251' \
         'historical_round8_immutable_published_rc_identity_verification: release-object,tag=v0.16-rc.2,annotated-tag-target=exact-commit,target-commitish=exact-commit,title=exact,body=exact,prerelease=true,latest=false,draft=false,immutable=true' \
         'historical_round8_evaluation_v10_policy: immutable-consumed-fail-not-formal-input' \
         'historical_round8_formal_bundle_content_policy: exclude-evaluation-holdout-consumed-private-blind-retired' \
@@ -521,12 +523,14 @@ policy_keys=(
   current_production_approval_status
   historical_round8_rc_artifact_version
   historical_round8_rc_publish_host_evidence
+  historical_round8_host_matrix
+  historical_round8_host_matrix_commit
 )
 policy_values=(
   v0.16-rc.4
   linux-amd64
   1.26.4
-  f71ec0eb6776854457892452cf28c47f0d658251
+  8423cce2d1004e80948a9e2c60ee69354c0aabc3
   .github/workflows/round9-gate.yml
   .github/workflows/round9-host-validation.yml
   .github/workflows/round9-release-rc.yml
@@ -571,6 +575,8 @@ policy_values=(
   NOT_GRANTED
   0.16-rc.2
   round8-host-evidence.json
+  v7.2.95
+  f71ec0eb6776854457892452cf28c47f0d658251
 )
 policy_bad_values=(
   v0.16-rc.2
@@ -621,6 +627,8 @@ policy_bad_values=(
   GRANTED
   0.16-rc.4
   round9-host-evidence.json
+  v7.2.102
+  8423cce2d1004e80948a9e2c60ee69354c0aabc3
 )
 for index in "${!policy_keys[@]}"; do
   key="${policy_keys[$index]}"

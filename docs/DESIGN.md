@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 ## Scope, release state, and invariants
@@ -16,10 +16,10 @@ be overwritten, relabeled, repaired, or republished as current Round 9 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.95` at
-  `f71ec0eb6776854457892452cf28c47f0d658251`, module sum
-  `h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA=`, and `go.mod` sum
-  `h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM=`.
+- CPA `v7.2.102` at
+  `8423cce2d1004e80948a9e2c60ee69354c0aabc3`, module sum
+  `h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=`, and `go.mod` sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 
 The root module, `integration/cpalatestcontract`, and
 `integration/pluginstorecontract` bind this same identity. A later CPA tag is
@@ -34,9 +34,9 @@ candidate binds category, clause, ownership scope, referent chain, and evidence
 occurrences. Only a candidate whose inspection, current execution act, harmful
 core, operational actionability, authorization state, and defensive/quoted
 scope all satisfy `CandidateBlockEligibility` may enter scoring or hard-floor
-processing. Historical assistant/tool/system content, tool schemas, unrelated
-JSON fields, code, logs, and distant long-text windows cannot fill missing
-dimensions for a current request.
+processing. Historical assistant/system/tool/unknown-role content, tool schemas,
+assistant tool-call arguments, unrelated JSON fields, code, logs, and distant
+long-text windows cannot fill missing dimensions for a current request.
 
 The implementation has seven non-negotiable invariants:
 
@@ -67,7 +67,7 @@ audit-migration, and operator-owned rollback contracts are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Exact-main CI,
-counted-Mock Host validation on the sole pinned CPA v7.2.95 identity, and
+counted-Mock Host validation on the sole pinned CPA v7.2.102 identity, and
 independent audit remain mandatory; self-tests do not authorize production
 Balanced mode.
 
@@ -101,7 +101,7 @@ a new CPA/provider shape requires review and an explicit canonical mapping.
 For an allowed request, `model.route` returns `Handled: false`. For a blocked
 request, it returns `Handled: true`, `TargetKind: self`. The executor returns an
 RPC error envelope with HTTP status 403 and the stable marker
-`cyber_abuse_guard_blocked`. The pinned CPA v7.2.95 ABI contract turns that
+`cyber_abuse_guard_blocked`. The pinned CPA v7.2.102 ABI contract turns that
 error into the native error shape for the
 entry protocol; the counted-Mock Host lane must reverify the exact client shapes
 against the same candidate bytes.
@@ -132,10 +132,11 @@ CPA serializes request bodies as Base64 inside `ModelRouteRequest`, so a raw
 request slightly above 6 MiB can exceed the native 8 MiB RPC copy budget.
 Returning a router error there would make CPA continue upstream. The native
 boundary therefore detects an oversized `model.route` before `C.GoBytes` and
-uses a no-copy, mode-aware path: `balanced`/`strict` self-route to the local
-executor with `scan_limit`; `off`/`observe`/`audit` retain their documented
-non-enforcing behavior. An oversized executor RPC returns the local 403 policy
-refusal and cannot fall back to a provider.
+uses a no-copy, mode-aware path: only `strict` self-routes to the local executor
+with `scan_limit`; `balanced`/`audit`/`observe`/`off` pass through according to
+their documented incomplete-inspection behavior. An oversized executor RPC
+returns a local 403 policy refusal in Strict and a local 413 size error in
+Balanced; neither executor result can fall back to a provider.
 
 ## Request extraction
 
@@ -299,11 +300,16 @@ name+ordinal. Mixed-ID, partial, duplicate, wrong-owner, malformed, orphaned, or
 nonterminal groups are inert. A Responses `previous_response_id` plus an output
 alone is also inert because the plugin cannot prove Host session ownership,
 pending-call state, prior consumption, or replay protection.
-Assistant history, tool schemas, nonterminal tool results, and other carrier
-content remain inert or auditable unless a later current trusted-user directive
-proves the bounded referent chain and the reactivated candidate passes the same
-eligibility gate. Ambiguous or role-less envelopes retain bounded inspection
-and audit evidence, but never gain request authority.
+Historical assistant, system, tool, and unknown-role content remains ineligible
+as a referent source and may contribute only bounded inspection or audit
+evidence. A bare current-user referent can reactivate only the newest eligible
+trusted RoleUser review; tool schemas and assistant tool-call arguments are never
+historical referent payloads. An explicit current-user harmful restatement is
+evaluated on its own. A structurally proven active request-local system/developer
+instruction or terminal tool result may still block its own independently
+complete candidate as described above; that is direct candidate evaluation, not
+historical referent promotion. Ambiguous or role-less envelopes never gain
+request authority.
 
 ### Defensive quotation and referential reactivation
 
@@ -364,7 +370,8 @@ reclassified so benign code remains available. Scope-cap eviction first proves
 a complete bounded inert review or classifies the retained carrier; fully safe
 scopes remain evictable instead of exhausting the 64-scope budget.
 
-The most recent eligible user review can be linked to one later user follow-up.
+Only the newest eligible trusted RoleUser safety review can be linked to one
+later user follow-up.
 An affirmative referential directive such as `execute it`, `proceed`, or
 `go ahead`, including bounded polite or conditional forms, reclassifies only the
 quoted referent. The final score, category, rule IDs, evidence, context, and
@@ -372,7 +379,7 @@ behavior graph are therefore the same as a direct classification of that
 referent. Explanations, meaning/risk/consequence questions, negation, and
 remediation do not reactivate it. A review carried by assistant, system, tool,
 or unknown-role provenance cannot establish a user referent, and an older review
-is discarded when a newer eligible RoleUser review is observed. User
+is discarded when a newer eligible trusted RoleUser review is observed. User
 attribution is separate: mixed-trust RoleUser pairs retain conservative direct
 classification with `FindingOriginNonUserOrUntrusted`, but cannot enter subject
 accumulation.
@@ -783,8 +790,11 @@ prove that an oversized request receives 413 before CPA reads it.
   the current valid registration so CPA keeps the plugin active;
 - rule load/validation failure: registration/reconfigure fails;
 - malformed request: allow and optionally audit `parse_error` outside `off`;
-- RPC beyond the native copy budget: no-copy local refusal in Balanced/Strict;
-  allow in Off/Observe/Audit, with a minimal event in audit-capable modes;
+- RPC beyond the native copy budget: a model-route callback self-routes only in
+  Strict; Balanced/Off/Observe/Audit pass through after recording the applicable
+  incomplete-inspection counters/event. If an executor callback is nevertheless
+  invoked directly, Strict returns the local policy 403 and every non-strict
+  mode returns a local 413 size error;
 - audit failure: continue classifying and blocking;
 - panic in `model.route`: increment counters and, when a validated
   Balanced/Strict runtime is active, return a successful local self-route so
@@ -833,26 +843,38 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-The v7.2.95 plugin-store contract module first proves that exact upstream
-Host tests still exist, then runs those names precisely instead of relying on a
-broad wildcard. It also calls the official `pluginstore.InstallArchive` for both
-synthetic bytes and, when supplied, the real build artifact. These checks cover
-store naming, root-only library layout, checksum, installed path/bytes, repeat
-installation, tamper repair, priority ordering, and documented Host fallback.
-They remain source/installer compatibility evidence. Current admission requires
-the v7.2.95 counted-Mock Host run on the same candidate and independent
-verification.
+Both v7.2.102 compatibility contract modules first prove that the named critical
+upstream Host tests still exist and then each executes the complete upstream
+`internal/pluginhost` package for the current platform. Their CI coverage is
+intentionally overlapping; it is neither an exact-name-only run nor a pair of
+non-duplicative contracts. The plugin-store module also calls the official
+`pluginstore.InstallArchive` for both synthetic bytes and, when supplied, the
+real build artifact. These checks cover store naming, root-only library layout,
+checksum, installed path/bytes, repeat installation, tamper repair, priority
+ordering, and documented Host fallback. They remain source/installer
+compatibility evidence. Current admission requires the v7.2.102 counted-Mock
+Host run on the same candidate and independent verification.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,
 starts a local mock OpenAI-compatible upstream, and starts CPA with the plugin.
 It installs the real store ZIP, loads the installed Guard, and asserts that safe
-requests increment Auth Selector, Provider, Usage, and Mock Upstream counters
-while blocked requests leave all four at zero. It covers OpenAI Chat, OpenAI
+requests carry a valid CPA credential-selection trace, cross Provider execution
+and Mock Upstream, and increment Usage, while blocked requests expose no CPA
+credential-selection trace and leave Provider, Usage, and Mock Upstream at zero.
+The local harness does not claim a counted Auth Selector delta; that remains a
+protected exact-candidate counted-Mock requirement. It covers OpenAI Chat, OpenAI
 Responses, Anthropic, and Gemini non-streaming/streaming paths, pre-SSE 403,
 token-count 403 where exposed, adapter-level nil-response/status-error 405 for `http_request`, safe model/body
 and tool preservation, management authentication, reconfiguration, role-aware
 follow-ups, encoded tool payloads, a Base64-expanded RPC above 8 MiB, and
 disabled-plugin recovery.
+
+The 2026-07-27 working-tree report records a real local CPA v7.2.102 Host and
+Router run for a generated Linux amd64 `0.16-dirty` `.so`. That result proves the
+development artifact exercised the reported loopback/Mock paths; it is not a
+clean exact-main candidate, protected counted-Mock record, independently audited
+artifact, release admission, or production approval, and it cannot be carried
+forward to different bytes.
 
 A separately compiled minimal Router/executor fixture exercises priority
 preemption, equal-priority plugin-ID ordering, invalid targets, missing or

@@ -7,7 +7,7 @@ classifier. The authoritative path is:
     protected no-checkout GitHub job
       -> sudo -n /usr/local/libexec/cag-round9-eval-broker
       -> fixed root-owned sandbox adapter
-      -> CPA v7.2.95 HTTP black box with the exact Phase 1 SO
+      -> CPA v7.2.102 HTTP black box with the exact Phase 1 SO
       -> fixed root-owned external evaluator
       -> Ed25519 signed aggregate envelope
       -> protected remote Git tag one-shot ledger
@@ -89,8 +89,8 @@ directory. The adapter must create a canonical descriptor containing:
     phase_protocol=authenticated Audit -> Balanced -> Strict
     runtime_checks.schema=round9-external-cpa-runtime-checks/v1
     candidate_so_sha256=<exact Phase 1 SO>
-    cpa_version=v7.2.95
-    cpa_commit=f71ec0eb6776854457892452cf28c47f0d658251
+    cpa_version=v7.2.102
+    cpa_commit=8423cce2d1004e80948a9e2c60ee69354c0aabc3
     production_accessed=false
     real_provider_contacted=false
 

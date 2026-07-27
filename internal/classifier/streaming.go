@@ -585,6 +585,7 @@ type ScanSession struct {
 	profiledGroupRefs              []profiledSegmentRef
 	profiledGroupRisk              []bool
 	profiledGroupComplete          []bool
+	profiledGroupProofTruncated    bool
 	profiledGroupActiveDirective   bool
 	profiledGroupStructuredTool    bool
 	profiledGroupAuthorityScope    EnforcementScope
@@ -1058,11 +1059,6 @@ func (s *ScanSession) finishField(field *streamingField) {
 					candidate, segment.ConversationIndex, segment.TurnIndex,
 					enforcementScopeForProfiledGroup(refs),
 				)
-				if profiledHistoricalReferentEligible(segment) {
-					s.clearProfiledHistoricalCandidate()
-					s.rememberProfiledHistoricalCandidate(candidate, len(refs))
-					hasHistoricalWindowCandidate = resultHasEligibleMaliciousWinner(candidate, s.thresholds)
-				}
 			} else if profiledHistoricalReferentEligible(segment) {
 				s.classifier.annotateProfiledResult(&candidate, refs, false, s.policy, s.mode, s.thresholds)
 			} else {
@@ -1075,8 +1071,9 @@ func (s *ScanSession) finishField(field *streamingField) {
 				// Deferred until Finish proves that no later current user turn owns
 				// the request. A historical assistant tool call must stay inert.
 			} else if profiledHistoricalReferentEligible(segment) {
-				s.rememberProfiledHistoricalCandidate(candidate, len(refs))
-				hasHistoricalWindowCandidate = resultHasEligibleMaliciousWinner(candidate, s.thresholds)
+				// Historical user text is independently inspected above, but only the
+				// exact closed safety-review core reconstructed by the role-summary
+				// group below may enter the bare-referent slot.
 			} else if s.profiledStreamingClassifiable(segment) || unclosedSafetyCommitted {
 				s.considerWithEnforcementScope(
 					candidate, origin, enforcementScopeForProfiledGroup(refs),
@@ -1168,6 +1165,18 @@ func (s *ScanSession) finishField(field *streamingField) {
 				candidate, classified := batch.classify([]string{referent}, false)
 				if !classified {
 					return
+				}
+				if profiledField {
+					segment := fieldSegment
+					segment.Text = rawField
+					refs := []profiledSegmentRef{{index: int(field.id), segment: segment}}
+					if rawField == "" || !s.classifier.rebaseProfiledReconstructedCore(
+						&candidate, refs, referent, s.policy,
+					) {
+						// Cross-window review proof intentionally retains no prompt bytes.
+						// Keep its field owner but publish no wrapper-relative span claim.
+						profiledCarrierRunClearOccurrenceOffsets(&candidate)
+					}
 				}
 				summary.inertQuotedReferent = candidate
 				summary.hasInertQuotedReferent = true
@@ -1589,6 +1598,56 @@ func (s *ScanSession) rememberProfiledHistoricalCandidate(result Result, refCoun
 	s.profiledHistoricalRefCount = refCount
 }
 
+func (s *ScanSession) refreshProfiledHistoricalReviewGroup(
+	batch *roleClassificationBatch,
+) bool {
+	if s == nil || s.classifier == nil || len(s.profiledGroupRefs) == 0 ||
+		len(s.profiledGroupRefs) != len(s.profiledGroupParts) ||
+		len(s.profiledGroupComplete) != len(s.profiledGroupRefs) {
+		return true
+	}
+	if s.profiledGroupProofTruncated {
+		// Once any same-scope field has been evicted, the retained tail cannot
+		// prove that the complete historical group was one closed safety review.
+		s.clearProfiledHistoricalCandidate()
+		return true
+	}
+	for _, complete := range s.profiledGroupComplete {
+		if !complete {
+			// The newest trusted historical user group still owns the slot, but an
+			// incomplete exact-text proof can never populate it.
+			s.clearProfiledHistoricalCandidate()
+			return true
+		}
+	}
+	group := profiledSegmentGroup{
+		refs:  s.profiledGroupRefs,
+		parts: s.profiledGroupParts,
+	}
+	quoted, evidenceRefs, inert := s.classifier.profiledHistoricalSafetyReviewReferent(group)
+	// Every newest trusted historical user group is a locality barrier. Clear a
+	// previously retained review before deciding whether this complete group is
+	// itself an exact safety review.
+	s.clearProfiledHistoricalCandidate()
+	if !inert {
+		return true
+	}
+	candidate, classified := batch.classify([]string{quoted}, false)
+	if !classified {
+		return false
+	}
+	if !s.classifier.rebaseProfiledReconstructedCore(&candidate, evidenceRefs, quoted, s.policy) {
+		// A reconstructed quote may be enforced only after every dimension is
+		// rebound to the original field and span.
+		return true
+	}
+	s.classifier.annotateProfiledResult(
+		&candidate, evidenceRefs, false, s.policy, s.mode, s.thresholds,
+	)
+	s.rememberProfiledHistoricalCandidate(candidate, len(s.profiledGroupRefs))
+	return true
+}
+
 func (s *ScanSession) profiledHistoricalReferentCandidate(result Result) (Result, bool) {
 	if s == nil || result.Truncated ||
 		result.Coverage.State != "" && result.Coverage.State != CoverageComplete ||
@@ -1990,6 +2049,47 @@ func (s *ScanSession) appendProfiledStreamingGroupUnit(
 	}
 }
 
+func (s *ScanSession) trimProfiledStreamingGroup(segment extract.Segment) bool {
+	if s == nil || len(s.profiledGroupParts) <= maxRoleClassifierSegments {
+		return true
+	}
+	// Trimming is acceptable for bounded generic classification, but it is never
+	// a complete historical-review proof: an evicted field could be the plain
+	// attack or open directive that disqualifies the retained closed-looking tail.
+	s.profiledGroupProofTruncated = true
+	evictedRisk := len(s.profiledGroupRisk) != 0 && s.profiledGroupRisk[0]
+	independentBlock := s.hasBest && resultHasEligibleBlockingCandidate(s.best, s.thresholds)
+	if evictedRisk && !independentBlock {
+		switch s.profiledGroupAuthorityScope {
+		case EnforcementScopeRequestLocalTool:
+			// A same-group tool result is not known to be terminal until the
+			// complete request has arrived. Retain only its coordinates and defer
+			// the incomplete disposition to Finish.
+			s.rememberProfiledPendingToolIncomplete(segment)
+		case EnforcementScopeRequestLocalSystem:
+			// Only request-local non-user authority needs this additional
+			// overflow guard. Current-user and unknown groups continue through
+			// the established Round 8 overflow ledger, which preserves benign
+			// owner and cancellation proofs without false incomplete results.
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return false
+		}
+	}
+	copy(s.profiledGroupParts, s.profiledGroupParts[len(s.profiledGroupParts)-maxRoleClassifierSegments:])
+	clear(s.profiledGroupParts[maxRoleClassifierSegments:])
+	s.profiledGroupParts = s.profiledGroupParts[:maxRoleClassifierSegments]
+	copy(s.profiledGroupRefs, s.profiledGroupRefs[len(s.profiledGroupRefs)-maxRoleClassifierSegments:])
+	clear(s.profiledGroupRefs[maxRoleClassifierSegments:])
+	s.profiledGroupRefs = s.profiledGroupRefs[:maxRoleClassifierSegments]
+	copy(s.profiledGroupRisk, s.profiledGroupRisk[len(s.profiledGroupRisk)-maxRoleClassifierSegments:])
+	clear(s.profiledGroupRisk[maxRoleClassifierSegments:])
+	s.profiledGroupRisk = s.profiledGroupRisk[:maxRoleClassifierSegments]
+	copy(s.profiledGroupComplete, s.profiledGroupComplete[len(s.profiledGroupComplete)-maxRoleClassifierSegments:])
+	clear(s.profiledGroupComplete[maxRoleClassifierSegments:])
+	s.profiledGroupComplete = s.profiledGroupComplete[:maxRoleClassifierSegments]
+	return true
+}
+
 func profiledStreamingGenericGroupView(
 	parts []string,
 	refs []profiledSegmentRef,
@@ -2032,13 +2132,36 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	requestLocalSystemCarrier := profiledRequestLocalSystemCarrier(segment) &&
 		profiledSelfContainedCarrierKind(segment.ContentKind)
 	if (profiledContentInert(segment.ContentKind) || profiledStreamingCurrentTrustedCarrier(segment)) &&
-		!historicalReferent && !requestLocalSystemCarrier {
+		!historicalReferent && !requestLocalSystemCarrier && !pendingTool {
 		s.quotedOrInertSuppressed = true
 		return
 	}
 	key := profiledStreamingGroupKey(segment, int(current.id))
 	if historicalReferent {
 		s.beginProfiledHistoricalScope(segment, int(current.id))
+	}
+	if historicalReferent && current.hasInertQuotedReferent && len(current.sample) == 0 {
+		if !s.beginProfiledStreamingGroup(key) {
+			return
+		}
+		// The exact review candidate is content-free at this point. Represent its
+		// group membership with an incomplete marker: it may own a one-field slot,
+		// while any same-scope neighbor conservatively invalidates whole-group proof.
+		s.appendProfiledStreamingGroupUnit(
+			int(current.id), "", segment, currentRisk != nil && currentRisk.hasRisk(), false,
+		)
+		if !s.trimProfiledStreamingGroup(segment) {
+			return
+		}
+		s.clearProfiledHistoricalCandidate()
+		if !s.profiledGroupProofTruncated && len(s.profiledGroupRefs) == 1 {
+			candidate := current.inertQuotedReferent
+			s.classifier.annotateProfiledResult(
+				&candidate, s.profiledGroupRefs, false, s.policy, s.mode, s.thresholds,
+			)
+			s.rememberProfiledHistoricalCandidate(candidate, 1)
+		}
+		return
 	}
 	if !current.sampleComplete {
 		if profiledRiskOwner {
@@ -2059,17 +2182,22 @@ func (s *ScanSession) considerProfiledRoleSummary(
 				s.rememberProfiledPreviousUserRisk(segment, currentRisk, false)
 			}
 		}
-		if historicalReferent && current.hasInertQuotedReferent {
-			refs := []profiledSegmentRef{{index: int(current.id), segment: segment}}
-			candidate := current.inertQuotedReferent
-			s.classifier.annotateProfiledResult(&candidate, refs, false, s.policy, s.mode, s.thresholds)
+		if historicalReferent {
+			if !s.beginProfiledStreamingGroup(key) {
+				return
+			}
+			// Preserve only coordinates for an overlong historical field. A
+			// field-local incremental proof can populate a single-field slot, but
+			// the incomplete group marker guarantees that any same-scope neighbor
+			// invalidates it instead of being silently omitted from whole-group proof.
+			s.appendProfiledStreamingGroupUnit(
+				int(current.id), "", segment, currentRisk != nil && currentRisk.hasRisk(), false,
+			)
+			if !s.trimProfiledStreamingGroup(segment) {
+				return
+			}
 			s.clearProfiledHistoricalCandidate()
-			s.rememberProfiledHistoricalCandidate(candidate, len(refs))
-		} else if historicalReferent && !current.hasHistoricalWindowCandidate {
-			// The nearest incomplete scope owns a bare referent even when it is
-			// benign. Clear any older attack unless this exact long field already
-			// produced a blockable, privacy-safe window Result.
-			s.clearProfiledHistoricalCandidate()
+			return
 		}
 		if requestLocalSystemCarrier {
 			if !s.beginProfiledStreamingGroup(key) {
@@ -2168,37 +2296,8 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			return
 		}
 	}
-	if len(s.profiledGroupParts) > maxRoleClassifierSegments {
-		evictedRisk := len(s.profiledGroupRisk) != 0 && s.profiledGroupRisk[0]
-		independentBlock := s.hasBest && resultHasEligibleBlockingCandidate(s.best, s.thresholds)
-		if evictedRisk && !independentBlock {
-			switch s.profiledGroupAuthorityScope {
-			case EnforcementScopeRequestLocalTool:
-				// A same-group tool result is not known to be terminal until the
-				// complete request has arrived. Retain only its coordinates and defer
-				// the incomplete disposition to Finish.
-				s.rememberProfiledPendingToolIncomplete(segment)
-			case EnforcementScopeRequestLocalSystem:
-				// Only request-local non-user authority needs this additional
-				// overflow guard. Current-user and unknown groups continue through
-				// the established Round 8 overflow ledger, which preserves benign
-				// owner and cancellation proofs without false incomplete results.
-				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
-				return
-			}
-		}
-		copy(s.profiledGroupParts, s.profiledGroupParts[len(s.profiledGroupParts)-maxRoleClassifierSegments:])
-		clear(s.profiledGroupParts[maxRoleClassifierSegments:])
-		s.profiledGroupParts = s.profiledGroupParts[:maxRoleClassifierSegments]
-		copy(s.profiledGroupRefs, s.profiledGroupRefs[len(s.profiledGroupRefs)-maxRoleClassifierSegments:])
-		clear(s.profiledGroupRefs[maxRoleClassifierSegments:])
-		s.profiledGroupRefs = s.profiledGroupRefs[:maxRoleClassifierSegments]
-		copy(s.profiledGroupRisk, s.profiledGroupRisk[len(s.profiledGroupRisk)-maxRoleClassifierSegments:])
-		clear(s.profiledGroupRisk[maxRoleClassifierSegments:])
-		s.profiledGroupRisk = s.profiledGroupRisk[:maxRoleClassifierSegments]
-		copy(s.profiledGroupComplete, s.profiledGroupComplete[len(s.profiledGroupComplete)-maxRoleClassifierSegments:])
-		clear(s.profiledGroupComplete[maxRoleClassifierSegments:])
-		s.profiledGroupComplete = s.profiledGroupComplete[:maxRoleClassifierSegments]
+	if !s.trimProfiledStreamingGroup(segment) {
+		return
 	}
 	// A fenced/configuration field is ordinarily retained as inert historical
 	// evidence. Once the same profiled group proves a request-local system
@@ -2207,18 +2306,8 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem {
 		historicalReferent = false
 	}
-	if historicalReferent && len(s.profiledGroupRefs) != 0 {
-		owner := s.profiledGroupRefs[len(s.profiledGroupRefs)-1].segment
-		if owner.Role == extract.RoleAssistant &&
-			isClearNonUserSafetyContent(owner.Role, strings.Join(s.profiledGroupParts, "\n")) {
-			// A refusal is transparent to the request it refuses. It neither
-			// becomes the referent nor clears the immediately preceding one.
-			return
-		}
-	}
-
 	genericParts, genericRefs := profiledStreamingGenericGroupView(
-		s.profiledGroupParts, s.profiledGroupRefs, historicalReferent,
+		s.profiledGroupParts, s.profiledGroupRefs, historicalReferent || pendingTool,
 	)
 	if len(genericParts) == 0 {
 		if historicalReferent && !current.hasHistoricalWindowCandidate {
@@ -2226,6 +2315,12 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			// Generic classification must not consume its text, but a benign field
 			// must terminate an older malicious carrier just as the batch path does.
 			s.clearProfiledHistoricalCandidate()
+		}
+		return
+	}
+	if historicalReferent {
+		if !s.refreshProfiledHistoricalReviewGroup(batch) {
+			return
 		}
 		return
 	}
@@ -2251,15 +2346,6 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			s.clearProfiledHistoricalCandidate()
 			s.rememberProfiledHistoricalCandidate(candidate, len(refs))
 		}
-		return
-	}
-	if historicalReferent {
-		if current.hasInertQuotedReferent {
-			candidate = current.inertQuotedReferent
-		}
-		s.classifier.annotateProfiledResult(&candidate, genericRefs, false, s.policy, s.mode, s.thresholds)
-		s.clearProfiledHistoricalCandidate()
-		s.rememberProfiledHistoricalCandidate(candidate, len(genericRefs))
 		return
 	}
 	candidate = s.prepareProfiledCandidate(
@@ -3987,6 +4073,7 @@ func (s *ScanSession) clearProfiledGroup() {
 	s.profiledGroupRisk = nil
 	clear(s.profiledGroupComplete)
 	s.profiledGroupComplete = nil
+	s.profiledGroupProofTruncated = false
 	s.profiledGroupActiveDirective = false
 	s.profiledGroupStructuredTool = false
 	s.profiledGroupAuthorityScope = EnforcementScopeNone

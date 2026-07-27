@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -40,10 +39,10 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.95",
-	Commit:    "f71ec0eb6776854457892452cf28c47f0d658251",
-	ModuleSum: "h1:QHQuGuPwOOTdyk5G7s0gjirdQtCM7NtxHRGS1I2xNtA=",
-	GoModSum:  "h1:he/Nx8K5RKvpcnedn0dmR8vVgHmetQ3/wutuPibWuRM=",
+	Version:   "v7.2.102",
+	Commit:    "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
+	ModuleSum: "h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=",
+	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
 var latestCriticalCPAHostTests = []string{
@@ -65,6 +64,15 @@ var latestCriticalCPAHostTests = []string{
 	"TestHostRouteModelSkipsUnavailableBuiltinProvider",
 	"TestHostRouteModelSkipsUnavailableExecutorTargets",
 	"TestHostRouteModelUsesHighestPriorityFirstMatch",
+	"TestGuardedPluginClientShutdownContextDetachesBlockedCall",
+	"TestHostCanceledBlockedLoadKeepsOneLoaderAndCleanupPerPlugin",
+	"TestHostCanceledInitializationDiscardsBlockedClient",
+	"TestHostCanceledLoadDiscardsLateClientWithoutReplacingCurrentPlugin",
+	"TestHostCanceledRegisterRetainsLoadTokenUntilShutdownReturns",
+	"TestHostCancellationUnderMutationLockDoesNotInsertLoadedPlugin",
+	"TestHostShutdownAllRetainsBlockedLoadTokenUntilCleanup",
+	"TestHostUnloadPluginContextDetachesBlockedCall",
+	"TestOwnsExecutorDistinguishesHostAdapters",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
 }
 
@@ -117,13 +125,14 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 		}
 	}
 
-	exactNames := make([]string, 0, len(latestCriticalCPAHostTests))
-	for _, name := range latestCriticalCPAHostTests {
-		exactNames = append(exactNames, regexp.QuoteMeta(name))
-	}
+	// Execute the complete upstream Host suite for the current platform. The
+	// required-name check above keeps the contract explicit, while running the
+	// whole package prevents newly added lifecycle, cancellation, cleanup,
+	// executor-ownership, or routing regressions from silently falling outside
+	// a hand-maintained allowlist.
 	runLatestGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
-		"-run", "^("+strings.Join(exactNames, "|")+")$", cpaLatestPluginHostPackage,
+		cpaLatestPluginHostPackage,
 	)
 }
 
@@ -175,7 +184,10 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		}
 	}
 
-	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket.go")
+	// CPA v7.2.102 split request normalization out of the websocket transport
+	// file. Pin the semantic implementation file while the upstream behavior
+	// tests above continue to guard the public contract.
+	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")
 	handlerSource, err := os.ReadFile(handlerSourcePath)
 	if err != nil {
 		t.Fatalf("read latest CPA Responses handler source: %v", err)

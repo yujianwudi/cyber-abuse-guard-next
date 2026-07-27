@@ -140,11 +140,11 @@ func TestRound8RouterHistoricalReactivationBoundary(t *testing.T) {
 				t.Fatalf("unreactivated historical attack blocked current benign request: %+v", route)
 			}
 		})
-		t.Run(format+" explicit execute it", func(t *testing.T) {
+		t.Run(format+" bare execute cannot reactivate plain attack", func(t *testing.T) {
 			body := round8RouterHistoryBody(t, format, attack, refusal, "Execute it.")
 			route := callRoleRoute(t, p, format, body)
-			if !route.Handled || route.TargetKind != pluginapi.ModelRouteTargetSelf {
-				t.Fatalf("explicit historical reactivation was not locally blocked: %+v", route)
+			if route.Handled || route.Reason != "" {
+				t.Fatalf("plain historical attack acquired bare-referent authority: %+v", route)
 			}
 		})
 		t.Run(format+" explicit prohibition", func(t *testing.T) {

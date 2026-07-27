@@ -9,7 +9,7 @@ import (
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 )
 
-func TestRound8ExplicitReferentReactivatesHistoricalInertContentKinds(t *testing.T) {
+func TestRound9BareReferentDoesNotReactivateHistoricalCarrierContentKinds(t *testing.T) {
 	t.Parallel()
 
 	guard := newDefaultClassifier(t)
@@ -49,11 +49,10 @@ func TestRound8ExplicitReferentReactivatesHistoricalInertContentKinds(t *testing
 				),
 				"stream": classifyRound8StreamingSegments(t, guard, segments),
 			} {
-				if result.Action != ActionBlock || result.Category != rules.CategoryCredentialTheft ||
-					!resultContainsRuleID(result, "CRED-002") {
-					t.Fatalf("%s historical %s referent = %+v, want CRED-002 block", path, testCase.name, result)
+				if result.Action == ActionBlock || resultHasEligibleMaliciousWinner(result, DefaultThresholds()) ||
+					result.DecisionExplanation != nil && result.DecisionExplanation.ReferentLinkUsed {
+					t.Fatalf("%s historical %s carrier acquired bare-referent authority: %+v", path, testCase.name, result)
 				}
-				assertRound8ReferentExplanation(t, result, 2)
 			}
 		})
 	}

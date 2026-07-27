@@ -2,13 +2,22 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
-> The Round 6 addendum below is current design/handoff context. The older
-> single-repository review is retained afterward as historical evidence; its
-> branch, commit, classifier identity, validation, and taxonomy statements must
-> not be inherited as v0.15 PASS evidence.
+> **Frozen historical snapshot.** The Round 6 addendum and the older
+> single-repository review below preserve their historical wording and evidence,
+> including CPA v7.2.95 as the then-current Round 6 target. Their branch, commit,
+> classifier identity, validation, taxonomy, and "current" statements must not
+> be inherited as current release or v0.15 PASS evidence.
+>
+> The current formal CPA identity is:
+>
+> ```text
+> current_formal_cpa: v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3
+> current_module_sum: h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=
+> current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+> ```
 
 ## Round 6 CPA pinned-compatibility addendum
 

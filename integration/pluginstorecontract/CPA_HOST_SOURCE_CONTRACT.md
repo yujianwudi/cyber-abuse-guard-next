@@ -1,10 +1,11 @@
-# CPA v7.2.95 host routing source contract
+# CPA v7.2.102 host routing source contract
 
 This isolated module pins `github.com/router-for-me/CLIProxyAPI/v7` to
-`v7.2.95` at commit `f71ec0eb6776854457892452cf28c47f0d658251`.
+`v7.2.102` at commit `8423cce2d1004e80948a9e2c60ee69354c0aabc3`.
 `host_source_contract_test.go` verifies the resolved module version, tag commit,
 and both module checksums, lists the official `internal/pluginhost` tests,
-requires a fixed set of critical names, and then runs only those exact tests.
+requires 28 fixed critical names, and then runs the complete upstream Host test
+suite for the current Linux platform.
 
 Run only this contract:
 
@@ -26,7 +27,10 @@ The upstream selection is intentionally broad enough to cover:
 - panic recovery, plugin fuse, and fallback to the next Router;
 - invalid, missing, or unavailable executor targets;
 - executor readiness failures caused by a missing identifier, unsupported
-  formats, or an OAuth-only scope.
+  formats, or an OAuth-only scope;
+- canceled load/register/unload/shutdown cleanup, blocked-call context
+  detachment, retained load-token ownership, and `OwnsExecutor` adapter
+  separation.
 
 `TestCPAHostFailOpenFixtureContract` then adds a test-only fixture to an
 ephemeral copy of the checksum-verified upstream source. It covers guard-first

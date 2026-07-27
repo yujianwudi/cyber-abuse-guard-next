@@ -2,8 +2,22 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
+
+> **Frozen historical snapshot.** Except for the current classifier identity
+> above and this notice, the body below preserves the Round 6 / v0.15 release
+> posture. References to CPA v7.2.95 as "current" or as the current CI/Host
+> target are scoped only to that frozen Round 6 snapshot and are not the active
+> repository release identity.
+>
+> The current formal CPA identity is:
+>
+> ```text
+> current_formal_cpa: v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3
+> current_module_sum: h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=
+> current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+> ```
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**; a candidate-bound
 `evaluation-v11` or later first-and-only `CONSUMED / PASS` attestation is also

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -13,7 +13,7 @@ current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e040
 > **Current development state:** Round 9 redesigns Balanced around
 > candidate/clause/scope/referent-bound block eligibility and prepares the Linux
 > amd64 `v0.16-rc.4` prerelease lane. The fixed source/compile target is CPA
-> `v7.2.95` only. The immutable `v0.16-rc.3` Tag records a deterministic Phase 1
+> `v7.2.102` only. The immutable `v0.16-rc.3` Tag records a deterministic Phase 1
 > dependency-bootstrap failure and has no candidate assets or Release. No
 > `v0.16-rc.4` Tag, Release, or stable `v0.16` is created by the source changes
 > alone. The protected
@@ -56,7 +56,7 @@ classifier.
 | Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
 | GitHub publication | `v0.16-rc.3` has an annotated Tag but no Release or Actions artifact; no `v0.16-rc.4` Tag or Release exists. `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
 | Last exact-main baseline | `77cf2de50f89af12a4a1e7c651a2ac0074cabcdd` / tree `ef5f35086ece6fcd415db1d5578ad89d4df55929`; CI `30116119718`, Round 9 gate `30116119599`, and CodeQL `30116119625` passed. The subsequent `v0.16-rc.3` Phase 1 run `30118817188` failed before asset creation because PyYAML was undeclared in the fixed container |
-| CPA source/compile target | `v7.2.95` (`f71ec0eb6776854457892452cf28c47f0d658251`) |
+| CPA source/compile target | `v7.2.102` (`8423cce2d1004e80948a9e2c60ee69354c0aabc3`) |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
@@ -66,16 +66,28 @@ classifier.
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
 | Validation platform | Linux amd64 only; emitted numeric GLIBC ABI versions must be `<= 2.34` |
 | Out of scope | Windows, macOS, musl/Alpine, real Provider traffic, production deployment/validation |
-| CPA Host matrix | CPA v7.2.95, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
+| CPA Host matrix | CPA v7.2.102, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v9` / `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`; Host and release binding remain pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v9` / `72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`; Host and release binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |
 
 ### Latest source-only runtime remediation
 
+- The active compatibility target is now official CPA `v7.2.102` at
+  `8423cce2d1004e80948a9e2c60ee69354c0aabc3`. Linux CI checks the complete
+  upstream Host suite and public plugin ABI/API, requires the fixed release to
+  remain GitHub `releases/latest`, and loads the built candidate `.so` through
+  CPA's real Host path. Frozen Round 6/8 and v0.15/v0.16-rc.2 records retain
+  their original CPA v7.2.95 identity.
+- Training telemetry can no longer hide real credential solicitation using
+  `prompt`, `induce`, `receive`, or `solicit`; four-role batch/stream
+  regressions require complete phishing blocks. Duplicate intrusion-alert
+  suppression and other defensive monitoring maintenance remain nonblocking
+  unless the request explicitly ties the control change to hiding malware,
+  unauthorized access, or another hostile purpose.
 - The four public Keysmith `system`/terminal-`tool` middle/back carrier cases
   now require and receive a unique same-scope request-local META owner; nearby
   historical, assistant, nonterminal, or inert material cannot borrow that
@@ -91,7 +103,7 @@ classifier.
   and Gemini require their native call/result shape and owner. Gemini accepts
   only one adjacent terminal transaction whose whole group is either explicit-
   ID matched or ID-free name+ordinal matched; all strings below its exact
-  `functionResponse.response` object, including CPA v7.2.95 `result` and
+  `functionResponse.response` object, including CPA v7.2.102 `result` and
   `output`, are scanned, but outer siblings remain inert. Claude permits the
   CPA-preserved `cache_control` object on a text block without treating its
   metadata as result text. A Responses
@@ -214,7 +226,7 @@ opaque-media dispositions keep the full configured audit path.
 
 Repository-neutral regressions derived from four public prompt-override source
 pins cover high-authority `instructions`, Chat and Responses tool descriptions,
-CPA v7.2.95 Codex Desktop `additional_tools`, assistant/tool history, defensive
+CPA v7.2.102 Codex Desktop `additional_tools`, assistant/tool history, defensive
 domain catalogs, 1,397-17,166 decoded-byte templates, and the 16 KiB boundary
 without adding repository-name signatures or complete third-party prompts. See the
 [public jailbreak repository review](docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md).
@@ -361,7 +373,7 @@ curl -H "X-Management-Key: $CPA_MANAGEMENT_KEY" \
   "http://127.0.0.1:8317/v0/management/plugins/cyber-abuse-guard/raw-captures?limit=20"
 ```
 
-CPA v7.2.95 HTML-escapes the legacy `raw_preview` string. That field remains
+CPA v7.2.102 HTML-escapes the legacy `raw_preview` string. That field remains
 available for compatibility but is explicitly deprecated. New consumers should
 use the canonical `raw_preview_b64` field when byte-stable review text is
 required. Base64 is transport encoding, not encryption or redaction: decoded
@@ -458,8 +470,8 @@ The actual 2026-07-20 v0.15 publication did not complete that protected chain;
 its owner-reported sandbox result and manual-build disclosure live in the
 GitHub Release notes and are not upgraded here into independent evidence.
 
-The Round 9 prerelease development target is pinned to CPA v7.2.95 at
-`f71ec0eb6776854457892452cf28c47f0d658251`. Later upstream
+The Round 9 prerelease development target is pinned to CPA v7.2.102 at
+`8423cce2d1004e80948a9e2c60ee69354c0aabc3`. Later upstream
 versions do not automatically change the supported or release-admitted target.
 Older observations remain non-executable historical records and are not current
 release or Host evidence.

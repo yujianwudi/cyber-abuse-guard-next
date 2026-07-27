@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 Last updated: 2026-07-25 (Asia/Shanghai)
@@ -11,7 +11,7 @@ Last updated: 2026-07-25 (Asia/Shanghai)
 
 The active development target is Linux amd64 `v0.16-rc.4`,
 classifier-policy-v9, ruleset 1.0.10, audit schema v6, and CPA
-`v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`. The protected Host lane may
+`v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3`. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
 counted Mock. Final classifier/public-corpus freeze, exact-main CI, reproducible
 release assets, protected Host execution, independent audit, tag, and GitHub

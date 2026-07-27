@@ -1223,10 +1223,10 @@ def validate_candidate(value: Any) -> dict[str, Any]:
     require_pattern(candidate["commit"], HEX40, "candidate commit")
     require_pattern(candidate["tree"], HEX40, "candidate tree")
     require_pattern(candidate["so_sha256"], HEX64, "candidate SO sha256")
-    require_literal(candidate["cpa_version"], "v7.2.95", "candidate CPA version")
+    require_literal(candidate["cpa_version"], "v7.2.102", "candidate CPA version")
     require_literal(
         candidate["cpa_commit"],
-        "f71ec0eb6776854457892452cf28c47f0d658251",
+        "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
         "candidate CPA commit",
     )
     policy = require_pattern(
@@ -1833,10 +1833,10 @@ def validate_execution(value: Any) -> dict[str, Any]:
     require_pattern(execution["sandbox_id"], IDENTIFIER, "sandbox id")
     require_pattern(execution["daemon_id"], IDENTIFIER, "daemon id")
     require_pattern(execution["probe_image_id"], SHA256_DIGEST, "probe image id")
-    require_literal(execution["cpa_version"], "v7.2.95", "CPA version")
+    require_literal(execution["cpa_version"], "v7.2.102", "CPA version")
     require_literal(
         execution["cpa_commit"],
-        "f71ec0eb6776854457892452cf28c47f0d658251",
+        "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
         "CPA commit",
     )
     require_pattern(execution["cpa_image_id"], SHA256_DIGEST, "CPA image id")

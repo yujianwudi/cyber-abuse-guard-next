@@ -2,13 +2,16 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
-The identity above is the repository's current Round 9 identity. The remainder
-of this file is a retained historical v0.15/Round 6 handoff; its
-`classifier-policy-v5` values are intentionally historical and are not current
-Round 9 evidence.
+> **Frozen historical snapshot.** The classifier identity above is the
+> repository's current Round 9 identity. The body below preserves the Round 6 /
+> v0.15 handoff, including its `classifier-policy-v5` values and any CPA v7.2.95
+> wording such as "current release target"; those statements are historical only
+> and are not the active repository release identity. The current formal CPA
+> identity is
+> `v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3`.
 
 Historical status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**
 

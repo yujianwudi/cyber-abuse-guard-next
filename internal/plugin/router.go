@@ -431,7 +431,7 @@ func extractionProfile(format string) (extract.RequestProfile, bool) {
 	case "interactions":
 		profile.Source = extract.SourceProfileInteractions
 	case audit.SourceFormatCodexAlphaSearch:
-		// CPA v7.2.95 exposes Alpha Search request bodies directly to ModelRouter.
+		// CPA v7.2.102 exposes Alpha Search request bodies directly to ModelRouter.
 		// They have no chat-role envelope, so treat their model-visible strings as
 		// direct untrusted text while retaining a distinct structural profile.
 		profile.Source = extract.SourceProfileCodexAlphaSearch

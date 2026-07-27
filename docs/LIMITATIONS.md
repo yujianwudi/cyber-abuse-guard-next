@@ -2,10 +2,10 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
-Last updated: 2026-07-26 (Asia/Shanghai)
+Last updated: 2026-07-27 (Asia/Shanghai)
 
 ## Current Round 9 evidence boundary
 
@@ -16,15 +16,19 @@ claim:
 
 | Evidence boundary | Current status |
 |---|---|
+| Local dirty development Host/Router | `PASS / DEVELOPMENT ONLY; NOT RELEASE EVIDENCE` |
 | Repository-local counted-Mock | `NOT_PROVIDED` |
 | Tencent Cloud #2 isolated counted-Mock | `NOT_PROVIDED` |
 | Protected external evaluation and one-shot ledger | `NOT_PROVIDED` |
 
-The task requires production to remain `mode=audit` and subject control to
-remain disabled. This repository work did not inspect production, so that is a
-requested constraint rather than a live-verified production state. No source,
-unit, compatibility, Docker-runner, or development-corpus result can substitute
-for any of the three missing runtime evidence classes.
+The local Host result used a generated Linux amd64 `0.16-dirty` `.so`, loopback
+fixtures, and a Mock upstream. It is real development execution for those dirty
+bytes, but is non-transferable and cannot substitute for any of the three missing
+exact-candidate runtime evidence classes. The task requires production to remain
+`mode=audit` and subject control to remain disabled. This repository work did not
+inspect production, so that is a requested constraint rather than a live-verified
+production state. No source, unit, compatibility, Docker-runner, development-
+corpus, or local dirty Host result can close those release boundaries.
 
 1. **No guarantee against account action.** The plugin reduces the number of
    clearly risky requests that reach upstream. It cannot guarantee that an
@@ -74,12 +78,17 @@ for any of the three missing runtime evidence classes.
    byte count because the body is not copied into Go.
    Inert quoted-review credit is likewise available only when the single quote,
    unsafe assessment, and final non-execution boundary are all visible in one
-   complete classification view. A later affirmative referential directive is
-   linked only to the newest eligible user review and reclassifies only that
-   quote; non-user reviews, questions, explanations, negation, consequences, and
-   remediation do not establish execution intent. Complete long reviews retain
-   only a privacy-safe result, never quoted text. Truncation or cross-window proof
-   loss receives no quoted-review credit and yields
+   complete classification view. A later bare affirmative referential directive
+   is linked only to the newest eligible trusted RoleUser review and reclassifies
+   only that quote. Historical assistant/system/tool/unknown reviews, tool
+   schemas, and assistant tool-call arguments cannot seed that referent;
+   questions, explanations, negation, consequences, and remediation do not
+   establish execution intent. An explicit current-user harmful restatement is
+   evaluated independently. A current request-local system/developer instruction
+   or terminal tool result may still block only its own independently complete
+   candidate, without historical referent promotion. Complete long reviews
+   retain only a privacy-safe result, never quoted text. Truncation or
+   cross-window proof loss receives no quoted-review credit and yields
    `CoverageUnavailable` / `classifier_window_incomplete`; insufficient
    reclassification budget yields `classification_chunk_limit`.
    The accepted lead-ins are exact enumerated English templates, not a general
@@ -110,16 +119,19 @@ for any of the three missing runtime evidence classes.
    metadata from forging tool authority.
 
 8. **CPA router failures are host-level fail-open.** The required Host matrix is
-   CPA v7.2.95. CPA may continue other Routers or native routing if
+   CPA v7.2.102. CPA may continue other Routers or native routing if
    the plugin is not loaded, registration fails, it is fused, the Router returns
    an error, a panic occurs before the host accepts a valid handled result, the
    target is invalid/empty, or the self executor is not ready. The plugin
    self-routes known failures and recovered ModelRouter panics in an active
-   Balanced/Strict runtime, but it cannot alter CPA's host policy or prove
+   Balanced/Strict runtime; the current oversized model-route exception remains
+   Strict-only. The plugin cannot alter CPA's host policy or prove
    fail-closed behavior for every host/ABI failure. `enforcement_ready` reports
    only internal plugin state and does not prove host load, registration,
    ordering, fuse state, or per-request executor readiness. Watchdog and
-   counter-delta monitoring remain mandatory.
+   counter-delta monitoring remain mandatory. The local `0.16-dirty` Host/Router
+   PASS is development evidence only; the exact-candidate counted-Mock matrix is
+   still required.
 
 9. **Router ordering cannot be enumerated.** The first handled Router wins. ABI
    v1 does not expose loaded Router ordering, so a higher-priority plugin can
@@ -138,7 +150,7 @@ for any of the three missing runtime evidence classes.
     frame; successful chunks would force HTTP 200. The policy executor routes
     `execute`, `execute_stream`, and `count_tokens` to the same policy HTTP 403;
     `http_request` returns an unsupported-method RPC error whose `StatusCode()`
-    is 405; the official adapter returns `(nil, error)`. CPA v7.2.95's public
+    is 405; the official adapter returns `(nil, error)`. CPA v7.2.102's public
     `/v1/alpha/search` consumer normally selects `codex` and maps every executor
     error to HTTP 502. The project-owned `httptest.Server` manually maps the
     status error, so final official CPA client HTTP 405 is `NOT AVAILABLE / NOT
@@ -153,7 +165,7 @@ for any of the three missing runtime evidence classes.
 13. **No `Retry-After` on executor errors.** ABI-v1 RPC errors cannot attach
     arbitrary downstream response headers.
 
-14. **Exact management routes only.** CPA v7.2.95 rejects dynamic `:`/`*`
+14. **Exact management routes only.** CPA v7.2.102 rejects dynamic `:`/`*`
     plugin routes, so subject unblock uses a fixed path and bounded JSON body.
     CPA host middleware, not the plugin, is the Management Key verification
     authority; ABI v1 does not reveal the configured key to the plugin. Host
@@ -174,7 +186,7 @@ for any of the three missing runtime evidence classes.
     reserved, but `classifier.enabled: true` is rejected. The plugin makes no
     classifier network request and does not upload prompts to a third party.
 
-17. **No authenticated management UI.** CPA v7.2.95 resource routes are not a
+17. **No authenticated management UI.** CPA v7.2.102 resource routes are not a
     safe place for audit/subject data. This version exposes exact authenticated
     management API routes only.
 
@@ -241,7 +253,7 @@ for any of the three missing runtime evidence classes.
 
 29. **Only one platform and one fixed CPA Host target are in scope.** The
     release platform is Linux amd64 with glibc 2.34+; musl/Alpine is unsupported.
-    The root module and both current contract modules pin CPA v7.2.95.
+    The root module and both current contract modules pin CPA v7.2.102.
     Source/compile success is not runtime admission. Exact-candidate counted-Mock
     Host evidence is required for this target.
     Earlier v7.2.85/v7.2.84/v7.2.83/v7.2.82/v7.2.81 checks are historical and non-gating.
@@ -299,21 +311,23 @@ for any of the three missing runtime evidence classes.
     Operators needing a distinct prompt-injection reporting taxonomy must add a
     separate non-Cyber-Abuse control-plane event model in a future version.
 
-36. **Local and historical Host execution is not current Round 9 evidence.**
-    The four-protocol harness, real store install, zero Auth
-    Selector/Provider/Usage/Mock Upstream counters, Router fixture, and
+36. **An earlier local Host mis-execution is excluded; the later dirty Host run
+    is development-only.** An earlier four-protocol harness, real store install,
+    zero Auth Selector/Provider/Usage/Mock Upstream counters, Router fixture, and
     proxy-413 fixture were mistakenly executed in WSL using loopback/Mock
     components and cleaned up without residual fixture processes. Those results
-    remain excluded. Earlier CPA and Round 5/8 records are frozen historical
-    evidence only. Repository-local counted-Mock, Tencent Cloud #2 isolated
-    counted-Mock, and protected external evaluation/one-shot-ledger evidence
-    are separately `NOT_PROVIDED`; none can be inferred from source compilation
-    or another boundary's result.
+    remain excluded. The separate 2026-07-27 CPA v7.2.102 Host/Router PASS is
+    retained only for its generated `0.16-dirty` `.so` and cannot become clean
+    exact-candidate or release evidence. Earlier CPA and Round 5/8 records are
+    frozen historical evidence only. Repository-local counted-Mock, Tencent
+    Cloud #2 isolated counted-Mock, and protected external evaluation/one-shot-
+    ledger evidence are separately `NOT_PROVIDED`; none can be inferred from
+    source compilation or another boundary's result.
 
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
     `classifier-policy-v9` / SHA-256
-`5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`,
+`72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -485,11 +499,14 @@ for any of the three missing runtime evidence classes.
 
 54. **The CPA source/compile contract is evidence only until counted-Mock Host
     validation.** `integration/cpalatestcontract` and
-    `integration/pluginstorecontract` both bind CPA v7.2.95. The contract
-    compiles the Guard and integration packages and runs exact official Host,
-    Responses, Interactions, fail-open, Raw Capture, and Store contracts. They do
-    not start the release CPA binary, load the candidate `.so`, or prove request
-    reconstruction, logging, Auth/Provider/Usage isolation, and upstream behavior.
+    `integration/pluginstorecontract` both bind CPA v7.2.102. Each module asserts
+    the named critical Host tests and executes the complete upstream
+    `internal/pluginhost` package, so this source coverage overlaps rather than
+    forming two non-duplicative exact-name runs. The wider contract compiles the
+    Guard and integration packages and runs Responses, Interactions, fail-open,
+    Raw Capture, and Store contracts. It does not start the release CPA binary,
+    load the candidate `.so`, or prove request reconstruction, logging,
+    Auth/Provider/Usage isolation, and upstream behavior.
     No runtime baseline is admitted until the authorized counted-Mock sandbox
     matrix binds the same candidate SHA-256. Later CPA versions do not
     automatically change these pinned requirements.
@@ -520,7 +537,7 @@ for any of the three missing runtime evidence classes.
     v7.2.80, an `agent` request that the Guard self-routes is rejected by CPA's
     native-Interactions validator with HTTP 400 before the Guard executor runs;
     a uniform Guard 403 would require an upstream CPA change. The owner-operated
-    sandbox must recheck that behavior on v7.2.95 and
+    sandbox must recheck that behavior on v7.2.102 and
     separately verify model/agent, stream/non-stream, exact status
     shapes, first-byte behavior, and zero Auth/Provider/Usage/upstream effects.
 
@@ -568,8 +585,9 @@ for any of the three missing runtime evidence classes.
     counted-Mock matrices must bind the final commit and plugin bytes before
     Host promotion; green GitHub Actions alone are insufficient.
 
-62. **The incident-response false-positive repair is intentionally finite and
-    still requires exact-candidate Host review.** The user-supplied external
+62. **The incident-response false-positive repair is intentionally finite; its
+    local dirty Host coverage still requires exact-candidate review.** The
+    user-supplied external
     report `Cyber-Abuse-Guard-Next-f37a25dd独立审计与二号机隔离测试报告-20260726.md`
     for `f37a25dd1ef7f64677282f154372cf2b4cb0ad7b`
     confirmed the multilingual malicious-carrier repair but found that an
@@ -578,9 +596,10 @@ for any of the three missing runtime evidence classes.
     analytical introduction grammar and preserves quote count, field/scope
     binding, byte/clause budgets, non-execution boundaries, and execution-tail
     reactivation. That external file is not checked into or cryptographically
-    bound by this repository. Repository classifier and simulated full-route
-    checks are not CPA Host, plugin-binary, latency, RSS, or independent
-    re-audit evidence.
+    bound by this repository. Repository classifier/simulated-route checks and
+    the later local CPA v7.2.102 `0.16-dirty` safe-review/direct-candidate Host
+    cases are still not clean exact-candidate bytes, protected latency/RSS, or
+    independent re-audit evidence.
     Coarse multilingual admission still uses a finite literal matcher whose
     same-field bits may accumulate across distant windows; changing that
     conservative behavior requires a reproducible safe fixture plus fuzz and

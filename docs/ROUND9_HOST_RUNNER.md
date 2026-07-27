@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 `.github/workflows/round9-host-validation.yml` is the only admissible Round 9
@@ -33,7 +33,7 @@ and a public RC do not authorize production Balanced mode.
 |---|---|
 | Candidate | annotated exact-main `v0.16-rc.4` |
 | Platform | Linux amd64 only |
-| CPA | `v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251` |
+| CPA | `v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3` |
 | Host workflow | `.github/workflows/round9-host-validation.yml` |
 | Dispatch ref | exact `refs/tags/v0.16-rc.4` |
 | Dispatch SHA | exact candidate commit |

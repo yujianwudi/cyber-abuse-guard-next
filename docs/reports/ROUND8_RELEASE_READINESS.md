@@ -2,10 +2,24 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 Last updated: 2026-07-22 (Asia/Shanghai)
+
+> **Frozen historical snapshot.** This report preserves the Round 8
+> `v0.16-rc.2` source-tree release contract as recorded on the date above. Every
+> embedded CPA v7.2.95 value and every "current" or "only current" statement is
+> relative to that frozen Round 8 snapshot; none is the active repository release
+> identity.
+>
+> The current formal CPA identity is:
+>
+> ```text
+> current_formal_cpa: v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3
+> current_module_sum: h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=
+> current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+> ```
 
 This document describes the source-tree release contract. It is not a Host
 attestation, independent audit, production authorization, or Release record.

@@ -7,7 +7,7 @@ permission to publish.
 
 | Workflow | Trigger | Purpose |
 |---|---|---|
-| `ci.yml` | Pull requests to `main`; pushes to `main` | Core quality, long fuzzing, Linux artifacts, the fixed CPA v7.2.95 source/compile contract, and reproducibility |
+| `ci.yml` | Pull requests to `main`; pushes to `main` | Core quality, long fuzzing, Linux artifacts, CPA v7.2.102 full Host/SDK source contracts, a real Linux candidate `.so` Host load, latest-release drift detection, and reproducibility |
 | `codeql.yml` | Pull requests and pushes to `main`; weekly schedule; manual dispatch | Minimal-permission CodeQL analysis for Go on Ubuntu, using the same sparse restricted-data boundary and a pinned manual Go build; produces code-scanning results only |
 | `candidate.yml` | Manual dispatch from exact `main` | Produce a private clean candidate artifact; never creates a GitHub Release |
 | `attested-prerelease.yml` | Manual dispatch from annotated `v0.15-dev.round6[.N]` | Bind candidate, Host, audit, and evaluation attestations into a blocked prerelease |
@@ -104,7 +104,7 @@ none of those paths or secrets is supplied by the candidate repository.
 
 The job runs on `self-hosted`, `linux`, `x64`, `cag-round9-sandbox` in the
 protected `round9-host-validation` environment. The broker fixes CPA to
-`v7.2.95@f71ec0eb6776854457892452cf28c47f0d658251`, permits only
+`v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3`, permits only
 `127.0.0.1:18394 -> 8317/tcp`, and drives one authenticated CPA container in
 Audit, Balanced, then Strict order. Missing Audit/phase-status evidence,
 SQLite v6 `quick_check`/WAL/restart recovery, panic/lifecycle checks, usage-queue

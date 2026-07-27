@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 Last updated: 2026-07-27 (Asia/Shanghai)
@@ -11,34 +11,38 @@ Last updated: 2026-07-27 (Asia/Shanghai)
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
 working-tree identity is `classifier-policy-v9` /
-`5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`
+`72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
-The complete `make round6-benchmark` recipe was rerun for the working-tree
-identity stated above under WSL Ubuntu 26.04, Go 1.26.4 linux/amd64, and GNU Make
-4.4.1, and exited 0. The hard acceptance lane recorded classifier
-P50/P95/P99 `459.731/563.714/765.255 us`, candidate-rich and near-budget
-adversarial cases `41.898827/21.298198 ms/op`, the approximately 1 MiB META
-wrapper at `152.808023 ms/op`, `6,339,221 B/op`, and 110 allocations, and the
-1,024-clause negated-prohibition flood at `34.427263 ms/op`, `4,358,060 B/op`, and 6,003
-allocations. At 64 complete call/result pairs, the request-local association
-planner measured OpenAI Chat/Responses, Claude, and Gemini at
-`1.382390/1.209921/0.922327/1.093778 ms/op`,
-`845,978/784,565/568,114/736,338 B/op`, and
-`16,981/15,552/14,046/15,005 allocs/op`. Long JSON extraction, raw-capture
-admission/management, and four-repository full-route acceptance also passed in
-the same recipe. The transient local log was 30,674 bytes with SHA-256
-`a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`;
-it is not checked into Git. This is
-source-only development evidence for the current policy identity, not a final
-commit/tree, CPA Host, reproducible Linux `.so`, release, or independent result.
-The isolated classifier latency comparison and predecessor complete benchmark
-below remain useful supporting history but are not substituted for the current
-recipe.
+The complete `make round6-benchmark` recipe has not been rerun after the
+referent-policy change that produced the current identity above. The most recent
+complete recipe is predecessor-only development evidence bound to digest
+`2c968f70cfe12e136c07e2856b589f220d464b2284f93e05f368cbb7c927848f`.
+That WSL Ubuntu 26.04 / Go 1.26.4 / GNU Make 4.4.1 run recorded classifier
+P50/P95/P99 `551.254 us / 957.089 us / 1.266960 ms`, candidate-rich and
+near-budget adversarial cases `41.335816/23.460676 ms/op`, the approximately
+1 MiB META wrapper at `160.790024 ms/op`, `6,337,260 B/op`, and 103
+allocations, and the 1,024-clause negated-prohibition flood at
+`38.648832 ms/op`, `4,358,501 B/op`, and 6,003 allocations. At 64 complete
+call/result pairs, the request-local association planner measured OpenAI
+Chat/Responses, Claude, and Gemini at
+`1.663277/1.447810/1.299558/1.290847 ms/op`,
+`845,978/784,565/568,114/736,402 B/op`, and
+`16,981/15,552/14,046/15,007 allocs/op`. The separate 1 MiB profiled
+defensive-quote microbenchmark measured `344.061658-366.730649 ms/op`, above
+the external `<250 ms/op` optimization target. Those measurements remain
+historical and are not relabeled as current-source evidence. On the current
+identity, isolated classifier performance acceptance passed with P95
+`1.5067 ms` against `<2 ms`, and the directive-overflow boundary reached at
+most `153.72 ms` against `<175 ms`; the complete benchmark recipe remains
+pending. No result here is final commit/tree, CPA Host, reproducible Linux
+`.so`, release, or independent performance evidence.
 
 | Round 9 evidence | Current status |
 |---|---|
-| Current complete local Linux development recipe | **SOURCE-ONLY DEVELOPMENT PASS.** `make round6-benchmark` exited 0 for `classifier-policy-v9` / `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03` under WSL Ubuntu 26.04, Go 1.26.4 linux/amd64, and GNU Make 4.4.1. Classifier P50/P95/P99 were `459.731/563.714/765.255 us`; candidate-rich/near-budget were `41.898827/21.298198 ms/op` with near-budget `308,727 B/op`; the long META wrapper was `152.808023 ms/op`, `6,339,221 B/op`, 110 allocs; the negated-prohibition flood was `34.427263 ms/op`, `4,358,060 B/op`, 6,003 allocs. At 64 complete tool call/result pairs, OpenAI Chat/Responses, Claude, and Gemini association planning measured `1.382390/1.209921/0.922327/1.093778 ms/op`, `845,978/784,565/568,114/736,338 B/op`, and `16,981/15,552/14,046/15,005 allocs/op`. Extract, raw-capture, and plugin-route acceptance lanes passed. The transient 30,674-byte log hashed to `a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`; no raw log is checked in, and no CPA Host, final artifact, or independent claim is inferred |
+| Current complete local Linux development recipe | **CLASSIFIER GATE PASS; FULL BENCHMARK PENDING.** `go test ./internal/classifier -count=1` passed on policy `72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`, including the enforced classifier latency and directive-overflow budgets. Exact metric values from the immediately preceding snapshot are not reattributed to this digest; `make round6-benchmark` remains pending. |
+| Pre-refresh complete local Linux development recipe (`2c968f70...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The complete recipe produced the detailed latency/allocation figures recorded above, including the long-prompt follow-up. It predates the current referent-policy identity and is not current-source, Host, artifact, or release evidence. |
+| Previous working-tree complete recipe (`5012c101...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The preceding policy snapshot recorded P50/P95/P99 `459.731/563.714/765.255 us`, candidate-rich/near-budget `41.898827/21.298198 ms/op`, long META `152.808023 ms/op`, and a transient 30,674-byte log SHA-256 `a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`; it is not current-identity evidence |
 | Pre-final isolated classifier latency study | **HISTORICAL DEVELOPMENT PASS.** Fourteen predecessor working-tree runs and five clean-HEAD controls passed P95 `<2 ms` / P99 `<5 ms`. Their stable median was P50 `391.237 us`, P95 `468.491 us`, P99 `620.655 us`, and about `28,041 B/classification`; one whole-process WSL noise round reached P99 `4.871859 ms` but still passed. Use the complete recipe above for the present-policy result; do not relabel this predecessor study |
 | Historical complete local Linux development recipe (pre-current identity) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** `GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go make round6-benchmark` with `GOFLAGS=-mod=readonly` exited successfully. Raw log: `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063` |
 | Historical role-aware maximum-parts path (pre-current identity) | **HISTORICAL DEVELOPMENT REGRESSION PASS.** Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. The checked-in hard-bound test remains part of CI, but its timing/allocation result was not rerun for the working-tree identity stated above |
@@ -46,7 +50,7 @@ recipe.
 | Pre-fix normalized multilingual long-frame signal pass (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Three isolated Go 1.26.4 `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` runs measured 0.355-0.363 ms/op at 16 KiB (45.15-46.21 MB/s, 810-813 B/op, 2 allocs/op) and 22.230-22.564 ms/op at 1 MiB (46.47-47.17 MB/s, 841-847 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path measured 7.873-8.598 ms/op at 16 KiB (543,028-563,462 B/op, 108-110 allocs/op) and 250.230-259.302 ms/op at 1 MiB (16,886,254-17,299,688 B/op, 333-339 allocs/op). These are historical WSL source microbenchmarks, not current-identity or CPA Host evidence |
 | Pre-fix directive-clause overflow wall-clock boundary (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS WITH LIMITED CONCURRENT HEADROOM.** Three isolated Go 1.26.4 runs measured the 1,024-unique-prohibition case at 93.324-97.670 ms/op, and a later exact-commit isolated rerun measured 99.842 ms/op, 449,483 B/op, and 2,103 allocs/op against the `<175 ms/op` gate. The independent audit also observed 184-198 ms/op when unrelated package work ran concurrently. Keep the deterministic wall-clock gate isolated and treat Host concurrency, RSS, P95/P99, and near-8 MiB fields as a separate acceptance lane; no current-policy or CPA Host latency/throughput result is inferred |
 | Pre-fix diagnostic retained as history | The earlier working-tree snapshot recorded 14.948-16.418 s/op, approximately 397 MB/op, and about 1.077 million allocs/op. Its CPU profile (`6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69`) and memory profile (`fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6`) remain diagnostic chronology only and are not attributed to the current classifier identity |
-| Classifier latency and allocation acceptance on the current source identity | **SOURCE-ONLY DEVELOPMENT PASS** through the complete recipe above; final commit/tree and exact candidate artifact binding remain `NOT_PROVIDED` |
+| Classifier latency and allocation acceptance on the current source identity | **PARTIAL SOURCE-ONLY DEVELOPMENT PASS.** Isolated hard acceptance tests passed; the complete benchmark recipe, final commit/tree, and exact candidate artifact binding remain `NOT_PROVIDED` |
 | Standalone and CPA Host RSS on the exact candidate | `NOT_PROVIDED` |
 | CPA Host latency, throughput, concurrency, and first-byte behavior | `NOT_PROVIDED` |
 | Repository-local counted-Mock runtime performance | `NOT_PROVIDED` |

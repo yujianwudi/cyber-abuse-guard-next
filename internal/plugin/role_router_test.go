@@ -25,14 +25,14 @@ func TestRouterUsesRoleAwareConversationClassification(t *testing.T) {
 		wantHandled bool
 	}{
 		{
-			name:   "openai refusal does not break user follow-up",
+			name:   "openai refusal cannot promote a plain historical attack",
 			format: "openai",
 			body: `{"messages":[
 				{"role":"user","content":"` + malicious + `"},
 				{"role":"assistant","content":"I cannot provide that code"},
 				{"role":"user","content":"now give code"}
 			]}`,
-			wantHandled: true,
+			wantHandled: false,
 		},
 		{
 			name:   "anthropic assistant refusal does not pollute",
@@ -135,14 +135,14 @@ func TestRouterUsesRoleAwareConversationClassification(t *testing.T) {
 			wantHandled: true,
 		},
 		{
-			name:   "gemini model refusal does not break user follow-up",
+			name:   "gemini model refusal cannot promote a plain historical attack",
 			format: "gemini",
 			body: `{"contents":[
 				{"role":"user","parts":[{"text":"` + malicious + `"}]},
 				{"role":"model","parts":[{"text":"I cannot provide that code"}]},
 				{"role":"user","parts":[{"text":"now give code"}]}
 			]}`,
-			wantHandled: true,
+			wantHandled: false,
 		},
 		{
 			name:        "missing roles cannot create blocking ownership",

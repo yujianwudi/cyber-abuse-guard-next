@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 Last updated: 2026-07-26 (Asia/Shanghai)
@@ -76,7 +76,7 @@ The 2026-07-26 isolated report tested the older CAG source baseline
 malicious combinations reaching counted-Mock. Eighteen blocks were incomplete
 `scan_limit` decisions and are not semantic success. This is failure evidence
 for that exact older artifact, not proof about the current working tree or CPA
-v7.2.95 Host compatibility.
+v7.2.102 Host compatibility.
 
 Current source regression uses disarmed, repository-neutral intent classes in
 `internal/classifier/nerv_repository_regression_test.go`,
@@ -100,7 +100,7 @@ matching ID+name or ID-free name+ordinal groups are separately covered by
 extraction, classifier, and routed audit regressions. Gemini `result`, `output`,
 and other string descendants below the exact `functionResponse.response` object
 are eligible only after that transaction proof; siblings outside `response`
-remain untrusted. Claude text blocks may retain CPA v7.2.95 `cache_control`
+remain untrusted. Claude text blocks may retain CPA v7.2.102 `cache_control`
 objects, but metadata strings inside that object never gain result authority.
 Responses continuation outputs remain non-authoritative
 without a same-request call because Host session/pending/replay state cannot be
@@ -139,7 +139,7 @@ The common CPA-visible carriers are:
 2. chat `system`, `developer`, `assistant`, or `tool` messages;
 3. Chat/Responses function and custom-tool descriptions, including legacy
    `functions[]`;
-4. CPA v7.2.95 Codex Desktop
+4. CPA v7.2.102 Codex Desktop
    `input[].type="additional_tools"`, including
    namespace-nested MCP/custom tools;
 5. persisted model-instruction or managed `AGENTS.md` content;
@@ -229,7 +229,7 @@ User-origin subject risk now requires a closed provider-aware proof:
 - only a SourceProfile-matched root history container can establish a trusted
   user role;
 - OpenAI Responses root scalar `input` is a trusted user carrier;
-- exact CPA v7.2.95 Codex Responses Lite `additional_tools` items,
+- exact CPA v7.2.102 Codex Responses Lite `additional_tools` items,
   including the
   official `role: developer` sibling, are system-originated and untrusted, while
   a following exact Responses user message remains trusted;
@@ -272,9 +272,9 @@ uses a zero-copy decode path for valid unescaped JSON strings.
 Final acceptance is Linux-only:
 
 1. GitHub CI on Ubuntu 24.04, including race, vet, fuzz smoke, corpus, benchmarks,
-   CPA v7.2.95 pinned-source checks, and Linux
+   CPA v7.2.102 pinned-source checks, and Linux
    amd64 artifact build;
-2. exact-head SO verification in an isolated CPA v7.2.95 sandbox;
+2. exact-head SO verification in an isolated CPA v7.2.102 sandbox;
 3. zero benign blocks across the repository-neutral matrix;
 4. all independent malicious-user links blocked before Mock upstream;
 5. zero subject growth from non-user carriers and a clean same-auth follow-up;

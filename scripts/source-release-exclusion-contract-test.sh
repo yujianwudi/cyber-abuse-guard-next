@@ -10,7 +10,7 @@ work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 archive="$work/source.tar"
 verifier_path='scripts/round9_external_evaluation_contract.py'
-verifier_sha256='b632063bed7cdb59ae7d56b5f9634efd4945b8a0c769cb3dd86b9c52de1a2076'
+verifier_sha256='1d2cc9c1d1bb68af0fce40fdf5884b528cd32bd05fb9d0a0d518bae9e8147996'
 verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
 verifier_test_sha256='7f32dc75f6354777eadf8791cc3b56ba9f9ac8db37334b8a66c7d046ded7ba48'
 

@@ -2645,7 +2645,8 @@ func candidateExplicitDefenseEvasionRelation(text string, hostile bool) bool {
 		"no longer trigger", "stops triggering", "prevent detection", "躲开", "避开", "规避", "禁用", "关闭", "隐藏", "绕过", "压制", "不被发现", "不再触发",
 	)
 	maliciousPurpose := hostile || containsAnyLiteral(text,
-		"intrusion", "malware", "malicious", "unauthorized access", "unauthorized control", "covert access", "credential theft", "theft", "exfiltrat",
+		"hide the intrusion", "hide an intrusion", "conceal the intrusion", "conceal an intrusion", "keep the intrusion hidden",
+		"intrusion remains undetected", "intrusion stays undetected", "malware", "malicious", "unauthorized access", "unauthorized control", "covert access", "credential theft", "theft", "exfiltrat",
 		"persistent access", "continuing access", "ongoing access", "ongoing attack", "恶意", "未授权访问", "入侵", "入侵活动", "持续访问", "凭据窃取", "外传",
 	)
 	// A request whose actual core is exporting records remains exfiltration even
@@ -3051,7 +3052,9 @@ var candidatePhishingCredentialCollectionIntents = []string{
 	"collect", "collects", "collecting", "capture", "captures", "capturing",
 	"harvest", "harvests", "harvesting", "record", "records", "recording",
 	"gather", "gathers", "gathering", "store", "stores", "storing",
-	"steal", "steals", "stealing",
+	"steal", "steals", "stealing", "prompt", "prompts", "prompting", "prompted",
+	"induce", "induces", "inducing", "induced", "receive", "receives", "receiving", "received",
+	"solicit", "solicits", "soliciting", "solicited",
 	"收集", "采集", "截取", "记录", "保存", "获取", "骗取", "窃取",
 }
 
@@ -4509,7 +4512,8 @@ func candidateSecurityControlEvasion(category rules.Category, text string) bool 
 // dimensions without borrowing request-global evidence.
 func candidateSecurityControlEvasionMaliciousPurpose(text string) bool {
 	return containsAnyLiteral(text,
-		"malware", "malicious payload", "implant", "backdoor", "intrusion", "credential theft", "exfiltrat",
+		"malware", "malicious payload", "implant", "backdoor", "hide the intrusion", "hide an intrusion", "conceal the intrusion", "conceal an intrusion",
+		"keep the intrusion hidden", "intrusion remains undetected", "intrusion stays undetected", "credential theft", "exfiltrat",
 		"unauthorized access", "unauthorized control", "covert access", "persistent access", "continuing access", "ongoing access", "theft",
 		"恶意软件", "恶意载荷", "植入程序", "后门", "入侵", "凭证窃取", "外传", "未授权访问", "未授权控制", "秘密访问", "持续访问", "窃取",
 	) || hasExplicitHarmConflict(text)

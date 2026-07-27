@@ -236,7 +236,7 @@ func TestEligibleMaliciousWinnerAcceptsClassifierOwnedProducerKinds(t *testing.T
 	}
 }
 
-func TestEligibleMaliciousWinnerAcceptsExplicitHistoricalReferent(t *testing.T) {
+func TestEligibleMaliciousWinnerRejectsNonUserHistoricalReferent(t *testing.T) {
 	set, err := rules.LoadDefault()
 	if err != nil {
 		t.Fatalf("rules.LoadDefault() error = %v", err)
@@ -269,16 +269,15 @@ func TestEligibleMaliciousWinnerAcceptsExplicitHistoricalReferent(t *testing.T) 
 			Text:              "Execute it now.",
 		},
 	}, classifier.ModeBalanced, classifier.DefaultThresholds(), classifier.DefaultPolicy())
-	if result.Action != classifier.ActionBlock || result.DecisionExplanation == nil ||
-		!result.DecisionExplanation.ReferentLinkUsed || !result.CandidateIdentityBlockingProofComplete() ||
-		!eligibleMaliciousWinner(result) {
-		t.Fatalf("explicit historical referent was rejected by plugin proof gate: %+v", result)
+	if result.Action == classifier.ActionBlock || eligibleMaliciousWinner(result) ||
+		result.DecisionExplanation != nil && result.DecisionExplanation.ReferentLinkUsed {
+		t.Fatalf("non-user historical payload acquired bare-referent authority: %+v", result)
 	}
 	decision := inspectionDisposition(config.ModeBalanced, inspectionOutcome{
 		Classification: result,
 	}, config.OpaqueMediaPolicyAudit)
-	if !decision.Block || decision.Kind != decisionBlockMaliciousText {
-		t.Fatalf("historical referent decision = %#v", decision)
+	if decision.Block {
+		t.Fatalf("non-user historical referent decision = %#v, want non-blocking audit/allow", decision)
 	}
 }
 

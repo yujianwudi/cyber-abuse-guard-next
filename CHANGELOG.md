@@ -2,13 +2,27 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 Source-tree status updated: 2026-07-27 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Move the active Round 9 CPA contract to the official latest release
+  `v7.2.102` (`8423cce2d1004e80948a9e2c60ee69354c0aabc3`) with reviewed module and
+  `go.mod` sums. CI now verifies that this fixed identity is still GitHub's
+  `releases/latest`, executes the complete upstream Linux `internal/pluginhost`
+  suite plus `sdk/pluginabi`/`sdk/pluginapi`, and loads the built candidate
+  `.so` through the real Host integration path. Historical Round 6/8 and
+  v0.15/v0.16-rc.2 evidence remains pinned to CPA v7.2.95.
+- Prevent consented-training telemetry from masking a real credential
+  solicitation by covering `prompt`, `induce`, `receive`, and `solicit` forms
+  and their inflections across user/system/developer/tool batch and streaming
+  paths. Narrow defense-evasion purpose binding so ordinary duplicate
+  intrusion-alert suppression, monitoring maintenance, and retired-rule audit
+  work remain nonblocking, while explicit alert suppression used to hide
+  malware or unauthorized access still blocks.
 - Repair the exact-main Round 9 paired-malicious regression introduced by the
   physical-occurrence binder. Defense-evasion, prompt-injection, and phishing
   relations now reuse narrow clause-local object, mechanism, purpose, harm,
@@ -102,7 +116,7 @@ Source-tree status updated: 2026-07-27 (Asia/Shanghai)
 - Restrict provider-native result authority to the exact Chat `content`,
   Responses `output`, Claude `tool_result.content`, or Gemini
   `functionResponse.response` boundary. Gemini authorizes string descendants of
-  that exact response object, including CPA v7.2.95 `result` and `output`
+  that exact response object, including CPA v7.2.102 `result` and `output`
   carriers, while siblings on `functionResponse` remain untrusted. Claude text
   blocks accept a CPA-preserved `cache_control` object without authorizing its
   metadata strings; arbitrary block siblings, aliases, and scalar cache-control
@@ -137,7 +151,7 @@ Source-tree status updated: 2026-07-27 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Refresh the source behavior identity for `classifier-policy-v9` to
-  `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`;
+  `72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;
@@ -809,10 +823,14 @@ the Round 6 candidate.
   Classify every retained segment independently, join adjacent user turns for
   follow-ups, use a conservative fallback for role-less provider items, and
   fail closed instead of silently discarding over-capacity history.
-- Handle over-8-MiB Base64-expanded model-route RPCs without copying the giant
-  payload: Balanced/Strict self-route to a local scan-limit refusal, while
-  non-enforcing modes retain their documented behavior. Record a privacy-
-  minimal scan-limit event without inventing unavailable request metadata.
+- Historical v0.1.1 behavior handled over-8-MiB Base64-expanded model-route
+  RPCs without copying the giant payload: at that release, Balanced/Strict
+  self-routed to a local scan-limit refusal while non-enforcing modes retained
+  their documented behavior. This is not the current Round 9 contract: only
+  Strict model-route self-routes; Balanced and every other non-strict mode pass
+  through with incomplete-inspection accounting, while a directly invoked
+  oversized executor returns a non-strict local 413. Record a privacy-minimal
+  scan-limit event without inventing unavailable request metadata.
 - Scope negation and prohibition cues to nearby evidence so unrelated prefixes
   cannot suppress a later operational-abuse request.
 - Publish embedded ruleset `1.0.1`, including targeted indirect

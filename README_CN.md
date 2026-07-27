@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03
+current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
 ```
 
 > **RC 身份说明：** `v0.16-rc.3` 是不可移动的 Phase 1 失败 Tag，没有候选产物或
@@ -15,7 +15,7 @@ current_classifier_policy_sha256: 5012c1013645e593422c76546d1afaf41b1e4f5184e040
 
 > **当前开发状态：** 第九轮正在以候选/子句/scope/referent 绑定的阻断资格
 > 重新设计 Balanced，并准备 Linux amd64 `v0.16-rc.4` 预发行链。固定源码/编译目标仅为 CPA
-> `v7.2.95`。源码变更本身不会创建标签、Release
+> `v7.2.102`。源码变更本身不会创建标签、Release
 > 或稳定版 `v0.16`。无 checkout 的受保护 CPA 外部评估、受保护账本证明、exact-main CI
 > 和独立审计仍是必需门禁；尚未获得生产批准，也不得据此自动重新开启生产 Balanced。
 
@@ -47,7 +47,7 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
 | GitHub 发布 | `v0.16-rc.3` 仅有 annotated Tag，没有 Release 或 Actions artifact；当前尚无 `v0.16-rc.4` Tag 或 Release。`round9-release-rc.yml` 只能生成私有 17 资产候选，公共预发行写入保持硬阻断 |
 | 上一个 exact-main 基线 | `77cf2de50f89af12a4a1e7c651a2ac0074cabcdd` / tree `ef5f35086ece6fcd415db1d5578ad89d4df55929`；CI `30116119718`、Round 9 gate `30116119599`、CodeQL `30116119625` 均通过；随后 rc.3 Phase 1 run `30118817188` 因固定容器缺少 PyYAML 而在产物创建前失败 |
-| CPA 源码/编译目标 | `v7.2.95`（`f71ec0eb6776854457892452cf28c47f0d658251`） |
+| CPA 源码/编译目标 | `v7.2.102`（`8423cce2d1004e80948a9e2c60ee69354c0aabc3`） |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
 | 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
@@ -57,15 +57,17 @@ CPA 加载并注册插件、Router 顺序可到达插件且本地 Executor 就�
 | 静态分析治理 | `.github/workflows/codeql.yml` 在经过审查的稀疏源码边界内，以最小权限在 Ubuntu 上分析 Go；CodeQL 结果不能授权发布 |
 | 验证平台 | 仅 Linux amd64；产物引用的数字型 GLIBC ABI 版本必须 `<= 2.34` |
 | 不在范围 | Windows、macOS、musl/Alpine、真实 Provider、生产部署/验证 |
-| CPA 固定目标 | 仅 v7.2.95；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
+| CPA 固定目标 | 仅 v7.2.102；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 当前源码独立审计 | 外部评估仍为 `NOT_RUN`；仓库外的 `f37a25dd` 报告不能替代当前源码精确重审，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `5012c1013645e593422c76546d1afaf41b1e4f5184e0400cc58bd04db8f02b03`；Host 与发行绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`；Host 与发行绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 
 ### 最新源码修复
 
+- 当前兼容目标已升级到官方最新 CPA `v7.2.102` / `8423cce2d1004e80948a9e2c60ee69354c0aabc3`。Linux CI 会执行完整上游 Host 测试和公开插件 ABI/API 测试，校验该固定版本仍是 GitHub `releases/latest`，并通过真实 CPA Host 路径加载构建出的候选 `.so`；历史第六/八轮及 v0.15/v0.16-rc.2 证据仍保留原始 CPA v7.2.95 身份。
+- 已补齐 `prompt`、`induce`、`receive`、`solicit` 及其时态，防止训练 telemetry 遮蔽真实凭据索取；四角色批处理/流式回归都要求完整钓鱼阻断。重复入侵告警降噪、监控维护和退役规则审计保持放行，只有明确用于隐藏恶意软件、未授权访问等敌意目的时才按规避阻断。
 - 精确支持“仅做防御性事件响应训练/分析、解释风险、提供检测与修复建议、明确不要执行”的单一闭合引用审查。
 - 该修复只扩展有限英文引导语，不会把泛化的“防御、训练、事件响应”关键词当作放行条件；第二引用、超预算、跨字段/跨 scope、缺少终止边界和后续执行指令仍不能获得抑制。
 - 已补批处理、内容类型拆分、整段/二分/逐字节流式，以及 Balanced/Strict × OpenAI Chat/Responses/Claude/Gemini 模拟路由回归；仍不等同于最终 `.so` 或 CPA Host 证据。
@@ -145,7 +147,7 @@ request/subject 关联哈希。只有需要逐请求关联时才设置 `audit.pe
 opaque-media 处置仍保留完整审计路径。
 
 来自四个公开破限项目的仓库中性回归覆盖 Chat/Responses 的 system、developer、
-assistant、tool、function/custom description、tool-call/output，以及 CPA v7.2.95
+assistant、tool、function/custom description、tool-call/output，以及 CPA v7.2.102
 Codex Desktop 的 `additional_tools`。测试不加入仓库名签名，不复制完整第三方提示词，
 并同时验证 1,397–17,166 解码字节长模板、16 KiB 边界、普通双用途安全请求与同身份干净后续请求。
 
@@ -257,7 +259,7 @@ curl -H "X-Management-Key: $CPA_MANAGEMENT_KEY" \
   "http://127.0.0.1:8317/v0/management/plugins/cyber-abuse-guard/raw-captures?limit=20"
 ```
 
-CPA v7.2.95 会对旧字段 `raw_preview` 做 HTML 转义。该字段仅为旧客户端兼容而
+CPA v7.2.102 会对旧字段 `raw_preview` 做 HTML 转义。该字段仅为旧客户端兼容而
 保留，并已明确弃用；新客户端应使用规范字段 `raw_preview_b64`。Base64 只是传输
 编码，不是加密或额外脱敏，解码后仍是敏感的用户原文。解码结果只能作为纯文本
 渲染，禁止传给 `innerHTML`、HTML 模板或其他可执行/可解释内容的渲染器。
