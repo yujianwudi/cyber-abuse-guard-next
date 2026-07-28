@@ -2,14 +2,14 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
 The current publication target is the Linux-only `v0.16-rc.4` Round 9
-prerelease. It uses the single CPA v7.2.102 pin and the exact loopback Host
+prerelease. It uses the single CPA v7.2.103 pin and the exact loopback Host
 binding `127.0.0.1:18394 -> 8317/tcp`. Protected counted-Mock Host evidence,
 one-shot independent corpora, exact-main CI, and independent audit remain
 required; production approval has not been granted and no stable `v0.16`
@@ -88,7 +88,7 @@ Current GitHub Actions entry points are intentionally limited to:
 - `.github/workflows/round9-gate.yml` for ordinary Round 9 policy/corpus
   verification without independent-corpus execution;
 - `.github/workflows/round9-host-validation.yml` for the protected Linux
-  v7.2.102 one-shot independent-corpus and counted-Mock run;
+  v7.2.103 one-shot independent-corpus and counted-Mock run;
 - `.github/workflows/round9-release-rc.yml` for the exact-main, Linux-only
   `v0.16-rc.4` private-candidate/public-prerelease lane;
 - `.github/workflows/release-rc.yml` and

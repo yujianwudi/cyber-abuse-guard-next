@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Root-installed CPA v7.2.102/counting-upstream sandbox adapter.
+"""Root-installed CPA v7.2.103/counting-upstream sandbox adapter.
 
 The adapter accepts only an exact candidate shared object, a root-owned static
 configuration and a private work directory.  It never receives a corpus path.
@@ -45,8 +45,8 @@ from round9_eval_core import (  # noqa: E402
 CONFIG_SCHEMA = "round9-cpa-sandbox-adapter-config/v1"
 DESCRIPTOR_SCHEMA = "round9-external-cpa-sandbox/v2"
 STATE_SCHEMA = "round9-cpa-sandbox-adapter-state/v2"
-CPA_VERSION = "v7.2.102"
-CPA_COMMIT = "8423cce2d1004e80948a9e2c60ee69354c0aabc3"
+CPA_VERSION = "v7.2.103"
+CPA_COMMIT = "cade44b9cdee6b9328ea2648fd119129fdf11e2d"
 CPA_SOURCE = "https://github.com/router-for-me/CLIProxyAPI"
 MOCK_CONTRACT = "round9-counted-mock/v1"
 FINALIZE_REPORT_SCHEMA = "round9-cpa-sandbox-finalize/v2"
@@ -454,7 +454,7 @@ def verify_images(
             "org.opencontainers.image.version": CPA_VERSION,
         }.items()
     ):
-        fail("CPA image labels do not bind v7.2.102 immutable source")
+        fail("CPA image labels do not bind v7.2.103 immutable source")
     mock = inspect_image(
         config, config["counted_mock_image_id"], "counted Mock image inspection", runner=runner
     )

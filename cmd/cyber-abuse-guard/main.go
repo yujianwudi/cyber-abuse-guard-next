@@ -169,9 +169,10 @@ func cliproxyPluginCall(method *C.char, request *C.uint8_t, requestLen C.size_t,
 	}
 	methodString = C.GoStringN(method, C.int(methodLen))
 	if uint64(requestLen) > maxNativeRequestBytes {
-		// Do not C.GoBytes an unbounded request. Model-route oversize handling is
-		// mode-aware because returning an RPC error would make CPA continue to the
-		// provider path; enforcing modes instead self-route to a local refusal.
+		// Do not C.GoBytes an unbounded request. Model-route and RPC schema 2
+		// RequestInterceptor oversize handling are mode-aware because an RPC error
+		// would make CPA continue the Host chain/provider path. Strict instead
+		// returns a successful local termination response.
 		raw, code := handleOversizedPluginCall(methodString)
 		if !writeNativeResponse(response, raw) {
 			return 1

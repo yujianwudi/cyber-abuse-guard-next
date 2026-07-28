@@ -12,15 +12,30 @@ import (
 
 const (
 	cpaModulePath        = "github.com/router-for-me/CLIProxyAPI/v7"
-	cpaPinnedVersion     = "v7.2.102"
-	cpaPinnedCommit      = "8423cce2d1004e80948a9e2c60ee69354c0aabc3"
-	cpaPinnedModuleSum   = "h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA="
+	cpaPinnedVersion     = "v7.2.103"
+	cpaPinnedCommit      = "cade44b9cdee6b9328ea2648fd119129fdf11e2d"
+	cpaPinnedModuleSum   = "h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU="
 	cpaPinnedGoModSum    = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 	cpaPluginHostPackage = cpaModulePath + "/internal/pluginhost"
+	cpaHandlersPackage   = cpaModulePath + "/sdk/api/handlers"
 )
 
 var criticalCPAHostTests = []string{
 	"TestDecodeEnvelopeResultPreservesPluginHTTPStatus",
+	"TestCompleteRequestDoesNotWaitForBlockingPlugin",
+	"TestCompleteRequestUsesUncancelledContextAndClonesMetadata",
+	"TestHostApplyConfigDispatchesInterceptorRPCMethods",
+	"TestHostApplyConfigRegistersInterceptorOnlyPlugin",
+	"TestHostApplyConfigSerializesLifecycleCalls",
+	"TestInterceptRequestChainsByPriorityAndHeaders",
+	"TestInterceptRequestAfterAuthPassesTargetFormat",
+	"TestInterceptorsSkipErrorsAndFusePanics",
+	"TestRegisterRPCPluginAcceptsModelRouterOnSchema1",
+	"TestRegisterRPCPluginRejectsFutureSchemaVersion",
+	"TestRegisterRPCPluginSendsHostSchemaVersion",
+	"TestRequestInterceptorTerminationStopsChain",
+	"TestRPCCapabilitiesAndAdapterIncludeRequestLifecycle",
+	"TestRPCInterceptorsIncludeHostCallbackID",
 	"TestSanitizePluginRequestRemovesNonJSONMetadata",
 	"TestServeManagementHTMLEscapesJSONResponseStrings",
 	"TestHostRouteModelAllowsExplicitExecutorPluginTarget",
@@ -48,6 +63,11 @@ var criticalCPAHostTests = []string{
 	"TestHostUnloadPluginContextDetachesBlockedCall",
 	"TestOwnsExecutorDistinguishesHostAdapters",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
+}
+
+var criticalCPAHandlerTests = []string{
+	"TestHandlerRequestInterceptorTerminatesBeforeAuth",
+	"TestHandlerRequestInterceptorTerminatesAfterAuth",
 }
 
 type resolvedCPAModule struct {
@@ -89,6 +109,14 @@ func TestOfficialCPAHostRoutingSourceContract(t *testing.T) {
 			t.Fatalf("pinned CPA host package no longer lists required test %q", name)
 		}
 	}
+	handlerTests := runGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", cpaHandlersPackage,
+	)
+	for _, name := range criticalCPAHandlerTests {
+		if !linePresent(handlerTests, name) {
+			t.Fatalf("pinned CPA handler package no longer lists required test %q", name)
+		}
+	}
 
 	// Execute the complete upstream Host suite for the current platform. The
 	// required-name check above keeps the contract explicit, while running the
@@ -98,6 +126,10 @@ func TestOfficialCPAHostRoutingSourceContract(t *testing.T) {
 	runGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
 		cpaPluginHostPackage,
+	)
+	runGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+		"-run", "^("+strings.Join(criticalCPAHandlerTests, "|")+")$", cpaHandlersPackage,
 	)
 }
 
@@ -114,7 +146,7 @@ func TestCPAHostFailOpenFixtureContract(t *testing.T) {
 	if _, errFixtureStat := os.Stat(fixturePath); errFixtureStat != nil {
 		t.Fatalf("stat Host fixture: %v", errFixtureStat)
 	}
-	moduleCopy := filepath.Join(t.TempDir(), "cpa-v7.2.102")
+	moduleCopy := filepath.Join(t.TempDir(), "cpa-v7.2.103")
 	if errCopyModule := os.CopyFS(moduleCopy, os.DirFS(module.Dir)); errCopyModule != nil {
 		t.Fatalf("copy pinned CPA module for Host fixture: %v", errCopyModule)
 	}
@@ -259,4 +291,13 @@ func runGoCommandInDir(t *testing.T, directory, goBinary string, arguments ...st
 	}
 	t.Logf("%s", output.String())
 	return output.String()
+}
+
+func linePresent(output, want string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == want {
+			return true
+		}
+	}
+	return false
 }

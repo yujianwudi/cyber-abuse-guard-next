@@ -92,10 +92,23 @@ func TestABIEnvelopeRegistrationAndModeAwareOversize(t *testing.T) {
 		OK     bool `json:"ok"`
 		Result struct {
 			SchemaVersion uint32 `json:"schema_version"`
+			Capabilities  struct {
+				ModelRouter        bool `json:"model_router"`
+				Executor           bool `json:"executor"`
+				RequestInterceptor bool `json:"request_interceptor"`
+				RequestLifecycle   bool `json:"request_lifecycle_plugin"`
+				ManagementAPI      bool `json:"management_api"`
+			} `json:"capabilities"`
 		} `json:"result"`
 	}
-	if err := json.Unmarshal(raw, &registerEnvelope); err != nil || !registerEnvelope.OK || registerEnvelope.Result.SchemaVersion != 1 {
+	if err := json.Unmarshal(raw, &registerEnvelope); err != nil || !registerEnvelope.OK ||
+		pluginabi.SchemaVersion != 2 || registerEnvelope.Result.SchemaVersion != pluginabi.SchemaVersion {
 		t.Fatalf("invalid registration envelope %s: %v", raw, err)
+	}
+	capabilities := registerEnvelope.Result.Capabilities
+	if !capabilities.ModelRouter || !capabilities.Executor || !capabilities.RequestInterceptor ||
+		!capabilities.RequestLifecycle || !capabilities.ManagementAPI {
+		t.Fatalf("invalid schema-v2 registration capabilities: %+v", capabilities)
 	}
 
 	// This is the method-specific path used by the native C boundary before it

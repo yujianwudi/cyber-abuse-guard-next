@@ -153,7 +153,7 @@ temporary="$(mktemp "$dist/.release-evidence-final.XXXXXX")"
   printf -- '- GitHub Release: %s\n\n' "$release_url"
 
   printf '## Accepted limitations\n\n'
-  printf -- '- CPA ABI v1 retains host-level Router fail-open boundaries and exposes no complete router-order or plugin-directory inventory.\n'
+  printf -- '- CPA C ABI v1 / RPC schema 2 retains host-level RequestInterceptor fail-open boundaries and exposes no complete interceptor-order or plugin-directory inventory; `router_errors` is the Router/RequestInterceptor compatibility aggregate.\n'
   printf -- '- HMAC dual-key rotation is design-only in v0.15.\n'
   printf -- '- Persisted subject-state completeness is protected by filesystem trust, not a keyed whole-snapshot MAC.\n'
   printf -- '- Unknown, novel, or encrypted encodings can evade semantic detection.\n'

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 ## Scope, release state, and invariants
@@ -16,9 +16,9 @@ be overwritten, relabeled, repaired, or republished as current Round 9 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.102` at
-  `8423cce2d1004e80948a9e2c60ee69354c0aabc3`, module sum
-  `h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=`, and `go.mod` sum
+- CPA `v7.2.103` at
+  `cade44b9cdee6b9328ea2648fd119129fdf11e2d`, module sum
+  `h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU=`, and `go.mod` sum
   `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 
 The root module, `integration/cpalatestcontract`, and
@@ -40,9 +40,10 @@ long-text windows cannot fill missing dimensions for a current request.
 
 The implementation has seven non-negotiable invariants:
 
-1. A blocked request is routed by `ModelRouter` to the plugin's own executor
-   before provider resolution and auth scheduling. The executor never invokes a
-   host HTTP or host model callback.
+1. A blocked request is terminated by the schema-2 before-auth
+   `RequestInterceptor` with a direct HTTP 403 before auth scheduling, provider
+   execution, usage accounting, SSE establishment, or upstream work. The legacy
+   executor remains a callback-safe, outbound-free defense-in-depth path.
 2. Every malicious-text block producer consumes an eligible candidate; score,
    threshold, wrapper amplification, semantic composition, and hard floor cannot
    create eligibility or bypass the common gate.
@@ -67,30 +68,69 @@ audit-migration, and operator-owned rollback contracts are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Exact-main CI,
-counted-Mock Host validation on the sole pinned CPA v7.2.102 identity, and
+counted-Mock Host validation on the sole pinned CPA v7.2.103 identity, and
 independent audit remain mandatory; self-tests do not authorize production
 Balanced mode.
 
 ## CPA ABI path
 
-The shared object exports `cliproxy_plugin_init` and returns ABI version 1. The
-JSON RPC capabilities are:
+The shared object exports `cliproxy_plugin_init` and returns C ABI version 1.
+Its JSON RPC registration uses schema version 2 and declares:
 
-- `model_router`: inspect `ModelRouteRequest` before provider/auth selection;
-- `executor`: terminate blocked non-streaming, streaming, and token-count
-  requests locally; HTTP forwarding remains explicitly unsupported;
+- `request_interceptor`: classify before auth and directly terminate a blocked
+  request. The bounded lifecycle cache retains only the opaque `RequestID` and
+  a per-process, request-ID-bound HMAC-SHA256 fingerprint of canonical
+  `SourceFormat`, body, case-normalized header names with exact ordered values,
+  and the stream flag. After auth skips duplicate classification and side
+  effects only when both the ID and fingerprint match; computing the body
+  fingerprint remains O(n). A body, header, format, or stream mutation is
+  reclassified and replaces the cached fingerprint. A fail-open operational
+  failure is not cached as checked, so after auth can retry. No request text or
+  header value is retained in the cache. This still assumes the attested Host
+  chain
+  has no untrusted mutator that runs after Guard at the final interceptor stage;
+- `request_lifecycle_plugin`: remove the bounded, TTL-limited opaque RequestID
+  and fingerprint entry for succeeded, failed, rejected, or canceled requests;
+- `model_router: true`: only the CPA v7.2.103 `codex-alpha-search` compatibility
+  entry is handled because those two HTTP routes do not invoke
+  RequestInterceptor. Host-originated Router callbacks for every other format
+  return `Handled:false` without classification; ordinary enforcement remains
+  on the schema-2 before-auth interceptor;
+- `executor`: retain the outbound-free local refusal path as defense in depth;
+  HTTP forwarding remains explicitly unsupported;
 - `management_api`: expose management-key-protected status, event, stats, test,
   unblock, and delete routes.
 
 The canonical CPA formats `openai`, `openai-response`, `interactions`,
-`openai-image`, `openai-video`, `claude`, and `gemini` are declared as executor input and output
+`codex-alpha-search`, `openai-image`, `openai-video`, `claude`, and `gemini` are declared as executor input and output
 formats. The real-Host harness retains separate allow/block, stream,
 token-count, and native error-shape assertions for the four original entry
 protocols; the image/profile and native Interactions matrices are distinct
 pending Host gates. Interactions is a known format but intentionally uses the
 conservative untrusted-text extractor until a fixed role schema is proven.
+Alpha Search uses its dedicated query profile and is never sent to CAG's
+executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
+before Codex auth or upstream because that handler currently accepts only a
+`provider=codex` target.
 
-For an unknown non-multipart `SourceFormat`, Strict self-routes before
+CPA v7.2.103 exposes `ModelRouter` as a global capability rather than a
+source-format-scoped capability. Once CAG registers it for Alpha Search, an
+ordinary routed request still incurs CPA's body clone, JSON/Base64
+serialization, and Router RPC before CAG can return `Handled:false`; the plugin
+fast path cannot remove that Host-side O(n) work. For a native RPC above 8 MiB,
+`CallOversized` receives only the method name and cannot distinguish Alpha
+Search from an ordinary request. CAG therefore retains security-first
+oversized `model.route` handling so a large Alpha Search request cannot bypass
+inspection. The consequence is that a large ordinary request can produce one
+incomplete disposition at `model.route` and another at
+`request.intercept_before`; `request.intercept_after` is an unconditional
+pass-through for oversized envelopes, preventing a third disposition. A
+time-window suppression heuristic is intentionally rejected because concurrent
+requests could be mismatched. Eliminating this cost and duplicate accounting
+requires CPA to scope Router capabilities by format or invoke
+RequestInterceptor for Alpha Search.
+
+For an unknown non-multipart `SourceFormat`, Strict terminates before
 interpretation. Balanced, Audit, and Observe still run a bounded generic
 untrusted-text walk so a new label is not a silent bypass; a counter and
 watchdog delta make it visible. Unknown multipart is different: every non-file
@@ -98,13 +138,12 @@ field becomes schema-incomplete, Balanced allows+audits, and Strict blocks for
 the fixed incomplete reason. Neither path guesses future provider semantics;
 a new CPA/provider shape requires review and an explicit canonical mapping.
 
-For an allowed request, `model.route` returns `Handled: false`. For a blocked
-request, it returns `Handled: true`, `TargetKind: self`. The executor returns an
-RPC error envelope with HTTP status 403 and the stable marker
-`cyber_abuse_guard_blocked`. The pinned CPA v7.2.102 ABI contract turns that
-error into the native error shape for the
-entry protocol; the counted-Mock Host lane must reverify the exact client shapes
-against the same candidate bytes.
+For an allowed request, the interceptor returns an empty modification response.
+For a blocked request, it returns `Terminate: true`, status 403, no-store and
+nosniff headers, and the stable `cyber_abuse_guard_blocked` JSON body. CPA maps
+that termination into the native error shape for each entry protocol. The
+counted-Mock Host lane must reverify the exact client shapes against the same
+candidate bytes.
 
 `executor.execute`, `executor.execute_stream`, and `executor.count_tokens` use
 this same policy-403 path. `executor.http_request` produces an unsupported-method
@@ -128,15 +167,17 @@ security property and correct 403 status, using CPA's protocol error wrapper.
 The stable marker and coarse category remain in the message; rule IDs and
 bypass details do not.
 
-CPA serializes request bodies as Base64 inside `ModelRouteRequest`, so a raw
+CPA serializes request bodies as Base64 inside `RequestInterceptRequest`, so a raw
 request slightly above 6 MiB can exceed the native 8 MiB RPC copy budget.
-Returning a router error there would make CPA continue upstream. The native
-boundary therefore detects an oversized `model.route` before `C.GoBytes` and
-uses a no-copy, mode-aware path: only `strict` self-routes to the local executor
-with `scan_limit`; `balanced`/`audit`/`observe`/`off` pass through according to
-their documented incomplete-inspection behavior. An oversized executor RPC
-returns a local 403 policy refusal in Strict and a local 413 size error in
-Balanced; neither executor result can fall back to a provider.
+Returning an interceptor RPC error there would make CPA continue its chain. The
+native boundary therefore detects oversized before-auth methods before
+`C.GoBytes` and uses a no-copy, mode-aware success response: `strict` terminates
+directly with `scan_limit`; `balanced`/`audit`/`observe`/`off` pass through
+according to their documented incomplete-inspection behavior. Oversized
+after-auth callbacks pass through without counters or audit because before-auth
+already owns the logical request disposition. An oversized executor RPC returns
+a local 403 policy refusal in Strict and a local 413 size error in Balanced;
+neither executor result can fall back to a provider.
 
 ## Request extraction
 
@@ -195,9 +236,9 @@ boundary cuts inherited media meaning. Consequently, tool argument/output
 member permutations have identical telemetry.
 
 Multipart extraction is selected by a fixed `RequestProfile` derived from the
-canonical `SourceFormat`. CPA ABI v1 `ModelRouteRequest` has no general HTTP
+canonical `SourceFormat`. CPA schema-2 `RequestInterceptRequest` has no general HTTP
 path, and the official image handler may parse and rebuild multipart before the
-Router receives it, so endpoint-path inference is neither available nor valid.
+interceptor receives it, so endpoint-path inference is neither available nor valid.
 For `openai-image`, inspectable text is limited to `prompt` and
 `negative_prompt` (plus `negative-prompt` and `negative prompt`); reviewed
 metadata/control fields are discarded, and `image`, `image[]`, `images`,
@@ -208,10 +249,10 @@ allowlisted text field carrying file evidence becomes
 
 Both schema reasons are incomplete inspection. No partial classification or
 subject-risk update is used: Balanced allows+audits as `multipart_schema`,
-Strict self-routes with `cyber_abuse_guard_multipart_schema`, and a complete
+Strict terminates with `cyber_abuse_guard_multipart_schema`, and a complete
 malicious prompt still follows ordinary policy. Parser unit tests prove the
 payload delivered to the plugin; only exact-candidate counted-Mock Host
-execution can prove pre-Router reconstruction and Auth/Provider/Usage/upstream
+execution can prove pre-interceptor reconstruction and Auth/Provider/Usage/upstream
 side effects.
 
 The original-body statement above is a Guard boundary, not an end-to-end Host
@@ -508,8 +549,8 @@ The anonymous identity is never admitted to rolling subject state. Anonymous
 requests still receive the same direct classifier/transport disposition, but
 cannot allocate a shared bucket or accumulate cross-request risk across users.
 
-CPA ABI v1 does not supply a distinct authenticated principal/key-policy ID or
-a trustworthy direct-peer address to ModelRouter. The Guard therefore rejects
+CPA schema 2 does not supply a distinct authenticated principal/key-policy ID or
+a trustworthy direct-peer address to RequestInterceptor. The Guard therefore rejects
 `trusted_proxy.enabled: true`; forwarded headers alone are spoofable and are
 never accepted as identity.
 
@@ -521,7 +562,7 @@ file is opened with `O_NOFOLLOW`; its type, permissions, size, and contents are
 validated through that same descriptor to prevent final-component symlink and
 path-swap races.
 
-Subject control is disabled by default and the Router does not enter the
+Subject control is disabled by default and request interception does not enter the
 identifier/controller path unless `subject_control.enabled: true` is explicit.
 The domain-separated request digest is computed lazily only for an eligible
 accumulating subject hit, a final block pending key, or a persisted audit event
@@ -561,7 +602,7 @@ manually blocked subject. Expired inactive state is pruned during this lookup.
 Manual blocks can be cleared through the authenticated management API.
 
 Risk accounting is idempotent per subject and domain-separated request digest.
-The same logical request crossing Router and executor methods, retrying, racing
+The same logical request crossing before/after-auth interception and legacy executor methods, retrying, racing
 concurrently, missing or expiring from the pending cache, or surviving an
 enabled-to-enabled reconfigure contributes at most one risk hit inside the risk
 window. Receipt metadata is bounded with the hit window and can be restored
@@ -790,36 +831,41 @@ prove that an oversized request receives 413 before CPA reads it.
   the current valid registration so CPA keeps the plugin active;
 - rule load/validation failure: registration/reconfigure fails;
 - malformed request: allow and optionally audit `parse_error` outside `off`;
-- RPC beyond the native copy budget: a model-route callback self-routes only in
+- RPC beyond the native copy budget: a request-interceptor callback terminates only in
   Strict; Balanced/Off/Observe/Audit pass through after recording the applicable
   incomplete-inspection counters/event. If an executor callback is nevertheless
   invoked directly, Strict returns the local policy 403 and every non-strict
   mode returns a local 413 size error;
 - audit failure: continue classifying and blocking;
-- panic in `model.route`: increment counters and, when a validated
-  Balanced/Strict runtime is active, return a successful local self-route so
+- panic in request interception: increment counters and, when a validated
+  Balanced/Strict runtime is active, return a successful direct termination so
   CPA cannot fall through to auth/provider selection; non-enforcing/no-runtime
-  cases still expose the error because they deliberately do not enforce;
+  cases deliberately return pass-through;
 - panic in another ABI method: recover, return a parseable internal error, and
   retain the non-zero ABI failure signal;
 - optional external classifier: interface reserved but not implemented.
 
 CPA owns the host fail-open policy. A plugin that is absent, fails registration,
-is fused, returns a Router error, panics before an accepted handled result,
-returns an invalid/empty target, or self-routes to an executor that is not ready
-can be skipped while later Routers or native routing continue. A higher-priority
-handled Router wins; equal priority is ordered by plugin ID ascending. No in-
-process plugin can prove that every host or ABI failure will be fail-closed.
+is fused, or returns an interceptor RPC error can be skipped while later
+interceptors and native execution continue. The Guard therefore converts known
+panic, shutdown, malformed-envelope, and guarded runtime failures into a valid
+mode-aware interceptor response. An earlier interceptor may terminate the chain
+before Guard runs or rewrite the representation that Guard inspects; a later
+interceptor may rewrite the request after Guard has inspected it. Equal priority
+is ordered by plugin ID ascending. Production must allowlist the interceptor
+inventory and verify that no untrusted post-Guard mutator is active. No
+in-process plugin can prove that every host or ABI failure will be fail-closed.
 The authenticated status exposes `loaded`, `enforcement_ready`,
-`router_errors`, `panics_recovered`, audit/HMAC/persistence degradation,
+`router_errors` (the compatibility aggregate for Router/interceptor protocol
+failures), `panics_recovered`, audit/HMAC/persistence degradation,
 reconfigure error, build/ruleset identity, and the classifier-policy
 version/hash. The read-only production watchdog checks those fields and runs
-built-in local-only probes. ABI v1 cannot
-enumerate router ordering or scan the plugin directory, so higher-priority
-router conflicts and duplicate `.so` versions remain mandatory operator checks.
+built-in local-only probes. The ABI cannot enumerate interceptor ordering or
+scan the plugin directory, so earlier interceptor conflicts and duplicate `.so`
+versions remain mandatory operator checks.
 `enforcement_ready` reflects plugin-internal runtime state only; it does not
-prove host load/registration, non-fused state, ordering, or per-request executor
-readiness.
+prove host load/registration, non-fused state, ordering, or per-request callback
+delivery.
 
 ## Verification strategy
 
@@ -843,7 +889,7 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-Both v7.2.102 compatibility contract modules first prove that the named critical
+Both v7.2.103 compatibility contract modules first prove that the named critical
 upstream Host tests still exist and then each executes the complete upstream
 `internal/pluginhost` package for the current platform. Their CI coverage is
 intentionally overlapping; it is neither an exact-name-only run nor a pair of
@@ -852,15 +898,16 @@ non-duplicative contracts. The plugin-store module also calls the official
 real build artifact. These checks cover store naming, root-only library layout,
 checksum, installed path/bytes, repeat installation, tamper repair, priority
 ordering, and documented Host fallback. They remain source/installer
-compatibility evidence. Current admission requires the v7.2.102 counted-Mock
+compatibility evidence. Current admission requires the v7.2.103 counted-Mock
 Host run on the same candidate and independent verification.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,
 starts a local mock OpenAI-compatible upstream, and starts CPA with the plugin.
 It installs the real store ZIP, loads the installed Guard, and asserts that safe
 requests carry a valid CPA credential-selection trace, cross Provider execution
-and Mock Upstream, and increment Usage, while blocked requests expose no CPA
-credential-selection trace and leave Provider, Usage, and Mock Upstream at zero.
+and Mock Upstream, and increment Usage, while blocked requests terminate in the
+schema-2 before-auth callback and expose no credential-selection trace, CAG
+executor call, Provider call, Usage event, Mock Upstream call, or SSE headers.
 The local harness does not claim a counted Auth Selector delta; that remains a
 protected exact-candidate counted-Mock requirement. It covers OpenAI Chat, OpenAI
 Responses, Anthropic, and Gemini non-streaming/streaming paths, pre-SSE 403,
@@ -876,12 +923,13 @@ clean exact-main candidate, protected counted-Mock record, independently audited
 artifact, release admission, or production approval, and it cannot be carried
 forward to different bytes.
 
-A separately compiled minimal Router/executor fixture exercises priority
-preemption, equal-priority plugin-ID ordering, invalid targets, missing or
+A separately compiled schema-1 Router/executor fixture remains an explicit
+legacy compatibility lane. It exercises priority, invalid targets, missing or
 disabled Guard state, registration failure, route error, and executor
-identifier/format/scope readiness. Host fuse and pre-result panic remain pinned
-to official source-overlay tests; the fixture does not use a process crash as a
-false substitute for a recoverable plugin panic.
+identifier/format/scope readiness, while the schema-2 Guard interceptor still
+blocks malicious requests when registered. Host fuse and pre-result panic remain
+pinned to official source-overlay tests; the fixture does not use a process
+crash as a false substitute for a recoverable plugin panic.
 
 Historically, the Host/Router targets and management-proxy fixture were mistakenly executed
 once in WSL outside the authorized evidence path. They used loopback/Mock

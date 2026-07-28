@@ -1,7 +1,6 @@
 package gemini
 
 import (
-	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -9,10 +8,11 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/api/handlers"
-	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	"github.com/tidwall/gjson"
@@ -33,116 +33,100 @@ func TestCyberAbuseGuardInteractionsTranslatorRegistryContract(t *testing.T) {
 	}
 }
 
-func TestCyberAbuseGuardInteractionsHandlerModelRouterContract(t *testing.T) {
+func TestCyberAbuseGuardInteractionsHandlerRequestInterceptorContract(t *testing.T) {
+	if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 2 {
+		t.Fatalf("CPA plugin versions = ABI %d schema %d, want 1/2", pluginabi.ABIVersion, pluginabi.SchemaVersion)
+	}
 	gin.SetMode(gin.TestMode)
-
-	t.Run("model request exposes native fields before auth", func(t *testing.T) {
-		const inputCanary = "INTERACTIONS_MODEL_INPUT_CANARY"
-		body := `{"model":"models/gemini-3.5-flash","input":[{"type":"user_input","content":[{"type":"text","text":"` + inputCanary + `"}]}]}`
-		host := &interactionsContractHost{}
-		recorder := runInteractionsContractRequest(t, host, body, "model-session")
-
-		if recorder.Code != http.StatusOK {
-			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
-		}
-		if host.routeCalls != 1 || host.executorCalls != 1 {
-			t.Fatalf("route/executor calls = %d/%d, want 1/1", host.routeCalls, host.executorCalls)
-		}
-		request := host.routeRequest
-		if request.SourceFormat != sdktranslator.FormatInteractions.String() || request.RequestedModel != "gemini-3.5-flash" || request.Stream {
-			t.Fatalf("route request identity = format %q model %q stream %v", request.SourceFormat, request.RequestedModel, request.Stream)
-		}
-		if request.Headers.Get("X-CAG-Visibility") != "header-canary" || request.Query.Get("session") != "model-session" {
-			t.Fatalf("route request headers/query = %#v / %#v", request.Headers, request.Query)
-		}
-		if got := gjson.GetBytes(request.Body, "model").String(); got != "gemini-3.5-flash" {
-			t.Fatalf("route body model = %q, want normalized gemini-3.5-flash; body=%s", got, request.Body)
-		}
-		if got := gjson.GetBytes(request.Body, "input.0.content.0.text").String(); got != inputCanary {
-			t.Fatalf("route body input = %q, want %q; body=%s", got, inputCanary, request.Body)
-		}
-		if host.executorOptions.SourceFormat != sdktranslator.FormatInteractions || host.executorOptions.ResponseFormat != sdktranslator.FormatInteractions {
-			t.Fatalf("executor formats = %q -> %q, want interactions -> interactions", host.executorOptions.SourceFormat, host.executorOptions.ResponseFormat)
-		}
-		if !bytes.Equal(host.executorOptions.OriginalRequest, request.Body) || !bytes.Equal(host.executorRequest.Payload, request.Body) {
-			t.Fatalf("executor original/payload drifted from ModelRouter body: original=%s payload=%s route=%s",
-				host.executorOptions.OriginalRequest, host.executorRequest.Payload, request.Body)
-		}
+	const registryClientID = "cyber-abuse-guard-interactions-schema2-contract"
+	registry.GetGlobalRegistry().RegisterClient(registryClientID, "gemini", []*registry.ModelInfo{{ID: "gemini-3.5-flash"}})
+	t.Cleanup(func() {
+		registry.GetGlobalRegistry().UnregisterClient(registryClientID)
 	})
 
-	t.Run("agent block route fails closed before executor and auth", func(t *testing.T) {
-		const inputCanary = "INTERACTIONS_AGENT_INPUT_CANARY"
-		body := `{"agent":"agents/cag-contract-agent","stream":true,"input":"` + inputCanary + `"}`
-		host := &interactionsContractHost{}
-		recorder := runInteractionsContractRequest(t, host, body, "agent-session")
+	const inputCanary = "INTERACTIONS_REQUEST_INTERCEPTOR_CANARY"
+	body := `{"model":"models/gemini-3.5-flash","input":[{"type":"user_input","content":[{"type":"text","text":"` + inputCanary + `"}]}]}`
+	host := &interactionsRequestLifecycleContractHost{}
+	recorder := runInteractionsContractRequest(t, host, body, "schema2-session")
 
-		if recorder.Code != http.StatusBadRequest {
-			t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusBadRequest, recorder.Body.String())
-		}
-		if !strings.Contains(recorder.Body.String(), "agent is only supported for native interactions execution") {
-			t.Fatalf("agent response does not expose the pinned CPA fail-closed contract: %s", recorder.Body.String())
-		}
-		if host.routeCalls != 1 || host.executorCalls != 0 {
-			t.Fatalf("route/executor calls = %d/%d, want 1/0", host.routeCalls, host.executorCalls)
-		}
-		request := host.routeRequest
-		if request.SourceFormat != sdktranslator.FormatInteractions.String() || request.RequestedModel != "agents/cag-contract-agent" || !request.Stream {
-			t.Fatalf("agent route identity = format %q model %q stream %v", request.SourceFormat, request.RequestedModel, request.Stream)
-		}
-		if request.Headers.Get("X-CAG-Visibility") != "header-canary" || request.Query.Get("session") != "agent-session" {
-			t.Fatalf("agent route headers/query = %#v / %#v", request.Headers, request.Query)
-		}
-		if got := gjson.GetBytes(request.Body, "input").String(); got != inputCanary {
-			t.Fatalf("agent route body input = %q, want %q; body=%s", got, inputCanary, request.Body)
-		}
-	})
+	if recorder.Code != http.StatusUnavailableForLegalReasons {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnavailableForLegalReasons, recorder.Body.String())
+	}
+	if recorder.Header().Get("X-CAG-Policy") != "blocked" || recorder.Body.String() != `{"blocked":true}` {
+		t.Fatalf("termination response headers/body = %#v / %s", recorder.Header(), recorder.Body.String())
+	}
+	if host.beforeCalls != 1 || host.afterCalls != 0 || host.responseCalls != 0 || host.streamCalls != 0 {
+		t.Fatalf("interceptor calls before/after/response/stream = %d/%d/%d/%d, want 1/0/0/0",
+			host.beforeCalls, host.afterCalls, host.responseCalls, host.streamCalls)
+	}
+	request := host.request
+	if request.RequestID == "" || request.SourceFormat != sdktranslator.FormatInteractions.String() ||
+		request.Model != "gemini-3.5-flash" || request.RequestedModel != "gemini-3.5-flash" || request.Stream || request.ToFormat != "" {
+		t.Fatalf("request identity = %#v", request)
+	}
+	if request.Headers.Get("X-CAG-Visibility") != "header-canary" {
+		t.Fatalf("request headers = %#v, want visibility canary", request.Headers)
+	}
+	if got := gjson.GetBytes(request.Body, "model").String(); got != "gemini-3.5-flash" {
+		t.Fatalf("intercepted body model = %q, want normalized gemini-3.5-flash; body=%s", got, request.Body)
+	}
+	if got := gjson.GetBytes(request.Body, "input.0.content.0.text").String(); got != inputCanary {
+		t.Fatalf("intercepted body input = %q, want %q; body=%s", got, inputCanary, request.Body)
+	}
+	completion := host.completion
+	if host.completionCalls != 1 || completion.RequestID != request.RequestID ||
+		completion.SourceFormat != sdktranslator.FormatInteractions.String() ||
+		completion.Model != "gemini-3.5-flash" || completion.RequestedModel != "gemini-3.5-flash" ||
+		completion.Outcome != pluginapi.RequestCompletionRejected || completion.StatusCode != http.StatusUnavailableForLegalReasons {
+		t.Fatalf("completion calls=%d completion=%#v", host.completionCalls, completion)
+	}
+	if completion.StartedAt.IsZero() || completion.CompletedAt.Before(completion.StartedAt) {
+		t.Fatalf("completion timestamps = %#v", completion)
+	}
 }
 
-type interactionsContractHost struct {
-	routeCalls      int
-	executorCalls   int
-	routeRequest    pluginapi.ModelRouteRequest
-	executorRequest coreexecutor.Request
-	executorOptions coreexecutor.Options
+type interactionsRequestLifecycleContractHost struct {
+	beforeCalls     int
+	afterCalls      int
+	responseCalls   int
+	streamCalls     int
+	completionCalls int
+	request         pluginapi.RequestInterceptRequest
+	completion      pluginapi.RequestCompletion
 }
 
-func (h *interactionsContractHost) HasModelRouters() bool { return true }
-
-func (h *interactionsContractHost) RouteModel(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, bool) {
-	h.routeCalls++
-	h.routeRequest = request
-	return pluginapi.ModelRouteResponse{
-		Handled:    true,
-		TargetKind: pluginapi.ModelRouteTargetExecutor,
-		Target:     "cyber-abuse-guard",
-		Reason:     "cyber_abuse_guard_contract_block",
-	}, true
+func (h *interactionsRequestLifecycleContractHost) InterceptRequestBeforeAuth(_ context.Context, request pluginapi.RequestInterceptRequest) pluginapi.RequestInterceptResponse {
+	h.beforeCalls++
+	h.request = request
+	return pluginapi.RequestInterceptResponse{
+		Terminate:       true,
+		StatusCode:      http.StatusUnavailableForLegalReasons,
+		ResponseHeaders: http.Header{"Content-Type": []string{"application/json"}, "X-Cag-Policy": []string{"blocked"}},
+		ResponseBody:    []byte(`{"blocked":true}`),
+	}
 }
 
-func (h *interactionsContractHost) ExecutePluginExecutor(_ context.Context, _ string, request coreexecutor.Request, options coreexecutor.Options) (coreexecutor.Response, error) {
-	h.executorCalls++
-	h.executorRequest = request
-	h.executorOptions = options
-	return coreexecutor.Response{Payload: []byte(`{"id":"cag-contract-block"}`)}, nil
+func (h *interactionsRequestLifecycleContractHost) InterceptRequestAfterAuth(_ context.Context, request pluginapi.RequestInterceptRequest) pluginapi.RequestInterceptResponse {
+	h.afterCalls++
+	return pluginapi.RequestInterceptResponse{Headers: request.Headers, Body: request.Body}
 }
 
-func (h *interactionsContractHost) ExecutePluginExecutorStream(_ context.Context, _ string, request coreexecutor.Request, options coreexecutor.Options) (*coreexecutor.StreamResult, error) {
-	h.executorCalls++
-	h.executorRequest = request
-	h.executorOptions = options
-	chunks := make(chan coreexecutor.StreamChunk)
-	close(chunks)
-	return &coreexecutor.StreamResult{Chunks: chunks}, nil
+func (h *interactionsRequestLifecycleContractHost) InterceptResponse(_ context.Context, request pluginapi.ResponseInterceptRequest) pluginapi.ResponseInterceptResponse {
+	h.responseCalls++
+	return pluginapi.ResponseInterceptResponse{Headers: request.ResponseHeaders, Body: request.Body}
 }
 
-func (h *interactionsContractHost) CountPluginExecutor(_ context.Context, _ string, request coreexecutor.Request, options coreexecutor.Options) (coreexecutor.Response, error) {
-	h.executorCalls++
-	h.executorRequest = request
-	h.executorOptions = options
-	return coreexecutor.Response{Payload: []byte(`{"total_tokens":0}`)}, nil
+func (h *interactionsRequestLifecycleContractHost) InterceptStreamChunk(_ context.Context, request pluginapi.StreamChunkInterceptRequest) pluginapi.StreamChunkInterceptResponse {
+	h.streamCalls++
+	return pluginapi.StreamChunkInterceptResponse{Headers: request.ResponseHeaders, Body: request.Body}
 }
 
-func runInteractionsContractRequest(t *testing.T, host *interactionsContractHost, body, session string) *httptest.ResponseRecorder {
+func (h *interactionsRequestLifecycleContractHost) CompleteRequest(_ context.Context, completion pluginapi.RequestCompletion) {
+	h.completionCalls++
+	h.completion = completion
+}
+
+func runInteractionsContractRequest(t *testing.T, host *interactionsRequestLifecycleContractHost, body, session string) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
 	ginContext, _ := gin.CreateTestContext(recorder)
@@ -151,7 +135,7 @@ func runInteractionsContractRequest(t *testing.T, host *interactionsContractHost
 	ginContext.Request.Header.Set("X-CAG-Visibility", "header-canary")
 
 	base := handlers.NewBaseAPIHandlers(&sdkconfig.SDKConfig{}, nil)
-	base.SetModelRouterHost(host)
+	base.SetPluginHost(host)
 	NewGeminiAPIHandler(base).Interactions(ginContext)
 	return recorder
 }

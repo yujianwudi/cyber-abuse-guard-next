@@ -28,6 +28,14 @@ type modelRouteFailure struct {
 	reason string
 }
 
+type modelRouteCallResult struct {
+	response        []byte
+	returnCode      int
+	policy          modelRouteFailurePolicy
+	failureRecorded bool
+	blockCategory   string
+}
+
 // requestHashMemo defers the full-body digest until a route actually needs a
 // subject idempotency key, a pending block correlation key, or a persisted
 // audit field. It is local to one router callback and is never shared.
@@ -57,11 +65,38 @@ const streamingScannerIdentity = buildinfo.StreamingScannerIdentity
 // privacy-safe failure is reported, and the captured policy survives either a
 // concurrent runtime swap or a recovered panic.
 func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
+	var request pluginapi.ModelRouteRequest
+	if err := json.Unmarshal(raw, &request); err != nil {
+		policy := p.snapshotModelRouteFailurePolicy()
+		return p.modelRouteFailureWithPolicy("invalid_request", "cyber_abuse_guard_invalid_request", policy), 0
+	}
+	result := p.callModelRouteRequest(request)
+	return result.response, result.returnCode
+}
+
+// callModelRouteRequest shares the existing classifier, audit, subject-risk,
+// and failure semantics with schema-v2 request interception without encoding
+// and decoding a second full request body. The returned failureRecorded bit
+// tells the interceptor adapter whether the router layer already accounted for
+// an operational failure, avoiding duplicate router_errors increments.
+func (p *Plugin) callModelRouteRequest(request pluginapi.ModelRouteRequest) (result modelRouteCallResult) {
+	// CPA v7.2.103 still routes Codex Alpha Search exclusively through the
+	// ModelRouter surface. For ordinary Host-originated requests, schema-v2
+	// RequestInterceptor is the production enforcement path and this registered
+	// router must be an O(1) no-op to avoid duplicate classification. Direct
+	// calls without PluginID remain available to the legacy executor contract and
+	// existing internal tests.
+	if strings.TrimSpace(request.PluginID) == ID &&
+		!strings.EqualFold(strings.TrimSpace(request.SourceFormat), "codex-alpha-search") {
+		result.response = okEnvelope(pluginapi.ModelRouteResponse{Handled: false})
+		return result
+	}
+
 	p.opMu.RLock()
 	state := p.runtime.Load()
-	policy := modelRoutePolicyFromState(state)
+	result.policy = modelRoutePolicyFromState(state)
 	if state == nil && p.shutdown.Load() {
-		policy = decodeModelRouteFailurePolicy(p.shutdownModelRoutePolicy.Load())
+		result.policy = decodeModelRouteFailurePolicy(p.shutdownModelRoutePolicy.Load())
 	}
 	locked := true
 	defer func() {
@@ -70,21 +105,19 @@ func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
 		}
 		if recovered := recover(); recovered != nil {
 			p.counters.panicsRecovered.Add(1)
-			response = p.modelRouteFailureWithPolicy(
+			result.response = p.modelRouteFailureWithPolicy(
 				"panic_recovered",
 				"cyber_abuse_guard_router_panic",
-				policy,
+				result.policy,
 			)
-			returnCode = 0
+			result.returnCode = 0
+			result.failureRecorded = true
+			if result.policy.failClosed {
+				result.blockCategory = "inspection_failure"
+			}
 		}
 	}()
 
-	var request pluginapi.ModelRouteRequest
-	if err := json.Unmarshal(raw, &request); err != nil {
-		p.opMu.RUnlock()
-		locked = false
-		return p.modelRouteFailureWithPolicy("invalid_request", "cyber_abuse_guard_invalid_request", policy), 0
-	}
 	if state == nil {
 		p.opMu.RUnlock()
 		locked = false
@@ -94,21 +127,31 @@ func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
 			code = "plugin_shutdown"
 			reason = "cyber_abuse_guard_shutdown"
 		}
-		return p.modelRouteFailureWithPolicy(code, reason, policy), 0
+		result.response = p.modelRouteFailureWithPolicy(code, reason, result.policy)
+		result.failureRecorded = true
+		if result.policy.failClosed {
+			result.blockCategory = "inspection_failure"
+		}
+		return result
 	}
 
-	response, failure := p.route(state, request)
+	var failure *modelRouteFailure
+	result.response, result.blockCategory, failure = p.route(state, request)
 	p.opMu.RUnlock()
 	locked = false
 	if failure != nil {
-		return p.modelRouteFailureWithPolicy(failure.code, failure.reason, policy), 0
+		result.response = p.modelRouteFailureWithPolicy(failure.code, failure.reason, result.policy)
+		result.failureRecorded = true
+		if result.policy.failClosed {
+			result.blockCategory = "inspection_failure"
+		}
 	}
-	return response, 0
+	return result
 }
 
-func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest) ([]byte, *modelRouteFailure) {
+func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest) ([]byte, string, *modelRouteFailure) {
 	if !state.config.Enabled || state.config.Mode == config.ModeOff {
-		return okEnvelope(pluginapi.ModelRouteResponse{Handled: false}), nil
+		return okEnvelope(pluginapi.ModelRouteResponse{Handled: false}), "", nil
 	}
 	started := time.Now()
 	p.counters.total.Add(1)
@@ -127,7 +170,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 			p.counters.coverageIncomplete.Add(1)
 			p.recordUnknownSourceBlock(state, hash, subjectHash, request.Stream, request.Body, time.Since(started))
 			p.pending.put(hash, "unknown_source_format")
-			return blockedRouteEnvelope("cyber_abuse_guard_unknown_source_format"), nil
+			return blockedRouteEnvelope("cyber_abuse_guard_unknown_source_format"), "unknown_source_format", nil
 		}
 		// Balanced/audit/observe still run the format-tolerant bounded extractor
 		// instead of silently bypassing policy. Strict blocks before interpretation
@@ -151,7 +194,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		MaxChunks:     state.config.EffectiveMaxClassificationChunks(),
 	})
 	if sessionErr != nil {
-		return nil, &modelRouteFailure{code: "invalid_classifier_limits", reason: "cyber_abuse_guard_inspection_failure"}
+		return nil, "", &modelRouteFailure{code: "invalid_classifier_limits", reason: "cyber_abuse_guard_inspection_failure"}
 	}
 	limits := extract.Limits{
 		// MaxScanBytes is now only the deprecated window alias. The streaming
@@ -178,9 +221,9 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		// deliberately kept on the existing mode-aware runtime-failure path and
 		// is never confused with request-content incompleteness.
 		if errors.Is(extractErr, extract.ErrInvalidLimits) {
-			return nil, &modelRouteFailure{code: "invalid_extractor_limits", reason: "cyber_abuse_guard_inspection_failure"}
+			return nil, "", &modelRouteFailure{code: "invalid_extractor_limits", reason: "cyber_abuse_guard_inspection_failure"}
 		}
-		return nil, &modelRouteFailure{code: "inspection_failure", reason: "cyber_abuse_guard_inspection_failure"}
+		return nil, "", &modelRouteFailure{code: "inspection_failure", reason: "cyber_abuse_guard_inspection_failure"}
 	}
 	result := session.Finish()
 	incompleteReasons := append([]extract.IncompleteReason(nil), extracted.IncompleteReasons...)
@@ -320,7 +363,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		p.recordDecision(state, request, &requestHash, subjectHash, extracted.TextBytesScanned, result, decision, incompleteReasons, subjectReason, request.Body, time.Since(started))
 	}
 	if !decision.Block {
-		return okEnvelope(pluginapi.ModelRouteResponse{Handled: false}), nil
+		return okEnvelope(pluginapi.ModelRouteResponse{Handled: false}), "", nil
 	}
 	category := decision.Category
 	if category == "" {
@@ -335,7 +378,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		result.Score >= state.config.Thresholds.HardBlock {
 		reason = "cyber_abuse_guard_hard_policy"
 	}
-	return blockedRouteEnvelope(reason), nil
+	return blockedRouteEnvelope(reason), category, nil
 }
 
 func (p *Plugin) auditSubjectHash(state *runtimeState, request pluginapi.ModelRouteRequest) string {
@@ -431,7 +474,7 @@ func extractionProfile(format string) (extract.RequestProfile, bool) {
 	case "interactions":
 		profile.Source = extract.SourceProfileInteractions
 	case audit.SourceFormatCodexAlphaSearch:
-		// CPA v7.2.102 exposes Alpha Search request bodies directly to ModelRouter.
+		// CPA v7.2.103 exposes Alpha Search model payloads only to ModelRouter.
 		// They have no chat-role envelope, so treat their model-visible strings as
 		// direct untrusted text while retaining a distinct structural profile.
 		profile.Source = extract.SourceProfileCodexAlphaSearch

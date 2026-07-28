@@ -150,9 +150,9 @@ panics_before="$status_panics_recovered"
 unknown_source_formats_before="$status_unknown_source_formats"
 if [[ -n "$MAX_ROUTER_ERRORS" ]]; then
   max_router_errors=$((10#$MAX_ROUTER_ERRORS))
-  (( router_errors_before <= max_router_errors )) || fail "router_errors=${router_errors_before} exceeds ${max_router_errors}"
+  (( router_errors_before <= max_router_errors )) || fail "router_errors=${router_errors_before} (Router/RequestInterceptor protocol failures) exceeds ${max_router_errors}"
 elif (( router_errors_before > 0 )); then
-  printf 'NOTICE: cumulative router_errors=%s; set MAX_ROUTER_ERRORS to enforce an absolute restart-scoped budget.\n' "$router_errors_before" >&2
+  printf 'NOTICE: cumulative router_errors=%s (Router/RequestInterceptor protocol failures); set MAX_ROUTER_ERRORS to enforce an absolute restart-scoped budget.\n' "$router_errors_before" >&2
 fi
 if [[ -n "$MAX_PANICS_RECOVERED" ]]; then
   max_panics_recovered=$((10#$MAX_PANICS_RECOVERED))
@@ -200,7 +200,7 @@ validate_status "post-probe"
 router_errors_after="$status_router_errors"
 panics_after="$status_panics_recovered"
 unknown_source_formats_after="$status_unknown_source_formats"
-[[ "$router_errors_after" == "$router_errors_before" ]] || fail "router_errors increased during local probes"
+[[ "$router_errors_after" == "$router_errors_before" ]] || fail "router_errors (Router/RequestInterceptor protocol failures) increased during local probes"
 [[ "$panics_after" == "$panics_before" ]] || fail "panics_recovered increased during local probes"
 (( unknown_source_formats_after >= unknown_source_formats_before )) || fail "unknown_source_formats decreased during local probes; CPA/plugin may have restarted"
 new_unknown_source_formats=$((unknown_source_formats_after - unknown_source_formats_before))
@@ -213,5 +213,5 @@ elif (( new_unknown_source_formats > 0 )); then
     "$new_unknown_source_formats" >&2
 fi
 
-printf 'cyber-abuse-guard health check OK: mode=%s ruleset=%s router_errors=%s panics_recovered=%s unknown_source_formats=%s\n' \
+printf 'cyber-abuse-guard health check OK: mode=%s ruleset=%s router_errors=%s (Router/RequestInterceptor protocol failures) panics_recovered=%s unknown_source_formats=%s\n' \
   "$actual_mode" "$ruleset_version" "$router_errors_after" "$panics_after" "$unknown_source_formats_after"

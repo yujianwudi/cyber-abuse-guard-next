@@ -19,7 +19,7 @@ const (
 	cpaLatestPluginHostPackage = cpaLatestModulePath + "/internal/pluginhost"
 	cpaLatestResponsesPackage  = cpaLatestModulePath + "/internal/translator/openai/openai/responses"
 	cpaLatestResponsesHandler  = cpaLatestModulePath + "/sdk/api/handlers/openai"
-	cpaLatestFixtureSHA256     = "113645c584a40ce6c8887d83ab9443e9c62f21201358bcb336c6e5eb1ebe6b1d"
+	cpaLatestFixtureSHA256     = "bce98b11218311554a05e582226d311609a49072c004a8bf62d96a5d8c01b5c8"
 
 	cpaCompatibilityProfileEnv = "CPA_COMPAT_PROFILE"
 	cpaCompatibilityModfileEnv = "CPA_COMPAT_MODFILE"
@@ -39,14 +39,28 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.102",
-	Commit:    "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
-	ModuleSum: "h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=",
+	Version:   "v7.2.103",
+	Commit:    "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
+	ModuleSum: "h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU=",
 	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
 var latestCriticalCPAHostTests = []string{
 	"TestDecodeEnvelopeResultPreservesPluginHTTPStatus",
+	"TestCompleteRequestDoesNotWaitForBlockingPlugin",
+	"TestCompleteRequestUsesUncancelledContextAndClonesMetadata",
+	"TestHostApplyConfigDispatchesInterceptorRPCMethods",
+	"TestHostApplyConfigRegistersInterceptorOnlyPlugin",
+	"TestHostApplyConfigSerializesLifecycleCalls",
+	"TestInterceptRequestChainsByPriorityAndHeaders",
+	"TestInterceptRequestAfterAuthPassesTargetFormat",
+	"TestInterceptorsSkipErrorsAndFusePanics",
+	"TestRegisterRPCPluginAcceptsModelRouterOnSchema1",
+	"TestRegisterRPCPluginRejectsFutureSchemaVersion",
+	"TestRegisterRPCPluginSendsHostSchemaVersion",
+	"TestRequestInterceptorTerminationStopsChain",
+	"TestRPCCapabilitiesAndAdapterIncludeRequestLifecycle",
+	"TestRPCInterceptorsIncludeHostCallbackID",
 	"TestSanitizePluginRequestRemovesNonJSONMetadata",
 	"TestServeManagementHTMLEscapesJSONResponseStrings",
 	"TestHostRouteModelAllowsExplicitExecutorPluginTarget",
@@ -74,6 +88,11 @@ var latestCriticalCPAHostTests = []string{
 	"TestHostUnloadPluginContextDetachesBlockedCall",
 	"TestOwnsExecutorDistinguishesHostAdapters",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
+}
+
+var latestCriticalCPAHandlerTests = []string{
+	"TestHandlerRequestInterceptorTerminatesBeforeAuth",
+	"TestHandlerRequestInterceptorTerminatesAfterAuth",
 }
 
 type latestResolvedCPAModule struct {
@@ -124,6 +143,14 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 			t.Fatalf("latest CPA host package no longer lists required test %q", name)
 		}
 	}
+	handlerTests := runLatestGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", cpaLatestHandlersPackage,
+	)
+	for _, name := range latestCriticalCPAHandlerTests {
+		if !linePresent(handlerTests, name) {
+			t.Fatalf("latest CPA handler package no longer lists required test %q", name)
+		}
+	}
 
 	// Execute the complete upstream Host suite for the current platform. The
 	// required-name check above keeps the contract explicit, while running the
@@ -133,6 +160,10 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 	runLatestGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
 		cpaLatestPluginHostPackage,
+	)
+	runLatestGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+		"-run", "^("+strings.Join(latestCriticalCPAHandlerTests, "|")+")$", cpaLatestHandlersPackage,
 	)
 }
 
@@ -184,7 +215,7 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		}
 	}
 
-	// CPA v7.2.102 split request normalization out of the websocket transport
+	// CPA v7.2.103 keeps request normalization split out of the websocket transport
 	// file. Pin the semantic implementation file while the upstream behavior
 	// tests above continue to guard the public contract.
 	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")

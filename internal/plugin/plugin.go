@@ -1,4 +1,4 @@
-// Package plugin implements the CPA v7.2.102 schema-v1 RPC surface for the
+// Package plugin implements the CPA v7.2.103 schema-v2 RPC surface for the
 // cyber-abuse guard. The native C boundary in cmd/cyber-abuse-guard is kept
 // deliberately thin; policy state and lifecycle semantics live here so they
 // can be race-tested without loading a shared object.
@@ -58,7 +58,7 @@ var metadata = pluginapi.Metadata{
 		{Name: "hard_block_even_if_authorized", Type: pluginapi.ConfigFieldTypeObject, Description: "Categories whose operational abuse remains protected from authorization score reductions."},
 		{Name: "subject_control", Type: pluginapi.ConfigFieldTypeObject, Description: "Rolling subject-risk, cooldown, and manual-block settings."},
 		{Name: "audit", Type: pluginapi.ConfigFieldTypeObject, Description: "SQLite audit settings plus an explicit default-off, block-only, redacted and truncated operator request-preview capture."},
-		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.102."},
+		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.103."},
 		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v0.16 and rejected."},
 	},
 }
@@ -86,6 +86,8 @@ type registrationCapabilities struct {
 	ExecutorModelScope    pluginapi.ExecutorModelScope `json:"executor_model_scope"`
 	ExecutorInputFormats  []string                     `json:"executor_input_formats"`
 	ExecutorOutputFormats []string                     `json:"executor_output_formats"`
+	RequestInterceptor    bool                         `json:"request_interceptor"`
+	RequestLifecycle      bool                         `json:"request_lifecycle_plugin"`
 	ManagementAPI         bool                         `json:"management_api"`
 }
 
@@ -140,21 +142,24 @@ type Plugin struct {
 	shutdown                 atomic.Bool
 	shutdownModelRoutePolicy atomic.Uint32
 
-	lastConfigError         atomic.Pointer[string]
-	lastReconfigureError    atomic.Pointer[string]
-	identifier              *subject.Identifier
-	identifierErr           error
-	loadRules               func() (*rules.RuleSet, error)
-	requestHasher           func([]byte) string
-	pending                 pendingCache
-	counters                counters
-	lastAuditNotice         atomic.Int64
-	lastRouterNotice        atomic.Int64
-	lastUnknownSourceNotice atomic.Int64
-	lastPersistenceNotice   atomic.Int64
-	abiLimitLogged          atomic.Bool
-	loggerMu                sync.RWMutex
-	logger                  LogFunc
+	lastConfigError           atomic.Pointer[string]
+	lastReconfigureError      atomic.Pointer[string]
+	identifier                *subject.Identifier
+	identifierErr             error
+	loadRules                 func() (*rules.RuleSet, error)
+	requestHasher             func([]byte) string
+	requestFingerprintKey     [32]byte
+	requestFingerprintEnabled bool
+	pending                   pendingCache
+	requestLifecycle          requestLifecycleCache
+	counters                  counters
+	lastAuditNotice           atomic.Int64
+	lastRouterNotice          atomic.Int64
+	lastUnknownSourceNotice   atomic.Int64
+	lastPersistenceNotice     atomic.Int64
+	abiLimitLogged            atomic.Bool
+	loggerMu                  sync.RWMutex
+	logger                    LogFunc
 }
 
 // LogFunc receives privacy-safe operational messages. The native entrypoint
@@ -165,16 +170,23 @@ type LogFunc func(level, message string, fields map[string]any)
 // only by plugin.register, matching the CPA native lifecycle.
 func New() *Plugin {
 	identifier, err := subject.NewIdentifier(subject.IdentifierConfig{})
+	requestFingerprintKey, requestFingerprintEnabled := newRequestFingerprintKey()
 	return &Plugin{
-		identifier:    identifier,
-		identifierErr: err,
-		loadRules:     rules.LoadDefault,
-		requestHasher: audit.HashRequest,
-		pending:       newPendingCache(4096, 2*time.Minute),
+		identifier:                identifier,
+		identifierErr:             err,
+		loadRules:                 rules.LoadDefault,
+		requestHasher:             audit.HashRequest,
+		requestFingerprintKey:     requestFingerprintKey,
+		requestFingerprintEnabled: requestFingerprintEnabled,
+		pending:                   newPendingCache(4096, 2*time.Minute),
+		requestLifecycle: newRequestLifecycleCache(
+			8192,
+			10*time.Minute,
+		),
 	}
 }
 
-// Call dispatches one schema-v1 RPC method. Controlled protocol/policy errors
+// Call dispatches one schema-v2 RPC method. Controlled protocol/policy errors
 // use a valid error envelope with return code zero. A recovered panic uses a
 // non-zero ABI return code while still returning a parseable envelope.
 func (p *Plugin) Call(method string, request []byte) (response []byte, returnCode int) {
@@ -196,11 +208,20 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 		p.Shutdown()
 		return okEnvelope(struct{}{}), 0
 	}
+	if method == pluginabi.MethodRequestComplete {
+		return p.handleRequestComplete(request), 0
+	}
 	if p.shutdown.Load() {
 		if method == pluginabi.MethodModelRoute {
 			return p.modelRouteFailureWithPolicy(
 				"plugin_shutdown",
 				"cyber_abuse_guard_shutdown",
+				decodeModelRouteFailurePolicy(p.shutdownModelRoutePolicy.Load()),
+			), 0
+		}
+		if requestInterceptorMethod(method) {
+			return p.requestInterceptorFailureWithPolicy(
+				"plugin_shutdown",
 				decodeModelRouteFailurePolicy(p.shutdownModelRoutePolicy.Load()),
 			), 0
 		}
@@ -214,6 +235,10 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 		return p.configure(request, true), 0
 	case pluginabi.MethodModelRoute:
 		return p.callModelRoute(request)
+	case pluginabi.MethodRequestInterceptBefore:
+		return p.callRequestIntercept(request, true)
+	case pluginabi.MethodRequestInterceptAfter:
+		return p.callRequestIntercept(request, false)
 	case pluginabi.MethodExecutorIdentifier:
 		return okEnvelope(struct {
 			Identifier string `json:"identifier"`
@@ -232,10 +257,10 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 }
 
 // CallOversized handles an RPC that exceeded the boundary-copy budget without
-// parsing or copying its attacker-controlled payload. CPA treats ModelRouter
-// errors as a request to continue native routing, so this content-incomplete
-// condition is returned as a successful mode-specific route: strict self-routes
-// while balanced/audit/observe/off pass through.
+// parsing or copying its attacker-controlled payload. Schema-v2 request
+// interception can terminate directly, so this content-incomplete condition is
+// returned as a successful mode-specific response: strict terminates while
+// balanced/audit/observe/off preserve the configured incomplete policy.
 func (p *Plugin) CallOversized(method string) (response []byte, returnCode int) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -253,11 +278,21 @@ func (p *Plugin) CallOversized(method string) (response []byte, returnCode int) 
 				decodeModelRouteFailurePolicy(p.shutdownModelRoutePolicy.Load()),
 			), 0
 		}
+		if requestInterceptorMethod(method) {
+			return p.requestInterceptorFailureWithPolicy(
+				"plugin_shutdown",
+				decodeModelRouteFailurePolicy(p.shutdownModelRoutePolicy.Load()),
+			), 0
+		}
 		return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, ""), 0
 	}
 	switch method {
 	case pluginabi.MethodModelRoute:
 		return p.callOversizedModelRoute()
+	case pluginabi.MethodRequestInterceptBefore:
+		return p.callOversizedRequestIntercept()
+	case pluginabi.MethodRequestInterceptAfter:
+		return p.callOversizedRequestInterceptAfterAuth()
 	case pluginabi.MethodExecutorExecute, pluginabi.MethodExecutorExecuteStream, pluginabi.MethodExecutorCountTokens:
 		return p.callOversizedExecutor()
 	default:
@@ -274,15 +309,15 @@ func (p *Plugin) callOversizedExecutor() ([]byte, int) {
 		p.counters.executorBlocks.Add(1)
 		return errorEnvelope(blockedErrorCode, refusalMessage, 403, "rpc_body_limit"), 0
 	}
-	// Non-strict routers never self-route an oversized request. If a host calls
-	// the executor directly anyway, report the boundary failure without turning
-	// it into a cyber-abuse policy 403 or writing a duplicate decision event.
+	// Non-strict inspection paths do not turn an oversized request into a policy
+	// block. If a Host calls the executor directly anyway, report the boundary
+	// failure without writing a duplicate decision event.
 	return errorEnvelope("request_too_large", "plugin executor RPC exceeds the size limit", 413, "rpc_body_limit"), 0
 }
 
-// recoverCallbackPanic is deliberately mode-aware for ModelRouter callbacks.
-// CPA v7.2.102 continues native routing after a router error, so an enforcing
-// runtime must turn a recovered panic into a successful local self-route. The
+// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v2
+// request-interceptor callbacks. CPA continues after an RPC error, so an
+// enforcing runtime must return a successful local block response. The
 // recovered value is never logged because it can contain attacker-controlled
 // data. Other RPC methods retain the ABI-level non-zero failure signal.
 func (p *Plugin) recoverCallbackPanic(method string) ([]byte, int) {
@@ -294,6 +329,12 @@ func (p *Plugin) recoverCallbackPanic(method string) ([]byte, int) {
 		return p.modelRouteFailureWithPolicy(
 			"panic_recovered",
 			"cyber_abuse_guard_router_panic",
+			p.snapshotModelRouteFailurePolicy(),
+		), 0
+	}
+	if requestInterceptorMethod(method) {
+		return p.requestInterceptorFailureWithPolicy(
+			"panic_recovered",
 			p.snapshotModelRouteFailurePolicy(),
 		), 0
 	}
@@ -343,9 +384,9 @@ func encodeModelRouteFailurePolicy(policy modelRouteFailurePolicy) uint32 {
 
 func decodeModelRouteFailurePolicy(encoded uint32) modelRouteFailurePolicy {
 	return modelRouteFailurePolicy{
-		// Shutdown always publishes a terminal router policy before publishing
+		// Shutdown always publishes a terminal inspection policy before publishing
 		// the shutdown flag. Treat even an unregistered shutdown as a valid
-		// pass-through router response instead of an RPC error.
+		// pass-through response instead of an RPC error.
 		initialized: encoded != 0,
 		failClosed:  encoded == shutdownModelRouteFailClosed,
 	}
@@ -401,7 +442,7 @@ func (p *Plugin) reportRouterFailure(code string) {
 			return
 		}
 		if p.lastRouterNotice.CompareAndSwap(previous, now) {
-			p.log("error", "cyber-abuse-guard handled a model router failure safely", map[string]any{
+			p.log("error", "cyber-abuse-guard handled a Router/RequestInterceptor protocol failure safely", map[string]any{
 				"plugin": ID,
 				"code":   code,
 			})
@@ -519,7 +560,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		}
 		return errorEnvelope("invalid_request", "invalid lifecycle request", 0, "")
 	}
-	if request.SchemaVersion != pluginabi.SchemaVersion {
+	if request.SchemaVersion < pluginabi.SchemaVersion {
 		if reconfigure && p.runtime.Load() != nil {
 			p.rejectReconfigure(fmt.Errorf("unsupported schema version %d", request.SchemaVersion), "unsupported_schema")
 			return okEnvelope(currentRegistration())
@@ -563,7 +604,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	}
 	if reconfigure && current != nil &&
 		(!state.config.Audit.Enabled || !state.config.Audit.RawCapture.Enabled) {
-		// p.opMu is exclusive here, every old router/management callback has
+		// p.opMu is exclusive here, every old inspection/management callback has
 		// finished, and all other runtime migrations have succeeded. Purge and
 		// WAL truncation therefore form the final hard privacy gate before Swap.
 		// If the gate cannot complete, retain the previous runtime instead of
@@ -598,11 +639,12 @@ func (p *Plugin) reportABICapabilityLimits() {
 	if !p.abiLimitLogged.CompareAndSwap(false, true) {
 		return
 	}
-	p.log("warn", "cyber-abuse-guard cannot verify router ordering or duplicate plugin binaries through the CPA v7.2.102 plugin ABI", map[string]any{
-		"plugin":                                 ID,
-		"code":                                   "cpa_abi_conflict_detection_unavailable",
-		"router_enumeration_supported":           false,
-		"duplicate_plugin_binary_scan_supported": false,
+	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.103 plugin ABI", map[string]any{
+		"plugin": ID,
+		"code":   "cpa_abi_conflict_detection_unavailable",
+		"request_interceptor_enumeration_supported": false,
+		"router_enumeration_supported":              false,
+		"duplicate_plugin_binary_scan_supported":    false,
 	})
 }
 
@@ -647,7 +689,7 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		return nil, fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
 	}
 	if cfg.TrustedProxy.Enabled {
-		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.102 does not provide a verified direct peer address")
+		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.103 request interception does not provide a verified direct peer address")
 	}
 	if cfg.Audit.LogOriginalText {
 		return nil, fmt.Errorf("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
@@ -803,16 +845,21 @@ func auditDatabasePathLocation(dataDir string) (string, error) {
 }
 
 func currentRegistration() registration {
-	formats := []string{"openai", "openai-response", "interactions", "openai-image", "openai-video", "claude", "gemini"}
+	formats := []string{"openai", "openai-response", "interactions", "codex-alpha-search", "openai-image", "openai-video", "claude", "gemini"}
 	return registration{
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata:      currentMetadata(),
 		Capabilities: registrationCapabilities{
+			// CPA v7.2.103 does not invoke RequestInterceptor for Alpha Search.
+			// ModelRouter is registered only as that narrow compatibility entry;
+			// ordinary Host callbacks are rejected in callModelRouteRequest above.
 			ModelRouter:           true,
 			Executor:              true,
 			ExecutorModelScope:    pluginapi.ExecutorModelScopeStatic,
 			ExecutorInputFormats:  append([]string(nil), formats...),
 			ExecutorOutputFormats: append([]string(nil), formats...),
+			RequestInterceptor:    true,
+			RequestLifecycle:      true,
 			ManagementAPI:         true,
 		},
 	}
@@ -871,10 +918,10 @@ func (p *Plugin) Shutdown() {
 		p.lifecycleMu.Unlock()
 		return
 	}
-	// Publish a terminal router policy before publishing shutdown. CPA v7.2.102
-	// continues upstream routing on router RPC errors, so late callbacks must
-	// receive a successful response. A runtime that was enforcing remains
-	// fail-closed; observe/audit/off remains an intentional pass-through.
+	// Publish one terminal enforcement policy before shutdown. CPA v7.2.103
+	// continues after interceptor RPC errors, so late callbacks must receive a
+	// successful direct response. An enforcing runtime remains fail-closed;
+	// observe/audit/off remains an intentional pass-through.
 	terminalPolicy := modelRoutePolicyFromState(p.runtime.Load())
 	terminalPolicy.initialized = true
 	p.shutdownModelRoutePolicy.Store(encodeModelRouteFailurePolicy(terminalPolicy))
@@ -882,6 +929,7 @@ func (p *Plugin) Shutdown() {
 	p.opMu.Lock()
 	state := p.runtime.Swap(nil)
 	p.pending.clear()
+	p.requestLifecycle.clear()
 	p.opMu.Unlock()
 	p.lifecycleMu.Unlock()
 	state.close()

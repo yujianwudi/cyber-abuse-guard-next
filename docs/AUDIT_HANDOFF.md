@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 ## 2026-07-25 Round 9 当前交接门禁
@@ -10,7 +10,7 @@ current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfd
 当前源码版本为 `0.16`，开发目标为 Linux amd64 非 latest 预发行
 `v0.16-rc.4`、`classifier-policy-v9`、ruleset `1.0.10`、audit schema v6，
 以及唯一 CPA 合同
-`v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3`。受保护 Host 作业不做
+`v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d`。受保护 Host 作业不做
 source checkout，只把候选与 Phase 1 的不可变身份交给预装的 root-owned broker；
 该 broker 才能访问外置加密独立语料、评估器、密钥、固定镜像和受保护 Git 账本。
 CPA 只允许 `127.0.0.1:18394 -> 8317/tcp` 的隔离 counted-Mock 绑定；不得接触
@@ -347,7 +347,7 @@ upstream Host 验收或独立源码/artifact 复核，更不能推翻唯一方�
 `CONSUMED / FAIL`。
 
 旧版 CPA 兼容性门禁、校验和与 CI 记录仅作为历史事实保留在 CHANGELOG 和归档报告中；
-它们不是当前 v7.2.102 准入证据，也不得替代本轮精确源码、Host 与独立审计门禁。
+它们不是当前 v7.2.103 准入证据，也不得替代本轮精确源码、Host 与独立审计门禁。
 
 第五轮审计必须单独确认以下宿主边界：
 

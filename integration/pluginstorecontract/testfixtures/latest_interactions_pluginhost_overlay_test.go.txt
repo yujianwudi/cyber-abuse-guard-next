@@ -4,83 +4,101 @@ import (
 	"bytes"
 	"context"
 	"net/http"
-	"net/url"
 	"testing"
+	"time"
 
-	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 )
 
-func TestCyberAbuseGuardInteractionsDirectExecutorFormatContract(t *testing.T) {
-	body := []byte(`{"model":"gemini-3.5-flash","input":"INTERACTIONS_DIRECT_FORMAT_CANARY"}`)
+func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T) {
+	if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 2 {
+		t.Fatalf("CPA plugin versions = ABI %d schema %d, want 1/2", pluginabi.ABIVersion, pluginabi.SchemaVersion)
+	}
+
+	body := []byte(`{"model":"gemini-3.5-flash","input":"INTERACTIONS_SCHEMA2_CANARY"}`)
 	headers := make(http.Header)
 	headers.Set("X-CAG-Visibility", "header-canary")
-	query := url.Values{"session": []string{"direct-format-session"}}
-	var executorRequest pluginapi.ExecutorRequest
+	completions := make(chan pluginapi.RequestCompletion, 1)
 
-	executor := &fakeExecutor{
-		identifier: "cyber-abuse-guard",
-		execute: func(_ context.Context, request pluginapi.ExecutorRequest) (pluginapi.ExecutorResponse, error) {
-			executorRequest = request
-			return pluginapi.ExecutorResponse{Payload: []byte(`{"blocked":true}`)}, nil
-		},
+	plugin := validTestPlugin("cyber-abuse-guard")
+	plugin.Capabilities.ModelRouter = modelRouterFunc(func(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
+		if request.SourceFormat == "codex-alpha-search" {
+			return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
+		}
+		return pluginapi.ModelRouteResponse{Handled: false}, nil
+	})
+	plugin.Capabilities.RequestInterceptor = requestInterceptorFunc(func(_ context.Context, request pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+		if request.RequestID != "interactions-schema2-request" || request.SourceFormat != sdktranslator.FormatInteractions.String() ||
+			request.Model != "gemini-3.5-flash" || request.RequestedModel != "gemini-3.5-flash" || request.Stream {
+			t.Fatalf("request identity = id %q format %q model %q requested %q stream %v",
+				request.RequestID, request.SourceFormat, request.Model, request.RequestedModel, request.Stream)
+		}
+		if !bytes.Equal(request.Body, body) || request.Headers.Get("X-CAG-Visibility") != "header-canary" {
+			t.Fatalf("request body/headers drifted: body=%s headers=%#v", request.Body, request.Headers)
+		}
+		return pluginapi.RequestInterceptResponse{
+			Terminate:       true,
+			StatusCode:      http.StatusUnavailableForLegalReasons,
+			ResponseHeaders: http.Header{"Content-Type": []string{"application/json"}, "X-Cag-Policy": []string{"blocked"}},
+			ResponseBody:    []byte(`{"blocked":true}`),
+		}, nil
+	})
+	plugin.Capabilities.RequestLifecyclePlugin = requestLifecyclePluginFunc(func(_ context.Context, completion pluginapi.RequestCompletion) {
+		completions <- completion
+	})
+	lookup := newTestSymbolLookup(&testPlugin{registerResult: plugin})
+
+	registered, errRegister := registerRPCPlugin(context.Background(), nil, "cyber-abuse-guard", lookup, pluginabi.MethodPluginRegister, []byte("mode: enforce"))
+	if errRegister != nil {
+		t.Fatalf("register schema-2 interactions Guard: %v", errRegister)
 	}
-	host := newRouteModelHostWithRecords(capabilityRecord{
+	if lookup.lastLifecycle.SchemaVersion != 2 {
+		t.Fatalf("Guard lifecycle schema_version = %d, want 2", lookup.lastLifecycle.SchemaVersion)
+	}
+	if registered.Capabilities.RequestInterceptor == nil || registered.Capabilities.RequestLifecyclePlugin == nil {
+		t.Fatalf("registered Guard capabilities = %#v, want request_interceptor and request_lifecycle_plugin", registered.Capabilities)
+	}
+	if registered.Capabilities.ModelRouter == nil {
+		t.Fatal("current schema-2 Guard fixture omitted the Alpha Search compatibility ModelRouter")
+	}
+
+	host := newHostWithRecords(capabilityRecord{
 		id:       "cyber-abuse-guard",
 		priority: 300,
-		plugin: pluginapi.Plugin{Capabilities: pluginapi.Capabilities{
-			Executor:              executor,
-			ExecutorModelScope:    pluginapi.ExecutorModelScopeStatic,
-			ExecutorInputFormats:  []string{sdktranslator.FormatInteractions.String()},
-			ExecutorOutputFormats: []string{sdktranslator.FormatInteractions.String()},
-			ModelRouter: modelRouterFunc(func(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
-				if request.SourceFormat != sdktranslator.FormatInteractions.String() || request.RequestedModel != "gemini-3.5-flash" || request.Stream {
-					t.Fatalf("route identity = format %q model %q stream %v", request.SourceFormat, request.RequestedModel, request.Stream)
-				}
-				if !bytes.Equal(request.Body, body) || request.Headers.Get("X-CAG-Visibility") != "header-canary" || request.Query.Get("session") != "direct-format-session" {
-					t.Fatalf("route body/headers/query drifted: body=%s headers=%#v query=%#v", request.Body, request.Headers, request.Query)
-				}
-				return pluginapi.ModelRouteResponse{Handled: true, TargetKind: pluginapi.ModelRouteTargetSelf}, nil
-			}),
-		}},
+		plugin:   registered,
 	})
-	t.Cleanup(host.ShutdownAll)
-
-	routeResponse, handled := host.RouteModel(context.Background(), pluginapi.ModelRouteRequest{
+	response := host.InterceptRequestBeforeAuth(context.Background(), pluginapi.RequestInterceptRequest{
+		RequestID:      "interactions-schema2-request",
 		SourceFormat:   sdktranslator.FormatInteractions.String(),
+		Model:          "gemini-3.5-flash",
 		RequestedModel: "gemini-3.5-flash",
 		Headers:        headers,
-		Query:          query,
 		Body:           body,
 	})
-	if !handled || !routeResponse.Handled || routeResponse.TargetKind != pluginapi.ModelRouteTargetSelf || routeResponse.Target != "cyber-abuse-guard" {
-		t.Fatalf("RouteModel() = %#v, %v; want direct Guard self target", routeResponse, handled)
+	if !response.Terminate || response.StatusCode != http.StatusUnavailableForLegalReasons ||
+		response.ResponseHeaders.Get("X-CAG-Policy") != "blocked" || string(response.ResponseBody) != `{"blocked":true}` {
+		t.Fatalf("schema-2 Guard termination response = %#v", response)
 	}
 
-	response, errExecute := host.ExecutePluginExecutor(context.Background(), routeResponse.Target,
-		coreexecutor.Request{Model: "gemini-3.5-flash", Payload: body},
-		coreexecutor.Options{
-			SourceFormat:    sdktranslator.FormatInteractions,
-			ResponseFormat:  sdktranslator.FormatInteractions,
-			OriginalRequest: body,
-			Headers:         headers,
-			Query:           query,
-		},
-	)
-	if errExecute != nil {
-		t.Fatalf("ExecutePluginExecutor() error = %v", errExecute)
-	}
-	if string(response.Payload) != `{"blocked":true}` {
-		t.Fatalf("executor response payload = %s", response.Payload)
-	}
-	if executorRequest.SourceFormat != sdktranslator.FormatInteractions.String() || executorRequest.Format != sdktranslator.FormatInteractions.String() {
-		t.Fatalf("executor request formats = source %q target %q, want direct interactions", executorRequest.SourceFormat, executorRequest.Format)
-	}
-	if !bytes.Equal(executorRequest.OriginalRequest, body) || !bytes.Equal(executorRequest.Payload, body) {
-		t.Fatalf("executor original/payload drifted: original=%s payload=%s", executorRequest.OriginalRequest, executorRequest.Payload)
-	}
-	if executorRequest.Headers.Get("X-CAG-Visibility") != "header-canary" || executorRequest.Query.Get("session") != "direct-format-session" {
-		t.Fatalf("executor headers/query drifted: headers=%#v query=%#v", executorRequest.Headers, executorRequest.Query)
+	host.CompleteRequest(context.Background(), pluginapi.RequestCompletion{
+		RequestID:      "interactions-schema2-request",
+		SourceFormat:   sdktranslator.FormatInteractions.String(),
+		Model:          "gemini-3.5-flash",
+		RequestedModel: "gemini-3.5-flash",
+		Outcome:        pluginapi.RequestCompletionRejected,
+		StatusCode:     http.StatusUnavailableForLegalReasons,
+	})
+	select {
+	case completion := <-completions:
+		if completion.RequestID != "interactions-schema2-request" ||
+			completion.SourceFormat != sdktranslator.FormatInteractions.String() ||
+			completion.Outcome != pluginapi.RequestCompletionRejected ||
+			completion.StatusCode != http.StatusUnavailableForLegalReasons {
+			t.Fatalf("schema-2 Guard completion = %#v", completion)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for schema-2 Guard completion")
 	}
 }

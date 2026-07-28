@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 Last updated: 2026-07-27 (Asia/Shanghai)
@@ -118,44 +118,69 @@ corpus, or local dirty Host result can close those release boundaries.
    legitimate continuation outputs audit-only, but prevent request-local
    metadata from forging tool authority.
 
-8. **CPA router failures are host-level fail-open.** The required Host matrix is
-   CPA v7.2.102. CPA may continue other Routers or native routing if
-   the plugin is not loaded, registration fails, it is fused, the Router returns
-   an error, a panic occurs before the host accepts a valid handled result, the
-   target is invalid/empty, or the self executor is not ready. The plugin
-   self-routes known failures and recovered ModelRouter panics in an active
-   Balanced/Strict runtime; the current oversized model-route exception remains
-   Strict-only. The plugin cannot alter CPA's host policy or prove
-   fail-closed behavior for every host/ABI failure. `enforcement_ready` reports
-   only internal plugin state and does not prove host load, registration,
-   ordering, fuse state, or per-request executor readiness. Watchdog and
-   counter-delta monitoring remain mandatory. The local `0.16-dirty` Host/Router
-   PASS is development evidence only; the exact-candidate counted-Mock matrix is
-   still required.
+8. **CPA interceptor failures retain host-level fail-open boundaries.** The
+   required Host matrix is CPA v7.2.103 with C ABI 1 and RPC schema 2. CPA skips
+   an interceptor that returns an RPC error and fuses an interceptor that
+   panics across the Host boundary; it may then continue the remaining chain and
+   native execution. The plugin returns successful, mode-aware responses for
+   known scan failures, shutdown, malformed envelopes, recovered in-process
+   panics, and oversized callbacks. Balanced and Strict terminate on operational
+   inspection failures; the oversized content-incomplete exception remains
+   Strict-only while Balanced preserves its documented allow+audit policy. It cannot
+   alter CPA's policy when the binary is absent, registration fails, the Host
+   fuses/skips it, or the native callback fails before a valid response is
+   accepted. `enforcement_ready` reports only internal plugin state and does not
+   prove Host load, registration, interceptor ordering, fuse state, or callback
+   delivery. The compatibility field `router_errors` therefore aggregates
+   legacy Router and RPC schema 2 RequestInterceptor protocol-path failures;
+   watchdog and counter-delta monitoring remain mandatory. Historical dirty
+   Host/Router evidence is development-only; the exact-candidate counted-Mock
+   matrix is still required.
 
-9. **Router ordering cannot be enumerated.** The first handled Router wins. ABI
-   v1 does not expose loaded Router ordering, so a higher-priority plugin can
-   bypass this guard. Use priority 300, inspect deployment configuration, and
-   disable the old `antigravity-coding-filter`. Routers at the same priority are
-   ordered by plugin ID ascending; a lexicographically earlier ID can still
-   handle the request first.
+9. **RequestInterceptor ordering cannot be enumerated in-process.** CPA invokes
+   interceptors by priority descending and then plugin ID ascending. A preceding
+   interceptor can terminate the chain before Guard inspection or rewrite the
+   request Guard receives; an interceptor that runs later can rewrite a request
+   after Guard has inspected that stage. Use priority 300, inspect the complete
+   deployment inventory and priorities, disable the old
+   `antigravity-coding-filter`, and treat any unreviewed request-rewriting plugin
+   as outside the admission boundary. A higher-priority legacy schema-1
+   ModelRouter alone no longer bypasses ordinary model requests because the
+   schema-2 before-auth interceptor still runs before execution. Alpha Search is
+   different: CPA v7.2.103 omits RequestInterceptor there, so deployment must
+   also ensure no unreviewed higher-priority ModelRouter handles
+   `codex-alpha-search` before CAG.
 
 10. **Duplicate plugin binaries cannot be detected in-process.** ABI v1 does
     not expose the plugin directory. The operator must ensure only one
     `cyber-abuse-guard` `.so` version is installed before restart.
 
-11. **403 versus SSE is an ABI-v1 tradeoff.** `ExecutorResponse` has no status
+11. **403, SSE, Alpha Search, and Router cost are Host-contract tradeoffs.** `ExecutorResponse` has no status
     field. A blocked stream returns a genuine HTTP 403 before SSE is
     established. ABI v1 cannot return both a 403 and a successful terminal SSE
     frame; successful chunks would force HTTP 200. The policy executor routes
     `execute`, `execute_stream`, and `count_tokens` to the same policy HTTP 403;
     `http_request` returns an unsupported-method RPC error whose `StatusCode()`
-    is 405; the official adapter returns `(nil, error)`. CPA v7.2.102's public
-    `/v1/alpha/search` consumer normally selects `codex` and maps every executor
-    error to HTTP 502. The project-owned `httptest.Server` manually maps the
-    status error, so final official CPA client HTTP 405 is `NOT AVAILABLE / NOT
-    RUN` and remains a handoff blocker until an official route can map Guard's
-    error to a final 405.
+    is 405; the official adapter returns `(nil, error)`. CPA v7.2.103's two Alpha
+    Search routes do not call RequestInterceptor or request lifecycle. CAG's
+    format-gated ModelRouter returns a self target for malicious search, which
+    the Alpha handler rejects as HTTP 503 before Codex credential selection or
+    upstream execution. Native policy HTTP 403 is therefore unavailable on
+    Alpha Search until CPA exposes local termination there; the Linux Host test
+    must prove both aliases with an in-memory OAuth auth and a networkless Codex
+    probe rather than claiming the ordinary interceptor response shape.
+    `ModelRouter` registration is global in CPA v7.2.103, so ordinary requests
+    still pay Host-side body cloning, JSON/Base64 serialization, and one Router
+    RPC before CAG returns `Handled:false`; the plugin cannot make that work
+    O(1). An oversized callback supplies only the method name, not the source
+    format, so keeping large Alpha Search fail-closed can cause an oversized
+    ordinary request to be counted once by `model.route` and once by
+    `request.intercept_before`. Non-strict oversized after-auth remains a
+    side-effect-free pass-through to avoid a third count, but Strict records and
+    blocks it so a post-before-auth oversized mutation cannot bypass enforcement.
+    A timing-window dedupe would create concurrent-request
+    mismatches and is not used. Full removal requires a CPA format-scoped Router
+    capability or Alpha Search RequestInterceptor support.
 
 12. **Protocol-specific error shapes differ.** OpenAI-compatible handlers can
     retain a stable marker. Anthropic may normalize plugin errors and drop
@@ -165,7 +190,7 @@ corpus, or local dirty Host result can close those release boundaries.
 13. **No `Retry-After` on executor errors.** ABI-v1 RPC errors cannot attach
     arbitrary downstream response headers.
 
-14. **Exact management routes only.** CPA v7.2.102 rejects dynamic `:`/`*`
+14. **Exact management routes only.** CPA v7.2.103 rejects dynamic `:`/`*`
     plugin routes, so subject unblock uses a fixed path and bounded JSON body.
     CPA host middleware, not the plugin, is the Management Key verification
     authority; ABI v1 does not reveal the configured key to the plugin. Host
@@ -176,7 +201,7 @@ corpus, or local dirty Host result can close those release boundaries.
     `client_max_body_size 1m`, with a server test proving HTTP 413 occurs before
     CPA receives the request.
 
-15. **No trustworthy remote address in `ModelRouteRequest`.** CPA exposes
+15. **No trustworthy remote address in `RequestInterceptRequest`.** CPA exposes
     neither a verified direct peer nor a separate authenticated principal/key
     policy ID. `trusted_proxy.enabled: true` is rejected; forwarded headers are
     not trusted. Subjects are HMACed from the authenticated downstream key or
@@ -186,7 +211,7 @@ corpus, or local dirty Host result can close those release boundaries.
     reserved, but `classifier.enabled: true` is rejected. The plugin makes no
     classifier network request and does not upload prompts to a third party.
 
-17. **No authenticated management UI.** CPA v7.2.102 resource routes are not a
+17. **No authenticated management UI.** CPA v7.2.103 resource routes are not a
     safe place for audit/subject data. This version exposes exact authenticated
     management API routes only.
 
@@ -253,7 +278,7 @@ corpus, or local dirty Host result can close those release boundaries.
 
 29. **Only one platform and one fixed CPA Host target are in scope.** The
     release platform is Linux amd64 with glibc 2.34+; musl/Alpine is unsupported.
-    The root module and both current contract modules pin CPA v7.2.102.
+    The root module and both current contract modules pin CPA v7.2.103.
     Source/compile success is not runtime admission. Exact-candidate counted-Mock
     Host evidence is required for this target.
     Earlier v7.2.85/v7.2.84/v7.2.83/v7.2.82/v7.2.81 checks are historical and non-gating.
@@ -327,7 +352,7 @@ corpus, or local dirty Host result can close those release boundaries.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
     `classifier-policy-v9` / SHA-256
-`72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`,
+`f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`,
     and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -420,12 +445,14 @@ corpus, or local dirty Host result can close those release boundaries.
     persist raw bodies for HTTP error responses. Deployment must separately
     control CPA commercial mode, log directory, retention, and access.
 
-46. **Parser evidence is not Host evidence.** CPA ABI v1 does not provide a
-    general HTTP path in `ModelRouteRequest`, and its image handler can parse and
-    rebuild multipart before the Router sees it. Unit tests prove the payload
+46. **Parser evidence is not Host evidence.** RPC schema 2 exposes the current
+    model payload and headers in `RequestInterceptRequest`, not the raw ingress
+    socket, route, trusted direct peer, or every handler transformation that ran
+    before the callback. CPA handlers can parse, normalize, translate, or rebuild
+    a request before either interceptor stage. Unit tests prove only the payload
     delivered to the Guard; they cannot prove ingress boundary/header order,
-    CPA reconstruction, pre-SSE behavior, or Auth/Provider/Usage/upstream side
-    effects. Those claims require the exact CI artifact in the authorized
+    CPA reconstruction, pre-SSE termination, or Auth/Provider/Usage/upstream
+    side effects. Those claims require the exact CI artifact in the authorized
     isolated Host matrix.
 
 47. **Unit tests and GitHub CI are not production admission.** Passing source,
@@ -499,7 +526,7 @@ corpus, or local dirty Host result can close those release boundaries.
 
 54. **The CPA source/compile contract is evidence only until counted-Mock Host
     validation.** `integration/cpalatestcontract` and
-    `integration/pluginstorecontract` both bind CPA v7.2.102. Each module asserts
+    `integration/pluginstorecontract` both bind CPA v7.2.103. Each module asserts
     the named critical Host tests and executes the complete upstream
     `internal/pluginhost` package, so this source coverage overlaps rather than
     forming two non-duplicative exact-name runs. The wider contract compiles the
@@ -537,7 +564,7 @@ corpus, or local dirty Host result can close those release boundaries.
     v7.2.80, an `agent` request that the Guard self-routes is rejected by CPA's
     native-Interactions validator with HTTP 400 before the Guard executor runs;
     a uniform Guard 403 would require an upstream CPA change. The owner-operated
-    sandbox must recheck that behavior on v7.2.102 and
+    sandbox must recheck that behavior on v7.2.103 and
     separately verify model/agent, stream/non-stream, exact status
     shapes, first-byte behavior, and zero Auth/Provider/Usage/upstream effects.
 

@@ -8,7 +8,7 @@ Describe the change, why it is needed, and the affected trust boundary.
 - [ ] `make test` passed, or the reason it was not applicable is documented.
 - [ ] Vet, format, module, script, and safe-gate checks relevant to this change passed.
 - [ ] Performance-sensitive changes include `make round6-benchmark` results.
-- [ ] CPA integration changes retain the single pinned v7.2.102 contract.
+- [ ] CPA integration changes retain the single pinned v7.2.103 schema-2 contract.
 
 ## Security and restricted data
 

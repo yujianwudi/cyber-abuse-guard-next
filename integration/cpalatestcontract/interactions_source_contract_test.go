@@ -20,9 +20,9 @@ const (
 	cpaLatestOpenAIGeminiPackage       = cpaLatestModulePath + "/internal/translator/openai/gemini"
 
 	cpaLatestInteractionsHandlerFixture       = "latest_interactions_handler_overlay_test.go.txt"
-	cpaLatestInteractionsHandlerFixtureSHA256 = "5f099850bdb6462b0daca4a730d0bde92739dc2435a9c33dfa38bd2eb0dafa66"
+	cpaLatestInteractionsHandlerFixtureSHA256 = "424501cfa8e07e138abd5acbc3c9b5b8470868f46c83232906484719cabd68b5"
 	cpaLatestInteractionsHostFixture          = "latest_interactions_pluginhost_overlay_test.go.txt"
-	cpaLatestInteractionsHostFixtureSHA256    = "8338d3eb83ff1169adf433ee57f11fb5348e30afcde237216c382559558feecc"
+	cpaLatestInteractionsHostFixtureSHA256    = "37c0c7502cbacc2f18e2fbd39fa62aeccde9373a047a5589f1da8f68a12ed58f"
 )
 
 var latestOfficialInteractionsTests = []struct {
@@ -108,20 +108,20 @@ func TestLatestCPAInteractionsHandlerAndTranslatorOverlayContract(t *testing.T) 
 		targetPath:    filepath.Join("sdk", "api", "handlers", "gemini", "cyber_abuse_guard_interactions_contract_test.go"),
 		packagePath:   "./sdk/api/handlers/gemini",
 		testNames: []string{
-			"TestCyberAbuseGuardInteractionsHandlerModelRouterContract",
+			"TestCyberAbuseGuardInteractionsHandlerRequestInterceptorContract",
 			"TestCyberAbuseGuardInteractionsTranslatorRegistryContract",
 		},
 	})
 }
 
-func TestLatestCPAInteractionsDirectExecutorFormatOverlayContract(t *testing.T) {
+func TestLatestCPAInteractionsSchema2RequestLifecycleOverlayContract(t *testing.T) {
 	runLatestCPAOverlayFixture(t, latestCPAOverlayFixture{
 		fixtureName:   cpaLatestInteractionsHostFixture,
 		fixtureSHA256: cpaLatestInteractionsHostFixtureSHA256,
 		targetPath:    filepath.Join("internal", "pluginhost", "cyber_abuse_guard_interactions_format_contract_test.go"),
 		packagePath:   "./internal/pluginhost",
 		testNames: []string{
-			"TestCyberAbuseGuardInteractionsDirectExecutorFormatContract",
+			"TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract",
 		},
 	})
 }

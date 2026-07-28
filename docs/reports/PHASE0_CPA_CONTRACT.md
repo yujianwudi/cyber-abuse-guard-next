@@ -1,16 +1,16 @@
-# CPA v7.2.102 Packaging and Contract Baseline
+# CPA v7.2.103 Packaging and Contract Baseline
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 This path is retained by the audit-bundle contract, but its contents describe
 only the current CPA target. Historical Phase 0 version matrices are available
 in Git history and are not shipped here as active validation guidance.
 
-The root module and both isolated integration modules pin CPA v7.2.102 at commit
-`8423cce2d1004e80948a9e2c60ee69354c0aabc3`. Current validation paths are:
+The root module and both isolated integration modules pin CPA v7.2.103 at commit
+`cade44b9cdee6b9328ea2648fd119129fdf11e2d`. Current validation paths are:
 
 - the official Host source and fail-open fixture contract;
 - pinned-source compile, Interactions, and Store contracts;
@@ -20,7 +20,7 @@ The root module and both isolated integration modules pin CPA v7.2.102 at commit
 
 See [CPA_INTEGRATION.md](CPA_INTEGRATION.md) for the active commands, exact
 module checksums, last fully verified source baseline, and evidence boundary.
-The owner-operated isolated CPA v7.2.102 Host + Mock-upstream record remains a
+The owner-operated isolated CPA v7.2.103 Host + Mock-upstream record remains a
 separate release requirement; source or CI compile checks do not authorize
 production deployment.
 

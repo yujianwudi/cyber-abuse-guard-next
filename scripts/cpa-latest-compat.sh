@@ -75,9 +75,9 @@ fi
 set_profile_identity() {
   case "$1" in
     primary)
-      cpa_version='v7.2.102'
-      cpa_commit='8423cce2d1004e80948a9e2c60ee69354c0aabc3'
-      cpa_module_sum='h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA='
+      cpa_version='v7.2.103'
+      cpa_commit='cade44b9cdee6b9328ea2648fd119129fdf11e2d'
+      cpa_module_sum='h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU='
       cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
       ;;
     *)
@@ -181,15 +181,15 @@ fi
 
 assert_checked_in_module_identity \
   "$root" root \
-  v7.2.102 h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA= \
+  v7.2.103 h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/cpalatestcontract" cpalatestcontract \
-  v7.2.102 h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA= \
+  v7.2.103 h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/pluginstorecontract" pluginstorecontract \
-  v7.2.102 h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA= \
+  v7.2.103 h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 verify_primary_latest=0

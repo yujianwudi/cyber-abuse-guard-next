@@ -12,9 +12,11 @@ type pendingDecision struct {
 	element  *list.Element
 }
 
-// pendingCache carries only the coarse category across CPA's model.route ->
-// executor callback split. It is bounded and time-limited, and never retains
-// request text, headers, credentials, or other prompt-derived material.
+// pendingCache is a bounded, time-limited string cache. The legacy
+// model.route -> executor bridge stores a coarse category, while the schema-v2
+// request-lifecycle wrapper stores a request-ID-bound HMAC-SHA256 fingerprint.
+// Neither use retains request text, header values, credentials, or other
+// prompt-derived material.
 type pendingCache struct {
 	mu    sync.Mutex
 	items map[string]pendingDecision
@@ -74,6 +76,20 @@ func (cache *pendingCache) get(hash string) (pendingDecision, bool) {
 		return pendingDecision{}, false
 	}
 	return item, true
+}
+
+func (cache *pendingCache) remove(hash string) bool {
+	if cache == nil || hash == "" {
+		return false
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	item, ok := cache.items[hash]
+	if !ok {
+		return false
+	}
+	cache.removeLocked(hash, item)
+	return true
 }
 
 func (cache *pendingCache) clear() {

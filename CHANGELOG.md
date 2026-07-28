@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 Source-tree status updated: 2026-07-27 (Asia/Shanghai)
@@ -10,12 +10,34 @@ Source-tree status updated: 2026-07-27 (Asia/Shanghai)
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
 - Move the active Round 9 CPA contract to the official latest release
-  `v7.2.102` (`8423cce2d1004e80948a9e2c60ee69354c0aabc3`) with reviewed module and
+  `v7.2.103` (`cade44b9cdee6b9328ea2648fd119129fdf11e2d`) with reviewed module and
   `go.mod` sums. CI now verifies that this fixed identity is still GitHub's
   `releases/latest`, executes the complete upstream Linux `internal/pluginhost`
   suite plus `sdk/pluginabi`/`sdk/pluginapi`, and loads the built candidate
   `.so` through the real Host integration path. Historical Round 6/8 and
   v0.15/v0.16-rc.2 evidence remains pinned to CPA v7.2.95.
+- Migrate ordinary model-request enforcement from the schema-1 ModelRouter path
+  to CPA schema 2 request interception and request lifecycle completion.
+  Malicious batch and stream requests now terminate directly with HTTP 403
+  before Auth, Provider, Usage, Executor, Mock upstream, or SSE side effects.
+  Stable `RequestID` correlation prevents duplicate after-auth
+  classification/audit. Oversized after-auth envelopes pass through in
+  non-strict modes, while Strict records an incomplete block so a mutation
+  cannot bypass enforcement. A bounded TTL cache uses a per-process,
+  request-ID-bound HMAC-SHA256 over case-normalized header names while
+  preserving exact value order. Mutated inputs are reclassified;
+  fail-open operational failures are not cached as checked. The cache is cleared
+  idempotently for succeeded, failed, rejected, and canceled completions.
+  Because CPA v7.2.103 does not invoke RequestInterceptor for either Alpha
+  Search URL, CAG retains a narrowly
+  gated ModelRouter only for `codex-alpha-search`; malicious search fails closed
+  as HTTP 503 before Codex auth/upstream, while all other Host-originated Router
+  callbacks are O(1) unhandled. The schema-1 Router fixture remains an explicit
+  legacy Host compatibility lane.
+- Accept Host registration and reconfiguration schema versions greater than 2
+  while always negotiating the plugin's implemented RPC schema 2; schema 1 is
+  still rejected. RequestInterceptor blocks now carry their category directly
+  from classification, removing the second SHA-256 lookup from the block path.
 - Prevent consented-training telemetry from masking a real credential
   solicitation by covering `prompt`, `induce`, `receive`, and `solicit` forms
   and their inflections across user/system/developer/tool batch and streaming
@@ -116,7 +138,7 @@ Source-tree status updated: 2026-07-27 (Asia/Shanghai)
 - Restrict provider-native result authority to the exact Chat `content`,
   Responses `output`, Claude `tool_result.content`, or Gemini
   `functionResponse.response` boundary. Gemini authorizes string descendants of
-  that exact response object, including CPA v7.2.102 `result` and `output`
+  that exact response object, including CPA v7.2.103 `result` and `output`
   carriers, while siblings on `functionResponse` remain untrusted. Claude text
   blocks accept a CPA-preserved `cache_control` object without authorizing its
   metadata strings; arbitrary block siblings, aliases, and scalar cache-control
@@ -151,7 +173,7 @@ Source-tree status updated: 2026-07-27 (Asia/Shanghai)
   proof covering quote/fence/newline variants, analytical purpose, an explicit
   non-execution boundary, and fail-closed independent execution tails.
 - Refresh the source behavior identity for `classifier-policy-v9` to
-  `72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1`;
+  `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`;
   the embedded YAML ruleset remains `1.0.10` and audit storage remains schema v6.
 - Preserve `v0.16-rc.3` as an immutable failed Phase 1 identity. Its admission
   passed, but its fixed Go container lacked the undeclared PyYAML dependency;

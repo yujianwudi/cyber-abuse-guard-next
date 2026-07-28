@@ -1,8 +1,8 @@
-# CPA v7.2.102 integration report
+# CPA v7.2.103 schema-2 integration contract and v7.2.102 historical validation
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 ## Active compatibility target
@@ -10,19 +10,19 @@ current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfd
 Cyber Abuse Guard pins the current Round 9 compatibility lane to one exact
 identity of `github.com/router-for-me/CLIProxyAPI/v7`:
 
-- formal target: `v7.2.102` at
-  `8423cce2d1004e80948a9e2c60ee69354c0aabc3`.
+- formal target: `v7.2.103` at
+  `cade44b9cdee6b9328ea2648fd119129fdf11e2d`, C ABI 1 / RPC schema 2.
 
 The checked-in module layout is:
 
-- root `go.mod`: v7.2.102 primary;
-- `integration/cpalatestcontract/go.mod`: v7.2.102;
-- `integration/pluginstorecontract/go.mod`: v7.2.102 Store reference.
+- root `go.mod`: v7.2.103 primary;
+- `integration/cpalatestcontract/go.mod`: v7.2.103;
+- `integration/pluginstorecontract/go.mod`: v7.2.103 Store reference.
 
 The reviewed module identities are:
 
 ```text
-primary_module_sum: h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=
+primary_module_sum: h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU=
 primary_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 ```
 
@@ -44,24 +44,25 @@ make round6-cpa-store-contract
 With `CPA_COMPAT_VERIFY_REMOTE=1`, the compatibility contract verifies the
 fixed Git tag-to-commit identity directly against the official Git origin and
 binds the Go module Origin plus both checksums. All checked-in modules use the
-same v7.2.102 identity. No repository token is used. The target is intentionally
+same v7.2.103 identity. No repository token is used. The target is intentionally
 pinned, so a later upstream Release does not silently change the supported
 source or Host target. Upstream-latest monitoring is separate and explicit:
 `CPA_COMPAT_REQUIRE_LATEST=1` additionally queries the official unauthenticated
 GitHub `releases/latest` endpoint and fails when the fixed target is no longer
 latest; that monitoring result does not invalidate compatibility with the
-reviewed v7.2.102 pin.
+reviewed v7.2.103 pin.
 `ALLOW_DIRTY_BUILD=1` is a development-only override and is not release
 evidence.
 
-## Current v7.2.102 development validation
+## Historical v7.2.102 development validation
 
 On 2026-07-27, Linux amd64 validation under WSL Ubuntu 26.04 and Go 1.26.4
-completed against the exact target above. A remote-enabled attempt verified that
-GitHub `releases/latest` and the official tag both resolve to `v7.2.102` at the
-required commit before the local Git transport later became unavailable. The
-complete compatibility matrix was then rerun to success with the same pinned
-module Origin, module checksum, and go.mod checksum while using the reachable
+completed against the then-current `v7.2.102` target at
+`8423cce2d1004e80948a9e2c60ee69354c0aabc3`. A remote-enabled attempt verified
+that GitHub `releases/latest` and the official tag both resolved to that identity
+before the local Git transport later became unavailable. The complete
+compatibility matrix was then rerun to success with the same historical module
+Origin, module checksum, and go.mod checksum while using the reachable
 `goproxy.cn` SumDB mirror and skipping only the already-proven live Git checks.
 Both nested compatibility modules asserted the named critical Host tests and
 each executed the complete upstream `internal/pluginhost` package; this
@@ -103,7 +104,7 @@ transitive dependency graph did move `github.com/tiktoken-go/tokenizer` from
 v0.7.0 to v0.8.1 and `github.com/dlclark/regexp2` v1 to
 `github.com/dlclark/regexp2/v2` v2.5.1; the checked-in root module files reflect
 that reviewed upstream change. These results remain frozen development
-self-checks, not current v7.2.102, exact-main, or Host evidence.
+self-checks, not current v7.2.103, exact-main, or Host evidence.
 
 The pinned compatibility rerun is retained as
 `dist/round9-worklogs/cpa-v7.2.95-pinned-compat-go1.26.4-20260724.log`
@@ -112,22 +113,24 @@ The pinned compatibility rerun is retained as
 The separate `CPA_COMPAT_REQUIRE_LATEST=1` monitoring probe observed the
 official latest Release as v7.2.97 and therefore failed as designed. That
 result did not invalidate the then-selected v7.2.95 compatibility pin; neither
-historical observation overrides the current formal v7.2.102 identity above.
+historical observation overrides the current formal v7.2.103 identity above.
 
 ## Coverage
 
 The current single-primary-profile matrix covers:
 
-- Guard compilation, registration, and routing contracts;
-- official Host Router ordering, fallback, panic/fuse, target-readiness, and
-  metadata-sanitization contracts;
+- Guard compilation, schema-2 registration, request interception, direct
+  termination, and request lifecycle contracts;
+- official Host RequestInterceptor priority/header chaining, before/after-auth
+  termination, error skip, panic fuse, completion, and metadata-sanitization
+  contracts, plus an explicit legacy schema-1 Router compatibility lane;
 - checksum-pinned fail-open overlays applied only to an ephemeral CPA source
   copy;
 - Interactions route, handler, translator, auth-selection, and direct-executor
   format contracts;
 - Raw Capture management-response transport and HTML-sanitization contracts on
-  the pinned CPA v7.2.102 source;
-- official v7.2.102 Responses continuation selectors for
+  the pinned CPA v7.2.103 source;
+- official v7.2.103 Responses continuation selectors for
   `previous_response_id`, Gemini interactions function calls and response-name
   backfill, and Gemini-to-OpenAI FIFO/fallback/explicit-ID translation paths;
 - CPA Store archive naming, root layout, checksum, installation, repeat-install,
@@ -140,10 +143,11 @@ The current single-primary-profile matrix covers:
   while exact-main CI remains pending.
 
 The shared test fixtures under `integration/pluginstorecontract/testfixtures/`
-remain the current v7.2.102 contract inputs and must not be treated as
-unsupported legacy fixtures.
+remain the current v7.2.103 contract inputs. The pure-C schema-1 Router fixture
+is deliberately retained as a named legacy compatibility lane; it is not the
+production Guard enforcement path.
 
-For the 2026-07-27 working tree, the nested `integration/cpalatestcontract`
+For the historical 2026-07-27 v7.2.102 working tree, the nested `integration/cpalatestcontract`
 module and the complete remote-enabled compatibility matrix passed with Linux
 Go 1.26.4. The official tag, commit, module Origin, and checksums were verified;
 the initial timeout is retained only as failed-attempt history. A clean
@@ -178,7 +182,7 @@ Store validation, integration compilation, and clean-tree verification. It did
 not run the native Host black-box or pure-C Router fixture targets.
 
 These commit, asset, and older CPA statements are retained only as historical
-baseline evidence. The current contract is fixed to CPA v7.2.102; exact
+baseline evidence. The current contract is fixed to CPA v7.2.103; exact
 tag/commit/tree, current CI, 17 asset hashes, and RC-versioned integration
 results are recorded at runtime in `rc-release-evidence.md` and
 `rc-release-manifest.json` rather than self-recorded in this source file.
@@ -193,7 +197,7 @@ this report is a claim that a production CPA process, real Provider, account
 pool, or production traffic was used.
 
 The remaining protected server evidence must load the clean exact Linux artifact
-in CPA v7.2.102 with a counted Mock upstream and reproduce zero deltas for
+in CPA v7.2.103 with a counted Mock upstream and reproduce zero deltas for
 locally blocked requests at Auth Selector, Provider execution, usage accounting,
 and Mock-upstream request layers. The local development blackbox proves a
 narrower boundary for its dirty `.so`: safe requests carry a CPA

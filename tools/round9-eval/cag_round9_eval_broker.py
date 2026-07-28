@@ -1222,8 +1222,8 @@ def validate_phase1_release_manifest(
         "release manifest primary CPA",
     )
     if primary != {
-        "version": "v7.2.102",
-        "commit": "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
+        "version": "v7.2.103",
+        "commit": "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
         "source_compatibility": "PASS",
         "counted_mock_validation": "NOT_RUN / EXTERNAL_EVALUATION_REQUIRED",
     }:
@@ -1360,8 +1360,8 @@ def validate_phase1_release_manifest(
         "release manifest Round 9 CPA contract",
     )
     if cpa_contract != {
-        "version": "v7.2.102",
-        "commit": "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
+        "version": "v7.2.103",
+        "commit": "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
         "upstream_version_policy": "fixed-no-automatic-follow",
     }:
         fail("Phase 1 release manifest Round 9 CPA contract differs")
@@ -1542,8 +1542,8 @@ def candidate_identity(args: argparse.Namespace, assets: dict[str, str]) -> dict
             "commit": args.commit,
             "tree": args.tree,
             "so_sha256": assets["so_sha256"],
-            "cpa_version": "v7.2.102",
-            "cpa_commit": "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
+            "cpa_version": "v7.2.103",
+            "cpa_commit": "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
             "classifier_policy_version": assets["classifier_policy_version"],
             "classifier_policy_sha256": assets["classifier_policy_sha256"],
             "ruleset_version": assets["ruleset_version"],
@@ -1570,8 +1570,8 @@ def execution_identity(config: dict[str, Any], args: argparse.Namespace) -> dict
             "sandbox_id": sandbox["sandbox_id"],
             "daemon_id": sandbox["daemon_id"],
             "probe_image_id": sandbox["probe_image_id"],
-            "cpa_version": "v7.2.102",
-            "cpa_commit": "8423cce2d1004e80948a9e2c60ee69354c0aabc3",
+            "cpa_version": "v7.2.103",
+            "cpa_commit": "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
             "cpa_image_id": sandbox["cpa_image_id"],
             "counted_mock_image_id": sandbox["counted_mock_image_id"],
             "model": sandbox["model"],
@@ -1752,8 +1752,8 @@ def validate_external_aggregate(
         or sandbox["sandbox_id"] != execution["sandbox_id"]
         or sandbox["daemon_id"] != execution["daemon_id"]
         or sandbox["probe_image_id"] != execution["probe_image_id"]
-        or sandbox["cpa_version"] != "v7.2.102"
-        or sandbox["cpa_commit"] != "8423cce2d1004e80948a9e2c60ee69354c0aabc3"
+        or sandbox["cpa_version"] != "v7.2.103"
+        or sandbox["cpa_commit"] != "cade44b9cdee6b9328ea2648fd119129fdf11e2d"
         or sandbox["cpa_image_id"] != execution["cpa_image_id"]
         or sandbox["counted_mock_image_id"] != execution["counted_mock_image_id"]
         or sandbox["network_binding"] != execution["network_binding"]

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfde478ff06024a6839e1
+current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
 > **Frozen historical snapshot.** The Round 6 addendum and the older
@@ -14,8 +14,8 @@ current_classifier_policy_sha256: 72976ff80ca9c25478fda5b50f4fd129ffc04e4c5fdcfd
 > The current formal CPA identity is:
 >
 > ```text
-> current_formal_cpa: v7.2.102@8423cce2d1004e80948a9e2c60ee69354c0aabc3
-> current_module_sum: h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=
+> current_formal_cpa: v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d
+> current_module_sum: h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
 

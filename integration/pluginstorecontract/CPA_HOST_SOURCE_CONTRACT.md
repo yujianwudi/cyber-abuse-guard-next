@@ -1,11 +1,13 @@
-# CPA v7.2.102 host routing source contract
+# CPA v7.2.103 schema-2 Host source contract
 
 This isolated module pins `github.com/router-for-me/CLIProxyAPI/v7` to
-`v7.2.102` at commit `8423cce2d1004e80948a9e2c60ee69354c0aabc3`.
+`v7.2.103` at commit `cade44b9cdee6b9328ea2648fd119129fdf11e2d`.
 `host_source_contract_test.go` verifies the resolved module version, tag commit,
 and both module checksums, lists the official `internal/pluginhost` tests,
-requires 28 fixed critical names, and then runs the complete upstream Host test
-suite for the current Linux platform.
+requires a fixed set of critical names, and then runs the complete upstream
+Host test suite for the current Linux platform. The fixed set includes schema-2
+RequestInterceptor/lifecycle behavior, the current Guard's narrow Alpha Search
+ModelRouter registration, and explicit schema-1 ModelRouter compatibility.
 
 Run only this contract:
 
@@ -21,6 +23,8 @@ go test -count=1 -v ./...
 
 The upstream selection is intentionally broad enough to cover:
 
+- schema-2 RPC negotiation, RequestInterceptor priority/termination,
+  error/panic fail-open, metadata sanitization, and completion lifecycle;
 - descending Router priority and first handled match;
 - same-priority ordering by ascending plugin ID;
 - continuation after an unhandled response or Router error;
@@ -33,11 +37,14 @@ The upstream selection is intentionally broad enough to cover:
   separation.
 
 `TestCPAHostFailOpenFixtureContract` then adds a test-only fixture to an
-ephemeral copy of the checksum-verified upstream source. It covers guard-first
-and competing-Router priority, plugin-ID tie breaks, guard load/register/enable
-failure, fuse, Router error/panic, invalid targets, missing identifiers,
-unsupported formats, disabled executors, and continuation to another Router or
-native routing. No Host algorithm is copied into this repository.
+ephemeral copy of the checksum-verified upstream source. The current Guard path
+registers schema-2 RequestInterceptor and RequestLifecyclePlugin capabilities
+plus a ModelRouter that handles only `codex-alpha-search`.
+The fixture covers Guard/competing-interceptor priority, plugin-ID tie breaks,
+termination, load/register/enable failure, fuse, interceptor error/panic
+fail-open, metadata sanitization, and all four completion outcomes. A separately
+named subtest preserves only the legacy schema-1 ModelRouter compatibility
+contract. No Host algorithm is copied into this repository.
 
 This is source-level evidence only. It does not build, load, or execute a
 Cyber Abuse Guard shared object, and it does not replace server-sandbox tests
@@ -46,7 +53,8 @@ isolation.
 
 The separate `make cpa-router-fixture-blackbox` CI target builds
 `integration/testfixtures/router_fixture.c` as a minimal second dynamic
-Router/executor and exercises the public native ABI. That target is CI-only in
-this handoff. Panic and fuse remain source-overlay evidence because a C plugin
-cannot safely manufacture a recoverable Go panic or mutate the Host's private
-fuse state.
+Router/executor and exercises the public native ABI. It remains a schema-1
+compatibility fixture and is not evidence of the current Guard's schema-2
+registration path. That target is CI-only in this handoff. Panic and fuse remain
+source-overlay evidence because a C plugin cannot safely manufacture a
+recoverable Go panic or mutate the Host's private fuse state.

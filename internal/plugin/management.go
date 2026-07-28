@@ -44,7 +44,8 @@ const (
 	managementRawCaptureSchema          = 4
 	managementHealthProbePath           = managementBasePath + "/health/probe"
 	managementMigrationBackupPurgePath  = managementBasePath + "/migration-backups/purge"
-	managementAuthDocumentation         = "CPA v7.2.102 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
+	managementAuthDocumentation         = "CPA v7.2.103 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
+	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 2 RequestInterceptor protocol-path failures"
 	migrationBackupDeleteConfirmation   = "DELETE_ALL_MIGRATION_BACKUPS"
 	migrationBackupRollbackConfirmation = "ACKNOWLEDGE_OLD_SO_ROLLBACK_REQUIRES_EXTERNAL_BACKUP"
 )
@@ -57,7 +58,7 @@ type managementRoute struct {
 }
 
 // managementRawCapture preserves the readable preview for existing operators
-// and adds a canonical transport-safe representation. CPA v7.2.102 HTML-escapes
+// and adds a canonical transport-safe representation. CPA v7.2.103 HTML-escapes
 // every JSON string returned by ServeManagementHTTP, so raw_preview_b64 is the
 // only byte-stable representation across the plugin/Host boundary.
 type managementRawCapture struct {
@@ -363,6 +364,7 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 		"classifier_policy_version": policyIdentity.Version,
 		"classifier_policy_sha256":  policyIdentity.SHA256,
 		"router_errors":             p.counters.routerErrors.Load(),
+		"router_errors_semantics":   routerErrorsDocumentation,
 		"panics_recovered":          p.counters.panicsRecovered.Load(),
 		"audit_degraded":            auditDegraded,
 		"hmac_stable":               hmacStable,
@@ -392,9 +394,10 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 			"description":                      managementAuthDocumentation,
 		},
 		"conflict_detection": map[string]any{
-			"router_enumeration_supported":           false,
-			"duplicate_plugin_binary_scan_supported": false,
-			"reason":                                 "CPA v7.2.102 plugin ABI exposes neither the loaded router ordering nor the plugin directory inventory",
+			"request_interceptor_enumeration_supported": false,
+			"router_enumeration_supported":              false,
+			"duplicate_plugin_binary_scan_supported":    false,
+			"reason":                                    "CPA v7.2.103 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
 		},
 	}
 	if state != nil {
@@ -594,7 +597,7 @@ func managementRawCaptureResponseDefaults(enabled bool, requestedLimit int) mana
 }
 
 // managementBoundRawCaptureResponse selects the largest newest-first prefix
-// whose complete CPA v7.2.102 Host-visible JSON body fits the fixed response
+// whose complete CPA v7.2.103 Host-visible JSON body fits the fixed response
 // budget. Each sensitive row is counted once; only the small metadata envelope
 // is re-encoded while the prefix grows.
 func managementBoundRawCaptureResponse(page audit.RawCapturePage, requestedLimit int) (managementRawCaptureResponse, error) {
@@ -813,7 +816,7 @@ func managementRawCaptureResponseBodies(response managementRawCaptureResponse) (
 	return body, len(hostBody), nil
 }
 
-// managementCPAHostSanitizeJSON mirrors CPA v7.2.102
+// managementCPAHostSanitizeJSON mirrors CPA v7.2.103
 // internal/htmlsanitize.JSONBody. The compatibility contract module compares
 // this prediction with the real Host ServeManagementHTTP behavior.
 func managementCPAHostSanitizeJSON(body []byte) ([]byte, bool) {
