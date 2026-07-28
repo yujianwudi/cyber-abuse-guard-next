@@ -48,7 +48,8 @@ real-Host, or release validation from these checks.
 - Preserve full-SHA pinning and least privilege in GitHub Actions changes.
 - Resolve all actionable review conversations.
 - Before merge, the required checks must pass: `quality-and-artifacts`,
-  `fuzz-long`, `reproducibility`, and `Analyze Go on Linux`.
+  `fuzz-long`, `reproducibility`, `Analyze Go on Linux`, and
+  `round9-policy-and-corpus`.
 - Follow the desired default-branch controls in
   [docs/REPOSITORY_GOVERNANCE.md](docs/REPOSITORY_GOVERNANCE.md).
 
@@ -56,7 +57,8 @@ real-Host, or release validation from these checks.
 
 A merged pull request, successful CI run, locally built package, or code-owner
 route does not authorize a tag, GitHub Release, CPA deployment, or production
-rollout. Unless the maintainer explicitly authorizes release work, contributors
-must not push release tags, dispatch publication workflows, publish artifacts,
-or change release evidence to claim external Host, audit, evaluation, or
-production approval.
+rollout. The repository contains no executable publication workflow. Unless the
+maintainer explicitly authorizes a separate release project, contributors must
+not push release tags, restore archived publication workflows, publish
+artifacts, or change release evidence to claim external Host, audit,
+evaluation, or production approval.

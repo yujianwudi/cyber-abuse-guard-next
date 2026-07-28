@@ -21,6 +21,7 @@ before their successful contexts exist can lock the default branch.
 | All review conversations resolved | Required |
 | Force pushes | Prohibited |
 | Branch deletion | Prohibited |
+| Delete merged pull-request branches | Enabled |
 | Enforce the rule for administrators | Disabled for documented break-glass recovery |
 
 Zero required approvals avoids deadlocking a single-maintainer repository. The
@@ -40,6 +41,8 @@ Run these read-only commands after enabling or changing protection:
 ```bash
 gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection
 gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection/required_status_checks
+gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection/required_signatures
+gh api repos/yujianwudi/cyber-abuse-guard-next --jq '{delete_branch_on_merge}'
 gh api repos/yujianwudi/cyber-abuse-guard-next/rulesets --paginate
 ```
 
@@ -58,13 +61,19 @@ gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection \
 
 The expected result is `strict: true`, the five exact check names above,
 `approvals: 0`, `conversations: true`, `admins: false`, `force_pushes: false`,
-and `deletions: false`. Also inspect branch-targeting rulesets for conflicting
-or broader rules. Tag governance is separate from `main` protection and must
-not be inferred from the branch result.
+`deletions: false`, `required_signatures.enabled: true`, and
+`delete_branch_on_merge: true`. Also inspect branch-targeting rulesets for
+conflicting or broader rules. Tag governance is separate from `main` protection
+and must not be inferred from the branch result.
 
 The successor repository protection was enabled on 2026-07-24 with those five
-contexts. This statement is a configuration snapshot, not a substitute for the
-read-only API verification commands above.
+contexts. On 2026-07-28 the live configuration was reconciled to prohibit force
+pushes and deletion of `main`, while preserving strict checks, signed commits,
+conversation resolution, zero required approvals, and the documented admin
+break-glass path. Automatic deletion of merged pull-request head branches is
+enabled to prevent stale `agent/*` branches from accumulating. This statement
+is a configuration snapshot, not a substitute for the read-only API
+verification commands above.
 
 When a workflow or job name changes, update the required-check configuration
 and this document together. Never rename a required check without first

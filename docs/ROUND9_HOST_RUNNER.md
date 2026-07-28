@@ -5,9 +5,23 @@ current_classifier_policy_version: classifier-policy-v9
 current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
 ```
 
-`.github/workflows/round9-host-validation.yml` is the only admissible Round 9
-Host evaluation path for `v0.16-rc.4`, but it is not publication authorization
-by itself. The job deliberately performs no source checkout. It passes only
+## Repository status
+
+```text
+workflow_status: ARCHIVED_NOT_EXECUTABLE
+archived_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml
+historical_provenance_path: .github/workflows/round9-host-validation.yml
+```
+
+This document preserves the reviewed Round 9 Host design for `v0.16-rc.4`.
+The source snapshot is retained for audit and regression review, but it is not
+an executable GitHub Actions entrypoint and cannot be dispatched from the
+current repository. Only `ci.yml`, `codeql.yml`, and `round9-gate.yml` remain
+active; Host evaluation is now an operator-owned external action.
+
+In the archived design, the historical provenance path above was the only
+admissible Round 9 Host evaluation path. It was not publication authorization
+by itself. The job deliberately performed no source checkout and passed only
 immutable candidate, Phase 1, workflow, challenge, dispatch ref/SHA, and
 workflow ref/SHA identities to the separately reviewed command:
 
@@ -22,7 +36,7 @@ adapter invocation, or hand-authored JSON is diagnostic only. Even correctly
 signed Host evidence cannot replace the missing exact-candidate independent
 audit.
 
-This lane is synthetic counted-Mock-only. It must not SSH to or reuse a
+The archived lane was synthetic counted-Mock-only. It must not SSH to or reuse a
 production host, CPA process, account pool, database, credential, Provider, or
 traffic stream. `subject_control=false` remains mandatory. External evaluation
 and a public RC do not authorize production Balanced mode.
@@ -34,7 +48,8 @@ and a public RC do not authorize production Balanced mode.
 | Candidate | annotated exact-main `v0.16-rc.4` |
 | Platform | Linux amd64 only |
 | CPA | `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` |
-| Host workflow | `.github/workflows/round9-host-validation.yml` |
+| Historical Host workflow provenance | `.github/workflows/round9-host-validation.yml` |
+| Archived source snapshot | `docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml` |
 | Dispatch ref | exact `refs/tags/v0.16-rc.4` |
 | Dispatch SHA | exact candidate commit |
 | Workflow ref | `OWNER/REPO/.github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.4` |
@@ -68,12 +83,13 @@ executed.
 
 ## Phase 1 admission and no-checkout boundary
 
-`round9-release-rc.yml` has no publication boolean and produces/attests only an
-exact 17-asset private candidate. Its admission also requires a successful
+The archived `round9-release-rc.yml` design has no publication boolean and
+produces/attests only an exact 17-asset private candidate. Its admission also
+requires a successful
 exact-main push run of `Round 9 policy gate` and requires historical workflow
-IDs `315644586` and `318443961` to remain `disabled_manually`. The Host dispatch
-has ten inputs: tag, tag object, commit, tree, Phase 1 run ID/attempt, artifact
-ID/digest, one canonical inline `candidate_identity` object, and a fresh
+IDs `315644586` and `318443961` to remain `disabled_manually`. Its Host dispatch
+design has ten inputs: tag, tag object, commit, tree, Phase 1 run ID/attempt,
+artifact ID/digest, one canonical inline `candidate_identity` object, and a fresh
 lowercase 64-hex challenge.
 Duplicate keys, unknown fields, non-canonical JSON, malformed identities, or an
 oversized candidate object fail before ledger reservation.
@@ -89,10 +105,11 @@ The Actions runner does not receive a corpus path, evaluator path, sandbox
 command, PAT, age identity, signing key, or plaintext case. The root install
 must be reviewed and provisioned before the candidate commit is frozen; do not
 install evaluator code from the candidate that it is about to evaluate.
-Before invoking the broker, the workflow proves that its dispatch and workflow
-refs both name the exact RC tag and that both GitHub SHA values equal the exact
-candidate commit. It then forwards all four values as distinct broker arguments;
-the root-owned broker rejects any mismatch or substitution.
+Before invoking the broker, the archived workflow design proves that its
+dispatch and workflow refs both name the exact RC tag and that both GitHub SHA
+values equal the exact candidate commit. It then forwards all four values as
+distinct broker arguments; the root-owned broker rejects any mismatch or
+substitution.
 
 ## CPA sandbox and listener
 
@@ -214,16 +231,17 @@ partial or completed state is reusable only when every signed candidate,
 corpus, execution, evaluator, and ledger identity still matches. These checks
 remain necessary but are not sufficient for public publication.
 
-## Attestation and current publication block
+## Attestation and archived publication block
 
-The Host workflow attests and uploads exactly:
+The archived Host workflow design attests and uploads exactly:
 
 - `round9-external-evaluation.json`;
 - `round9-external-ledger-proof.json`.
 
-`round9-release-rc.yml` keeps the 17-asset Phase 1 candidate build enabled and
-private. The former Host-only 19-asset publication assembly is statically
-unreachable and has no contents-write permission or Release mutation API. The
+The archived `round9-release-rc.yml` snapshot kept the 17-asset Phase 1
+candidate build enabled and private. The former Host-only 19-asset publication
+assembly is statically unreachable and has no contents-write permission or
+Release mutation API. The
 publish, publication-blocker, and legacy existing-Release verifier jobs are all
 gated on `needs.admission.outputs.publication_permitted == 'true'`, while the
 admission job emits exactly one hard-coded `publication_permitted=false` and no
@@ -239,8 +257,8 @@ non-replayed audit execution identity. Negative tests must reject Host-only or
 title-only approval, hand-filled status, asset substitution, signer drift,
 unknown fields, stale evidence, and digest drift. The verifier contract is
 currently `IMPLEMENTED_FAIL_CLOSED / INDEPENDENTLY_SIGNED_EVIDENCE_NOT_PROVIDED`,
-so no new public `v0.16-rc.4` prerelease is authorized or creatable through the
-workflow.
+so no new public `v0.16-rc.4` prerelease is authorized or creatable through that
+archived design. No current workflow contains this publication path.
 
 Admission rejects every pre-existing `v0.16-rc.4` Release, including an exact
 non-draft immutable 19-asset object. The preserved read-only verifier is legacy,

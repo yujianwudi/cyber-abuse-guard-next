@@ -100,6 +100,39 @@ for relative in "${documents[@]}"; do
   [[ -f "$document" && ! -L "$document" ]] || fail "required current release document must be a regular non-symlink file: $relative"
 done
 
+round9_host_guide="$doc_root/docs/ROUND9_HOST_RUNNER.md"
+round9_audit_contract="$doc_root/docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md"
+round9_execution_record="$doc_root/docs/reports/ROUND9_EXECUTION_RECORD.md"
+release_policy="$doc_root/docs/RELEASE_POLICY.md"
+
+grep -Fq 'workflow_status: ARCHIVED_NOT_EXECUTABLE' "$round9_host_guide" &&
+  grep -Fq 'archived_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml' "$round9_host_guide" ||
+  fail "Round 9 Host guide must identify the Host workflow as an archived non-executable source"
+grep -Fq 'workflow_status: ARCHIVED_NOT_EXECUTABLE' "$round9_audit_contract" &&
+  grep -Fq 'archived_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml' "$round9_audit_contract" ||
+  fail "Round 9 independent-audit contract must identify the RC workflow as an archived non-executable source"
+grep -Fq 'round9_host_workflow_status: ARCHIVED_NOT_EXECUTABLE' "$round9_execution_record" &&
+  grep -Fq 'round9_host_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml' "$round9_execution_record" &&
+  grep -Fq 'round9_rc_workflow_status: ARCHIVED_NOT_EXECUTABLE' "$round9_execution_record" &&
+  grep -Fq 'round9_rc_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml' "$round9_execution_record" ||
+  fail "Round 9 execution record must describe both retired workflows as archived and non-executable"
+
+if grep -Fq 'is the only admissible Round 9' "$round9_host_guide"; then
+  fail "Round 9 Host guide must not describe the archived Host workflow as currently schedulable"
+fi
+if grep -Fq 'runs the verifier tests in both build' "$round9_audit_contract"; then
+  fail "Round 9 independent-audit contract must not describe the archived RC workflow as currently schedulable"
+fi
+if grep -Fq 'The active RC build lane may create' "$round9_execution_record"; then
+  fail "Round 9 execution record must not describe the archived RC build lane as active"
+fi
+grep -Fq 'The remaining `current_*` release-automation keys in the status block preserve' "$release_policy" ||
+  fail "release policy must identify its retained Round 9 automation keys as an archived design contract"
+if grep -Fq 'The RC workflow accepts exactly ten dispatch inputs' "$release_policy" ||
+  grep -Fq 'A new dispatch or `Re-run all jobs` therefore' "$release_policy"; then
+  fail "release policy must not describe the archived RC workflow as currently dispatchable"
+fi
+
 if [[ "$doc_root" == "$root" ]]; then
   grep -Fq '[Round 9 Linux Host runner and counted-Mock contract](ROUND9_HOST_RUNNER.md)' \
     "$root/docs/README.md" ||
@@ -119,13 +152,15 @@ if [[ "$doc_root" == "$root" ]]; then
   grep -Fq '[Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)' \
     "$root/docs/README.md" ||
     fail "documentation index lost the Round 9 execution-record link"
-  grep -Fq '| `round9-release-rc.yml` |' "$root/.github/workflows/README.md" ||
-    fail "workflow index lost the active Round 9 RC lane"
+  grep -Fq '| `round9-gate.yml` |' "$root/.github/workflows/README.md" ||
+    fail "workflow index lost the active Round 9 policy gate"
+  grep -Fq 'docs/archive/workflows/' "$root/.github/workflows/README.md" ||
+    fail "workflow index lost the non-executable workflow archive boundary"
   grep -Fq '127.0.0.1:18394 -> 8317/tcp' "$root/docs/ROUND9_HOST_RUNNER.md" ||
     fail "Round 9 Host guide lost the fixed CPA listener contract"
-  round9_rc_workflow="$root/.github/workflows/round9-release-rc.yml"
+  round9_rc_workflow="$root/docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml"
   [[ -f "$round9_rc_workflow" && ! -L "$round9_rc_workflow" ]] ||
-    fail "Round 9 RC workflow must be a regular non-symlink file"
+    fail "archived Round 9 RC workflow must be a regular non-symlink file"
   grep -Fq 'ROUND9_NEW_PUBLIC_PRERELEASE_CREATION: BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE' \
     "$round9_rc_workflow" ||
     fail "Round 9 RC workflow lost the exact-candidate independent-audit publication block"
@@ -405,6 +440,10 @@ required_policy_lines=(
   "current_gate_workflow: .github/workflows/round9-gate.yml"
   "current_host_workflow: .github/workflows/round9-host-validation.yml"
   "current_rc_workflow: .github/workflows/round9-release-rc.yml"
+  "current_operational_workflow_mode: main-verification-only"
+  "current_release_automation_status: ARCHIVED_NOT_EXECUTABLE"
+  "archived_round9_host_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml"
+  "archived_round9_rc_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml"
   "current_host_environment: round9-host-validation"
   "current_host_runner_label: cag-round9-sandbox"
   "current_publication_environment: round9-rc-publication"
@@ -490,8 +529,8 @@ required_public_v13_policy_markers=(
   "The original v8 manifest remains frozen"
   "The rejected attempt to rebind corrected bytes to the same v8 identity"
   "The disabled legacy verifier documents the prospective signer split"
-  'Admission rejects any existing `v0.16-rc.4`'
-  'either creates a fresh private 17-asset candidate after all admission checks or'
+  'The archived admission design rejected any existing'
+  'design, a dispatch or `Re-run all jobs` either created a fresh private 17-asset'
   'The Host result is necessary evaluation evidence, but it is not sufficient'
   'Release title/body text such as `independent audit required` is also not evidence'
   'Before any public writer may be restored, an independent authority must provide'

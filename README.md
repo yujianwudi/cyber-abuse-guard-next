@@ -55,7 +55,7 @@ is not sent to a public classifier.
 |---|---|
 | Source version / RC target | `0.16` / `v0.16-rc.4` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
 | Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
-| GitHub publication | `v0.16-rc.3` has an annotated Tag but no Release or Actions artifact; no `v0.16-rc.4` Tag or Release exists. `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
+| GitHub publication | No executable publication workflow remains. `v0.16-rc.3` is a historical annotated Tag with no Release or Actions artifact; the retired candidate, Host, and publication definitions are audit-only snapshots under `docs/archive/workflows/` |
 | Frozen v7.2.103 exact-main baseline | `1a64639c0bac7a157d8201c1593bd68cf6e7fe11`; CI `30327322793`, Round 9 gate `30327322810`, and CodeQL `30327322801` passed before v7.2.104 was published. This is v7.2.103 development/Host-load evidence only; the current v7.2.104 lane remains pending |
 | CPA source/compile target | `v7.2.104` (`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
@@ -63,7 +63,7 @@ is not sent to a public classifier.
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
 | Independent audit | A user-supplied external report for `f37a25dd` states that CPA v7.2.95 multilingual checks passed and identified a defensive incident-response false positive. The report is not a repository-bound attestation; the current source still requires exact-commit re-audit |
 | Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
-| v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
+| Active workflows | `ci.yml`, `codeql.yml`, and `round9-gate.yml` only. All candidate, Host, RC, and formal-release workflows are non-executable historical snapshots |
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
 | Validation platform | Linux amd64 only; emitted numeric GLIBC ABI versions must be `<= 2.34` |
 | Out of scope | Windows, macOS, musl/Alpine, real Provider traffic, production deployment/validation |

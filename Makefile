@@ -197,15 +197,7 @@ workflow-lint:
 		-config-file .github/actionlint.yaml \
 		.github/workflows/ci.yml \
 		.github/workflows/codeql.yml \
-		.github/workflows/candidate.yml \
-		.github/workflows/attested-prerelease.yml \
-		.github/workflows/release-rc.yml \
-		.github/workflows/round8-host-validation.yml \
-		.github/workflows/round9-gate.yml \
-		.github/workflows/round9-host-validation.yml \
-		.github/workflows/round9-release-rc.yml \
-		.github/workflows/release.yml \
-		.github/workflows/release-promote.yml
+		.github/workflows/round9-gate.yml
 
 shellcheck-lint:
 	@set -euo pipefail; \
@@ -894,4 +886,5 @@ tools:
 
 clean:
 	rm -rf $(DIST_DIR) build integration/.work coverage.out
-	rm -f ./*.test
+	rm -f ./*.test ./*.test.exe
+	find scripts tools -type d -name __pycache__ -prune -exec rm -rf -- {} +

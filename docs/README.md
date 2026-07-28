@@ -8,16 +8,14 @@ current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e4634646
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
-The current publication target is the Linux-only `v0.16-rc.4` Round 9
-prerelease. It uses the single CPA v7.2.104 pin and the exact loopback Host
-binding `127.0.0.1:18394 -> 8317/tcp`. Protected counted-Mock Host evidence,
-one-shot independent corpora, exact-main CI, and independent audit remain
-required; production approval has not been granted and no stable `v0.16`
-exists.
+The active repository target is source verification on `main` with CPA
+v7.2.104. Candidate, protected-Host, and publication workflows are archived and
+not executable. External audit, deployment, production approval, and any future
+release remain operator-owned; no stable `v0.16` exists.
 
-This cleanup adds navigation without relocating frozen evaluation or Holdout
-evidence. Those files keep their existing paths so historical hashes and
-references remain stable.
+Restricted evaluation and Holdout reports are absent from this repository by
+the clean-history policy. Do not restore, link, or infer their contents from
+public source history.
 
 ## Current v0.16 documents
 
@@ -82,33 +80,20 @@ Current GitHub Actions entry points are intentionally limited to:
 - `.github/workflows/ci.yml` for ordinary verification;
 - `.github/workflows/codeql.yml` for minimal-permission Linux Go static
   analysis within the reviewed sparse source boundary;
-- `.github/workflows/candidate.yml` for private unreleased candidate bytes;
-- `.github/workflows/attested-prerelease.yml` for the externally attested
-  historical development prerelease gate;
 - `.github/workflows/round9-gate.yml` for ordinary Round 9 policy/corpus
-  verification without independent-corpus execution;
-- `.github/workflows/round9-host-validation.yml` for the protected Linux
-  v7.2.104 one-shot independent-corpus and counted-Mock run;
-- `.github/workflows/round9-release-rc.yml` for the exact-main, Linux-only
-  `v0.16-rc.4` private-candidate/public-prerelease lane;
-- `.github/workflows/release-rc.yml` and
-  `.github/workflows/round8-host-validation.yml` as read-only Round 8 identity
-  records;
-- `.github/workflows/release.yml` and
-  `.github/workflows/release-promote.yml` for the formal draft and its
-  protected promotion.
+  verification without independent-corpus execution.
 
 CodeQL creates code-scanning evidence only. It does not create package bytes or
-authorize publication. Only the three `round9-*` workflows define the current
-Round 9 engineering/Host/RC chain. Candidate, attestation, Round 8, formal, and
-promotion workflows remain version-locked historical machinery and do not
-authorize a stable v0.16 publication.
+authorize publication. Candidate, attestation, protected-Host, Round 8, RC,
+formal-release, and promotion definitions are version-locked, non-executable
+audit snapshots under [`archive/workflows/`](archive/workflows/). They do not
+authorize deployment or publication.
 
 The retired attempted `v0.15-rc.2` workflow definition is archived under
 [`archive/workflows/`](archive/workflows/) and cannot be dispatched by GitHub
 Actions. Its recorded runs failed and did not produce the public RC, which was
 published separately through the disclosed direct owner override. It remains
-historical evidence and is separate from the active v0.16-rc.4 workflow.
+historical evidence and is separate from the active engineering gates.
 
 The protected `v0.15-rc.3` tag is separate failed evidence. Workflow run
 29728286559 passed admission, failed before packaging, published no Actions
@@ -141,21 +126,11 @@ Project baselines and engineering evidence:
 - [Test report](reports/TEST_REPORT.md) — current v0.16 section plus retained
   historical records
 
-Frozen evaluation reports:
-
-- [Evaluation v4](reports/EVALUATION_V4_REPORT.md)
-- [Evaluation v5](reports/EVALUATION_V5_REPORT.md)
-- [Evaluation v6](reports/EVALUATION_V6_REPORT.md)
-- [Evaluation v7](reports/EVALUATION_V7_REPORT.md)
-- [Evaluation v8](reports/EVALUATION_V8_REPORT.md)
-- [Evaluation v9](reports/EVALUATION_V9_REPORT.md)
-- [Evaluation v10](reports/EVALUATION_V10_REPORT.md)
-
-Retired or historical Holdout reports:
-
-- [Holdout v1](reports/HOLDOUT_REPORT.md)
-- [Holdout v2](reports/HOLDOUT_V2_REPORT.md)
-- [Holdout v3](reports/HOLDOUT_V3_REPORT.md)
+Restricted evaluation and Holdout reports (`EVALUATION_V4_REPORT.md` through
+`EVALUATION_V10_REPORT.md`, plus `HOLDOUT_REPORT.md` through
+`HOLDOUT_V3_REPORT.md`) are **ABSENT BY CLEAN-HISTORY POLICY**. Public aggregate
+status belongs in the current reports above; restricted source material must
+remain outside the repository.
 
 ## Archive
 

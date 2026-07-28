@@ -616,7 +616,7 @@ final result after subsequent classifier edits.
   Development paired-malicious recall is exactly 10000 basis points overall
   and in every category; independently authored malicious recall remains at
   least 9500 basis points overall and in every category.
-- The active RC build lane may create only the private Actions candidate that
+- At that point, the then-active RC build lane could create only the private Actions candidate that
   contains 17 assets and their build-provenance attestations. It has no public
   Release writer. Actions artifact upload and provenance attestation are
   therefore permitted private-candidate writes, not public Release mutations;
@@ -767,6 +767,25 @@ final result after subsequent classifier edits.
 - `v0.16-rc.4` remains `NOT_CREATED` until its source is merged, all exact-main
   checks pass, a no-bypass Tag ruleset exists, and the protected Environment
   policies have been migrated. Public publication remains mechanically blocked.
+
+### 2026-07-28 - repository workflow governance
+
+```text
+repository_workflow_mode: main-verification-only
+round9_host_workflow_status: ARCHIVED_NOT_EXECUTABLE
+round9_host_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml
+round9_rc_workflow_status: ARCHIVED_NOT_EXECUTABLE
+round9_rc_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml
+```
+
+- The current GitHub Actions execution surface is exactly `ci.yml`,
+  `codeql.yml`, and `round9-gate.yml`.
+- The former Host and RC workflow paths remain only as historical provenance
+  identities. Their byte-preserving source snapshots live under
+  `docs/archive/workflows/` and cannot be dispatched by GitHub Actions.
+- No current workflow builds or publishes an RC, creates or edits a GitHub
+  Release, or runs the protected Host evaluation chain. Those activities are
+  operator-owned external actions.
 
 ## Current conclusion
 

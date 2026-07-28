@@ -41,6 +41,10 @@ current_cpa_commit: c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
 current_gate_workflow: .github/workflows/round9-gate.yml
 current_host_workflow: .github/workflows/round9-host-validation.yml
 current_rc_workflow: .github/workflows/round9-release-rc.yml
+current_operational_workflow_mode: main-verification-only
+current_release_automation_status: ARCHIVED_NOT_EXECUTABLE
+archived_round9_host_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml
+archived_round9_rc_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml
 current_host_environment: round9-host-validation
 current_host_runner_label: cag-round9-sandbox
 current_publication_environment: round9-rc-publication
@@ -115,38 +119,50 @@ current_independent_audit_status: NOT_PROVIDED
 current_production_approval_status: NOT_GRANTED
 ```
 
-The Round 9 lane is separate from the Round 8 workflows and identities. It is
+The `current_host_workflow` and `current_rc_workflow` values above are retained
+as provenance identities for historical attestations and regression contracts.
+Their reviewed source snapshots now live under `docs/archive/workflows/` and
+cannot be dispatched by GitHub Actions. The repository's operational mode is
+main verification only; Host execution, independent audit, deployment, and
+publication are operator-owned external actions.
+
+The remaining `current_*` release-automation keys in the status block preserve
+the frozen Round 9 design contract and its fail-closed semantics. They do not
+describe executable repository capabilities.
+
+The Round 9 design is separate from the Round 8 workflows and identities. It is
 Linux amd64 only, uses the exact Go 1.26.4 builder contract, and fixes CPA to
 `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`. The policy gate is an
 ordinary push/pull-request engineering gate. It does not run either independent
-corpus. The protected Host workflow is the only lane allowed to request the
-one-shot independent benign and independent malicious evaluation. It performs
-no source checkout: a separately reviewed, root-owned broker controls the
-encrypted corpus, evaluator, keys, fixed images, protected ledger, and result
-directory. The workflow receives only the signed privacy-bounded result and
-ledger proof. It must not contact a real Provider or production.
+corpus. The archived protected Host workflow design was the only lane allowed
+to request the one-shot independent benign and independent malicious evaluation.
+It performed no source checkout: a separately reviewed, root-owned broker
+controlled the encrypted corpus, evaluator, keys, fixed images, protected
+ledger, and result directory. The design returned only the signed
+privacy-bounded result and ledger proof and was forbidden from contacting a real
+Provider or production.
 
-The protected Host runner is documented in `docs/ROUND9_HOST_RUNNER.md`. CPA
-must publish exactly `127.0.0.1:18394 -> 8317/tcp`; preflight fails if that
-listener is unavailable, Docker configured/runtime bindings are checked
-byte-for-byte, and the exact binding is retained in Host evidence and the RC
-manifest. No wildcard, random CPA Host port, or additional listener is
-admissible.
+The archived protected Host runner design is documented in
+`docs/ROUND9_HOST_RUNNER.md`. In that design, CPA had to publish exactly
+`127.0.0.1:18394 -> 8317/tcp`; preflight failed if that listener was unavailable,
+Docker configured/runtime bindings were checked byte-for-byte, and the exact
+binding was retained in Host evidence and the RC manifest. No wildcard, random
+CPA Host port, or additional listener was admissible.
 
-The RC workflow accepts exactly ten dispatch inputs, including a successful
-exact-main `Round 9 policy gate` run ID and attempt. It also requires the
-historical workflow IDs `315644586` (`release-rc.yml`) and `318443961`
+The archived RC workflow design accepted exactly ten dispatch inputs, including
+a successful exact-main `Round 9 policy gate` run ID and attempt. It also
+required the historical workflow IDs `315644586` (`release-rc.yml`) and `318443961`
 (`round8-host-validation.yml`) to report `disabled_manually`. After admission it
-produces self-contained development evidence, embeds it in the schema-6
-manifest, attests exactly 17 assets, and uploads only a private Actions candidate
-artifact for protected Host evaluation. There is no publication boolean or
-successful public-recovery state. The publish, publication-blocker, and legacy
-existing-Release verifier jobs all require
+would produce self-contained development evidence, embed it in the schema-6
+manifest, attest exactly 17 assets, and upload only a private Actions candidate
+artifact for protected Host evaluation. The design had no publication boolean
+or successful public-recovery state. The publish, publication-blocker, and
+legacy existing-Release verifier jobs all required
 `needs.admission.outputs.publication_permitted == 'true'`; the reviewed
-admission step emits exactly `publication_permitted=false`, and both Safe Gate
+admission step emitted exactly `publication_permitted=false`, and both Safe Gate
 and document consistency bind that output plus all three conditions. The
-workflow has no `contents: write` and exposes no Release-create, upload, edit,
-delete, or other mutation path.
+archived snapshot has no `contents: write` and exposes no Release-create, upload,
+edit, delete, or other mutation path.
 
 The Host result is necessary evaluation evidence, but it is not sufficient
 publication authorization.
@@ -158,8 +174,8 @@ and offline/remote mechanical verifier now exist. They are implemented in
 `docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md`. No independently signed evidence
 package, pinned auditor trust configuration, auditor run/artifact, or protected
 audit-ledger events have been provided. The verifier therefore returns
-`NOT_PROVIDED`, and no new public `v0.16-rc.4` prerelease can be created by this
-workflow.
+`NOT_PROVIDED`. No current workflow can create a public `v0.16-rc.4`
+prerelease.
 
 The verifier does not create, sign, repair, or infer any of those external records.
 
@@ -174,11 +190,12 @@ The disabled legacy verifier documents the prospective signer split: the 17
 candidate-built assets would require the Round 9 RC-workflow attestation, while
 the two external assets would require the protected Round 9 Host-workflow
 attestation. It retains byte and stable-latest checks for future review, but no
-execution path can enter it. Admission rejects any existing `v0.16-rc.4`
-Release, whether draft or public, and never deletes, edits, uploads to, repairs,
-or treats that Release as success. A new dispatch or `Re-run all jobs` therefore
-either creates a fresh private 17-asset candidate after all admission checks or
-fails closed.
+execution path can enter it. The archived admission design rejected any existing
+`v0.16-rc.4` Release, whether draft or public, and never deleted, edited,
+uploaded to, repaired, or treated that Release as success. Under that historical
+design, a dispatch or `Re-run all jobs` either created a fresh private 17-asset
+candidate after all admission checks or failed closed. The repository no longer
+exposes either operation.
 
 Manifest schema 6 binds `classifier-policy-v9`, ruleset `1.0.10`, audit schema
 v6, Raw Capture schema v4, canonical Phase 1 development evidence, paired-v3
@@ -197,8 +214,9 @@ The paired-v3 corpus uses corpus manifest version 2. It binds the exact
 the audit report in turn binds the same cases SHA-256 and records 120/120 PASS
 without candidate output or classifier/project-test execution. A future
 publication path must mechanically bind the independently audited exact
-candidate to the canonical title, body, and 19-name allowlist; the current
-workflow cannot substitute title text or a Host `PASS` for that missing audit.
+candidate to the canonical title, body, and 19-name allowlist. No current
+workflow exists that could substitute title text or a Host `PASS` for that
+missing audit.
 
 Before any public writer may be restored, an independent authority must provide
 all of the following, and the implemented contract must reject missing, extra,

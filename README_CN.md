@@ -45,7 +45,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 |---|---|
 | 源码版本 / RC 目标 | `0.16` / 仅 `v0.16-rc.4` 预发行；精确 tag、commit、tree 和产物 hash 必须由未来 clean release run 生成 |
 | 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
-| GitHub 发布 | `v0.16-rc.3` 仅有 annotated Tag，没有 Release 或 Actions artifact；当前尚无 `v0.16-rc.4` Tag 或 Release。`round9-release-rc.yml` 只能生成私有 17 资产候选，公共预发行写入保持硬阻断 |
+| GitHub 发布 | 当前没有可执行的发布工作流。`v0.16-rc.3` 仅作为历史 annotated Tag 保留，没有 Release 或 Actions artifact；候选、Host 与发布定义已移入 `docs/archive/workflows/`，仅供审计 |
 | 冻结的 v7.2.103 exact-main 基线 | `1a64639c0bac7a157d8201c1593bd68cf6e7fe11`；CI `30327322793`、Round 9 gate `30327322810`、CodeQL `30327322801` 在 v7.2.104 发布前均通过。它只属于 v7.2.103 开发与 Host 加载证据；当前 v7.2.104 仍待重新验证 |
 | CPA 源码/编译目标 | `v7.2.104`（`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`） |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
@@ -53,7 +53,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
 | 独立审计 | 用户提供的外部 `f37a25dd` 报告称 CPA v7.2.95 多语言检查通过，并发现防御性事件响应请求误拦。该文件不是仓库绑定 attestation；当前源码仍需绑定最终 commit 重新审计 |
 | 生产批准 | **NOT GRANTED**；不存在稳定版 `v0.16`，也不能自动重新准入 Balanced |
-| v0.16 工作流 | `round9-gate.yml`、无 checkout 的 `round9-host-validation.yml`、`round9-release-rc.yml` 是当前第九轮链；第八轮与 v0.15 流程只读保留为历史证据 |
+| 当前工作流 | 仅保留 `ci.yml`、`codeql.yml`、`round9-gate.yml`；候选、Host、RC 和正式发布流程均为不可执行的历史快照 |
 | 静态分析治理 | `.github/workflows/codeql.yml` 在经过审查的稀疏源码边界内，以最小权限在 Ubuntu 上分析 Go；CodeQL 结果不能授权发布 |
 | 验证平台 | 仅 Linux amd64；产物引用的数字型 GLIBC ABI 版本必须 `<= 2.34` |
 | 不在范围 | Windows、macOS、musl/Alpine、真实 Provider、生产部署/验证 |

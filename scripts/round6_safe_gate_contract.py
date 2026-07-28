@@ -121,16 +121,45 @@ REPOSITORY_WORKFLOW_DISPATCH_INPUT_LIMIT = 10
 ACTIVE_WORKFLOW_PATHS = (
     ".github/workflows/ci.yml",
     ".github/workflows/codeql.yml",
-    ".github/workflows/candidate.yml",
-    ".github/workflows/attested-prerelease.yml",
-    ".github/workflows/release-rc.yml",
-    ".github/workflows/round8-host-validation.yml",
     ".github/workflows/round9-gate.yml",
-    ".github/workflows/round9-host-validation.yml",
-    ".github/workflows/round9-release-rc.yml",
-    ".github/workflows/release.yml",
-    ".github/workflows/release-promote.yml",
 )
+ARCHIVED_CANDIDATE_WORKFLOW_PATH = "docs/archive/workflows/candidate-v0.15.yml"
+ARCHIVED_ATTESTED_PRERELEASE_WORKFLOW_PATH = (
+    "docs/archive/workflows/attested-prerelease-v0.15.yml"
+)
+ARCHIVED_FORMAL_RELEASE_WORKFLOW_PATH = "docs/archive/workflows/release-v0.15.yml"
+ARCHIVED_RELEASE_PROMOTE_WORKFLOW_PATH = (
+    "docs/archive/workflows/release-promote-v0.15.yml"
+)
+ARCHIVED_ROUND8_RC_WORKFLOW_PATH = (
+    "docs/archive/workflows/release-rc-v0.16-rc.2.yml"
+)
+ARCHIVED_ROUND8_HOST_WORKFLOW_PATH = (
+    "docs/archive/workflows/round8-host-validation-v0.16-rc.2.yml"
+)
+ARCHIVED_ROUND9_HOST_WORKFLOW_PATH = (
+    "docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml"
+)
+ARCHIVED_ROUND9_RC_WORKFLOW_PATH = (
+    "docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml"
+)
+ARCHIVED_RC_WORKFLOW_PATH = "docs/archive/workflows/release-rc-v0.15-rc.2.yml"
+ARCHIVED_WORKFLOW_PATHS = (
+    ARCHIVED_CANDIDATE_WORKFLOW_PATH,
+    ARCHIVED_ATTESTED_PRERELEASE_WORKFLOW_PATH,
+    ARCHIVED_FORMAL_RELEASE_WORKFLOW_PATH,
+    ARCHIVED_RELEASE_PROMOTE_WORKFLOW_PATH,
+    ARCHIVED_ROUND8_RC_WORKFLOW_PATH,
+    ARCHIVED_ROUND8_HOST_WORKFLOW_PATH,
+    ARCHIVED_ROUND9_HOST_WORKFLOW_PATH,
+    ARCHIVED_ROUND9_RC_WORKFLOW_PATH,
+    ARCHIVED_RC_WORKFLOW_PATH,
+)
+# Compatibility aliases used by the historical workflow mutation tests. These
+# paths are reviewed snapshots and are not executable GitHub Actions entrypoints.
+ACTIVE_RC_WORKFLOW_PATH = ARCHIVED_ROUND8_RC_WORKFLOW_PATH
+ROUND9_HOST_WORKFLOW_PATH = ARCHIVED_ROUND9_HOST_WORKFLOW_PATH
+ROUND9_RC_WORKFLOW_PATH = ARCHIVED_ROUND9_RC_WORKFLOW_PATH
 ACTIONLINT_VERSION = "v1.7.12"
 ACTIONLINT_CONFIG_PATH = ".github/actionlint.yaml"
 ACTIONLINT_CONFIG_TEXT = (
@@ -145,11 +174,7 @@ ACTIONLINT_COMMAND = (
     + " ".join(ACTIVE_WORKFLOW_PATHS)
 )
 WORKFLOW_DIRECTORY_AUXILIARY_PATHS = (".github/workflows/README.md",)
-ACTIVE_RC_WORKFLOW_PATH = ".github/workflows/release-rc.yml"
 ROUND9_GATE_WORKFLOW_PATH = ".github/workflows/round9-gate.yml"
-ROUND9_HOST_WORKFLOW_PATH = ".github/workflows/round9-host-validation.yml"
-ROUND9_RC_WORKFLOW_PATH = ".github/workflows/round9-release-rc.yml"
-ARCHIVED_RC_WORKFLOW_PATH = "docs/archive/workflows/release-rc-v0.15-rc.2.yml"
 BLOCKED_PRERELEASE_MARKER = (
     "Attested prerelease - HOST, AUDIT, AND EVALUATION REQUIRED"
 )
@@ -1189,7 +1214,7 @@ ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
-    "18509d7a2e267f04bcdc524530131ef9c3e2e8f465473d8fbd440d7f529699c9"
+    "6e4e4e8a9900ba0c304f9b67bb537895a89ccf9a50576b68ff741f73fafdfde0"
 )
 ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1364,11 +1389,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "037b83d204226b759d847782406c750f445b8869953320a2acae0d6e11d3a152"
+    "dcbcc67213fa38db5dd4b1c6207ce0e6d6de80f6eba672dfe20b23f258dcf68f"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "e9d12c16f16b5cffe670c75117c9bfe00bb151af2185b42bf68d4e53b0602464",
-    "scripts/release-doc-consistency.sh": "604f9bf9f8574464437f69c9b1405d257f753c1ba29e7cd587a971bd63d0cf3d",
+    "scripts/release-doc-consistency-test.sh": "bf831f97bcfe627f36b0b8c1bc4d0da27c7b2496f09cdfef569b13c648950e82",
+    "scripts/release-doc-consistency.sh": "f71ddf51c755452076092d4dca8bb4c9ebd91cfb0eba81cb92841b3e47f8d5eb",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1505,7 +1530,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "43282fc08546cc7d3023c0f30985f8c8e43363a48cb2b23464c173f5bdb6d76c"
+ROUND6_SAFE_GATE_TEST_SHA256 = "6202d50288c9ae890e6e8f3e607f06e217e4fe2b3f479b6a8807aa2977b7c6b6"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -11803,7 +11828,7 @@ def validate_workflow_layout(root: Path) -> None:
         expected_directory_paths
     ):
         raise ContractError(
-            "workflow directory must contain exactly the eleven reviewed entrypoints and its README: "
+            "workflow directory must contain exactly the three reviewed entrypoints and its README: "
             + ", ".join(expected_directory_paths)
         )
 
@@ -11811,19 +11836,10 @@ def validate_workflow_layout(root: Path) -> None:
     actionlint_config_text = read_regular_text(actionlint_config_path, root)
     validate_actionlint_config(actionlint_config_text, actionlint_config_path)
 
-    active_rc_path = root / ACTIVE_RC_WORKFLOW_PATH
-    active_rc_text = read_regular_text(active_rc_path, root)
-    validate_rc_release_workflow(active_rc_text, active_rc_path)
     round9_gate_path = root / ROUND9_GATE_WORKFLOW_PATH
     validate_round9_gate_workflow(
         read_regular_text(round9_gate_path, root), round9_gate_path
     )
-    round9_host_path = root / ROUND9_HOST_WORKFLOW_PATH
-    validate_round9_host_workflow(
-        read_regular_text(round9_host_path, root), round9_host_path
-    )
-    round9_rc_path = root / ROUND9_RC_WORKFLOW_PATH
-    validate_round9_rc_workflow(read_regular_text(round9_rc_path, root), round9_rc_path)
     safe_gate_test_path = root / ROUND6_SAFE_GATE_TEST_SCRIPT
     if safe_gate_test_path.exists() or safe_gate_test_path.is_symlink():
         safe_gate_test_text = read_regular_text(safe_gate_test_path, root)
@@ -11833,11 +11849,31 @@ def validate_workflow_layout(root: Path) -> None:
         ):
             raise ContractError("Round6 safe-gate test suite differs from reviewed contract")
 
-    archive_path = root / ARCHIVED_RC_WORKFLOW_PATH
-    archive_text = read_regular_text(archive_path, root)
-    validate_archived_rc_workflow(archive_text, archive_path)
-    if archive_path.resolve().is_relative_to(resolved_workflow_dir):
-        raise ContractError("archived RC workflow must remain outside the executable workflow directory")
+    for relative in ARCHIVED_WORKFLOW_PATHS:
+        archive_path = root / relative
+        archive_text = read_regular_text(archive_path, root)
+        if archive_path.resolve().is_relative_to(resolved_workflow_dir):
+            raise ContractError(
+                "archived workflow must remain outside the executable workflow directory"
+            )
+        if relative == ARCHIVED_CANDIDATE_WORKFLOW_PATH:
+            validate_candidate_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_ATTESTED_PRERELEASE_WORKFLOW_PATH:
+            validate_blocked_prerelease_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_FORMAL_RELEASE_WORKFLOW_PATH:
+            validate_formal_release_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_RELEASE_PROMOTE_WORKFLOW_PATH:
+            validate_release_promote_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_ROUND8_RC_WORKFLOW_PATH:
+            validate_rc_release_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_ROUND8_HOST_WORKFLOW_PATH:
+            validate_round8_host_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_ROUND9_HOST_WORKFLOW_PATH:
+            validate_round9_host_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_ROUND9_RC_WORKFLOW_PATH:
+            validate_round9_rc_workflow(archive_text, archive_path)
+        elif relative == ARCHIVED_RC_WORKFLOW_PATH:
+            validate_archived_rc_workflow(archive_text, archive_path)
 
 
 def default_entrypoints(root: Path) -> list[Path]:
@@ -11901,6 +11937,7 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
     reviewed_control_scripts = (
         REPRODUCIBILITY_WRAPPER_SCRIPT,
         FROZEN_EVALUATION_TREE_SCRIPT,
+        *ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256,
     )
     if (
         (root / ".github/workflows/ci.yml").resolve()

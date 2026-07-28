@@ -109,6 +109,10 @@ make_fixture() {
         'current_gate_workflow: .github/workflows/round9-gate.yml' \
         'current_host_workflow: .github/workflows/round9-host-validation.yml' \
         'current_rc_workflow: .github/workflows/round9-release-rc.yml' \
+        'current_operational_workflow_mode: main-verification-only' \
+        'current_release_automation_status: ARCHIVED_NOT_EXECUTABLE' \
+        'archived_round9_host_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml' \
+        'archived_round9_rc_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml' \
         'current_host_environment: round9-host-validation' \
         'current_host_runner_label: cag-round9-sandbox' \
         'current_publication_environment: round9-rc-publication' \
@@ -174,12 +178,13 @@ make_fixture() {
         'current_independent_audit_status: NOT_PROVIDED' \
         'current_production_approval_status: NOT_GRANTED' \
         'The current public adversarial corpus is development-only v13 evidence under round9-public-adversarial-corpus/v13.' \
+        'The remaining `current_*` release-automation keys in the status block preserve the frozen Round 9 design contract and do not describe executable repository capabilities.' \
         'The original v8 manifest remains frozen as superseded invalid evidence.' \
         'The rejected attempt to rebind corrected bytes to the same v8 identity is retained separately.' \
         'The disabled legacy verifier documents the prospective signer split.' \
         'The two external assets remain separately attested.' \
-        'Admission rejects any existing `v0.16-rc.4` Release.' \
-        'A new dispatch either creates a fresh private 17-asset candidate after all admission checks or fails closed.' \
+        'The archived admission design rejected any existing `v0.16-rc.4` Release.' \
+        'Under that historical design, a dispatch or `Re-run all jobs` either created a fresh private 17-asset candidate after all admission checks or failed closed.' \
         'The Host result is necessary evaluation evidence, but it is not sufficient publication authorization.' \
         'Release title/body text such as `independent audit required` is also not evidence.' \
         'Before any public writer may be restored, an independent authority must provide the exact-candidate audit bindings.' \
@@ -196,6 +201,32 @@ make_fixture() {
         >"$fixture/$relative"
     elif [[ "$relative" == CHANGELOG.md ]]; then
       printf '# Changelog\n\n## 0.16 - 2026-07-21\n\nround6-prerelease-attestation.json\nformal-release-attestation.json\n' >"$fixture/$relative"
+    elif [[ "$relative" == docs/ROUND9_HOST_RUNNER.md ]]; then
+      printf '%s\n' \
+        '# Round 9 Host runner contract' \
+        '' \
+        'workflow_status: ARCHIVED_NOT_EXECUTABLE' \
+        'archived_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml' \
+        'historical_provenance_path: .github/workflows/round9-host-validation.yml' \
+        >"$fixture/$relative"
+    elif [[ "$relative" == docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md ]]; then
+      printf '%s\n' \
+        '# Round 9 independent audit contract' \
+        '' \
+        'workflow_status: ARCHIVED_NOT_EXECUTABLE' \
+        'archived_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml' \
+        'historical_provenance_path: .github/workflows/round9-release-rc.yml' \
+        >"$fixture/$relative"
+    elif [[ "$relative" == docs/reports/ROUND9_EXECUTION_RECORD.md ]]; then
+      printf '%s\n' \
+        '# Round 9 execution record' \
+        '' \
+        'repository_workflow_mode: main-verification-only' \
+        'round9_host_workflow_status: ARCHIVED_NOT_EXECUTABLE' \
+        'round9_host_workflow_source: docs/archive/workflows/round9-host-validation-v0.16-rc.4.yml' \
+        'round9_rc_workflow_status: ARCHIVED_NOT_EXECUTABLE' \
+        'round9_rc_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml' \
+        >"$fixture/$relative"
     elif [[ "$relative" == docs/reports/CORPUS_REPORT.md ]]; then
       printf '# Historical project regression corpus report - v0.1.2 candidate\n' >"$fixture/$relative"
     elif [[ "$relative" == docs/reports/ROUND8_RELEASE_READINESS.md ]]; then
@@ -271,6 +302,36 @@ must_fail() {
 
 make_fixture "$work/pass"
 run_gate "$work/pass"
+
+cp -a "$work/pass" "$work/current-host-workflow-claim"
+printf '\n`.github/workflows/round9-host-validation.yml` is the only admissible Round 9 Host path.\n' \
+  >>"$work/current-host-workflow-claim/docs/ROUND9_HOST_RUNNER.md"
+must_fail current-host-workflow-claim "$work/current-host-workflow-claim" \
+  'Round 9 Host guide must not describe the archived Host workflow as currently schedulable'
+
+cp -a "$work/pass" "$work/current-rc-verifier-claim"
+printf '\n`.github/workflows/round9-release-rc.yml` runs the verifier tests in both build contexts.\n' \
+  >>"$work/current-rc-verifier-claim/docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md"
+must_fail current-rc-verifier-claim "$work/current-rc-verifier-claim" \
+  'Round 9 independent-audit contract must not describe the archived RC workflow as currently schedulable'
+
+cp -a "$work/pass" "$work/active-rc-build-claim"
+printf '\nThe active RC build lane may create a private candidate.\n' \
+  >>"$work/active-rc-build-claim/docs/reports/ROUND9_EXECUTION_RECORD.md"
+must_fail active-rc-build-claim "$work/active-rc-build-claim" \
+  'Round 9 execution record must not describe the archived RC build lane as active'
+
+cp -a "$work/pass" "$work/current-rc-dispatch-input-claim"
+printf '\nThe RC workflow accepts exactly ten dispatch inputs.\n' \
+  >>"$work/current-rc-dispatch-input-claim/docs/RELEASE_POLICY.md"
+must_fail current-rc-dispatch-input-claim "$work/current-rc-dispatch-input-claim" \
+  'release policy must not describe the archived RC workflow as currently dispatchable'
+
+cp -a "$work/pass" "$work/current-rc-rerun-claim"
+printf '\nA new dispatch or `Re-run all jobs` therefore creates a private candidate.\n' \
+  >>"$work/current-rc-rerun-claim/docs/RELEASE_POLICY.md"
+must_fail current-rc-rerun-claim "$work/current-rc-rerun-claim" \
+  'release policy must not describe the archived RC workflow as currently dispatchable'
 
 if CURRENT_CLASSIFIER_POLICY_VERSION="$old_classifier_policy_version" "$gate" \
   >"$work/source-classifier-override.log" 2>&1; then

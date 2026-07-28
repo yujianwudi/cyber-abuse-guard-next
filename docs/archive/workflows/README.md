@@ -1,21 +1,25 @@
-# Archived workflow evidence
+# Archived GitHub Actions evidence
 
-Files in this directory are historical records, not active GitHub Actions
-entry points. GitHub executes workflows only from `.github/workflows/`, so the
-YAML stored here cannot be dispatched or triggered.
+YAML files in this directory are historical source snapshots, not executable
+GitHub Actions entrypoints. GitHub executes repository workflows only from
+`.github/workflows/`.
 
-`release-rc-v0.15-rc.2.yml` is the exact retired workflow definition retained
-from the failed publication attempts associated with the Linux amd64
-`v0.15-rc.2` sandbox prerelease. Its recorded runs failed and did not produce
-the public Release; that RC was published separately through the disclosed
-direct owner override. The embedded reference to
-`.github/workflows/release-rc.yml` records the path used by those historical
-runs and is intentionally unchanged. Do not copy that RC2 definition back into
-the executable workflow directory or treat it as authorization for a new RC
-publication. The active rc.4 workflow is a separately reviewed and hashed file;
-it does not mutate the archived RC2 record.
+| Snapshot | Historical role | Current status |
+|---|---|---|
+| `candidate-v0.15.yml` | Private v0.15 candidate builder | Archived; never run in this repository |
+| `attested-prerelease-v0.15.yml` | Blocked v0.15 attested prerelease lane | Archived; never run in this repository |
+| `release-v0.15.yml` | v0.15 draft Release builder | Archived; never run in this repository |
+| `release-promote-v0.15.yml` | v0.15 draft promotion lane | Archived; never run in this repository |
+| `release-rc-v0.15-rc.2.yml` | Original failed v0.15-rc.2 publication definition | Previously archived; immutable historical evidence |
+| `release-rc-v0.16-rc.2.yml` | Round 8 RC lane | Archived after being repository-disabled |
+| `round8-host-validation-v0.16-rc.2.yml` | Round 8 protected Host lane | Archived after being repository-disabled |
+| `round9-release-rc-v0.16-rc.4.yml` | Round 9 private-candidate and blocked-publication design | Archived; its only recorded dispatch failed before asset construction |
+| `round9-host-validation-v0.16-rc.4.yml` | Round 9 protected Host evaluation design | Archived without a recorded repository run |
 
-The active release chain is documented in
-[the release policy](../../RELEASE_POLICY.md), and the complete executable
-workflow inventory is maintained in
-[the active workflow README](../../../.github/workflows/README.md).
+The snapshots retain original workflow names, signer paths, tag identities, and
+fail-closed validation text so old attestations and regression tests remain
+auditable. They must not be copied back into `.github/workflows/` or treated as
+current execution, deployment, production, or publication authorization.
+
+The executable inventory is intentionally small and documented in
+[`.github/workflows/README.md`](../../../.github/workflows/README.md).

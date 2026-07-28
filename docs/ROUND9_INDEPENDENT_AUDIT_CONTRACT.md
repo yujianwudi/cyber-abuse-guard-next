@@ -4,6 +4,16 @@ This document describes a verifier, not an audit result. No independent-audit
 evidence package is stored in this repository, and the current candidate remains
 `NOT_PROVIDED / REQUIRES INDEPENDENT AUDIT`.
 
+```text
+workflow_status: ARCHIVED_NOT_EXECUTABLE
+archived_workflow_source: docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml
+historical_provenance_path: .github/workflows/round9-release-rc.yml
+```
+
+The archived source is a historical verifier and release-design contract. It is
+not an executable GitHub Actions entrypoint; no current workflow invokes this
+verifier or owns a public Release mutation path.
+
 ## Trust boundary
 
 The independent auditor is separate from both the candidate-building workflow
@@ -98,15 +108,19 @@ Exit status `1` means supplied evidence was invalid. Exit status `3` means the
 evidence package or trust anchor was not provided. The verifier does not create,
 sign, repair, or infer evidence.
 
-## Current workflow state
+## Archived workflow design state
 
-`.github/workflows/round9-release-rc.yml` runs the verifier tests in both build
-contexts and wires the remote verifier behind protected configuration. The
-current repository supplies no independent-audit artifact or trust configuration,
-so the step reports `NOT_PROVIDED`. Admission still emits
-`publication_permitted=false`; the workflow has no `contents: write` and no
-Release create/edit/upload/delete command. Implementing the verifier therefore
-does not authorize publication or production Balanced mode.
+The snapshot at
+`docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml` preserves the verifier
+tests in both historical build contexts and the protected remote-verifier
+wiring. Its original provenance identity was
+`.github/workflows/round9-release-rc.yml`; retaining that identity does not make
+the archived YAML schedulable. The repository supplies no independent-audit
+artifact or trust configuration, so the preserved design reports
+`NOT_PROVIDED`. Its admission emits `publication_permitted=false`; the snapshot
+has no `contents: write` and no Release create/edit/upload/delete command.
+Implementing the verifier therefore does not authorize publication or production
+Balanced mode.
 
 The only valid current conclusion remains:
 

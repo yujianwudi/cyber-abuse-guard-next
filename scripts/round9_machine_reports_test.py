@@ -787,7 +787,8 @@ class Round9MachineReportsTest(unittest.TestCase):
             encoding="utf-8"
         )
         rc_workflow = (
-            REPOSITORY_ROOT / ".github/workflows/round9-release-rc.yml"
+            REPOSITORY_ROOT
+            / "docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml"
         ).read_text(encoding="utf-8")
         for field in sorted(release_fields):
             with self.subTest(field=field):
@@ -821,7 +822,8 @@ class Round9MachineReportsTest(unittest.TestCase):
         )
         historical_workflow_state = '.state == "disabled_manually"'
         workflow = (
-            REPOSITORY_ROOT / ".github/workflows/round9-release-rc.yml"
+            REPOSITORY_ROOT
+            / "docs/archive/workflows/round9-release-rc-v0.16-rc.4.yml"
         ).read_text(encoding="utf-8")
         policy = (REPOSITORY_ROOT / "docs/RELEASE_POLICY.md").read_text(
             encoding="utf-8"
