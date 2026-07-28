@@ -5,17 +5,23 @@ current_classifier_policy_version: classifier-policy-v9
 current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
-Last updated: 2026-07-25 (Asia/Shanghai)
+Last updated: 2026-07-28 (Asia/Shanghai)
 
 ## Current Round 9 source-tree status — not a release PASS
 
 The active development target is Linux amd64 `v0.16-rc.4`,
 classifier-policy-v9, ruleset 1.0.10, audit schema v6, and CPA
-`v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d` with RPC schema 2. The protected Host lane may
+`v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` with RPC schema 2. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
 counted Mock. Final classifier/public-corpus freeze, exact-main CI, reproducible
 release assets, protected Host execution, independent audit, tag, and GitHub
 prerelease are not provided by this source snapshot.
+
+Exact-main commit `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` previously
+passed CI `30327322793`, Round 9 gate `30327322810`, and CodeQL `30327322801`
+against CPA v7.2.103. That frozen result proves only v7.2.103 development
+source/Host-load and reproducibility gates; it is not v7.2.104, protected
+counted-Mock, independent evaluation, release, or production evidence.
 
 The immutable `v0.16-rc.3` Tag is a failed Phase 1 identity, not the current
 candidate. Run `30118817188` failed on the undeclared PyYAML import before any

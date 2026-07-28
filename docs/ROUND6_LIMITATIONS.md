@@ -14,8 +14,8 @@ current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703
 > The current formal CPA identity is:
 >
 > ```text
-> current_formal_cpa: v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d
-> current_module_sum: h1:S8Tiyw5Uj/oUnvKM8GSmz7E6UutAgcWkEw9ztyxfHHU=
+> current_formal_cpa: v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
+> current_module_sum: h1:59vZ1rtgxs6etE0Z3iFsLWgZ/MrcIi4mhXLt0XLSNcY=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
 

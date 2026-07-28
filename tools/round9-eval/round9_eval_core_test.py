@@ -235,8 +235,8 @@ class Round9EvalCoreTest(unittest.TestCase):
             "commit": "2" * 40,
             "tree": "3" * 40,
             "so_sha256": "4" * 64,
-            "cpa_version": "v7.2.103",
-            "cpa_commit": "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
+            "cpa_version": "v7.2.104",
+            "cpa_commit": "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678",
             "classifier_policy_version": "classifier-policy-v9",
             "classifier_policy_sha256": "5" * 64,
             "ruleset_version": "1.0.10",
@@ -276,8 +276,8 @@ class Round9EvalCoreTest(unittest.TestCase):
             "sandbox_id": "round9-sandbox-test",
             "daemon_id": "round9-daemon-test",
             "probe_image_id": "sha256:" + "7" * 64,
-            "cpa_version": "v7.2.103",
-            "cpa_commit": "cade44b9cdee6b9328ea2648fd119129fdf11e2d",
+            "cpa_version": "v7.2.104",
+            "cpa_commit": "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678",
             "cpa_image_id": "sha256:" + "8" * 64,
             "counted_mock_image_id": "sha256:" + "9" * 64,
             "model": "gpt-5.4",
@@ -368,6 +368,15 @@ class Round9EvalCoreTest(unittest.TestCase):
         payload["candidate"]["cpa_version"] = "v7.2.102"
         payload["candidate"]["cpa_commit"] = (
             "8423cce2d1004e80948a9e2c60ee69354c0aabc3"
+        )
+        with self.assertRaisesRegex(ContractError, "candidate CPA version"):
+            validate_evaluation_payload(payload)
+
+    def test_stale_cpa_v72103_candidate_identity_is_rejected(self) -> None:
+        _envelope, payload, _proof = self.fixture()
+        payload["candidate"]["cpa_version"] = "v7.2.103"
+        payload["candidate"]["cpa_commit"] = (
+            "cade44b9cdee6b9328ea2648fd119129fdf11e2d"
         )
         with self.assertRaisesRegex(ContractError, "candidate CPA version"):
             validate_evaluation_payload(payload)

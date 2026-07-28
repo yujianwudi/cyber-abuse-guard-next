@@ -12,8 +12,8 @@ plugin release, production approval, or Balanced-mode admission is implied.
 Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
 reuse or relabel them as a build of the current source.
 
-Linux amd64 and CPA v7.2.103
-(`cade44b9cdee6b9328ea2648fd119129fdf11e2d`) are the only compatibility target.
+Linux amd64 and CPA v7.2.104
+(`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) are the only compatibility target.
 Runtime validation must use an isolated counted-Mock upstream with no real
 Provider or account pool. A sandbox PASS is engineering evidence only and does
 not replace independent source review or the external admission policy.
@@ -51,7 +51,7 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
 
 ## Preconditions
 
-- Run the candidate bytes against CPA v7.2.103 built with `CGO_ENABLED=1`.
+- Run the candidate bytes against CPA v7.2.104 built with `CGO_ENABLED=1`.
   Assets labelled `_no-plugin`
   cannot load native plugins. Source/compile compatibility does not substitute
   for loading the candidate `.so`. Earlier CPA checks are historical
@@ -390,7 +390,7 @@ Verify New API → CPA using an ordinary harmless request, confirm other plugins
 still behave normally, and compare the current CPA auth-file list with the saved
 inventory. Installation must not create, delete, or modify auth files.
 
-The CPA v7.2.103 Host matrix must cover OpenAI Chat, OpenAI Responses,
+The CPA v7.2.104 Host matrix must cover OpenAI Chat, OpenAI Responses,
 Claude, and Gemini allow/refusal paths, including streaming pre-SSE 403,
 Anthropic/Gemini token-count 403, and zero Auth Selector, Provider, Usage, and
 Mock Upstream counters for blocked requests. Ordinary CI does not execute that

@@ -21,7 +21,7 @@ Before touching a production pool, record and independently verify:
 - Linux amd64 SO byte count and SHA-256;
 - classifier version and SHA-256;
 - ruleset version and SHA-256;
-- CPA `v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d`;
+- CPA `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`;
 - checksum, SBOM, release manifest, artifact attestation, local counted-Mock
   evidence, Tencent counted-Mock evidence, and independent benign/malicious
   reports;

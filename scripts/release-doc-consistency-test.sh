@@ -104,8 +104,8 @@ make_fixture() {
         'current_candidate_status: PENDING_FINAL_SOURCE_FREEZE_HOST_AND_INDEPENDENT_EVIDENCE_NOT_PROVIDED' \
         'current_platform: linux-amd64' \
         'current_go_contract: 1.26.4' \
-        'current_cpa_version: v7.2.103' \
-        'current_cpa_commit: cade44b9cdee6b9328ea2648fd119129fdf11e2d' \
+        'current_cpa_version: v7.2.104' \
+        'current_cpa_commit: c9417c8ae9b16fabc0386ca35d36f13bf8b1d678' \
         'current_gate_workflow: .github/workflows/round9-gate.yml' \
         'current_host_workflow: .github/workflows/round9-host-validation.yml' \
         'current_rc_workflow: .github/workflows/round9-release-rc.yml' \
@@ -530,7 +530,7 @@ policy_values=(
   v0.16-rc.4
   linux-amd64
   1.26.4
-  cade44b9cdee6b9328ea2648fd119129fdf11e2d
+  c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
   .github/workflows/round9-gate.yml
   .github/workflows/round9-host-validation.yml
   .github/workflows/round9-release-rc.yml

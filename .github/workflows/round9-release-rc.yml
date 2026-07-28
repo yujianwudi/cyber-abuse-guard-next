@@ -393,7 +393,7 @@ jobs:
             "exact_main_round9_gate_attempt=$ROUND9_GATE_RUN_ATTEMPT" \
             'rc_gate.safe_contract=PASS' \
             'rc_gate.full_linux_quality=PASS' \
-            'rc_gate.cpa_v7.2.103_primary_source_compatibility=PASS' \
+            'rc_gate.cpa_v7.2.104_primary_source_compatibility=PASS' \
             'rc_gate.rc_integration=PASS' \
             'rc_gate.clean_tree=PASS' \
             'dynamic_stdout_included=false' \
@@ -527,8 +527,8 @@ jobs:
             .round9.release.publication_permitted == false and
             .round9.release.draft == false and .round9.release.prerelease == true and
             .round9.release.latest == false and (.round9.release.asset_allowlist | length == 17) and
-            .cpa.primary.version == "v7.2.103" and
-            .cpa.primary.commit == "cade44b9cdee6b9328ea2648fd119129fdf11e2d"
+            .cpa.primary.version == "v7.2.104" and
+            .cpa.primary.commit == "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678"
           ' dist/rc-release-manifest.json >/dev/null
           [[ "$(jq -r '.round9.release.asset_allowlist[]' dist/rc-release-manifest.json | LC_ALL=C sort)" == "$expected" ]]
           (cd dist && sha256sum -c checksums.txt && sha256sum -c rc-release-manifest.json.sha256)
@@ -965,7 +965,7 @@ jobs:
             "exact_main_round9_gate_run=$ROUND9_GATE_RUN_ID" \
             "exact_main_round9_gate_attempt=$ROUND9_GATE_RUN_ATTEMPT" \
             'rc_gate.safe_contract=PASS' 'rc_gate.full_linux_quality=PASS' \
-            'rc_gate.cpa_v7.2.103_primary_source_compatibility=PASS' \
+            'rc_gate.cpa_v7.2.104_primary_source_compatibility=PASS' \
             'rc_gate.rc_integration=PASS' 'rc_gate.clean_tree=PASS' \
             'dynamic_stdout_included=false' 'wall_clock_timing_included=false' \
             'benchmark_measurements_included=false' >"$RUNNER_TEMP/rc-release-test-summary.txt"
@@ -1104,7 +1104,7 @@ jobs:
               .round9.development_evidence and
             .round9.external_evaluation.candidate.tag == "v0.16-rc.4" and
             .round9.external_evaluation.candidate.commit == $commit and
-            .round9.external_evaluation.candidate.cpa_version == "v7.2.103" and
+            .round9.external_evaluation.candidate.cpa_version == "v7.2.104" and
             .round9.external_evaluation.execution.workflow_run_id == $host_run and
             .round9.external_evaluation.execution.workflow_run_attempt == $host_attempt and
             .round9.external_evaluation.execution.production_accessed == false and

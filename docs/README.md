@@ -9,7 +9,7 @@ The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
 The current publication target is the Linux-only `v0.16-rc.4` Round 9
-prerelease. It uses the single CPA v7.2.103 pin and the exact loopback Host
+prerelease. It uses the single CPA v7.2.104 pin and the exact loopback Host
 binding `127.0.0.1:18394 -> 8317/tcp`. Protected counted-Mock Host evidence,
 one-shot independent corpora, exact-main CI, and independent audit remain
 required; production approval has not been granted and no stable `v0.16`
@@ -88,7 +88,7 @@ Current GitHub Actions entry points are intentionally limited to:
 - `.github/workflows/round9-gate.yml` for ordinary Round 9 policy/corpus
   verification without independent-corpus execution;
 - `.github/workflows/round9-host-validation.yml` for the protected Linux
-  v7.2.103 one-shot independent-corpus and counted-Mock run;
+  v7.2.104 one-shot independent-corpus and counted-Mock run;
 - `.github/workflows/round9-release-rc.yml` for the exact-main, Linux-only
   `v0.16-rc.4` private-candidate/public-prerelease lane;
 - `.github/workflows/release-rc.yml` and

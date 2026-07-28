@@ -11,7 +11,7 @@ current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703
 > wording such as "current release target"; those statements are historical only
 > and are not the active repository release identity. The current formal CPA
 > identity is
-> `v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d` (RPC schema 2).
+> `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` (RPC schema 2).
 
 Historical status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**
 

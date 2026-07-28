@@ -5,13 +5,13 @@ current_classifier_policy_version: classifier-policy-v9
 current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
 ```
 
-Last updated: 2026-07-27 (Asia/Shanghai)
+Last updated: 2026-07-28 (Asia/Shanghai)
 
 ## Current Round 9 source-tree snapshot verification
 
 The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 1.0.10, audit schema v6, and CPA
-`v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d` with RPC schema 2. The protected Host contract
+`v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` with RPC schema 2. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
 `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`
@@ -79,8 +79,8 @@ results is independent or transferable to a future clean commit.
 | Independent benign/malicious corpus | **NOT_PROVIDED**; the active contract requires an age-encrypted root-owned bundle outside Git and outside the candidate checkout |
 | Protected Host execution boundary | **NO SOURCE CHECKOUT**; a fixed root-owned broker owns corpus decryption, evaluator/adapter paths, keys, image identities, result directory, and protected one-shot ledger |
 | External evidence schemas | evaluation v3, evaluator aggregate v3, ledger event v3, ledger proof v1, external counted-Mock v1, CPA sandbox descriptor v2 |
-| CPA external evaluation | **NOT RUN / PENDING** for the exact v7.2.103 RPC schema-2 loopback lane; Audit→Balanced→Strict plus database/restart/panic/usage/Raw Capture runtime checks are required for `PASS` |
-| Exact-main GitHub CI / tag / Release | Current repair: **PENDING PUSH AND REVALIDATION**. Predecessor main `d23c94f` Round 9 run `30223734797` failed at the paired-malicious gate; CodeQL run `30223734789` passed. Historical rc.3 Phase 1 run `30118817188` failed before asset creation; rc.3 has no Release and cannot be reused |
+| CPA external evaluation | **NOT RUN / PENDING** for the exact v7.2.104 RPC schema-2 loopback lane; Audit→Balanced→Strict plus database/restart/panic/usage/Raw Capture runtime checks are required for `PASS` |
+| Exact-main GitHub CI / tag / Release | Frozen v7.2.103 exact-main commit `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` passed CI `30327322793`, Round 9 gate `30327322810`, and CodeQL `30327322801` before v7.2.104 was published. Those runs are v7.2.103 development evidence only. The current v7.2.104 identity is **PENDING PUSH AND REVALIDATION**; no tag or Release is inferred |
 | Independent audit | User-supplied `f37a25dd` report used as remediation input, but **NOT REPOSITORY-ATTESTED**; current source/commit/plugin re-audit **NOT_PROVIDED / REQUIRED** |
 | Production approval | **NOT_GRANTED** |
 | Overall | **BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT** |
@@ -830,7 +830,7 @@ commit/tree or `.so` freeze, the no-checkout external CPA evaluation, protected
 ledger proof, exact-main CI, or independent audit has passed.
 
 ```text
-current_formal_cpa: v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d
+current_formal_cpa: v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9

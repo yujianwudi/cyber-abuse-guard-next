@@ -33,7 +33,7 @@ and a public RC do not authorize production Balanced mode.
 |---|---|
 | Candidate | annotated exact-main `v0.16-rc.4` |
 | Platform | Linux amd64 only |
-| CPA | `v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d` |
+| CPA | `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` |
 | Host workflow | `.github/workflows/round9-host-validation.yml` |
 | Dispatch ref | exact `refs/tags/v0.16-rc.4` |
 | Dispatch SHA | exact candidate commit |

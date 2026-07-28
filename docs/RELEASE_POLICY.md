@@ -36,8 +36,8 @@ historical_failed_candidate_actions_artifact_count: 0
 historical_failed_candidate_release: ABSENT
 current_platform: linux-amd64
 current_go_contract: 1.26.4
-current_cpa_version: v7.2.103
-current_cpa_commit: cade44b9cdee6b9328ea2648fd119129fdf11e2d
+current_cpa_version: v7.2.104
+current_cpa_commit: c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
 current_gate_workflow: .github/workflows/round9-gate.yml
 current_host_workflow: .github/workflows/round9-host-validation.yml
 current_rc_workflow: .github/workflows/round9-release-rc.yml
@@ -117,7 +117,7 @@ current_production_approval_status: NOT_GRANTED
 
 The Round 9 lane is separate from the Round 8 workflows and identities. It is
 Linux amd64 only, uses the exact Go 1.26.4 builder contract, and fixes CPA to
-`v7.2.103@cade44b9cdee6b9328ea2648fd119129fdf11e2d`. The policy gate is an
+`v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`. The policy gate is an
 ordinary push/pull-request engineering gate. It does not run either independent
 corpus. The protected Host workflow is the only lane allowed to request the
 one-shot independent benign and independent malicious evaluation. It performs
