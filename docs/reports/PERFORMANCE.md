@@ -2,16 +2,16 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
+current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
 ```
 
-Last updated: 2026-07-27 (Asia/Shanghai)
+Last updated: 2026-07-28 (Asia/Shanghai)
 
 ## Round 9 current status
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
-working-tree identity is `classifier-policy-v9` /
-`f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`
+source identity is `classifier-policy-v9` /
+`e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The complete `make round6-benchmark` recipe has not been rerun after the
@@ -40,7 +40,7 @@ pending. No result here is final commit/tree, CPA Host, reproducible Linux
 
 | Round 9 evidence | Current status |
 |---|---|
-| Current complete local Linux development recipe | **CLASSIFIER GATE PASS; FULL BENCHMARK PENDING.** `go test ./internal/classifier -count=1` passed on policy `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`, including the enforced classifier latency and directive-overflow budgets. Exact metric values from the immediately preceding snapshot are not reattributed to this digest; `make round6-benchmark` remains pending. |
+| Current complete local Linux development recipe | **IDENTITY REBOUND; REVALIDATION PENDING.** CPA v7.2.104 changed the dependency locks included in the policy digest, producing `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`. The earlier classifier gate PASS remains historical evidence for `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`; no timing or full-benchmark result is reattributed to the new digest. |
 | Pre-refresh complete local Linux development recipe (`2c968f70...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The complete recipe produced the detailed latency/allocation figures recorded above, including the long-prompt follow-up. It predates the current referent-policy identity and is not current-source, Host, artifact, or release evidence. |
 | Previous working-tree complete recipe (`5012c101...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The preceding policy snapshot recorded P50/P95/P99 `459.731/563.714/765.255 us`, candidate-rich/near-budget `41.898827/21.298198 ms/op`, long META `152.808023 ms/op`, and a transient 30,674-byte log SHA-256 `a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`; it is not current-identity evidence |
 | Pre-final isolated classifier latency study | **HISTORICAL DEVELOPMENT PASS.** Fourteen predecessor working-tree runs and five clean-HEAD controls passed P95 `<2 ms` / P99 `<5 ms`. Their stable median was P50 `391.237 us`, P95 `468.491 us`, P99 `620.655 us`, and about `28,041 B/classification`; one whole-process WSL noise round reached P99 `4.871859 ms` but still passed. Use the complete recipe above for the present-policy result; do not relabel this predecessor study |

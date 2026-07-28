@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
+current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
 ```
 
 Last updated: 2026-07-28 (Asia/Shanghai)
@@ -14,7 +14,7 @@ The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` with RPC schema 2. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
-`f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`
+`e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging. A development-only Linux `0.16-dirty` `.so`
@@ -58,7 +58,7 @@ results is independent or transferable to a future clean commit.
 | Current Round 9 identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v9` / `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333` / **WORKING-TREE DEVELOPMENT IDENTITY; LOCAL DIRTY HOST BINDING PASS; CLEAN RELEASE BINDING PENDING** |
+| Classifier policy | `classifier-policy-v9` / `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971` / **CPA v7.2.104 DEPENDENCY-BOUND SOURCE IDENTITY; EXACT-MAIN REVALIDATION PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Current Linux source gates | **PASS / SOURCE ONLY.** Under WSL Ubuntu 26.04 and Go 1.26.4, the final working tree passed `make unit-test`, `make round6-vet`, `make round6-module-verify`, `make round6-script-test`, `make round9-corpus-contract`, and `go test -race ./internal/classifier -count=1`; the race run completed in 281.834 seconds with no data race. The script lane included fixed actionlint v1.7.12, ShellCheck v0.10.0, release-document consistency, and repository secret scanning. The connector-flood allocation-only acceptance remains enforced by the ordinary Linux lane and is skipped under race instrumentation by design. This row is source-only; Host and remote compatibility evidence are recorded separately below. |
 | CPA v7.2.102 source/API/SDK compatibility | **DEVELOPMENT CONTRACT PASS WITH SPLIT NETWORK EVIDENCE.** A remote-enabled attempt verified GitHub `releases/latest == v7.2.102` and official tag `v7.2.102` at `8423cce2d1004e80948a9e2c60ee69354c0aabc3`. After the local Git transport became unavailable, the complete matrix reran to success with the same pinned module Origin, module sum `h1:YimLZX/B4X5KA9v3Ss2afTmZtORYfT6UNMMteUKo+XA=`, and go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, using the reachable `goproxy.cn` SumDB mirror and skipping only the already-proven live Git checks. Both nested compatibility modules asserted named critical Host tests and each executed the complete upstream `internal/pluginhost` package; that coverage intentionally overlaps. SDK `pluginabi`/`pluginapi`, Interactions, Raw Capture, and Store contracts also passed. Exact-main CI remains pending |
@@ -72,7 +72,7 @@ results is independent or transferable to a future clean commit.
 | Public adversarial development corpus | Active: `round9-public-adversarial-v13` / 481448 bytes / `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; v12/v11/v10/v9 retained as prior valid history, exact v8 retained as immutable-invalid history, its corrected in-place rebind retained as rejected evidence, v7 retained as earlier valid history, and v6 as frozen-invalid history; v13 records the later MDX Star History storage/source/workflow/test-only default-head advance while retaining five behind non-default branches, 16 reviewed historical Release assets (four with prompt entries), and 199 metadata/digest-only Release assets that were neither downloaded nor opened; public text only, no third-party code execution, not an independent Holdout |
 | Visible benign development corpus | **CURRENT WORKING-TREE PASS / NOT INDEPENDENT EVIDENCE.** Linux amd64 Go 1.26.4 directly reran the frozen v1 runner on 2026-07-27: 0/1200 semantic requests and 0/7200 serialized routes blocked; 166 audit and 7034 allow routes; stream false/true 3600/3600; failures empty. The transient 2,515-byte JSON hashed to `e9fa8fb39e8c9bdefb5d0f198d8684d6b7cb39139b4284fe7efc39eb7008bb10`; it is not checked in. The predecessor report in `dist/round9-worklogs/development-benign-post-perf-20260724.json` remains historical evidence |
 | Visible paired-malicious v3 | **CURRENT WORKING-TREE PASS / NOT INDEPENDENT EVIDENCE.** Linux amd64 Go 1.26.4 directly reran the frozen v3 runner on 2026-07-27: 120/120 semantic samples blocked and 960/960 routes passed; stream false/true 480/480; failures empty; overall Wilson 95% interval 96.8981%-100%. The transient 7,150-byte JSON hashed to `9b5d893df4a459614118664fa8bd55ea0c3a2da1c3fa46fb87bc21d20c7a8f1a`; it is not checked in. This closes the local 112/120 regression observed on exact-main `d23c94f`; exact-main revalidation remains pending |
-| Current classifier performance acceptance | **SOURCE-ONLY GATE PASS.** The complete `go test ./internal/classifier -count=1` suite passed on policy `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`, including its enforced latency and directive-overflow budgets. Exact metric values from the immediately preceding source snapshot are not reattributed to this digest; the complete `make round6-benchmark` recipe remains pending. |
+| Current classifier performance acceptance | **REVALIDATION PENDING.** CPA v7.2.104 changed the dependency locks included in the policy digest, producing `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`. The complete source-only gate PASS on `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333` remains predecessor evidence and is not reattributed; the complete `make round6-benchmark` recipe remains pending. |
 | Pre-refresh Round 6 benchmark recipe | **HISTORICAL SOURCE-ONLY PASS; LONG-PROMPT OPTIMIZATION REMAINS OPEN.** `make round6-benchmark` exited 0 for predecessor digest `2c968f70cfe12e136c07e2856b589f220d464b2284f93e05f368cbb7c927848f` under WSL Ubuntu 26.04 and Go 1.26.4. Classifier P50/P95/P99 were `551.254 us / 957.089 us / 1.266960 ms`; candidate-rich/near-budget were `41.335816/23.460676 ms/op` with near-budget `288,121 B/op`; long META was `160.790024 ms/op`, `6,337,260 B/op`, 103 allocs; negated-prohibition flood was `38.648832 ms/op`, `4,358,501 B/op`, 6,003 allocs. At 64 complete tool pairs, OpenAI Chat/Responses, Claude, and Gemini association planning measured `1.663277/1.447810/1.299558/1.290847 ms/op`, `845,978/784,565/568,114/736,402 B/op`, and `16,981/15,552/14,046/15,007 allocs/op`. Extract long-scale, raw-capture, and plugin full-route acceptance lanes passed. The separate 1 MiB profiled defensive-quote microbenchmark was `344.061658-366.730649 ms/op`, above the external `<250 ms/op` target; no current-source, CPA Host, final artifact, or independent performance PASS is inferred. |
 | Previous working-tree benchmark (`5012c101...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The preceding policy snapshot recorded P50/P95/P99 `459.731/563.714/765.255 us`, candidate-rich/near-budget `41.898827/21.298198 ms/op`, long META `152.808023 ms/op`, and transient log SHA-256 `a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`; it is not current-identity evidence |
 | Historical pre-fix Round 6 benchmark recipe | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** `make round6-benchmark` exited successfully for the earlier snapshot; log: `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063`. Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. It remains predecessor history and is not substituted for the current source-only recipe above |
@@ -834,7 +834,7 @@ current_formal_cpa: v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9
-working_tree_classifier_policy_sha256: f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333
+working_tree_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 verification_status: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
 ```
