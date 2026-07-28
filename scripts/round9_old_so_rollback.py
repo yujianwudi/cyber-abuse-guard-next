@@ -2,9 +2,9 @@
 """Synthetic Linux-only helpers for the Round 9 historical-SO rollback gate.
 
 The module never accepts a production path from the workflow.  Its caller
-creates a private temporary sandbox, builds the historical SO from the exact
-v0.16-rc.2 Git object, and uses only ``plugin.register`` against synthetic
-SQLite databases in that sandbox.
+creates a private temporary sandbox, builds the historical SO from a frozen
+production-source capsule derived from v0.16-rc.2, and uses only
+``plugin.register`` against synthetic SQLite databases in that sandbox.
 """
 
 from __future__ import annotations
@@ -45,6 +45,12 @@ ROLLBACK_INSTRUCTION = (
     "stop CPA; verify this manifest; restore this exact database before loading an older SO"
 )
 HISTORICAL_REPOSITORY = "https://github.com/yujianwudi/cyber-abuse-guard.git"
+HISTORICAL_SOURCE_CAPSULE = "testdata/round9-old-so-v0.16-rc.2-source"
+HISTORICAL_SOURCE_CAPSULE_SHA256 = (
+    "0934503d90f08a7df0403f6325d7f30b6c9bfb0a6ec713d1b160469ee3857f4b"
+)
+HISTORICAL_SOURCE_FILE_COUNT = 76
+HISTORICAL_SOURCE_DATE_EPOCH = 1_784_752_111
 SENTINEL_EVENT_ID = "round9-old-so-rollback-event"
 SENTINEL_CAPTURE_ID = "round9-old-so-rollback-capture"
 SENTINEL_PREVIEW = "synthetic rollback preview; no provider or customer content"
@@ -584,8 +590,16 @@ def assemble_report(args: argparse.Namespace) -> dict[str, Any]:
         raise GateError("restored database identity differs from the migration manifest")
     if args.repository != HISTORICAL_REPOSITORY:
         raise GateError("historical source repository differs from the frozen predecessor")
+    if args.source_capsule != HISTORICAL_SOURCE_CAPSULE:
+        raise GateError("historical source capsule path differs from the reviewed fixture")
+    if args.source_capsule_sha256 != HISTORICAL_SOURCE_CAPSULE_SHA256:
+        raise GateError("historical source capsule SHA-256 differs from the reviewed fixture")
+    if args.source_file_count != HISTORICAL_SOURCE_FILE_COUNT:
+        raise GateError("historical source capsule file count differs from the reviewed fixture")
+    if args.source_date_epoch != HISTORICAL_SOURCE_DATE_EPOCH:
+        raise GateError("historical source timestamp differs from the reviewed fixture")
     report = {
-        "schema": "round9-old-so-rollback-gate/v1",
+        "schema": "round9-old-so-rollback-gate/v2",
         "platform": "linux/amd64",
         "go_runtime": args.go_runtime,
         "historical_source": {
@@ -598,10 +612,16 @@ def assemble_report(args: argparse.Namespace) -> dict[str, Any]:
             "classifier_sha256": args.classifier_sha256,
             "ruleset": args.ruleset,
             "ruleset_sha256": args.ruleset_sha256,
-            "remote_ref_verified": args.remote_verified == "true",
+            "source_mode": "repository_local_reviewed_production_capsule",
+            "capsule_path": args.source_capsule,
+            "capsule_sha256": f"sha256:{args.source_capsule_sha256}",
+            "capsule_file_count": args.source_file_count,
+            "source_date_epoch": args.source_date_epoch,
+            "remote_ref_verified": False,
+            "remote_dependency_required": False,
         },
         "historical_so": {
-            "provenance": "rebuilt_from_exact_annotated_tag_source",
+            "provenance": "rebuilt_from_frozen_reviewed_production_source_capsule",
             "bytes": args.so_bytes,
             "sha256": f"sha256:{args.so_sha256}",
             "archived_release_so_byte_identity": "NOT_PROVIDED",
@@ -691,10 +711,13 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "ruleset",
         "ruleset_sha256",
         "go_runtime",
-        "remote_verified",
+        "source_capsule",
+        "source_capsule_sha256",
         "so_sha256",
     ):
         report.add_argument(f"--{name.replace('_', '-')}", required=True)
+    report.add_argument("--source-file-count", type=int, required=True)
+    report.add_argument("--source-date-epoch", type=int, required=True)
     report.add_argument("--so-bytes", type=int, required=True)
     report.add_argument("--output", type=Path, required=True)
     return parser.parse_args(argv)

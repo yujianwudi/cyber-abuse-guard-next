@@ -1,0 +1,75 @@
+version: "1.0.9"
+rules:
+  - id: PHISH-001
+    category: phishing_deployment
+    severity: critical
+    base_score: 65
+    hard_floor: 80
+    authorization_protected: true
+    intent:
+      zh: ["部署", "制作", "创建", "生成", "复制", "上线", "诱导", "仿制", "镜像", "冒充", "复刻", "伪造", "搭建", "发布", "发送", "分发", "架设"]
+      en: ["deploy", "deploys", "deploying", "deployed", "create", "creates", "creating", "created", "build", "builds", "building", "built", "host", "hosts", "hosting", "hosted", "launch", "launches", "launching", "launched", "stand up", "prepare", "impersonating", "impersonate", "impersonates", "impersonated", "clone", "clones", "cloning", "copy", "mirror", "duplicate", "recreate", "replicate", "spoof", "mimic", "forge", "craft", "set up", "publish", "send", "distribute", "deliver", "spin up"]
+    object:
+      zh: ["仿冒登录页", "仿冒银行登录页", "仿冒企业登录页", "假登录页", "假邮箱登录页", "钓鱼登录页", "钓鱼邮件", "仿冒管理员的邮件", "钓鱼站", "二维码钓鱼", "短信钓鱼", "语音钓鱼", "凭证收集页面", "仿冒网站", "相似域名网站", "钓鱼短信", "仿站", "钓鱼落地页", "知名品牌页面", "oauth 授权诱饵", "恶意 oauth 同意页", "多因素中继页", "商务邮件诈骗"]
+      en: ["cloned login page", "cloned sign-in page", "cloned corporate sign-in page", "fake login portal", "fake login page", "lookalike microsoft 365 portal", "bank sign-on portal", "phishing page", "phishing email", "phishing campaign", "credential collection page", "credential-harvesting email", "credential harvesting email", "qr phishing", "spoofed email", "lookalike site", "phishing site", "smishing message", "voice phishing", "vishing call", "malicious qr code", "phising page", "phising email", "credential bait page", "oauth consent lure", "malicious oauth consent page", "mfa relay page", "adversary-in-the-middle login", "business email compromise", "invoice-change email"]
+    operational:
+      zh: ["部署流程", "完整模板", "可直接发送", "收集密码", "表单收集", "用表单", "回传", "网页模板", "可直接上线", "凭证转发端点"]
+      en: ["source code", "deployable", "ready-to-host", "ready to host", "captures", "records", "collects", "sending", "html template", "working page", "live site", "credential relay endpoint"]
+    target:
+      zh: ["真实客户", "真实用户", "真实账号", "员工", "知名品牌", "真实品牌", "真实组织"]
+      en: ["victim", "real customer", "real users", "employee", "corporate", "real organization", "payroll provider", "real brand", "named brand", "customers"]
+    evasion:
+      zh: ["绕过反钓鱼", "绕过链接扫描", "规避检测"]
+      en: ["bypass link scanner", "bypass anti-phishing", "evade detection"]
+    scale:
+      zh: ["批量", "自动", "群发", "活动"]
+      en: ["automate", "automated", "hundreds", "campaign", "at scale"]
+  - id: PHISH-002
+    category: phishing_deployment
+    severity: critical
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: true
+    intent:
+      zh: ["收集", "获取凭证", "记录密码", "回传密码", "发送密码", "捕获", "截获", "窃取", "转发", "转送", "转去", "回传", "保存提交内容"]
+      en: ["collect credentials", "capture credentials", "harvest credentials", "record passwords", "forward credentials", "send passwords", "credential harvesting", "collect", "collects", "collecting", "collected", "capture", "captures", "capturing", "captured", "harvest", "harvests", "harvesting", "harvested", "record", "records", "recording", "recorded", "forward", "forwards", "forwarding", "forwarded", "relay", "relays", "relaying", "relayed", "route", "routes", "routing", "steal", "steals", "stealing", "stolen", "intercept", "intercepts", "intercepting", "intercepted", "receive submissions"]
+    object:
+      zh: ["钓鱼落地页", "登录提交", "页面提交", "表单数据", "表单提交", "伪造表单", "提交的凭证", "提交的密码"]
+      en: ["login submissions", "page submissions", "form data", "form submissions", "submitted credential", "submitted credentials", "submitted password", "submitted passwords", "password entries", "phishing form", "fake portal submissions"]
+    operational:
+      zh: ["外部地址", "凭证接收端", "批量活动", "回传服务器", "接收服务器", "我的接收端", "我的邮箱", "外部接口"]
+      en: ["external address", "credential endpoint", "phishing campaign", "collection server", "receiving server", "my receiver", "password receiver", "webhook", "my inbox", "external api"]
+    target:
+      zh: ["受害者", "真实用户", "员工", "客户", "真实品牌"]
+      en: ["victim", "real user", "employee", "employees", "staff", "customer", "real brand"]
+    evasion:
+      zh: ["规避", "绕过"]
+      en: ["evade", "bypass"]
+    scale:
+      zh: ["批量", "群发", "自动"]
+      en: ["bulk", "mass send", "automate", "hundreds"]
+
+  - id: PHISH-003
+    category: phishing_deployment
+    severity: critical
+    base_score: 45
+    hard_floor: 80
+    authorization_protected: true
+    intent:
+      zh: ["部署", "制作", "创建", "生成", "做", "做一个", "复制", "上线", "仿制", "镜像", "冒充", "复刻", "伪造", "搭建", "发布", "发送", "分发"]
+      en: ["deploy", "deploys", "deploying", "deployed", "create", "creates", "creating", "created", "make", "makes", "making", "made", "build", "builds", "building", "built", "host", "hosts", "hosting", "hosted", "launch", "launches", "launching", "launched", "stand up", "prepare", "prepares", "preparing", "prepared", "impersonate", "impersonates", "impersonating", "impersonated", "clone", "clones", "cloning", "copy", "copies", "copying", "copied", "mirror", "mirrors", "mirroring", "mirrored", "duplicate", "duplicates", "duplicating", "duplicated", "recreate", "recreates", "recreating", "recreated", "replicate", "replicates", "replicating", "replicated", "spoof", "spoofs", "spoofing", "spoofed", "mimic", "mimics", "mimicking", "mimicked", "forge", "forges", "forging", "forged", "craft", "crafts", "crafting", "crafted", "set up", "publish", "publishes", "publishing", "published", "send", "sends", "sending", "sent", "distribute", "distributes", "distributing", "distributed", "deliver", "delivers", "delivering", "delivered"]
+    object:
+      zh: ["登录门户", "登录站点", "身份验证页面", "品牌登录页", "sso 登录页", "邮件登录页", "登录表单", "身份验证门户", "单点登录页面", "账号验证邮件", "密码重置邮件"]
+      en: ["login portal", "sign-in portal", "sign-in screen", "lookalike sign-in screen", "branded sign-in portal", "authentication portal", "branded login", "identity provider login", "sso portal", "webmail login", "password reset portal", "password-reset message", "account verification message", "login page", "sign-in page", "authentication page", "login form", "sign-in form", "credential form", "sso screen", "identity provider page", "account verification email", "password reset email"]
+    operational:
+      zh: ["捕获提交", "收集密码", "记录凭证", "回传服务器", "外部接收端", "我的接收端", "可直接上线", "网页模板"]
+      en: ["capture submissions", "collect passwords", "record credentials", "forward submissions", "forward submitted credentials", "collection server", "external receiver", "my receiver", "credential receiver", "credential endpoint", "ready to host", "working page", "html template"]
+    target:
+      zh: ["受害者", "真实用户", "员工", "客户", "真实品牌", "知名品牌", "真实组织"]
+      en: ["victim", "real users", "employees", "customers", "real brand", "named brand", "real organization", "corporate users"]
+    evasion:
+      zh: ["绕过链接扫描", "绕过反钓鱼", "隐藏域名", "规避检测"]
+      en: ["bypass link scanner", "bypass anti-phishing", "hide domain", "evade detection", "avoid filters"]
+    scale:
+      zh: ["批量", "群发", "自动", "活动"]
+      en: ["bulk", "mass send", "automated", "campaign", "at scale"]

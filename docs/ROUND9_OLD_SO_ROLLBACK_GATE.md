@@ -6,16 +6,38 @@ deployment, a tag, or a release.
 
 ## Frozen historical identity
 
-The gate accepts historical source only from the predecessor repository:
+The original source provenance remains the predecessor repository:
 
 ```text
 https://github.com/yujianwudi/cyber-abuse-guard.git
 ```
 
-The current repository is `cyber-abuse-guard-next`; its checkout, tags, objects,
-and remotes are never used as the source of the historical SO. The gate creates
-an execution-private bare repository and fetches only the annotated
-`v0.16-rc.2` tag from the fixed predecessor URL before checking this identity:
+That remote is no longer available, so a live fetch is not a reproducible CI
+dependency. Before it became unavailable, the exact annotated `v0.16-rc.2` tag
+was used to derive a reviewed non-test source capsule at:
+
+```text
+testdata/round9-old-so-v0.16-rc.2-source
+```
+
+The capsule contains exactly 76 reviewed module and non-`*_test.go` source
+files and is sufficient to build the plugin: `go.mod`, `go.sum`,
+`cmd/cyber-abuse-guard`, files below `internal`, and `rules`. It is intentionally
+not described as a minimal Linux import closure: historical build-inert helper
+packages below `internal/round8test` and `internal/fixturepublish` remain frozen
+in the reviewed set but are not imported by the plugin build. Every `*_test.go`
+file and every `testdata`, evaluation, holdout, consumed, private, blind, or
+retired path is excluded. Its deterministic file/path aggregate is:
+
+```text
+SHA-256: 0934503d90f08a7df0403f6325d7f30b6c9bfb0a6ec713d1b160469ee3857f4b
+files: 76
+source date epoch: 1784752111
+```
+
+The current working source, tags, objects, remotes, and caller-provided paths
+are never used to substitute the historical plugin. The gate verifies the
+capsule file set and aggregate before checking this recorded provenance:
 
 ```text
 tag object: 58bd9b78886da04c03b2c6d8f28e8cd7f2436e84
@@ -28,19 +50,19 @@ ruleset SHA-256: a3de344d3f6dc8eea86d946a823996494d4d297c41efcc6346a6ef757f263a7
 supported audit schema: 5
 ```
 
-The fetched annotated tag object, peeled commit, tree, classifier constants,
-schema constant, and aggregate ruleset digest must all match. CI additionally
-performs a separate read-only `ls-remote` check against that same fixed URL.
-The script uses `git archive` only from the private predecessor-repository
-fetch and builds a temporary Linux amd64 SO with Go 1.26.4 and
-`GOFLAGS=-mod=readonly`. Historical build metadata uses the predecessor module
-path `github.com/yujianwudi/cyber-abuse-guard/internal/buildinfo`, never the
-current `cyber-abuse-guard-next` module path.
+The tag object, peeled commit, and tree remain provenance records; each run
+cryptographically verifies the reviewed capsule, classifier constants, schema
+constant, and aggregate ruleset digest. It then builds a temporary Linux amd64
+SO with Go 1.26.4 and `GOFLAGS=-mod=readonly`. Historical build metadata uses
+the predecessor module path
+`github.com/yujianwudi/cyber-abuse-guard/internal/buildinfo`, never the current
+`cyber-abuse-guard-next` module path. The generated report explicitly records
+`remote_ref_verified=false` and does not claim a live remote verification.
 
-This proves source provenance for the compatibility executable. It does **not**
-claim byte equality with a previously published v0.16-rc.2 release SO; no such
-archived release-asset byte identity is supplied to this gate, so that field is
-reported as `NOT_PROVIDED`.
+This proves the reviewed source-capsule identity used for the
+compatibility executable. It does **not** claim byte equality with a previously
+published v0.16-rc.2 release SO; no such archived release-asset byte identity is
+supplied to this gate, so that field is reported as `NOT_PROVIDED`.
 
 ## Mechanical sequence
 
@@ -68,7 +90,7 @@ outside that directory.
 7. Load the historical SO against that restored schema-v5 copy. Registration,
    sentinel retention, and `quick_check` must pass.
 
-The generated report uses schema `round9-old-so-rollback-gate/v1`, records that
+The generated report uses schema `round9-old-so-rollback-gate/v2`, records that
 only `plugin.register` ran, and fixes the final conclusion to:
 
 ```text
@@ -81,21 +103,14 @@ into a broader zero-access attestation for the whole candidate.
 
 ## Run on Linux amd64
 
-Both modes require read-only network access to the fixed predecessor repository
-because the historical source is never taken from the current checkout. The
-optional remote check below adds a second exact ref-set verification.
+The gate never fetches the predecessor repository, a Git tag, or any GitHub
+asset. It reads the byte-frozen capsule from the reviewed checkout and fails
+closed if its path set, file count, or aggregate SHA-256 changes. A cold Go
+module cache may still resolve the capsule's pinned dependencies through the
+operator-configured module proxy. For a fully network-isolated run, prewarm and
+verify that module cache, then set `GOPROXY=off`.
 
 ```bash
-GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go \
-GOFLAGS=-mod=readonly \
-make round9-old-so-rollback-gate
-```
-
-To include the read-only GitHub ref check used by CI:
-
-```bash
-ROUND9_OLD_SO_VERIFY_REMOTE=1 \
-ROUND9_OLD_SO_ROLLBACK_REPORT=dist/round9-worklogs/round9-old-so-rollback.json \
 GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go \
 GOFLAGS=-mod=readonly \
 make round9-old-so-rollback-gate

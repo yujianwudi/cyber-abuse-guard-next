@@ -11,6 +11,11 @@ historical_repository='https://github.com/yujianwudi/cyber-abuse-guard.git'
 historical_tag_object='58bd9b78886da04c03b2c6d8f28e8cd7f2436e84'
 historical_commit='9665fdd1aacab0d79b8790d68c87c6c8c80f8911'
 historical_tree='84c6636b2012c825627bad34f922dfa0329d0a1e'
+historical_source_capsule_relative='testdata/round9-old-so-v0.16-rc.2-source'
+historical_source_capsule="$root/$historical_source_capsule_relative"
+historical_source_capsule_sha256='0934503d90f08a7df0403f6325d7f30b6c9bfb0a6ec713d1b160469ee3857f4b'
+historical_source_file_count='76'
+historical_source_date_epoch='1784752111'
 historical_version='0.16-rc.2'
 historical_classifier='classifier-policy-v7'
 historical_classifier_sha256='ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d'
@@ -18,7 +23,7 @@ historical_ruleset='1.0.9'
 historical_ruleset_sha256='a3de344d3f6dc8eea86d946a823996494d4d297c41efcc6346a6ef757f263a7d'
 fixed_migration_time='2026-07-24T00:00:00Z'
 
-for command_name in git tar sha256sum awk sort grep file readelf stat install timeout wc python3 "$go_bin"; do
+for command_name in tar sha256sum awk sort grep find file readelf stat install python3 "$go_bin"; do
   command -v "$command_name" >/dev/null 2>&1 || {
     printf 'Round 9 old-SO rollback gate: missing command %s\n' "$command_name" >&2
     exit 1
@@ -58,75 +63,47 @@ printf 'isolated-synthetic-fixture-only-v1\n' > \
   "$work_dir/.round9-old-so-rollback-sandbox"
 chmod 0600 "$work_dir/.round9-old-so-rollback-sandbox"
 
-# The current project lives in cyber-abuse-guard-next, but v0.16-rc.2 belongs
-# to the immutable predecessor repository.  Fetch only that annotated tag into
-# an execution-private bare repository; never resolve it from this repository,
-# one of its remotes, or a caller-provided URL.
-history_repo="$work_dir/historical-source.git"
-git init --bare --quiet "$history_repo"
-git -C "$history_repo" remote add origin "$historical_repository"
-[[ "$(git -C "$history_repo" remote get-url origin)" == "$historical_repository" ]] || {
-  echo 'historical source URL was rewritten away from the frozen predecessor repository' >&2
+# The predecessor repository is retained only as provenance.  CI builds from a
+# reviewed non-test source capsule derived from the exact v0.16-rc.2 tag before
+# that remote became unavailable.  The capsule deliberately excludes every
+# *_test.go and testdata/evaluation/holdout surface; a few frozen build-inert
+# helper packages remain and are documented as outside the Linux import closure.
+[[ -d "$historical_source_capsule" && ! -L "$historical_source_capsule" ]] || {
+  echo 'v0.16-rc.2 production-source capsule is missing or unsafe' >&2
   exit 1
 }
-timeout --signal=KILL 120s git -C "$history_repo" \
-  -c http.lowSpeedLimit=1 -c http.lowSpeedTime=60 \
-  fetch --no-tags --depth=1 origin \
-  "refs/tags/$historical_tag:refs/tags/$historical_tag" || {
-  echo 'v0.16-rc.2 could not be fetched from the frozen predecessor repository' >&2
+if find "$historical_source_capsule" ! -type d ! -type f -print -quit | grep -q .; then
+  echo 'v0.16-rc.2 production-source capsule contains a non-regular entry' >&2
+  exit 1
+fi
+mapfile -d '' historical_source_files < <(
+  find "$historical_source_capsule" -type f -print0 | LC_ALL=C sort -z
+)
+[[ "${#historical_source_files[@]}" == "$historical_source_file_count" ]] || {
+  printf 'v0.16-rc.2 production-source capsule file count mismatch: got %d, want %s\n' \
+    "${#historical_source_files[@]}" "$historical_source_file_count" >&2
   exit 1
 }
-
-actual_tag_object="$(git -C "$history_repo" rev-parse --verify "refs/tags/$historical_tag")"
-actual_tag_type="$(git -C "$history_repo" cat-file -t "$actual_tag_object")"
-actual_commit="$(git -C "$history_repo" rev-parse --verify "refs/tags/$historical_tag^{commit}")"
-actual_tree="$(git -C "$history_repo" rev-parse --verify "$actual_commit^{tree}")"
-[[ "$actual_tag_object" == "$historical_tag_object" && "$actual_tag_type" == tag ]] || {
-  echo 'v0.16-rc.2 annotated tag object identity mismatch' >&2
+historical_source_capsule_actual_sha256="$({
+  for source_file in "${historical_source_files[@]}"; do
+    relative="${source_file#"$historical_source_capsule"/}"
+    if grep -Eiq '(^|/)[^/]*(evaluation|holdout|consumed|private|blind|retired|testdata)[^/]*($|/)' \
+      <<<"$relative"; then
+      printf 'restricted path is forbidden in the production-source capsule: %s\n' \
+        "$relative" >&2
+      exit 1
+    fi
+    printf '%s  %s\n' "$(sha256sum "$source_file" | awk '{print $1}')" "$relative"
+  done
+} | sha256sum | awk '{print $1}')"
+[[ "$historical_source_capsule_actual_sha256" == "$historical_source_capsule_sha256" ]] || {
+  echo 'v0.16-rc.2 production-source capsule SHA-256 mismatch' >&2
   exit 1
 }
-[[ "$actual_commit" == "$historical_commit" && "$actual_tree" == "$historical_tree" ]] || {
-  echo 'v0.16-rc.2 commit/tree identity mismatch' >&2
-  exit 1
-}
-
-remote_verified=false
-verify_remote="${ROUND9_OLD_SO_VERIFY_REMOTE:-0}"
-case "$verify_remote" in
-  0) ;;
-  1)
-    remote_refs="$(timeout --signal=KILL 60s git \
-      -c http.lowSpeedLimit=1 -c http.lowSpeedTime=60 \
-      ls-remote --tags "$historical_repository" \
-      "refs/tags/$historical_tag" "refs/tags/$historical_tag^{}")" || {
-      echo 'v0.16-rc.2 remote tag identity could not be verified' >&2
-      exit 1
-    }
-    [[ "$(printf '%s\n' "$remote_refs" | grep -Fxc \
-      "$historical_tag_object"$'\t'"refs/tags/$historical_tag")" == 1 ]] || {
-      echo 'v0.16-rc.2 remote annotated tag object mismatch' >&2
-      exit 1
-    }
-    [[ "$(printf '%s\n' "$remote_refs" | grep -Fxc \
-      "$historical_commit"$'\t'"refs/tags/$historical_tag^{}")" == 1 ]] || {
-      echo 'v0.16-rc.2 remote peeled commit mismatch' >&2
-      exit 1
-    }
-    [[ "$(printf '%s\n' "$remote_refs" | wc -l)" == 2 ]] || {
-      echo 'v0.16-rc.2 remote tag query returned an unexpected ref set' >&2
-      exit 1
-    }
-    remote_verified=true
-    ;;
-  *)
-    echo 'ROUND9_OLD_SO_VERIFY_REMOTE must be 0 or 1' >&2
-    exit 2
-    ;;
-esac
 
 source_dir="$work_dir/source"
 mkdir -m 0700 "$source_dir"
-git -C "$history_repo" archive --format=tar "$historical_commit" | tar -xf - -C "$source_dir"
+tar -cf - -C "$historical_source_capsule" . | tar -xf - -C "$source_dir"
 
 [[ "$(grep -Fxc 'const ClassifierPolicyVersion = "classifier-policy-v7"' \
   "$source_dir/internal/classifier/policy_identity.go")" == 1 ]] || {
@@ -159,7 +136,7 @@ historical_ruleset_actual_sha256="$({
 }
 
 historical_so="$work_dir/cyber-abuse-guard-v0.16-rc.2-source-built.so"
-source_date_epoch="$(git -C "$history_repo" show -s --format=%ct "$historical_commit")"
+source_date_epoch="$historical_source_date_epoch"
 ldflags="-s -w -buildid="
 ldflags+=" -X github.com/yujianwudi/cyber-abuse-guard/internal/buildinfo.Version=$historical_version"
 ldflags+=" -X github.com/yujianwudi/cyber-abuse-guard/internal/buildinfo.Commit=$historical_commit"
@@ -255,7 +232,10 @@ python3 -B ./scripts/round9_old_so_rollback.py report \
   --ruleset "$historical_ruleset" \
   --ruleset-sha256 "$historical_ruleset_sha256" \
   --go-runtime go1.26.4 \
-  --remote-verified "$remote_verified" \
+  --source-capsule "$historical_source_capsule_relative" \
+  --source-capsule-sha256 "$historical_source_capsule_sha256" \
+  --source-file-count "$historical_source_file_count" \
+  --source-date-epoch "$historical_source_date_epoch" \
   --so-sha256 "$historical_so_sha256" \
   --so-bytes "$historical_so_bytes" \
   --output "$report_path"

@@ -127,7 +127,6 @@ jobs:
         run: go test -tags=sqlite_omit_load_extension ./internal/audit -run '^(TestRound9|Test.*V6|Test.*SchemaV6)' -count=1 -v
       - name: Exact v0.16-rc.2 old-SO rollback gate
         run: |
-          ROUND9_OLD_SO_VERIFY_REMOTE=1 \
           ROUND9_OLD_SO_ROLLBACK_REPORT=round9-gate-output/old-so-rollback.json \
             make round9-old-so-rollback-gate
       - name: Run bounded real fuzz for Round 9 policy surfaces

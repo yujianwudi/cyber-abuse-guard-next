@@ -1,0 +1,74 @@
+version: "1.0.9"
+rules:
+  - id: DISRUPT-001
+    category: service_disruption
+    severity: critical
+    base_score: 62
+    hard_floor: 80
+    authorization_protected: false
+    intent:
+      zh: ["淹没", "洪泛", "压垮", "占满", "占用完", "耗光", "拖住", "资源耗尽", "耗尽连接资源", "连接饥饿", "使其离线", "使服务不可用", "服务不可用", "持续攻击", "发动", "发起", "拖垮", "打崩", "中断服务", "流量压垮"]
+      en: ["flood", "floods", "flooding", "flooded", "overload", "overloads", "overloading", "overloaded", "overwhelm", "exhaust", "exhausts", "exhausting", "exhausted", "starve", "starves", "starving", "resource starvation", "drain connections", "occupy", "occupies", "occupying", "occupied", "knock", "knocks", "knocking", "knocked", "launch", "launches", "launching", "launched", "hammer the service", "saturate capacity", "overwhelm the service", "crash the service", "take offline", "render unavailable", "make unavailable", "make the service unavailable", "force offline", "sustained denial-of-service", "disrupt service", "swamp", "swamps", "swamping", "swamped", "swamp the service", "traffic deluge"]
+    object:
+      zh: ["ddos", "僵尸网络", "受感染设备", "连接池", "带宽", "流量放大器", "拒绝服务", "流量洪水", "请求风暴", "流量风暴", "自动化请求", "分布式请求", "自动化流量"]
+      en: ["ddos", "distributed denial-of-service", "denial of service", "botnet", "infected devices", "flooder", "connection pool", "worker pool", "bandwidth", "request storm", "traffic storm", "automated requests", "distributed requests", "distributed traffic", "automated traffic"]
+    operational:
+      zh: ["连接耗尽", "持续占满", "让真实 customers 无法访问", "分布式洪泛", "资源耗尽流量", "可运行", "接受命令", "控制器", "停止响应", "完整软件"]
+      en: ["connection exhaustion", "keep opening connections", "opening connections", "distributed request burst", "resource exhaustion traffic", "working tool", "tool", "complete software", "accepts commands", "controller", "goes offline", "stops responding", "customers cannot access", "cannot access the service", "users cannot access"]
+    target:
+      zh: ["真实生产", "真实 ip", "目标端口", "目标网站", "指定公司", "公司在线业务", "竞争对手", "第三方", "生产系统", "生产服务"]
+      en: ["victim", "victim organization", "competitor", "competitor organization", "third-party", "third-party organization", "production", "production environment", "production service", "production sites", "real api", "live api", "company website", "company's website", "real external target", "target organization"]
+    evasion:
+      zh: ["放大攻击"]
+      en: ["amplification"]
+    scale:
+      zh: ["批量控制", "几千台", "高并发", "分布式", "分布式流量", "自动化", "自动协调", "自动化攻击流量"]
+      en: ["high-concurrency", "high concurrency", "distributed", "automated attack traffic", "at scale", "hundreds of nodes", "thousands of nodes", "thousands", "many clients"]
+  - id: DISRUPT-002
+    category: service_disruption
+    severity: critical
+    base_score: 62
+    hard_floor: 80
+    authorization_protected: false
+    intent:
+      zh: ["删除", "擦除", "破坏", "删库", "擦盘"]
+      en: ["delete", "deleted", "wipe", "wiped", "destroy", "destroyed", "destructive deletion", "erase", "erased"]
+    object:
+      zh: ["生产数据库", "服务器磁盘", "多台主机"]
+      en: ["production database", "victim disks", "victim hosts"]
+    operational:
+      zh: ["脚本", "工具", "远程", "可运行"]
+      en: ["script", "tool", "remotely", "working", "operational"]
+    target:
+      zh: ["生产", "受害者", "真实主机"]
+      en: ["production", "victim", "real hosts"]
+    evasion:
+      zh: ["删除备份", "擦除痕迹"]
+      en: ["delete backups", "erase traces"]
+    scale:
+      zh: ["批量", "多台", "自动"]
+      en: ["hundreds", "across", "automate", "multiple"]
+  - id: DISRUPT-003
+    category: service_disruption
+    severity: high
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: false
+    intent:
+      zh: ["打垮", "使其下线", "拖垮"]
+      en: ["take", "take down", "bring down", "knock down"]
+    object:
+      zh: ["竞争对手网站", "第三方网站"]
+      en: ["competitor's website", "third-party website"]
+    operational:
+      zh: ["流量风暴", "请求风暴"]
+      en: ["traffic storm", "request storm"]
+    target:
+      zh: ["竞争对手", "第三方"]
+      en: ["competitor", "third-party"]
+    evasion:
+      zh: ["绕过限流", "隐藏来源"]
+      en: ["bypass rate limits", "hide the source"]
+    scale:
+      zh: ["分布式", "批量", "大规模"]
+      en: ["distributed", "bulk", "at scale"]

@@ -22,6 +22,10 @@ Dockerfile* text eol=lf
 /testdata/round9-development-*/** -text -whitespace
 /testdata/round9-public-adversarial-v*/** -text -whitespace
 
+# The historical old-SO build capsule is a byte-frozen, production-source-only
+# fixture.  Keep its reviewed bytes stable across Windows and Linux checkouts.
+/testdata/round9-old-so-v0.16-rc.2-source/** -text -whitespace
+
 # Formal source archives must not export consumed evaluation, holdout, blind,
 # private, or retired material. The release packager repeats these exclusions
 # explicitly and verifies the resulting archive fail-closed.

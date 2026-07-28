@@ -16,6 +16,10 @@ from repository_secret_scan import (
 
 
 class RepositorySecretScanTests(unittest.TestCase):
+    OLD_SO_RAW_CAPTURE = (
+        "testdata/round9-old-so-v0.16-rc.2-source/internal/audit/raw_capture.go"
+    )
+
     def test_rejects_parent_path_escape(self) -> None:
         for value in ("../outside", "nested/../../outside", r"nested\..\..\outside"):
             with self.subTest(value=value), self.assertRaises(ValueError):
@@ -118,6 +122,32 @@ class RepositorySecretScanTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("sk-" + "D" * 24, encoding="utf-8")
             self.assertEqual([], scan_paths(root, [relative]))
+
+    def test_allows_only_the_fixed_old_so_raw_capture_false_positive(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        self.assertEqual([], scan_paths(root, [self.OLD_SO_RAW_CAPTURE]))
+
+    def test_old_so_exception_fails_closed_on_content_drift_or_other_path(self) -> None:
+        repository_root = Path(__file__).resolve().parent.parent
+        original = (repository_root / self.OLD_SO_RAW_CAPTURE).read_bytes()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            drifted = root / self.OLD_SO_RAW_CAPTURE
+            drifted.parent.mkdir(parents=True, exist_ok=True)
+            drifted.write_bytes(original + b"\n")
+            copied_relative = "fixtures/raw_capture.go"
+            copied = root / copied_relative
+            copied.parent.mkdir(parents=True, exist_ok=True)
+            copied.write_bytes(original)
+
+            self.assertEqual(
+                [Finding(self.OLD_SO_RAW_CAPTURE, 148, "private-key-material")],
+                scan_paths(root, [self.OLD_SO_RAW_CAPTURE]),
+            )
+            self.assertEqual(
+                [Finding(copied_relative, 148, "private-key-material")],
+                scan_paths(root, [copied_relative]),
+            )
 
 
 if __name__ == "__main__":

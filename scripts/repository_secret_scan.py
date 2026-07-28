@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import hashlib
 import ipaddress
 import os
 from pathlib import Path, PurePosixPath
@@ -49,6 +50,27 @@ SSH_KEY_BASENAMES = frozenset(
 SECRET_SUFFIXES = frozenset({".ppk", ".p12", ".pfx", ".jks", ".keystore"})
 SECRET_EXACT_NAMES = frozenset({".env", ".netrc", ".npmrc"})
 PUBLIC_IPV4 = re.compile(r"(?<![0-9])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9])")
+
+OLD_SO_RAW_CAPTURE_PATH = (
+    "testdata/round9-old-so-v0.16-rc.2-source/internal/audit/raw_capture.go"
+)
+OLD_SO_RAW_CAPTURE_SHA256 = (
+    "b61d123ffac4a6bf46bbbc08b843f1a162d6240861bcb7bad82c1689f357e0d5"
+)
+_PEM_FENCE = "-" * 5
+OLD_SO_RAW_CAPTURE_FALSE_POSITIVE = (
+    148,
+    "private-key-material",
+    "\t\treplacement: `"
+    + _PEM_FENCE
+    + "BEGIN PRIVATE KEY"
+    + _PEM_FENCE
+    + "[REDACTED]"
+    + _PEM_FENCE
+    + "END PRIVATE KEY"
+    + _PEM_FENCE
+    + "`,",
+)
 
 
 def _private_key_pattern() -> re.Pattern[str]:
@@ -118,13 +140,31 @@ def path_findings(relative: str) -> list[Finding]:
     return findings
 
 
-def line_findings(relative: str, text: str) -> list[Finding]:
+def _is_fixed_old_so_false_positive(
+    relative: str,
+    content_sha256: str,
+    line_number: int,
+    line: str,
+    rule: str,
+) -> bool:
+    return (
+        relative == OLD_SO_RAW_CAPTURE_PATH
+        and content_sha256 == OLD_SO_RAW_CAPTURE_SHA256
+        and (line_number, rule, line) == OLD_SO_RAW_CAPTURE_FALSE_POSITIVE
+    )
+
+
+def line_findings(relative: str, text: str, content_sha256: str = "") -> list[Finding]:
     findings: list[Finding] = []
     for line_number, line in enumerate(text.splitlines(), start=1):
         if ALLOW_MARKER.search(line):
             continue
         for rule, pattern in CONTENT_RULES:
             if pattern.search(line):
+                if _is_fixed_old_so_false_positive(
+                    relative, content_sha256, line_number, line, rule
+                ):
+                    continue
                 findings.append(Finding(relative, line_number, rule))
         for match in PUBLIC_IPV4.finditer(line):
             try:
@@ -180,7 +220,9 @@ def scan_paths(root: Path, relative_paths: Iterable[str]) -> list[Finding]:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
             continue
-        findings.extend(line_findings(relative, text))
+        findings.extend(
+            line_findings(relative, text, hashlib.sha256(data).hexdigest())
+        )
     return sorted(set(findings))
 
 

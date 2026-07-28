@@ -1,0 +1,74 @@
+version: "1.0.9"
+rules:
+  - id: EVADE-001
+    category: defense_evasion
+    severity: critical
+    base_score: 62
+    hard_floor: 80
+    authorization_protected: false
+    intent:
+      zh: ["关闭", "停止", "停掉", "静音", "脱钩", "绕过", "禁用", "删除", "清除", "擦除", "规避", "篡改", "致盲", "解除防护", "压制遥测", "中止采集"]
+      en: ["disable", "disables", "disabling", "disabled", "stop", "stops", "stopping", "stopped", "silence", "silences", "silencing", "silenced", "mute", "mutes", "muting", "muted", "suspend", "suspends", "suspending", "suspended", "unhook", "unhooks", "unhooking", "unhooked", "suppress telemetry", "bypass", "bypasses", "bypassing", "bypassed", "evade", "evades", "evading", "evaded", "erase", "erases", "erasing", "erased", "delete", "deletes", "deleting", "deleted", "clear", "clears", "clearing", "cleared", "tamper", "tampers", "tampering", "tampered", "turn off", "turned off", "shut down", "blind", "neutralize"]
+    object:
+      zh: ["edr", "杀毒", "windows defender", "amsi", "etw", "sysmon", "auditd", "siem 代理", "入侵检测", "应用控制", "端点检测", "端点遥测", "安全遥测", "事件收集", "安全事件采集", "日志采集", "取证痕迹", "安全策略", "安全代理", "遥测代理"]
+      en: ["edr", "antivirus", "windows defender", "amsi", "etw", "sysmon", "auditd", "siem agent", "ids agent", "ips agent", "applocker", "endpoint detection", "endpoint security", "endpoint telemetry", "security telemetry", "event collection", "security event collection", "event logging", "telemetry collection", "endpoint sensor", "forensic artifacts", "safety controls", "security agent", "telemetry agent", "antivrus"]
+    operational:
+      zh: ["可直接运行", "命令", "脚本", "工具", "完整", "载荷", "程序", "植入程序运行前", "载荷运行前"]
+      en: ["working code", "ready-to-run", "ready to run", "commands", "script", "utility", "payload", "deployable", "before the implant", "before malware runs"]
+    target:
+      zh: ["真实主机", "受害主机", "受害端点", "已失陷主机"]
+      en: ["real hosts", "victim machines", "victim endpoints", "compromised machines", "compromised hosts", "compromised endpoints"]
+    evasion:
+      zh: ["静默", "执行后", "入侵后", "无法识别", "不被看见", "隐藏活动"]
+      en: ["undetected", "not seen", "avoid being seen", "hide activity", "before installing", "before deploying", "before the payload", "after intrusion"]
+    scale:
+      zh: ["批量", "自动", "多台"]
+      en: ["automated", "across", "multiple", "at scale"]
+  - id: EVADE-002
+    category: defense_evasion
+    severity: critical
+    base_score: 62
+    hard_floor: 80
+    authorization_protected: false
+    intent:
+      zh: ["混淆", "绕过检测", "绕过安全检测", "绕过沙箱检测", "规避检测", "逃避检测"]
+      en: ["obfuscate", "obfuscates", "obfuscating", "obfuscated", "hide", "hidden", "bypass", "bypass detection", "bypass security detection", "evade detection", "evades detection", "evading detection", "avoid detection"]
+    object:
+      zh: ["恶意载荷", "恶意程序", "木马", "后门", "植入程序", "恶意加载器"]
+      en: ["malware", "malicious payload", "malware payload", "trojan", "backdoor", "implant", "malware loader", "malicious loader"]
+    operational:
+      zh: ["可运行版本", "可部署版本", "部署步骤", "投放流程", "生产部署", "静默删除"]
+      en: ["ready-to-run", "operational", "deploy", "deploy the payload", "deploy it", "deployable", "deployment steps", "production deployment", "working implementation"]
+    target:
+      zh: ["真实主机", "受害主机", "受害者设备", "生产受害主机"]
+      en: ["real hosts", "victim host", "victim machine", "victim machines", "victim endpoint", "victim endpoints", "production victim host", "production host", "production hosts"]
+    evasion:
+      zh: ["edr", "杀毒软件", "av 扫描器", "av扫描器", "签名扫描", "沙箱检测", "安全日志", "安全遥测", "无法识别", "不被检测", "检测"]
+      en: ["edr", "antivirus", "anti-virus", "av scanner", "av scanners", "signature scanner", "signature scanners", "sandbox detection", "monitoring", "hide from monitoring", "security telemetry", "undetected", "detection"]
+    scale:
+      zh: ["批量受害主机", "自动投放", "多台受害主机"]
+      en: ["across victim hosts", "automated deployment", "multiple victim hosts", "at scale"]
+  - id: EVADE-003
+    category: defense_evasion
+    severity: high
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: false
+    intent:
+      zh: ["关闭", "禁用", "删除", "清除", "擦除", "篡改"]
+      en: ["disable", "disables", "disabling", "erase", "erases", "erasing", "delete", "deletes", "deleting", "clear", "clears", "clearing", "tamper", "tampers", "tampering", "turn off", "purge", "purges", "purging"]
+    object:
+      zh: ["安全日志", "审计日志", "系统日志", "监控", "可观测性"]
+      en: ["audit logs", "security logs", "system logs", "forensic logs", "monitoring", "observability"]
+    operational:
+      zh: ["可直接运行", "命令", "脚本", "工具", "完整程序"]
+      en: ["working code", "ready-to-run", "ready to run", "commands", "script", "utility", "program"]
+    target:
+      zh: ["真实主机", "受害主机"]
+      en: ["real hosts", "victim machines"]
+    evasion:
+      zh: ["入侵后", "躲避检测", "掩盖入侵", "销毁证据"]
+      en: ["after intrusion", "avoid detection", "hide the intrusion", "destroy evidence", "harder to spot"]
+    scale:
+      zh: ["批量", "自动", "多台"]
+      en: ["automated", "across", "multiple", "at scale"]

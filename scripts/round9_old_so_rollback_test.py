@@ -15,6 +15,10 @@ import unittest
 from round9_old_so_rollback import (
     GateError,
     HISTORICAL_REPOSITORY,
+    HISTORICAL_SOURCE_CAPSULE,
+    HISTORICAL_SOURCE_CAPSULE_SHA256,
+    HISTORICAL_SOURCE_DATE_EPOCH,
+    HISTORICAL_SOURCE_FILE_COUNT,
     MANIFEST_SCHEMA,
     ROLLBACK_INSTRUCTION,
     SENTINEL_CAPTURE_ID,
@@ -28,7 +32,7 @@ from round9_old_so_rollback import (
 
 
 class RollbackSourceContractTests(unittest.TestCase):
-    def test_historical_source_is_fetched_only_from_predecessor_repository(self) -> None:
+    def test_historical_source_uses_only_the_reviewed_source_capsule(self) -> None:
         root = Path(__file__).resolve().parent.parent
         script = (root / "scripts" / "round9-old-so-rollback-gate.sh").read_text(
             encoding="utf-8"
@@ -44,28 +48,70 @@ class RollbackSourceContractTests(unittest.TestCase):
             f"historical_repository='{HISTORICAL_REPOSITORY}'", script
         )
         for required in (
-            'git -C "$history_repo" remote add origin "$historical_repository"',
-            'git -C "$history_repo" remote get-url origin',
-            '"refs/tags/$historical_tag:refs/tags/$historical_tag"',
-            'git -C "$history_repo" archive --format=tar "$historical_commit"',
-            'git -C "$history_repo" show -s --format=%ct "$historical_commit"',
-            'ls-remote --tags "$historical_repository"',
+            f"historical_source_capsule_relative='{HISTORICAL_SOURCE_CAPSULE}'",
+            f"historical_source_capsule_sha256='{HISTORICAL_SOURCE_CAPSULE_SHA256}'",
+            f"historical_source_file_count='{HISTORICAL_SOURCE_FILE_COUNT}'",
+            f"historical_source_date_epoch='{HISTORICAL_SOURCE_DATE_EPOCH}'",
+            'find "$historical_source_capsule" ! -type d ! -type f',
+            'find "$historical_source_capsule" -type f -print0',
+            'tar -cf - -C "$historical_source_capsule" .',
             "github.com/yujianwudi/cyber-abuse-guard/internal/buildinfo.Version",
             '--repository "$historical_repository"',
+            '--source-capsule "$historical_source_capsule_relative"',
+            '--source-capsule-sha256 "$historical_source_capsule_sha256"',
         ):
             self.assertIn(required, script)
 
         for forbidden in (
-            'git -C "$root" archive',
-            'git -C "$root" show -s --format=%ct "$historical_commit"',
-            'ls-remote --tags origin',
+            'git -C "$history_repo"',
+            "fetch --no-tags",
+            "ls-remote --tags",
+            "ROUND9_OLD_SO_VERIFY_REMOTE",
             "github.com/yujianwudi/cyber-abuse-guard-next/internal/buildinfo.Version",
         ):
             self.assertNotIn(forbidden, script)
 
+        capsule = root / HISTORICAL_SOURCE_CAPSULE
+        entries = tuple(capsule.rglob("*"))
+        self.assertTrue(capsule.is_dir())
+        self.assertFalse(any(entry.is_symlink() for entry in entries))
+        files = tuple(sorted(entry for entry in entries if entry.is_file()))
+        self.assertEqual(len(files), HISTORICAL_SOURCE_FILE_COUNT)
+        relative_paths = tuple(path.relative_to(capsule).as_posix() for path in files)
+        forbidden_path_tokens = (
+            "evaluation",
+            "holdout",
+            "consumed",
+            "private",
+            "blind",
+            "retired",
+            "testdata",
+        )
+        self.assertFalse(
+            any(
+                token in component.lower()
+                for relative in relative_paths
+                for component in Path(relative).parts
+                for token in forbidden_path_tokens
+            )
+        )
+        aggregate = "".join(
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {relative}\n"
+            for path, relative in zip(files, relative_paths, strict=True)
+        )
+        self.assertEqual(
+            hashlib.sha256(aggregate.encode("utf-8")).hexdigest(),
+            HISTORICAL_SOURCE_CAPSULE_SHA256,
+        )
+
         self.assertIn(HISTORICAL_REPOSITORY, documentation)
-        self.assertIn("never used as the source of the historical SO", documentation)
+        self.assertIn(HISTORICAL_SOURCE_CAPSULE, documentation)
+        self.assertIn("never fetches the predecessor repository", documentation)
+        self.assertIn("A cold Go", documentation)
+        self.assertIn("GOPROXY=off", documentation)
+        self.assertNotIn("requires no network access", documentation)
         self.assertIn("make round9-old-so-rollback-gate", workflow)
+        self.assertNotIn("ROUND9_OLD_SO_VERIFY_REMOTE", workflow)
 
 
 class RollbackHelperTests(unittest.TestCase):

@@ -1164,7 +1164,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
   fi'''
 ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "f156bc02f01f530ec272d520ce9412f74c99ea1a350007fc16eb236e25983dd1"
+ROUND9_GATE_WORKFLOW_SHA256 = "afa15747b2847618d5afb7e9ad50514b2a2826a086a721022b5baf66fff2221c"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "a18cb24fd0815ddde8f1dcb7b4fafe985de5799ea95b4c1af0958bc6cb5e59de"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1199,10 +1199,10 @@ REPOSITORY_SECRET_SCAN_SCRIPT = "scripts/repository_secret_scan.py"
 REPOSITORY_SECRET_SCAN_TEST_SCRIPT = "scripts/repository_secret_scan_test.py"
 REPOSITORY_SECRET_SCAN_SHA256 = {
     REPOSITORY_SECRET_SCAN_SCRIPT: (
-        "2795a68176ad1af746017d46bc5b16acca17990622375cc512bcc25e7002a2a3"
+        "1eb092a3edd00ef7889fb62e015f946d7ea5942d0ebaf3368d375d1a3718a5e3"
     ),
     REPOSITORY_SECRET_SCAN_TEST_SCRIPT: (
-        "3f4eaa8f228a3446d714b6643c8ad623a26727daba9b4d0ea3bd2a0b88efcb6e"
+        "78b11d3a062f88364c5712642086d62c80dbd35e76eab49f238f46a336ab857b"
     ),
 }
 RC_RELEASE_WORKFLOW_SHA256 = "5ff480e2bb84bc33da81cc4e9839e4bca50453fc7e77debc1f24dd5b04362107"
@@ -1505,7 +1505,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "4f6890e536a1fc13e47d645fe77f572bf3977dd7f1611775e2a97b14372d7eec"
+ROUND6_SAFE_GATE_TEST_SHA256 = "43282fc08546cc7d3023c0f30985f8c8e43363a48cb2b23464c173f5bdb6d76c"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -10668,7 +10668,7 @@ def reviewed_round9_host_evidence_dynamic_call_ids(
 
 
 def reviewed_repository_secret_scan_dynamic_call_ids(
-    tree: ast.Module, source: Path, root: Path
+    tree: ast.Module, text: str, source: Path, root: Path
 ) -> set[int]:
     """Admit only the fixed, non-shell Git inventory in the reviewed scanner."""
 
@@ -10678,7 +10678,6 @@ def reviewed_repository_secret_scan_dynamic_call_ids(
     expected_hash = REPOSITORY_SECRET_SCAN_SHA256.get(relative)
     if expected_hash is None:
         return set()
-    text = read_regular_text(safe_source, root)
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != expected_hash:
         raise ContractError(
             f"repository secret scanner differs from the reviewed contract: {source}"
@@ -11681,7 +11680,7 @@ def audit_python_source(
         "subprocess.getstatusoutput",
     }
     reviewed_dynamic_call_ids = reviewed_repository_secret_scan_dynamic_call_ids(
-        tree, source, root
+        tree, text, source, root
     ) | reviewed_round9_git_boundary_dynamic_call_ids(
         tree, source, root
     ) | reviewed_round9_eval_dynamic_call_ids(

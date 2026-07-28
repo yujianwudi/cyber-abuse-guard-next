@@ -1343,16 +1343,35 @@ jobs:
             ("capture_output=True", "capture_output=False"),
             ("check=False", "check=True"),
             ("timeout=30", "timeout=31"),
+            (
+                '"testdata/round9-old-so-v0.16-rc.2-source/internal/audit/raw_capture.go"',
+                '"testdata/round9-old-so-v0.16-rc.2-source/internal/audit/other.go"',
+            ),
+            (
+                '"b61d123ffac4a6bf46bbbc08b843f1a162d6240861bcb7bad82c1689f357e0d5"',
+                '"061d123ffac4a6bf46bbbc08b843f1a162d6240861bcb7bad82c1689f357e0d5"',
+            ),
+            (
+                "OLD_SO_RAW_CAPTURE_FALSE_POSITIVE = (\n    148,\n",
+                "OLD_SO_RAW_CAPTURE_FALSE_POSITIVE = (\n    149,\n",
+            ),
+            (
+                '    "private-key-material",\n    "\\t\\treplacement: `"',
+                '    "openai-api-key",\n    "\\t\\treplacement: `"',
+            ),
+            ('    + "[REDACTED]"\n', '    + "[MASKED]"\n'),
         ):
-            with self.subTest(old=old), self.assertRaisesRegex(
-                ContractError,
-                "repository secret scanner|dynamic Python command",
-            ):
-                audit_python_source(
-                    original.replace(old, new, 1),
-                    source,
-                    repository,
-                )
+            with self.subTest(old=old):
+                self.assertEqual(original.count(old), 1)
+                with self.assertRaisesRegex(
+                    ContractError,
+                    "repository secret scanner|dynamic Python command",
+                ):
+                    audit_python_source(
+                        original.replace(old, new, 1),
+                        source,
+                        repository,
+                    )
 
     def test_round9_eval_installer_dynamic_dispatch_is_narrowly_reviewed(self):
         root = Path(__file__).resolve().parent.parent

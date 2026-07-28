@@ -38,6 +38,12 @@ Source-tree status updated: 2026-07-27 (Asia/Shanghai)
   while always negotiating the plugin's implemented RPC schema 2; schema 1 is
   still rejected. RequestInterceptor blocks now carry their category directly
   from classification, removing the second SHA-256 lookup from the block path.
+- Make the exact v0.16-rc.2 old-SO rollback gate self-contained after the
+  predecessor repository became unavailable. CI now rebuilds the historical
+  plugin from a byte-frozen 76-file reviewed non-`*_test.go` source capsule,
+  rejects any path/file/hash drift, excludes restricted corpus surfaces, and
+  records that no live predecessor-repository verification was used. A cold Go
+  module cache may still use the configured module proxy for pinned dependencies.
 - Prevent consented-training telemetry from masking a real credential
   solicitation by covering `prompt`, `induce`, `receive`, and `solicit` forms
   and their inflections across user/system/developer/tool batch and streaming

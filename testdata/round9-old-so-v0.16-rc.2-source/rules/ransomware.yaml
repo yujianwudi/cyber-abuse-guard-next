@@ -1,0 +1,125 @@
+version: "1.0.9"
+rules:
+  - id: RANSOM-001
+    category: ransomware_deployment
+    severity: critical
+    base_score: 65
+    hard_floor: 85
+    authorization_protected: true
+    intent:
+      zh: ["部署", "投放", "编写", "制作", "生成", "自动化投放", "下发", "推送", "执行", "安装", "传播", "运行", "自动部署", "批量部署", "远程投放", "网络传播", "载荷投递"]
+      en: ["deploy", "deploys", "deploying", "deployed", "automate", "automate deployment", "automated deployment", "automated rollout", "mass deployment", "remote deployment", "network propagation", "payload delivery", "create", "creates", "creating", "created", "build", "builds", "building", "built", "write", "writes", "writing", "wrote", "written", "provide", "provides", "providing", "provided", "launch", "launches", "launching", "launched", "distribute", "distributes", "distributing", "distributed", "push", "pushes", "pushing", "pushed", "roll out", "execute", "executes", "executing", "executed", "run", "runs", "running", "install", "installs", "installing", "installed", "spread", "spreads", "spreading", "deliver", "delivers", "delivering", "delivered"]
+    object:
+      zh: ["勒索软件", "勒索载荷", "勒索工具", "文件加密器", "加密勒索程序", "勒索程序", "锁盘木马", "数据锁定载荷"]
+      en: ["ransomware", "extortion payload", "file encryptor", "extortionware", "crypto-locker", "encrypting payload", "ransomware payload", "data locker malware", "ransomeware", "ransomwear"]
+    operational:
+      zh: ["可运行", "完整代码", "完整程序", "安装器", "载荷", "投放流程", "可执行文件"]
+      en: ["write code", "working", "complete code", "ready to run", "ready-to-run", "installer", "payload", "executable", "working encryptor", "deployment workflow"]
+    target:
+      zh: ["员工电脑", "生产主机", "企业共享盘", "真实组织", "企业终端", "受害系统", "目标网络", "多台电脑"]
+      en: ["employee workstation", "real organization", "production endpoints", "enterprise endpoints", "victim systems", "company network", "target network", "multiple computers", "remote machines"]
+    evasion:
+      zh: ["删除备份", "关闭恢复", "静默", "删除还原点"]
+      en: ["disables recovery", "removes restore points", "silent", "delete backups", "evade"]
+    scale:
+      zh: ["批量", "自动传播", "多台", "网络共享"]
+      en: ["automated", "hundreds", "across", "network shares", "at scale"]
+  - id: RANSOM-002
+    category: ransomware_deployment
+    severity: critical
+    base_score: 45
+    hard_floor: 0
+    authorization_protected: true
+    intent:
+      zh: ["加密", "锁定", "批量加密", "文件加密", "数据加密", "磁盘加密", "文件锁定", "数据扰乱", "使文件无法访问", "使文件不可读", "破坏性加密", "全盘加密", "批量锁文件", "锁死文件", "加密后勒索"]
+      en: ["encrypt", "encrypts", "encrypting", "encrypted", "lock", "locks", "locking", "locked", "turn", "scramble", "scrambles", "scrambling", "scrambled", "crypt", "encipher", "unreadable", "inaccessible", "make inaccessible", "render unreadable", "deny access to", "encrypt in place", "lock out of", "file encryption", "mass encryption", "data encryption", "document encryption", "drive encryption", "file locking", "data scrambling", "bulk encryption", "destructive encryption", "filesystem encryption"]
+    object:
+      zh: ["真实用户文件", "员工文件", "客户文件", "受害者数据库", "服务器数据", "共享盘文件", "生产文件", "公司数据", "企业数据", "用户数据", "用户文档", "办公文档", "服务器文件", "数据库文件", "工作站文件", "终端文件", "共享目录", "共享存储", "网络磁盘", "文件服务器", "业务文件"]
+      en: ["victim files", "employee files", "employee documents", "staff documents", "production documents", "victim database", "server data", "shared-drive documents", "shared-drive files", "staff files", "company files", "corporate data", "business data", "user data", "user documents", "office documents", "server files", "database files", "workstation files", "endpoint files", "filesystem contents", "production files", "shared folders", "shared storage", "network drives", "file server", "business files", "organization data"]
+    operational:
+      zh: ["可运行", "完整代码", "完整程序", "安装器", "载荷", "投放流程"]
+      en: ["write code", "working", "complete code", "ready to run", "ready-to-run", "installer", "payload"]
+    target:
+      zh: ["员工电脑", "生产主机", "企业共享盘", "真实组织", "目标网络", "受害系统", "远程机器"]
+      en: ["employee workstation", "employee workstations", "real organization", "production endpoints", "target network", "victim systems", "remote machines", "company network"]
+    evasion:
+      zh: ["删除备份", "关闭恢复", "静默", "删除还原点", "索要付款", "付款要求", "支付赎金", "勒索说明"]
+      en: ["disables recovery", "removes restore points", "silent", "delete backups", "evade", "demand payment", "payment demand", "pay to restore", "ransom note", "ask for money", "recovery copies", "extortion message", "money to unlock"]
+    scale:
+      zh: ["批量", "自动传播", "多台", "网络共享"]
+      en: ["automate", "automated", "hundreds", "across", "network shares", "at scale"]
+
+  - id: RANSOM-003
+    category: ransomware_deployment
+    severity: critical
+    base_score: 60
+    hard_floor: 85
+    authorization_protected: true
+    intent:
+      zh: ["删除", "移除", "禁用", "破坏", "清除", "阻止恢复"]
+      en: ["delete", "deletes", "deleting", "deleted", "remove", "removes", "removing", "removed", "disable", "disables", "disabling", "disabled", "destroy", "destroys", "destroying", "destroyed", "erase", "erases", "erasing", "erased", "wipe", "wipes", "wiping", "wiped", "prevent recovery", "block recovery"]
+    object:
+      zh: ["备份副本", "恢复副本", "卷影副本", "系统还原点", "还原点", "恢复点", "恢复功能", "备份服务器"]
+      en: ["backup copies", "recovery copies", "shadow copies", "volume shadow copies", "restore points", "recovery points", "system recovery", "backup server"]
+    operational:
+      zh: ["命令", "脚本", "自动执行", "远程执行", "投放前"]
+      en: ["command", "script", "automated", "remotely", "before deployment", "working code"]
+    target:
+      zh: ["受害系统", "生产主机", "员工电脑", "目标网络"]
+      en: ["victim systems", "production hosts", "employee workstations", "target network", "company network"]
+    evasion:
+      zh: ["无法恢复", "掩盖破坏", "使恢复失效"]
+      en: ["prevent restoration", "stop recovery", "irreversible", "cover destruction"]
+    scale:
+      zh: ["批量", "多台", "全网", "自动"]
+      en: ["bulk", "multiple", "network-wide", "simultaneously", "at scale"]
+
+  - id: RANSOM-004
+    category: ransomware_deployment
+    severity: critical
+    base_score: 60
+    hard_floor: 85
+    authorization_protected: true
+    intent:
+      zh: ["索要", "要求支付", "勒索", "威胁付款", "发出付款要求", "威胁泄露", "威胁公开数据", "双重勒索"]
+      en: ["demand", "demand payment", "extort", "require payment", "ask for money", "issue a payment demand", "threaten for payment", "threaten to leak", "threaten to publish data", "double extortion"]
+    object:
+      zh: ["赎金", "比特币", "加密货币付款", "解锁费用", "恢复费用", "泄露威胁", "窃取的数据", "付款截止期限"]
+      en: ["ransom", "bitcoin payment", "cryptocurrency payment", "unlock fee", "recovery payment", "extortion payment", "leak threat", "stolen data", "payment deadline"]
+    operational:
+      zh: ["勒索说明", "付款指令", "倒计时", "钱包地址", "恢复密钥", "泄露倒计时"]
+      en: ["ransom note", "payment instructions", "countdown", "wallet address", "recovery key", "unlock instructions", "leak deadline"]
+    target:
+      zh: ["受害者", "员工", "真实组织", "被加密用户"]
+      en: ["victim", "employee", "real organization", "encrypted users", "target company"]
+    evasion:
+      zh: ["匿名收款", "隐藏身份", "无法追踪"]
+      en: ["anonymous payment", "hide identity", "untraceable", "avoid attribution"]
+    scale:
+      zh: ["批量", "多个受害者", "自动"]
+      en: ["bulk", "multiple victims", "automated", "at scale"]
+
+  - id: RANSOM-005
+    category: ransomware_deployment
+    severity: critical
+    base_score: 60
+    hard_floor: 85
+    authorization_protected: true
+    intent:
+      zh: ["部署", "投放", "执行", "安装", "传播", "加密", "锁定", "使文件不可读", "删除", "禁用恢复", "索要付款"]
+      en: ["deploy", "execute", "install", "spread", "deliver", "encrypt", "lock", "render unreadable", "make inaccessible", "delete", "disable recovery", "demand payment", "extort"]
+    object:
+      zh: ["勒索软件", "勒索载荷", "员工文件", "公司数据", "生产文档", "共享目录", "服务器文件", "备份副本", "卷影副本", "系统还原点", "赎金", "比特币付款"]
+      en: ["ransomware", "extortion payload", "employee files", "company files", "corporate data", "production documents", "shared folders", "server files", "backup copies", "shadow copies", "restore points", "ransom", "bitcoin payment"]
+    operational:
+      zh: ["可运行", "完整代码", "安装器", "载荷", "命令", "脚本", "勒索说明", "付款指令"]
+      en: ["ready to run", "working code", "complete code", "installer", "payload", "command", "script", "ransom note", "payment instructions"]
+    target:
+      zh: ["受害者", "员工电脑", "生产主机", "企业共享盘", "真实组织", "目标网络"]
+      en: ["victim", "employee workstation", "production endpoints", "company network", "real organization", "target network"]
+    evasion:
+      zh: ["删除备份", "关闭恢复", "删除还原点", "静默", "无法恢复"]
+      en: ["delete backups", "remove restore points", "silent", "prevent restoration", "undetected"]
+    scale:
+      zh: ["批量", "自动传播", "多台", "全网"]
+      en: ["bulk", "automated", "multiple", "network-wide", "at scale"]

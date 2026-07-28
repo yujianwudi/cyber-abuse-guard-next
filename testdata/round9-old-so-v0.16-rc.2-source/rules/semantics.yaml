@@ -1,0 +1,257 @@
+version: "1.0.9"
+profiles:
+  - category: credential_theft
+    harm:
+      zh: ["冒用", "据为己用", "拿到账号访问"]
+      en: ["reuse them", "account access available", "entry into their real accounts", "made available off-network"]
+    object:
+      zh: ["浏览器登录状态", "单点登录会话", "员工认证数据", "登录状态"]
+      en: ["authentication artifacts", "browser session data", "single-sign-on sessions", "login material", "staff authentication data"]
+    action:
+      zh: ["捞出", "转到操作端", "直接使用"]
+      en: ["take authentication", "automated acquisition", "recover from compromised", "provide an execution sequence", "are to be recovered"]
+    outcome:
+      zh: ["处于已登录状态", "可直接进入账号"]
+      en: ["sessions usable", "sessions open on an outsider device", "access is available later"]
+    target:
+      zh: ["外包人员", "账号本人"]
+      en: ["contractor endpoints", "field staff", "support engineers", "customer phones", "account owners"]
+    destination:
+      zh: ["操作端", "另一台机器", "另一台电脑"]
+      en: ["operator workstation", "operator host", "my workstation", "outsider device", "operator-owned vault", "off-network operator host"]
+    evasion:
+      zh: ["不弹确认", "低噪声"]
+      en: ["without notifying", "without alerts", "without a fresh sign-in", "no reauthentication prompt", "low-noise collection"]
+    scale:
+      zh: ["多端点", "成批账号"]
+      en: ["many endpoints", "across staff accounts"]
+    sequence:
+      zh: ["随后直接使用", "之后进入账号"]
+      en: ["then provide an execution sequence", "available later", "followed by account entry"]
+    impact:
+      zh: ["账号可用", "认证被接管"]
+      en: ["account access", "usable from my workstation", "opening on an outsider device"]
+
+  - category: phishing_deployment
+    harm:
+      zh: ["诱使填写", "仿成公司页面"]
+      en: ["route every entry", "collection of employee password entries", "submissions arrive at my receiver", "submission sink", "ending up at an outside collection service"]
+    object:
+      zh: ["公司单点登录页", "账号验证诱饵"]
+      en: ["imitation sso form", "account-review form", "account-verification lure", "employee password entries", "password-expiry page", "replica bank sign-on screen", "lookalike identity form", "familiar webmail screen"]
+    action:
+      zh: ["发给员工", "转去私人接收端"]
+      en: ["send staff", "placed online", "mass distribution", "provide the deployment plan"]
+    outcome:
+      zh: ["口令到达接收端", "填写内容被收走"]
+      en: ["submitted secrets appear in my inbox", "what they type ending up outside", "customer submissions delivered"]
+    target:
+      zh: ["公司员工", "真实职员"]
+      en: ["finance employees", "real staff", "customer sign-ins", "payroll recipients"]
+    destination:
+      zh: ["私人接收端", "外部收集服务"]
+      en: ["operator mailbox", "my external receiver", "outside collection service", "private webhook"]
+    evasion:
+      zh: ["避开链接检查", "绕过邮件过滤"]
+      en: ["link screening does not stop", "filtering avoid", "quietly ending up"]
+    scale:
+      zh: ["面向全员", "批量投递"]
+      en: ["across the campaign", "mass mail", "broad delivery"]
+    sequence:
+      zh: ["填写后转送", "投递后收集"]
+      en: ["followed by collection", "next give the deployment plan", "when the form is completed"]
+    impact:
+      zh: ["密码被接收", "提交内容外流"]
+      en: ["password entries collected", "entries routed outside", "submissions delivered to a private webhook"]
+
+  - category: malware_deployment
+    harm:
+      zh: ["远程操控", "植入驻留"]
+      en: ["remote operator control", "make that machine available", "accept commands from an operator"]
+    object:
+      zh: ["远控植入程序", "按键记录程序", "外部控制端接收任务"]
+      en: ["remote administration implant", "keystroke-capturing implant", "small helper", "command-capable payload", "credential-recording program", "remote control implant"]
+    action:
+      zh: ["静默装到", "开机常驻"]
+      en: ["place on employee laptops", "installation sequence", "covert installation", "installed across compromised endpoints", "startup persistent"]
+    outcome:
+      zh: ["持续受控", "重启后仍可控制"]
+      en: ["remains resident", "available to an off-site controller", "operators can issue tasks"]
+    target:
+      zh: ["员工电脑", "客户工作站"]
+      en: ["employee laptops", "victim workstations", "someone else's laptop", "customer workstations", "employee endpoints", "people using them"]
+    destination:
+      zh: ["外部控制端", "远程操作端"]
+      en: ["operator server", "off-site controller", "quiet command channel", "remote operator"]
+    evasion:
+      zh: ["用户不可见", "全程无提示"]
+      en: ["without notice", "users see nothing", "visibility none", "hidden from the people"]
+    scale:
+      zh: ["多台员工电脑", "全部端点"]
+      en: ["many employee devices", "across compromised endpoints"]
+    sequence:
+      zh: ["开机后回连", "安装后常驻"]
+      en: ["after each reboot", "automatic startup", "then provide the installation sequence"]
+    impact:
+      zh: ["机器被远程控制", "远程任务可执行"]
+      en: ["machine available to a controller", "remote tasks can be issued", "persistent command access"]
+
+  - category: ransomware_deployment
+    harm:
+      zh: ["锁住员工文档", "索要解锁费用"]
+      en: ["denial of access", "monetized release", "return access only after payment"]
+    object:
+      zh: ["员工文档", "财务共享盘"]
+      en: ["employee project files", "documents on staff workstations", "user documents", "finance share", "staff documents", "files on employee machines"]
+    action:
+      zh: ["清掉恢复副本", "删掉 recovery copies", "批量锁住"]
+      en: ["make files unusable", "locks them", "files are to be encrypted", "destruction of recovery material", "backups are to be erased"]
+    outcome:
+      zh: ["收到赎金后解锁", "文件无法打开"]
+      en: ["cannot be opened", "unavailable until payment", "state unreadable", "access returned only after payment", "become unavailable to its owners"]
+    target:
+      zh: ["员工工作站", "文件所有者"]
+      en: ["employee machines", "staff workstations", "shared drives", "their owners"]
+    destination:
+      zh: ["支付界面", "勒索提示"]
+      en: ["displayed recovery price", "payment condition", "release condition payment"]
+    evasion:
+      zh: ["旧副本静默消失", "阻止回滚"]
+      en: ["old copies quietly disappear", "eliminates rollback", "no usable restore point"]
+    scale:
+      zh: ["所有工作站", "大批文档"]
+      en: ["hundreds of user documents", "all workstations", "across shared drives"]
+    sequence:
+      zh: ["付款后才给密钥", "再要求 payment", "payment 才给恢复 key", "锁定后删除备份"]
+      en: ["then provide the execution sequence", "before restoration", "only after payment"]
+    impact:
+      zh: ["无法使用", "无法恢复", "解锁密钥"]
+      en: ["files unusable", "access denied", "recovery impossible", "owners lose access", "a charge is demanded"]
+
+  - category: unauthorized_exploitation
+    harm:
+      zh: ["未授权弱点利用", "拿下高权限账号"]
+      en: ["unauthorized exploitation", "gain administrator access", "authentication bypass"]
+    object:
+      zh: ["认证弱点", "应用入口", "登录校验"]
+      en: ["authentication weakness", "authentication flaw", "application entry", "permission boundary", "exploit auth", "external service", "application"]
+    action:
+      zh: ["绕过登录校验", "取得管理员权限"]
+      en: ["exploit the weakness", "bypassing login", "escalating privileges", "privilege escalation", "gain admin"]
+    outcome:
+      zh: ["高权限入口长期可用", "反复进入管理员身份"]
+      en: ["repeated administrator entry", "durable high-privilege doorway", "administrator rights obtained", "persist"]
+    target:
+      zh: ["未授权站点", "外部系统"]
+      en: ["external portal", "service we do not own", "third-party application", "outside environment"]
+    destination:
+      zh: ["敏感服务", "回访通道"]
+      en: ["sensitive services", "return path", "new access path"]
+    evasion:
+      zh: ["不触发审计告警", "隐藏访问路径"]
+      en: ["avoid audit alerts", "quiet access", "hidden in normal traffic", "no audit"]
+    scale:
+      zh: ["跨服务横向", "反复访问"]
+      en: ["lateral access", "repeated entry"]
+    sequence:
+      zh: ["绕过后提权", "提权后驻留"]
+      en: ["then give the execution sequence", "bypass then escalate", "retain access afterward", "later use"]
+    impact:
+      zh: ["取得高权限", "权限边界被突破"]
+      en: ["administrator access", "administrator rights", "permission boundary broadened", "high-privilege doorway", "no effective monitoring alert"]
+
+  - category: service_disruption
+    harm:
+      zh: ["拖垮服务", "延长不可用"]
+      en: ["keep the outage", "delayed recovery", "stop an unapproved target"]
+    object:
+      zh: ["第三方接口", "关键队列", "自动扩缩容系统"]
+      en: ["competitor service connection pool", "work queue", "critical queue", "public service capacity", "connections", "third-party service", "customer entrance", "regions", "capacity bottleneck", "autoscaling"]
+    action:
+      zh: ["打满接口", "拖垮备用节点"]
+      en: ["exhaust the connection pool", "multi-source saturation", "fill the critical queue", "capacity exhaustion", "saturate connections", "shape the peak-hour traffic", "refuses requests", "is to be filled"]
+    outcome:
+      zh: ["服务无法受理请求", "客户入口静默"]
+      en: ["every region refuses requests", "customer entrance goes quiet", "outage extended", "extend outage"]
+    target:
+      zh: ["竞争对手服务", "第三方服务", "冗余节点"]
+      en: ["competitor service", "unapproved target", "redundant nodes"]
+    destination:
+      zh: ["营业高峰", "恢复窗口"]
+      en: ["business peak", "peak-hour traffic", "recovery window"]
+    evasion:
+      zh: ["避开限流告警", "绕过容量保护"]
+      en: ["defeat failover", "rate-limit bypass", "bypass-rate-limit"]
+    scale:
+      zh: ["多来源冲击", "所有区域"]
+      en: ["multi-source", "every region", "fanout sources", "well beyond normal"]
+    sequence:
+      zh: ["打满后拖垮", "持续到高峰结束"]
+      en: ["then provide the rollout sequence", "through the business peak", "repeatedly disturbed"]
+    impact:
+      zh: ["无法恢复服务", "不可用时间延长", "无法访问"]
+      en: ["cannot restore service", "can no longer reach the service", "redundant nodes dragged down", "prolonged recovery", "recovery window is stretched", "becomes unavailable"]
+
+  - category: data_exfiltration
+    harm:
+      zh: ["分批外送", "带走数据"]
+      en: ["covert delivery", "off-network transfer", "remove data from an unapproved tenant"]
+    object:
+      zh: ["高价值记录", "生产记录"]
+      en: ["organization's customer records", "high-value tables", "restricted material", "customer archives", "sensitive-data"]
+    action:
+      zh: ["筛出后外送", "打包送往"]
+      en: ["copy to outside storage", "staging small batches", "packaged and sent", "staged batching", "stage encrypted"]
+    outcome:
+      zh: ["数据到达外部接收端", "敏感字段在外部可用"]
+      en: ["arrive at an overseas receiver", "material into a personal repository", "egress external-drop"]
+    target:
+      zh: ["生产环境", "未授权租户"]
+      en: ["unapproved tenant", "source production records", "organization's records", "prod records"]
+    destination:
+      zh: ["私人网盘", "境外接收端"]
+      en: ["outside storage", "outside receiver", "overseas receiver", "personal repository", "unapproved endpoint"]
+    evasion:
+      zh: ["借正常同步掩护", "删掉导出日志"]
+      en: ["disguise as synchronization", "avoid dlp alerts", "audit cleanup", "audit clues erased", "blend sync", "purge audit", "resemble ordinary backup traffic"]
+    scale:
+      zh: ["完整数据集", "分成小批"]
+      en: ["complete dataset", "small batches", "export split into small pieces"]
+    sequence:
+      zh: ["筛出后压缩外送", "暂存后传出"]
+      en: ["then give the sequence", "staging before delivery", "after packaging"]
+    impact:
+      zh: ["数据离开批准边界", "秘密可被复原"]
+      en: ["secrets can be reconstructed", "data leaves the boundary", "sensitive fields remain usable", "sensitive fields usable"]
+
+  - category: defense_evasion
+    harm:
+      zh: ["告警抑制", "归因阻断"]
+      en: ["alert suppression", "attribution prevention", "destroying evidence", "unauthorized activity", "high-risk behavior"]
+    object:
+      zh: ["审计转发", "监控环境"]
+      en: ["endpoint protection", "audit forwarding", "detection rules", "audit records", "security-control"]
+    action:
+      zh: ["静默告警", "改写时间线"]
+      en: ["disable endpoint protection", "muting alerts", "rules are to be weakened", "records rewritten", "security-control deactivation", "reduce monitoring noise"]
+    outcome:
+      zh: ["监控无法关联事件", "取证材料不再产生"]
+      en: ["monitoring connects no event", "activity labeled trusted maintenance", "no trace", "labeled as trusted maintenance", "forensic material no longer"]
+    target:
+      zh: ["受害主机", "入侵后的端点"]
+      en: ["victim hosts", "post-compromise endpoints", "compromised environment"]
+    destination:
+      zh: ["例行维护", "正常流量", "受信任维护"]
+      en: ["administrator maintenance", "normal traffic", "routine operations", "trusted maintenance"]
+    evasion:
+      zh: ["混进例行维护", "不留痕迹"]
+      en: ["disguise the intrusion", "blending into normal traffic", "masquerade maintenance", "traffic disguise", "blends into routine operations"]
+    scale:
+      zh: ["集中监控", "多台主机"]
+      en: ["central monitoring", "across victim hosts"]
+    sequence:
+      zh: ["先静默再改写", "入侵后清理证据"]
+      en: ["then give the sequence", "after intrusion", "before review"]
+    impact:
+      zh: ["证据无法还原", "安全控制失效"]
+      en: ["evidence cannot be reconstructed", "controls are ineffective", "forensic material removed", "forensic material no longer gets in the way", "evidence destruction", "weakened detection rules"]

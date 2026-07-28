@@ -1,0 +1,34 @@
+version: "1.0.9"
+contexts:
+  - kind: defensive
+    terms:
+      zh: ["防御", "防护建议", "建议防护", "如何检测", "检测思路", "检测规则", "检测指导", "如何防止", "安全检查", "加固", "告警建议", "告警规则", "当出现时告警", "检测停止", "告警停止", "调查停止原因", "意外停止", "识别迹象", "完善风控", "优化风控", "改进风控", "风控优化", "降低误报", "减少误报", "降低误伤", "减少误伤", "降低误拦", "减少误拦", "误伤分析", "误拦分析", "审查拦截记录", "复核拦截记录", "分析拦截记录", "改进检测", "完善检测", "优化检测", "分析破限仓库以改进检测", "分析破限仓库以改进防护", "分析越狱仓库以改进检测", "审查越狱样本以改进检测", "安全配置", "起草安全策略", "员工测验", "桌面演练", "模拟钓鱼", "yara 规则", "sigma 规则", "suricata 规则", "snort 规则", "ioc 提取", "入侵指标"]
+      en: ["defensive", "defensive analysis", "defensive guidance", "recommend controls", "recommended controls", "explain controls", "explain defensive controls", "analyze for defenders", "how to detect", "how to prevent", "detection guidance", "defensive controls", "improve risk controls", "optimize risk controls", "improve abuse controls", "optimize abuse controls", "reduce false positives", "reduce false blocks", "false-positive analysis", "false positive analysis", "false-positive review", "false positive review", "review blocked requests", "review block records", "review interception records", "improve detection coverage", "optimize detection rules", "analyze jailbreak repositories to improve detection", "analyze jailbreak repositories for detection", "review jailbreak samples for detection", "defensive review of jailbreak repositories", "secure settings", "security checklist", "warning signs", "alert for", "alert when", "create an alert", "detect when", "investigate why", "unexpectedly stopped", "stopped unexpectedly", "failed unexpectedly", "investigate the outage", "draft a system policy", "draft a safety policy", "why attackers", "employee quiz", "recognizing suspicious", "reporting suspicious", "tabletop exercise", "mock phishing", "malware protection", "malware prevention", "ransomware insurance", "insurance options", "ransomware awareness", "ransomware-awareness", "phishing simulation", "campaign simulation", "phishing campaign tabletop exercise", "awareness training", "yara rule", "yara signature", "sigma rule", "sigma analytic", "suricata rule", "suricata signature", "suricata alert", "snort rule", "snort signature", "snort detection outline", "ioc extraction", "indicators of compromise"]
+  - kind: remediation
+    terms:
+      zh: ["如何修复", "修复方案", "修复建议", "应用补丁", "补丁指南", "缓解", "从备份恢复", "恢复清单", "恢复流程", "恢复采集", "恢复遥测", "恢复被删除的审计日志", "加固清单", "安全版本", "轮换", "撤销会话", "回归测试", "批准的维护", "计划维护", "过期日志", "日志保留", "旧日志"]
+      en: ["remediation", "remediate", "mitigation", "apply a patch", "patch guidance", "patching guidance", "recovery checklist", "restore from backup", "restore from backups", "restoration plan", "restore collection", "restore telemetry", "restore event collection", "restore deleted audit logs", "safe version", "rotate", "revoke", "regression test", "approved maintenance", "scheduled maintenance", "old logs", "expired logs", "log retention", "retention policy"]
+  - kind: ctf
+    terms:
+      zh: ["ctf", "虚构赛题", "赛题"]
+      en: ["ctf", "hack the box", "tryhackme", "capture-the-flag"]
+  - kind: lab
+    terms:
+      zh: ["本地靶场", "隔离环境", "教学网络", "虚构靶场"]
+      en: ["isolated lab", "offline lab", "lab server", "classroom sandbox", "toy service"]
+  - kind: authorized
+    terms:
+      zh: ["已获授权", "书面授权", "授权测试", "自有服务器", "自有代码", "自有网络", "授权范围", "所有者批准", "批准压测", "批准的有界压测", "限速压测"]
+      en: ["i am authorized", "written authorization", "authorized engagement", "authorized assessment", "owner approval", "approved internal assessment", "signed test plan", "approved load test", "approved bounded load test", "bounded load test", "rate-limited load test"]
+  - kind: static_analysis
+    terms:
+      zh: ["静态分析", "静态审查", "离线取证", "不运行样本", "代码审计", "分析样本", "反编译报告", "yara 规则", "sigma 规则", "suricata 规则", "snort 规则", "ioc 提取", "入侵指标"]
+      en: ["static analysis", "statically review", "without executing", "code review", "decompiler report", "quarantined binary", "analyze a sample", "offline forensics", "yara rule", "yara signature", "sigma rule", "suricata rule", "suricata signature", "snort rule", "snort signature", "ioc extraction", "indicators of compromise"]
+  - kind: incident_response
+    terms:
+      zh: ["事件响应", "应急响应", "隔离主机", "保全证据", "证据链", "取证分析", "取证调查", "从备份恢复", "复盘"]
+      en: ["incident response", "incident responder", "containment", "containment actions", "preserve evidence", "forensic analysis", "forensic investigation", "triage", "from backups"]
+  - kind: high_level
+    terms:
+      zh: ["高层次", "概念性", "概念层面", "对比方式", "比较方式", "原理", "风险摘要", "面向管理层", "安全培训", "概念解释", "不涉及实现细节", "不提供执行流程", "解释", "分析", "什么是"]
+      en: ["high-level", "high level", "conceptual", "conceptual comparison", "compare techniques", "contrast techniques", "overview", "broad terms", "training", "nontechnical audience", "without operational", "without an execution workflow", "do not provide an execution workflow", "explain", "analyze", "what is", "why attackers", "malware protection", "malware prevention", "ransomware insurance", "insurance options", "ransomware awareness", "ransomware-awareness", "phishing simulation", "campaign simulation", "phishing campaign tabletop exercise", "awareness training"]
