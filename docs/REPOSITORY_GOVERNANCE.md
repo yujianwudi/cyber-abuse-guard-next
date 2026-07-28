@@ -19,6 +19,7 @@ before their successful contexts exist can lock the default branch.
 | Required status checks are up to date | Strict / required |
 | Required status checks | `quality-and-artifacts`, `fuzz-long`, `reproducibility`, `Analyze Go on Linux`, `round9-policy-and-corpus` |
 | All review conversations resolved | Required |
+| Require signed commits | Required |
 | Force pushes | Prohibited |
 | Branch deletion | Prohibited |
 | Delete merged pull-request branches | Enabled |
@@ -46,7 +47,8 @@ gh api repos/yujianwudi/cyber-abuse-guard-next --jq '{delete_branch_on_merge}'
 gh api repos/yujianwudi/cyber-abuse-guard-next/rulesets --paginate
 ```
 
-For a compact protection audit:
+For a compact protection audit, run the branch-protection query together with
+the two repository controls that GitHub exposes through separate endpoints:
 
 ```bash
 gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection \
@@ -57,6 +59,10 @@ gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection \
          admins: .enforce_admins.enabled,
          force_pushes: .allow_force_pushes.enabled,
          deletions: .allow_deletions.enabled}'
+gh api repos/yujianwudi/cyber-abuse-guard-next/branches/main/protection/required_signatures \
+  --jq '{required_signatures: .enabled}'
+gh api repos/yujianwudi/cyber-abuse-guard-next \
+  --jq '{delete_branch_on_merge}'
 ```
 
 The expected result is `strict: true`, the five exact check names above,

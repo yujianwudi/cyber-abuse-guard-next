@@ -1530,7 +1530,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "6202d50288c9ae890e6e8f3e607f06e217e4fe2b3f479b6a8807aa2977b7c6b6"
+ROUND6_SAFE_GATE_TEST_SHA256 = "5610d00c74d58db85ea3d8a16dc5099765d782578a2bf71864952375175e50b7"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -11874,6 +11874,10 @@ def validate_workflow_layout(root: Path) -> None:
             validate_round9_rc_workflow(archive_text, archive_path)
         elif relative == ARCHIVED_RC_WORKFLOW_PATH:
             validate_archived_rc_workflow(archive_text, archive_path)
+        else:
+            raise ContractError(
+                f"archived workflow has no reviewed validator: {relative}"
+            )
 
 
 def default_entrypoints(root: Path) -> list[Path]:

@@ -2608,6 +2608,21 @@ jobs:
             self.assertNotIn(archive, {path.resolve() for path in entrypoints})
             self.assertTrue(archive.is_file())
 
+    def test_workflow_layout_rejects_archive_without_reviewed_validator(self):
+        root = self.workflow_layout_fixture()
+        relative = "docs/archive/workflows/unreviewed.yml"
+        archive = root / relative
+        archive.write_text("name: Unreviewed archive\n", encoding="utf-8")
+        with mock.patch.object(
+            _CONTRACT_MODULE,
+            "ARCHIVED_WORKFLOW_PATHS",
+            (*ARCHIVED_WORKFLOW_PATHS, relative),
+        ):
+            with self.assertRaisesRegex(
+                ContractError, "archived workflow has no reviewed validator"
+            ):
+                validate_workflow_layout(root)
+
     def test_workflow_layout_rejects_extra_entrypoint_and_archived_rc_mutation(self):
         root = self.workflow_layout_fixture()
         extra = root / ".github/workflows/unreviewed.yml"
