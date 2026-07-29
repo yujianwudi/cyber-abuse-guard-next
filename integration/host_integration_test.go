@@ -689,11 +689,12 @@ func runHostIncidentResponseRoleMatrix(
 				assertProviderRequestOccurred(t, response.Header, upstream, providerProbe,
 					upstreamBefore, providerBefore)
 				assertUsageQueueIncrementedAndDrain(t, baseURL)
-				wantCounters := map[string]uint64{"allowed": 1, "coverage_complete": 1}
-				if role == "system" {
-					wantCounters = map[string]uint64{"audited": 1, "coverage_complete": 1}
-				}
-				assertHostPluginCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL), wantCounters)
+				// A complete category-free defensive review is an allow for every
+				// authority-bearing role. Role-specific authority matters only when an
+				// independently malicious reactivation is present.
+				assertHostPluginCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL), map[string]uint64{
+					"allowed": 1, "coverage_complete": 1,
+				})
 			})
 		}
 	}

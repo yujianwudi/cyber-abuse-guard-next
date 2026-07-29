@@ -14,6 +14,10 @@ Source-tree status updated: 2026-07-30 (Asia/Shanghai)
   v7.2.104 Git tag, commit, module Origin, and checksums, while the moving
   `releases/latest` probe remains an optional drift monitor rather than a
   compatibility or release gate.
+- Align the CPA Host counter contract with the Round 9 defensive-owner parity:
+  complete category-free incident-response reviews now count as `allowed` for
+  user, request-local system, and terminal-tool roles. HTTP/upstream/usage
+  behavior is unchanged; malicious same-carrier reactivation still blocks.
 - Repair the `150c25e6` isolation-audit findings with candidate-local quoted
   carrier ownership, request-local system/developer defensive-owner parity,
   bounded batch/streaming reactivation, real-credential phishing relations,
