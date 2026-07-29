@@ -40,7 +40,7 @@ class RollbackSourceContractTests(unittest.TestCase):
         documentation = (root / "docs" / "ROUND9_OLD_SO_ROLLBACK_GATE.md").read_text(
             encoding="utf-8"
         )
-        workflow = (root / ".github" / "workflows" / "round9-gate.yml").read_text(
+        workflow = (root / ".github" / "workflows" / "policy-gate.yml").read_text(
             encoding="utf-8"
         )
 

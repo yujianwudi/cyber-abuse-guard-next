@@ -194,18 +194,9 @@ round9-old-so-rollback-gate:
 
 workflow-lint:
 	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) \
-		-config-file .github/actionlint.yaml \
 		.github/workflows/ci.yml \
 		.github/workflows/codeql.yml \
-		.github/workflows/candidate.yml \
-		.github/workflows/attested-prerelease.yml \
-		.github/workflows/release-rc.yml \
-		.github/workflows/round8-host-validation.yml \
-		.github/workflows/round9-gate.yml \
-		.github/workflows/round9-host-validation.yml \
-		.github/workflows/round9-release-rc.yml \
-		.github/workflows/release.yml \
-		.github/workflows/release-promote.yml
+		.github/workflows/policy-gate.yml
 
 shellcheck-lint:
 	@set -euo pipefail; \
@@ -286,11 +277,6 @@ round6-script-test: repository-secret-scan
 	make shellcheck-lint
 	bash -n ./scripts/go-safe-development-test.sh
 	bash -n ./scripts/cpa-latest-compat.sh
-	bash -n ./scripts/round6-candidate-artifacts.sh
-	bash -n ./scripts/round6-rc-artifacts.sh
-	bash -n ./scripts/round8-build-host-images.sh
-	bash -n ./scripts/round8-host-evidence.sh
-	python3 -B ./scripts/round8-host-evidence-test.py
 	bash -n ./scripts/round9-build-host-images.sh
 	bash -n ./scripts/round9-host-evidence.sh
 	python3 -B ./scripts/round9-host-evidence-test.py
@@ -302,23 +288,10 @@ round6-script-test: repository-secret-scan
 	python3 -B ./tools/round9-eval/cag_round9_external_evaluator_test.py
 	python3 -B ./tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py
 	python3 -B ./tools/round9-eval/cag_round9_eval_broker_test.py
-	./scripts/release-candidate-contract-test.sh
-	bash -n ./scripts/verify-external-release-attestation.sh
-	./scripts/verify-external-release-attestation-test.sh
-	bash -n ./scripts/source-release-exclusion-contract-test.sh
-	./scripts/source-release-exclusion-contract-test.sh
-	bash -n ./scripts/verify-frozen-evaluation-v10-tree.sh
-	./scripts/verify-frozen-evaluation-v10-tree.sh
-	bash -n ./scripts/round6-reproducibility-test.sh
-	bash -n ./scripts/round6-safe-go-files.sh
-	python3 -B ./scripts/round6_safe_gate_contract_test.py
 	python3 -B ./scripts/round6_safe_gate_contract.py --root .
 	./scripts/check-production-health-test.sh
 	GO=$(GO) ./scripts/create-store-archive-test.sh
 	./scripts/generate-hmac-key-test.sh
-	bash ./scripts/release-evidence-privacy-test.sh
-	bash ./scripts/round6-doc-consistency-fixture-test.sh
-	./scripts/release-doc-consistency.sh
 
 corpus-regression:
 	$(GO) test -tags=$(TEST_TAGS) ./internal/classifier \

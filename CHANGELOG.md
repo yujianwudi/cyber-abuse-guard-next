@@ -7,7 +7,14 @@ current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf54
 
 Source-tree status updated: 2026-07-30 (Asia/Shanghai)
 
-## Unreleased - v0.16-rc.4 Round 9 candidate
+## Unreleased - v0.16 main development
+
+- Reduce the executable GitHub Actions surface from eleven workflows to three:
+  `CI`, `CodeQL`, and `Policy and Corpus Gate`. Retire the automated candidate,
+  prerelease, Round 8, RC, Host, promotion, and release lanes; normalize the
+  active policy workflow filename to `policy-gate.yml`; retain stable required
+  job contexts for branch protection; and update the workflow inventory and
+  repository-governance documentation.
 
 - Keep the required CI compatibility lane pinned to CPA v7.2.104 after the
   upstream v7.2.105 release. CI still resolves and verifies the exact official
