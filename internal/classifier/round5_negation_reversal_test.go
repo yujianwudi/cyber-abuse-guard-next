@@ -252,6 +252,40 @@ func TestRound5AdjacentNegationCandidateFloodPerformanceAcceptance(t *testing.T)
 		time.Duration(reversalCandidateResult.NsPerOp()), reversalCandidateResult.AllocedBytesPerOp(), reversalCandidateResult.AllocsPerOp())
 }
 
+func TestRuleIntentNegationFastGateCoversASCIIMarkers(t *testing.T) {
+	// This mirrors every ASCII marker consumed by
+	// ruleIntentOccurrenceNegation. candidateActionTargets uses
+	// stringMayContainNegation as a fast gate before that matcher, so a new
+	// marker must be added here and to the gate in the same change.
+	for _, marker := range []string{
+		"must never", "must not", "should never", "should not", "need not",
+		"ought not", "shall not", "would not", "could not", "may not",
+		"do not", "cannot", "will not", "never", "not to", "without",
+		"forbids", "forbid", "forbidden to", "prohibits", "prohibit",
+		"prohibited from", "refuse to",
+	} {
+		if !stringMayContainNegation("prefix " + marker + " deploy") {
+			t.Errorf("negation fast gate missed marker %q", marker)
+		}
+	}
+}
+
+func TestIndependentMaliciousExecutionBoundaryPrefilterClosure(t *testing.T) {
+	const tail = "deploy ransomware across production endpoints"
+	for _, boundary := range []string{
+		"; then ", ", then ", ". then ", " but then ", ", but then ", " but also ",
+		" and then ", ", and then ", " additionally ", ", additionally ", " now ",
+		". separately, ", "; separately, ", ", separately, ", " separately, ",
+		"；然后", "。然后", "但是随后", "但同时", "另外", "现在",
+		". ", "。", "! ", "！", "? ", "？",
+	} {
+		got, ok := independentMaliciousExecutionTail("analyze mitigation only" + boundary + tail)
+		if !ok || got != tail {
+			t.Errorf("independent execution boundary %q => (%q, %t)", boundary, got, ok)
+		}
+	}
+}
+
 func round5AdjacentNegationFloodParts() []string {
 	parts := make([]string, 0, 2*(maxAdjacentNegationCandidates+2))
 	for index := 0; index < maxAdjacentNegationCandidates+2; index++ {

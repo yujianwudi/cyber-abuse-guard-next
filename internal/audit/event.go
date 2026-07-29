@@ -1325,7 +1325,7 @@ func validIncompleteReason(value string) bool {
 	return oneOf(value, "", "parse_error", "scan_limit", "rpc_body_limit", "json_depth_limit",
 		"text_part_limit", "role_attribution", "classification_chunk_limit", "total_text_limit", "multipart_limit",
 		"multipart_schema", "tool_schema", "deferred_text_limit", "unsupported_content_type",
-		"incomplete_inspection", "unknown_source_format")
+		"classifier_proof_budget", "incomplete_inspection", "unknown_source_format")
 }
 
 // privacySafeModel is also used when reading legacy databases so management

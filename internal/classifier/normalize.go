@@ -11,10 +11,15 @@ import (
 
 const (
 	// This mirrors extract.HardMaxScanBytes without importing the extractor.
-	maxClassifierInputBytes           = 4 << 20
-	maxClassifierNormalizedRunes      = 1 << 20
-	maxClassifierParts                = 4096
-	compactHardBoundary          rune = -1 // impossible in decoded UTF-8 input
+	maxClassifierInputBytes      = 4 << 20
+	maxClassifierNormalizedRunes = 1 << 20
+	maxClassifierParts           = 4096
+	// U+FDD0 is a Unicode noncharacter reserved here as the internal hard
+	// boundary marker. Literal input instances are mapped to U+FFFD before
+	// boundaries are introduced, so the marker survives rune/string round trips
+	// without colliding with legitimate replacement characters in user text.
+	compactHardBoundary     rune = '\uFDD0'
+	compactHardBoundaryText      = "\uFDD0"
 )
 
 type normalizedViews struct {
@@ -116,6 +121,9 @@ func normalizePartsInto(parts []string, destination []rune, scratch *normalizati
 				if replacement, ok := commonHomoglyphReplacement(r); ok {
 					r = replacement
 				}
+				if r == compactHardBoundary {
+					r = unicode.ReplacementChar
+				}
 				runes = append(runes, r)
 			}
 		}
@@ -168,6 +176,9 @@ func normalizeBytesInto(value []byte, destination []rune, scratch *normalization
 			r = unicode.ToLower(r)
 			if replacement, ok := commonHomoglyphReplacement(r); ok {
 				r = replacement
+			}
+			if r == compactHardBoundary {
+				r = unicode.ReplacementChar
 			}
 			runes = append(runes, r)
 		}

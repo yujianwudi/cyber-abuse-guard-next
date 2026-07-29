@@ -3,6 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 go_launcher="${GO:-go}"
+export GOTOOLCHAIN=go1.26.4
 selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"
 if [[ "$selected_go_root" != /* || "$selected_go_root" == *$'\n'* || \
       ! -x "$selected_go_root/bin/go" ]]; then
@@ -10,7 +11,7 @@ if [[ "$selected_go_root" != /* || "$selected_go_root" == *$'\n'* || \
   exit 1
 fi
 go_bin="$selected_go_root/bin/go"
-export GOTOOLCHAIN=go1.26.4
+export GOTOOLCHAIN=local
 export GOFLAGS=-mod=readonly
 selected_go_version="$("$go_bin" env GOVERSION)"
 [[ "$selected_go_version" == go1.26.4 ]] || {

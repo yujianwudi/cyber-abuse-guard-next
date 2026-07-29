@@ -372,12 +372,10 @@ class Round9EvalCoreTest(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "candidate CPA version"):
             validate_evaluation_payload(payload)
 
-    def test_stale_cpa_v72103_candidate_identity_is_rejected(self) -> None:
+    def test_synthetic_stale_cpa_candidate_identity_is_rejected(self) -> None:
         _envelope, payload, _proof = self.fixture()
-        payload["candidate"]["cpa_version"] = "v7.2.103"
-        payload["candidate"]["cpa_commit"] = (
-            "cade44b9cdee6b9328ea2648fd119129fdf11e2d"
-        )
+        payload["candidate"]["cpa_version"] = "v0.0.0-stale-sentinel"
+        payload["candidate"]["cpa_commit"] = "0" * 40
         with self.assertRaisesRegex(ContractError, "candidate CPA version"):
             validate_evaluation_payload(payload)
 

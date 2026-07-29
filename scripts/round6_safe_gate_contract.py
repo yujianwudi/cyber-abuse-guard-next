@@ -1392,7 +1392,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "db99781222754f8e5a4780defe8ab002bdf3ed8ad0f83806a88eb06ee7749a6d"
+    "c021099e8898b3622320f5df623d4ec3473c58e3f72dd435ccd9293be0d9dcdc"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then
@@ -1418,14 +1418,14 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
     "scripts/round8_docker_sandbox.py": "30585beb793b7d35d842adce962fdc111eb76ef6a5ec963b6ab52470bbc64301",
 }
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "818b812f309d750744f0b4569b4c667a9b572f85b7fa375a441f3f4001a89484",
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "df006d0a36aa68d90350221dd7401be17979c4931cb038cbdc226350a71ea6a5",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "f1131ba45d7e2a111c90bfabaae83c96018597f9d984f4cd907a9497b64d8af5",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "f287236bbcc19213fffb86af899384db5090ebd5083ef09256737a2b1329c77a",
     "tools/round9-eval/cag_round9_eval_broker.py": "f0d65129d6b97c38f9501fc9bde61c714b6a58cd13a4c3cdd90d42b4b14b3444",
     "tools/round9-eval/cag_round9_eval_broker_test.py": "74a001b2e7a203d66bf56c3bfd3b36526f7ad3c41b7ae071fb64e1c955d887cd",
     "tools/round9-eval/cag_round9_external_evaluator.py": "e8c2aa080a5e1874f922c4bc170744ac1cde7a03a52ee8043331f644c5a062fc",
     "tools/round9-eval/cag_round9_external_evaluator_test.py": "5a9c9f84ae827dd4ea7282730dfced4d122144fe557edcaaa6ba1f2b2757d159",
     "tools/round9-eval/round9_eval_core.py": "ece01a3da333a04f1ff70d984bb32ef70a090b55d1f41e0523fbe302a46c747d",
-    "tools/round9-eval/round9_eval_core_test.py": "0f99a108e51d96538a20b9b3f1f77fe484b8f0c724d0ba14b40f391c79d20ac9",
+    "tools/round9-eval/round9_eval_core_test.py": "6fd312efe0f64b097d2da0a0cdf78b779ed4d44607444ba7ab017ec81e74cae4",
     "tools/round9-eval/round9_eval_test_fixtures.py": "8b124e4c68f9576fa1d851bb86141a7d8bf3c216b8f41d3df2058dc2c7abfa62",
 }
 ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
@@ -1505,7 +1505,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "43282fc08546cc7d3023c0f30985f8c8e43363a48cb2b23464c173f5bdb6d76c"
+ROUND6_SAFE_GATE_TEST_SHA256 = "34c1cbb7f599cb90f2611d15ae028c89a2fbdcb7f2b1709fb45f62fc16d541a9"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -3315,6 +3315,7 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
         'go_bin="$selected_go_root/bin/go"',
         "export GOTOOLCHAIN=go1.26.4",
+        "export GOTOOLCHAIN=local",
         "export GOFLAGS=-mod=readonly",
         'selected_go_version="$("$go_bin" env GOVERSION)"',
         '[[ "$selected_go_version" == go1.26.4 ]]',
@@ -3358,6 +3359,20 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
             raise ContractError(
                 f"fixed CPA primary verification must bind the exact lightweight tag through Git origin and selected Go toolchain: {source}"
             )
+    toolchain_selection_order = (
+        "export GOTOOLCHAIN=go1.26.4",
+        'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
+        'go_bin="$selected_go_root/bin/go"',
+        "export GOTOOLCHAIN=local",
+        'selected_go_version="$("$go_bin" env GOVERSION)"',
+    )
+    toolchain_positions = [text.find(marker) for marker in toolchain_selection_order]
+    if any(text.count(marker) != 1 for marker in toolchain_selection_order) or (
+        toolchain_positions != sorted(toolchain_positions)
+    ):
+        raise ContractError(
+            f"CPA selected Go toolchain must resolve exact go1.26.4 before freezing GOTOOLCHAIN=local and isolating module caches: {source}"
+        )
     latest_body = shell_function_body(text, "resolve_remote_latest_release_tag", source)
     for required in (
         "timeout --signal=KILL 60s curl",

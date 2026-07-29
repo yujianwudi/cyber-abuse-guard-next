@@ -50,3 +50,9 @@ func TestValidateEventCoverageMetadataConsistency(t *testing.T) {
 		})
 	}
 }
+
+func TestClassifierProofBudgetIncompleteReasonIsValid(t *testing.T) {
+	if !validIncompleteReason("classifier_proof_budget") {
+		t.Fatal("classifier proof-budget incomplete reason was rejected")
+	}
+}

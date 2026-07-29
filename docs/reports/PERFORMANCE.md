@@ -2,21 +2,48 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
-Last updated: 2026-07-28 (Asia/Shanghai)
+Last updated: 2026-07-29 (Asia/Shanghai)
 
 ## Round 9 current status
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
 source identity is `classifier-policy-v9` /
-`e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
-The complete `make round6-benchmark` recipe has not been rerun after the
-referent-policy change that produced the current identity above. The most recent
-complete recipe is predecessor-only development evidence bound to digest
+The complete `make round6-benchmark` recipe was rerun in isolation on 2026-07-30
+under WSL Ubuntu 26.04, Linux amd64, and Go 1.26.4; every built-in acceptance
+test and benchmark lane passed. The 10,000-sample classifier run recorded
+P50/P95/P99 `328.852 us / 412.093 us / 558.688 us`, candidate-rich and
+near-budget adversarial cases `35.943486/16.983200 ms/op`, the approximately
+1 MiB META wrapper at `113.071336 ms/op`, and the
+1,024-unique-prohibition boundary at `80.469498 ms/op`. The separate 1 MiB
+profiled defensive-quote microbenchmark measured
+`198.164561-211.251020 ms/op`, below the external `<250 ms/op>` optimization
+target and materially below the older `344.061658-366.730649 ms/op` evidence.
+This closes the local microbenchmark residual without implying Host behavior.
+Exact-commit CI, CPA Host resource measurements, and the
+Tencent Cloud #2 matrix remain **PENDING** for
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+
+Evidence from the two immediate predecessors is retained without rebinding.
+Historical frozen main `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` used exact
+policy digest
+`f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333` and
+passed its source-only classifier gate, including the isolated P95 and
+directive-overflow acceptance below. Historical main
+`150c25e6352cb237cb3956bd66c83c3278c3fe33` used exact policy digest
+`e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971` and
+passed engineering CI run `30353591705`, but its Tencent Cloud #2 isolated
+audit was **FAIL BLOCKED** with 287 complete malicious fail-open cases, 36
+malicious incomplete 403 cases, and 2 complete benign false positives. Neither
+predecessor supplies current-identity performance evidence.
+
+The nearest older complete comparison is predecessor-only development evidence
+bound to digest
 `2c968f70cfe12e136c07e2856b589f220d464b2284f93e05f368cbb7c927848f`.
 That WSL Ubuntu 26.04 / Go 1.26.4 / GNU Make 4.4.1 run recorded classifier
 P50/P95/P99 `551.254 us / 957.089 us / 1.266960 ms`, candidate-rich and
@@ -31,26 +58,29 @@ Chat/Responses, Claude, and Gemini at
 `16,981/15,552/14,046/15,007 allocs/op`. The separate 1 MiB profiled
 defensive-quote microbenchmark measured `344.061658-366.730649 ms/op`, above
 the external `<250 ms/op` optimization target. Those measurements remain
-historical and are not relabeled as current-source evidence. On the current
-identity, isolated classifier performance acceptance passed with P95
-`1.5067 ms` against `<2 ms`, and the directive-overflow boundary reached at
-most `153.72 ms` against `<175 ms`; the complete benchmark recipe remains
-pending. No result here is final commit/tree, CPA Host, reproducible Linux
+historical and are not relabeled as current-source evidence. On historical
+`1a64639c` / `f9529ada...`, isolated classifier performance acceptance passed
+with P95 `1.5067 ms` against `<2 ms`, and the directive-overflow boundary
+reached at most `153.72 ms` against `<175 ms`; its complete benchmark recipe
+remained pending. No result here is final current commit/tree, CPA Host,
+reproducible Linux
 `.so`, release, or independent performance evidence.
 
 | Round 9 evidence | Current status |
 |---|---|
-| Current complete local Linux development recipe | **IDENTITY REBOUND; REVALIDATION PENDING.** CPA v7.2.104 changed the dependency locks included in the policy digest, producing `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`. The earlier classifier gate PASS remains historical evidence for `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`; no timing or full-benchmark result is reattributed to the new digest. |
+| Current `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14` performance acceptance | **LOCAL LINUX SOURCE-ONLY PASS.** Isolated `make round6-benchmark` passed under WSL Ubuntu 26.04 / Linux amd64 / Go 1.26.4. Classifier P50/P95/P99 were `328.852/412.093/558.688 us`; candidate-rich/near-budget were `35.943486/16.983200 ms/op`; long META was `113.071336 ms/op`; the 1,024-unique-prohibition boundary was `80.469498 ms/op`. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, below the external `<250 ms/op` target. No CPA Host, exact-commit CI, or independent performance PASS is inferred. |
+| Historical `150c25e6...` / `e0cbc975...` engineering and audit result | **ENGINEERING CI PASS / SECURITY AUDIT FAIL BLOCKED.** Exact-HEAD CI run `30353591705` passed, but the Tencent Cloud #2 isolated audit found 287 complete malicious fail-open cases, 36 malicious incomplete 403 cases, and 2 complete benign false positives. No performance acceptance is inferred for either that identity or the current tree. |
+| Historical `1a64639c...` / `f9529ada...` classifier gate | **HISTORICAL SOURCE-ONLY PASS.** The isolated classifier gate passed with P95 `1.5067 ms` against `<2 ms`, and the directive-overflow boundary reached at most `153.72 ms` against `<175 ms`. The complete `make round6-benchmark` recipe remained pending; this PASS is bound only to `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` and `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`. |
 | Pre-refresh complete local Linux development recipe (`2c968f70...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The complete recipe produced the detailed latency/allocation figures recorded above, including the long-prompt follow-up. It predates the current referent-policy identity and is not current-source, Host, artifact, or release evidence. |
 | Previous working-tree complete recipe (`5012c101...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The preceding policy snapshot recorded P50/P95/P99 `459.731/563.714/765.255 us`, candidate-rich/near-budget `41.898827/21.298198 ms/op`, long META `152.808023 ms/op`, and a transient 30,674-byte log SHA-256 `a0a2ae3ce885ca4c64bde47578bda0a8ec67534c73849a4ee65c6dcc7329249b`; it is not current-identity evidence |
-| Pre-final isolated classifier latency study | **HISTORICAL DEVELOPMENT PASS.** Fourteen predecessor working-tree runs and five clean-HEAD controls passed P95 `<2 ms` / P99 `<5 ms`. Their stable median was P50 `391.237 us`, P95 `468.491 us`, P99 `620.655 us`, and about `28,041 B/classification`; one whole-process WSL noise round reached P99 `4.871859 ms` but still passed. Use the complete recipe above for the present-policy result; do not relabel this predecessor study |
+| Pre-final isolated classifier latency study | **HISTORICAL DEVELOPMENT PASS.** Fourteen predecessor working-tree runs and five clean-HEAD controls passed P95 `<2 ms` / P99 `<5 ms`. Their stable median was P50 `391.237 us`, P95 `468.491 us`, P99 `620.655 us`, and about `28,041 B/classification`; one whole-process WSL noise round reached P99 `4.871859 ms` but still passed. Do not use this predecessor study as a present-policy result. |
 | Historical complete local Linux development recipe (pre-current identity) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** `GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go make round6-benchmark` with `GOFLAGS=-mod=readonly` exited successfully. Raw log: `dist/round9-worklogs/round6-benchmark-post-perf-20260724.log`, 26441 bytes, SHA-256 `ec603a4b437820f579d69340feba76bd63752ab5a63cf63998b6e87873d6c063` |
 | Historical role-aware maximum-parts path (pre-current identity) | **HISTORICAL DEVELOPMENT REGRESSION PASS.** Three `BenchmarkClassifierCandidateRichMaxParts` samples recorded 37.311769-39.621583 ms/op, 6,622,070-6,624,038 B/op, and 700-706 allocs/op. The checked-in hard-bound test remains part of CI, but its timing/allocation result was not rerun for the working-tree identity stated above |
 | Pre-fix v9 WSL source self-check (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Linux amd64 Go 1.26.4 recorded classifier p50/p95/p99 of 454.800 µs / 764.214 µs / 1.007808 ms over 10,000 samples; adversarial candidate-rich and near-budget cases were 42.930 ms/op and 24.744 ms/op. One-iteration streaming samples were 51.037 ms for 270 KiB, 197.453 ms for 1 MiB, 803.990 ms for 4 MiB, and 1.616 s near 8 MiB. These numbers predate the current policy identity and are not CPA Host or release evidence |
 | Pre-fix normalized multilingual long-frame signal pass (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Three isolated Go 1.26.4 `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` runs measured 0.355-0.363 ms/op at 16 KiB (45.15-46.21 MB/s, 810-813 B/op, 2 allocs/op) and 22.230-22.564 ms/op at 1 MiB (46.47-47.17 MB/s, 841-847 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path measured 7.873-8.598 ms/op at 16 KiB (543,028-563,462 B/op, 108-110 allocs/op) and 250.230-259.302 ms/op at 1 MiB (16,886,254-17,299,688 B/op, 333-339 allocs/op). These are historical WSL source microbenchmarks, not current-identity or CPA Host evidence |
 | Pre-fix directive-clause overflow wall-clock boundary (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS WITH LIMITED CONCURRENT HEADROOM.** Three isolated Go 1.26.4 runs measured the 1,024-unique-prohibition case at 93.324-97.670 ms/op, and a later exact-commit isolated rerun measured 99.842 ms/op, 449,483 B/op, and 2,103 allocs/op against the `<175 ms/op` gate. The independent audit also observed 184-198 ms/op when unrelated package work ran concurrently. Keep the deterministic wall-clock gate isolated and treat Host concurrency, RSS, P95/P99, and near-8 MiB fields as a separate acceptance lane; no current-policy or CPA Host latency/throughput result is inferred |
 | Pre-fix diagnostic retained as history | The earlier working-tree snapshot recorded 14.948-16.418 s/op, approximately 397 MB/op, and about 1.077 million allocs/op. Its CPU profile (`6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69`) and memory profile (`fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6`) remain diagnostic chronology only and are not attributed to the current classifier identity |
-| Classifier latency and allocation acceptance on the current source identity | **PARTIAL SOURCE-ONLY DEVELOPMENT PASS.** Isolated hard acceptance tests passed; the complete benchmark recipe, final commit/tree, and exact candidate artifact binding remain `NOT_PROVIDED` |
+| Classifier latency and allocation acceptance on the current source identity | **LOCAL LINUX SOURCE-ONLY PASS.** The isolated hard acceptance tests and complete benchmark recipe passed for `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; final commit/tree, exact candidate artifact, CPA Host, and independent binding are not provided. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, satisfying the external `<250 ms/op` local optimization target. |
 | Standalone and CPA Host RSS on the exact candidate | `NOT_PROVIDED` |
 | CPA Host latency, throughput, concurrency, and first-byte behavior | `NOT_PROVIDED` |
 | Repository-local counted-Mock runtime performance | `NOT_PROVIDED` |
@@ -71,9 +101,9 @@ The defensive-quote parity repair runs only when a current profiled scope has
 both directive and carrier units. Ordinary short requests avoid reconstruction;
 long fields retain a three-bit signal set. A single carrier is no longer
 classified twice, and a reconstructed proof is capped at 66,080 bytes. Tight
-`MaxChunks` regression passes as a source behavior check; the complete current-
-identity performance recipe and the isolated short classifier latency gate both
-passed at the source boundary. The
+`MaxChunks` regression remains historical `1a64639c` / `f9529ada...` evidence;
+the current-identity complete recipe and isolated short classifier latency gate
+also passed in the 2026-07-29 source-only run. The
 over-512-byte signal path performs one multi-pattern scan and shares the main
 normalized view when no compact carry was injected; the conservative fallback
 normalizes independently. Chinese, Japanese, Korean, and mixed-language terms
@@ -84,12 +114,15 @@ classification only when capacity eviction is required, allowing complete safe
 scopes to leave the window. No exact CPA Host latency, RSS, or throughput result
 is inferred from those source-only checks.
 
-The incident-response false-positive repair changes only bounded analytical and
-non-execution grammar and does not alter the long-frame matcher or streaming
-data structures. The current policy now has both the complete source benchmark
-recipe and isolated classifier latency evidence above, but still requires
-separate CPA Host concurrency/RSS/tail-latency evidence before any broader
-performance claim.
+The current remediation includes bounded classifier, streaming proof-budget,
+and eligibility-path changes. Historical `1a64639c` / `f9529ada...` has the isolated
+classifier evidence recorded above; its complete benchmark recipe remained
+pending. The current
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`
+identity passed the complete local recipe but
+still requires separate CPA Host concurrency/RSS/tail-latency evidence, and its
+1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`,
+below the external `<250 ms/op` local target, before any broader performance claim.
 
 A CPU profile of the historical `f37a25dd` overflow fixture measured about
 130.066 ms/op with profiling overhead. The overlapping cumulative samples put

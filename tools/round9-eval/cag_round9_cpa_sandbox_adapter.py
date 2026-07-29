@@ -1686,6 +1686,7 @@ INCOMPLETE_REASON_VALUES = frozenset(
         "text_part_limit",
         "role_attribution",
         "classification_chunk_limit",
+        "classifier_proof_budget",
         "total_text_limit",
         "multipart_limit",
         "multipart_schema",

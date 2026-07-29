@@ -982,6 +982,7 @@ type counters struct {
 	incompleteDeferredTextLimit      atomic.Uint64
 	incompleteUnsupportedContentType atomic.Uint64
 	incompleteRPCBodyLimit           atomic.Uint64
+	incompleteClassifierProofBudget  atomic.Uint64
 	executorBlocks                   atomic.Uint64
 	managementTests                  atomic.Uint64
 	routerErrors                     atomic.Uint64
@@ -1035,6 +1036,7 @@ func (c *counters) snapshot() map[string]uint64 {
 		"incomplete_deferred_text_limit":       c.incompleteDeferredTextLimit.Load(),
 		"incomplete_unsupported_content_type":  c.incompleteUnsupportedContentType.Load(),
 		"incomplete_rpc_body_limit":            c.incompleteRPCBodyLimit.Load(),
+		"incomplete_classifier_proof_budget":   c.incompleteClassifierProofBudget.Load(),
 		"rpc_body_limit":                       c.incompleteRPCBodyLimit.Load(),
 		"executor_blocks":                      c.executorBlocks.Load(),
 		"management_tests":                     c.managementTests.Load(),

@@ -120,6 +120,7 @@ func TestInspectionDispositionIncompleteOverridesMaliciousPrefix(t *testing.T) {
 		extract.IncompleteRoleAttribution,
 		extract.IncompleteTotalTextLimit,
 		extract.IncompleteClassificationChunkLimit,
+		extract.IncompleteClassifierProofBudget,
 		extract.IncompleteMultipartBoundaryLimit,
 		extract.IncompleteMultipartPartLimit,
 		extract.IncompleteMultipartHeaderLimit,
@@ -174,6 +175,45 @@ func TestInspectionDispositionIncompleteOverridesMaliciousPrefix(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestClassifierProofBudgetIncompleteDispositionContract(t *testing.T) {
+	reason := classifierCoverageReason(classifier.Coverage{
+		State:  classifier.CoverageUnavailable,
+		Reason: classifier.CoverageReasonClassifierProofBudget,
+	})
+	if reason != extract.IncompleteClassifierProofBudget {
+		t.Fatalf("classifier coverage reason = %q, want %q", reason, extract.IncompleteClassifierProofBudget)
+	}
+
+	for _, testCase := range []struct {
+		mode      config.Mode
+		wantBlock bool
+		wantAudit bool
+		wantCode  string
+		wantKind  decisionKind
+	}{
+		{
+			mode: config.ModeBalanced, wantAudit: true,
+			wantCode: "allow_due_to_incomplete_inspection", wantKind: decisionAuditIneligibleRisk,
+		},
+		{
+			mode: config.ModeStrict, wantBlock: true,
+			wantCode: "block_due_to_incomplete_inspection", wantKind: decisionBlockIncomplete,
+		},
+	} {
+		t.Run(string(testCase.mode), func(t *testing.T) {
+			decision := inspectionDisposition(testCase.mode, inspectionOutcome{
+				Incomplete: []extract.IncompleteReason{reason},
+			}, config.OpaqueMediaPolicyAudit)
+			if decision.Block != testCase.wantBlock || decision.Audit != testCase.wantAudit ||
+				decision.Code != testCase.wantCode || decision.Kind != testCase.wantKind ||
+				decision.Category != "classifier_proof_budget" ||
+				decision.RouteReason != "cyber_abuse_guard_classifier_proof_budget" {
+				t.Fatalf("decision = %#v", decision)
+			}
+		})
 	}
 }
 

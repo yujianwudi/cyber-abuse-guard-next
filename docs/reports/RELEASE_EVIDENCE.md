@@ -2,10 +2,10 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
-Last updated: 2026-07-28 (Asia/Shanghai)
+Last updated: 2026-07-29 (Asia/Shanghai)
 
 ## Current Round 9 source-tree status — not a release PASS
 
@@ -13,15 +13,22 @@ The active development target is Linux amd64 `v0.16-rc.4`,
 classifier-policy-v9, ruleset 1.0.10, audit schema v6, and CPA
 `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` with RPC schema 2. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
-counted Mock. Final classifier/public-corpus freeze, exact-main CI, reproducible
-release assets, protected Host execution, independent audit, tag, and GitHub
-prerelease are not provided by this source snapshot.
+counted Mock.
 
-Exact-main commit `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` previously
-passed CI `30327322793`, Round 9 gate `30327322810`, and CodeQL `30327322801`
-against CPA v7.2.103. That frozen result proves only v7.2.103 development
-source/Host-load and reproducibility gates; it is not v7.2.104, protected
-counted-Mock, independent evaluation, release, or production evidence.
+The last committed isolated-audit baseline is the exact audited commit
+`150c25e6352cb237cb3956bd66c83c3278c3fe33` with classifier
+historical classifier digest `e0cbc975...`.
+CI run `30353591705` passed its engineering gates, but that result is not a
+safety or release PASS. The isolated safety audit returned `FAIL / BLOCKED`:
+287 complete malicious cases failed open, 36 malicious incomplete cases
+returned HTTP 403, and 2 complete benign cases were false positives.
+
+The current source snapshot carries a remediation at
+`classifier-policy-v9` /
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+It has no commit-bound CI or second-machine retest. Final remediation freeze,
+exact-main CI, reproducible release assets, protected
+Host execution, independent re-audit, tag, and GitHub prerelease remain pending.
 
 The immutable `v0.16-rc.3` Tag is a failed Phase 1 identity, not the current
 candidate. Run `30118817188` failed on the undeclared PyYAML import before any
@@ -32,11 +39,18 @@ while the active namespace advances to `v0.16-rc.4`.
 candidate_tag: v0.16-rc.4 / NOT CREATED
 release_kind: prerelease
 latest: false
-exact_main_ci: NOT_PROVIDED
+audited_head: 150c25e6352cb237cb3956bd66c83c3278c3fe33
+audited_classifier_policy_digest: e0cbc975... / historical exact value retained in TEST_REPORT.md
+engineering_ci: 30353591705 / PASS / ENGINEERING ONLY
+safety_audit: FAIL / BLOCKED
+safety_findings: complete_malicious_fail_open=287 / malicious_incomplete_http_403=36 / complete_benign_false_positive=2
+remediation_source_snapshot: classifier-policy-v9 / e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14 / SOURCE GATES ONLY
+remediation_exact_commit_ci: PENDING
+second_machine_retest: PENDING
 counted_mock_host: NOT_PROVIDED
-independent_audit: NOT_PROVIDED
+independent_reaudit: PENDING
 production_approval: NOT_GRANTED
-overall: BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT
+overall: ENGINEERING BASELINE PASS / SECURITY AUDIT FAIL / BLOCKED
 ```
 
 ## Historical Round 8 source-tree status — not a Round 9 release PASS

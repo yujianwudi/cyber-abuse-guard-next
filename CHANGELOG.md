@@ -2,13 +2,21 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
 Source-tree status updated: 2026-07-28 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Repair the `150c25e6` isolation-audit findings with candidate-local quoted
+  carrier ownership, request-local system/developer defensive-owner parity,
+  bounded batch/streaming reactivation, real-credential phishing relations,
+  malformed percent-decoding preservation, and inert log/console/terminal
+  candidate suppression. The resulting working-tree policy identity is
+  `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`;
+  exact-main CI, the complete benchmark recipe, and the authoritative
+  CPA v7.2.104 counted-Mock matrix remain revalidation gates.
 - Advance the sole active CPA contract to official `v7.2.104`
   (`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) and its reviewed module sum
   while retaining C ABI 1 and RPC schema 2. The upstream plugin ABI, RPC
@@ -20,9 +28,9 @@ Source-tree status updated: 2026-07-28 (Asia/Shanghai)
   remains rejected. The v7.2.103 exact-main CI/Host result is retained as frozen
   historical evidence and is not promoted to a v7.2.104 PASS.
   Because the classifier identity deliberately binds `go.mod` and `go.sum`,
-  the unchanged `classifier-policy-v9` behavior is rebound for the v7.2.104
-  dependency locks to
-  `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`;
+  the then-current `classifier-policy-v9` behavior was rebound for the
+  v7.2.104 dependency locks to the predecessor digest
+  `e0cbc975...`;
   the earlier `f9529ada...` identity remains historical v7.2.103 evidence.
 - Earlier in this Round 9 line, move the active CPA contract to
   `v7.2.103` (`cade44b9cdee6b9328ea2648fd119129fdf11e2d`) with reviewed module and

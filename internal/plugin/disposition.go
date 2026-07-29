@@ -446,6 +446,8 @@ func incompleteCategory(reasons []extract.IncompleteReason) string {
 		return "total_text_limit"
 	case contains(extract.IncompleteClassificationChunkLimit):
 		return "classification_chunk_limit"
+	case contains(extract.IncompleteClassifierProofBudget):
+		return "classifier_proof_budget"
 	case contains(extract.IncompleteDeferredTextCandidateLimit):
 		return "deferred_text_limit"
 	case contains(extract.IncompleteScanByteLimit,
@@ -477,6 +479,8 @@ func incompleteRouteReason(category string) string {
 		return "cyber_abuse_guard_total_text_limit"
 	case "classification_chunk_limit":
 		return "cyber_abuse_guard_classification_chunk_limit"
+	case "classifier_proof_budget":
+		return "cyber_abuse_guard_classifier_proof_budget"
 	case "multipart_limit":
 		return "cyber_abuse_guard_multipart_limit"
 	case "multipart_schema":

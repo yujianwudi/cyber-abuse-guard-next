@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -17,9 +17,22 @@ current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e4634646
 > dependency-bootstrap failure and has no candidate assets or Release. No
 > `v0.16-rc.4` Tag, Release, or stable `v0.16` is created by the source changes
 > alone. The protected
-> no-checkout external CPA evaluation, protected-ledger proof, exact-main CI,
-> and an independent audit are still required. Production approval has not been
-> granted, and production Balanced must remain gated.
+> no-checkout external CPA evaluation, protected-ledger proof, exact-main CI for
+> the current remediation, and a fresh independent audit are still required.
+> Production approval has not been granted, and production Balanced must remain
+> gated.
+
+> [!CAUTION]
+> The exact committed baseline `150c25e6352cb237cb3956bd66c83c3278c3fe33`
+> with classifier `classifier-policy-v9` /
+> historical digest `e0cbc975...`
+> and CPA `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` passed engineering
+> CI run `30353591705`, but the isolated safety audit **FAILED / BLOCKED**:
+> 287 complete malicious cases failed open, 36 malicious incomplete cases
+> returned HTTP 403, and 2 complete benign cases were false positives. The
+> current remediation source identity is `classifier-policy-v9` /
+> `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`;
+> its commit-bound CI and second-machine retest are still **PENDING**.
 
 [![Historical CI](https://img.shields.io/badge/historical_CI-v0.15-blue)](https://github.com/yujianwudi/cyber-abuse-guard/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26.4-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -56,12 +69,15 @@ is not sent to a public classifier.
 | Source version / RC target | `0.16` / `v0.16-rc.4` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
 | Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
 | GitHub publication | `v0.16-rc.3` has an annotated Tag but no Release or Actions artifact; no `v0.16-rc.4` Tag or Release exists. `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
-| Frozen v7.2.103 exact-main baseline | `1a64639c0bac7a157d8201c1593bd68cf6e7fe11`; CI `30327322793`, Round 9 gate `30327322810`, and CodeQL `30327322801` passed before v7.2.104 was published. This is v7.2.103 development/Host-load evidence only; the current v7.2.104 lane remains pending |
-| CPA source/compile target | `v7.2.104` (`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) |
+| Audited committed baseline | `150c25e6352cb237cb3956bd66c83c3278c3fe33`; historical classifier digest `e0cbc975...`; CPA v7.2.104 |
+| Engineering CI | Run `30353591705` **PASS** for the exact audited baseline; this is engineering evidence only, not a safety or release PASS |
+| Safety audit | **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
+| Current remediation | Classifier `classifier-policy-v9` / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; local Linux unit/race/script/corpus/benchmark gates pass, while commit-bound CI and second-machine retest remain **PENDING** |
+| CPA source/compile target | Local pinned source/compile matrix **PASS** for `v7.2.104` (`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) under Go 1.26.4; explicit remote latest/tag checks, live Host `.so` load, and protected runtime matrix remain pending |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
-| Independent audit | A user-supplied external report for `f37a25dd` states that CPA v7.2.95 multilingual checks passed and identified a defensive incident-response false positive. The report is not a repository-bound attestation; the current source still requires exact-commit re-audit |
+| Independent audit | The 2026-07-29 isolated audit of exact baseline `150c25e6` is a safety **FAIL / BLOCKED** with the counts above. The current remediation has not been independently re-audited |
 | Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
 | v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
@@ -70,7 +86,7 @@ is not sent to a public classifier.
 | CPA Host matrix | CPA v7.2.104, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v9` / `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`; Host and release binding remain pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v9` / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; Host and release binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |

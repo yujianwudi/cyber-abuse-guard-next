@@ -1946,6 +1946,22 @@ jobs:
                 "export GOTOOLCHAIN=go1.26.04 # lookalike",
                 1,
             ),
+            text.replace("export GOTOOLCHAIN=local\n", "", 1),
+            text.replace(
+                'export GOTOOLCHAIN=go1.26.4\n'
+                'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
+                'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"\n'
+                'export GOTOOLCHAIN=go1.26.4',
+                1,
+            ),
+            text.replace(
+                'export GOTOOLCHAIN=local\nexport GOFLAGS=-mod=readonly\n'
+                'selected_go_version="$("$go_bin" env GOVERSION)"',
+                'export GOFLAGS=-mod=readonly\n'
+                'selected_go_version="$("$go_bin" env GOVERSION)"\n'
+                'export GOTOOLCHAIN=local',
+                1,
+            ),
             text.replace("export GOFLAGS=-mod=readonly", "export GOFLAGS=-mod=mod", 1),
             text.replace(
                 '"$cpa_module/sdk/pluginabi"',

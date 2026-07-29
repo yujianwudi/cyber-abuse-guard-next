@@ -2,10 +2,46 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
-## 2026-07-25 Round 9 当前交接门禁
+## 2026-07-29 当前审计与修复门禁
+
+最近一次已提交并接受隔离审计的基线是：
+
+```text
+audited_head: 150c25e6352cb237cb3956bd66c83c3278c3fe33
+audited_classifier_policy_digest: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+audited_cpa: v7.2.104 / c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
+engineering_ci: 30353591705 / PASS
+security_audit: FAIL / BLOCKED
+complete_malicious_fail_open: 287
+malicious_incomplete_http_403: 36
+complete_benign_false_positive: 2
+```
+
+CI `30353591705` 只证明上述精确 HEAD 的工程构建与测试门禁通过，不能覆盖隔离
+审计的安全失败。该审计观察到 287 个 coverage complete 的恶意样本放行、36 个
+恶意 incomplete 样本返回 HTTP 403，以及 2 个 coverage complete 的正常样本误拦；
+因此该基线不得发布、部署或恢复生产 Balanced。
+
+当前候选修复的源码身份是 `classifier-policy-v9` /
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`。
+它不是新的已审计候选：提交绑定 CI 和二号机隔离重验均为
+`PENDING`。在三类失败全部由绑定同一精确提交的新证据关闭前，当前结论保持：
+
+```text
+ENGINEERING BASELINE PASS / SECURITY AUDIT FAIL /
+CURRENT POLICY IDENTITY RECORDED / LOCAL LINUX SOURCE GATES PASS /
+CPA V7.2.104 SOURCE_COMPILE CONTRACT PASS /
+EXACT-COMMIT CI AND SECOND-MACHINE RETEST PENDING /
+BLOCKED
+```
+
+## Historical snapshot — 2026-07-25 Round 9 handoff gate
+
+以下“当前”“本轮”只描述 2026-07-25 的旧工作树与当时尚未提供的门禁状态，不能
+覆盖上方 2026-07-29 的隔离审计 `FAIL / BLOCKED`，也不能被重标为当前 PASS。
 
 当前源码版本为 `0.16`，开发目标为 Linux amd64 非 latest 预发行
 `v0.16-rc.4`、`classifier-policy-v9`、ruleset `1.0.10`、audit schema v6，

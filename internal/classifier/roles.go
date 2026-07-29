@@ -109,7 +109,7 @@ func (c *Classifier) ClassifySegmentsWithPolicy(segments []extract.Segment, mode
 			c.classifyWithPolicy(parts, mode, thresholds, policy, false),
 			FindingOriginNonUserOrUntrusted, mode, thresholds,
 		)
-		if resultIsNeutralClassifierWindowIncomplete(best) {
+		if resultIsNeutralClassifierIncomplete(best) {
 			attachBehaviorGraph(&best, "unknown_role_fallback", "")
 			return best
 		}
@@ -121,7 +121,7 @@ func (c *Classifier) ClassifySegmentsWithPolicy(segments []extract.Segment, mode
 				mode,
 				thresholds,
 			)
-			if resultIsNeutralClassifierWindowIncomplete(candidate) {
+			if resultIsNeutralClassifierIncomplete(candidate) {
 				attachBehaviorGraph(&candidate, "unknown_role_fallback", "")
 				return candidate
 			}
@@ -136,7 +136,7 @@ func (c *Classifier) ClassifySegmentsWithPolicy(segments []extract.Segment, mode
 					mode,
 					thresholds,
 				)
-				if resultIsNeutralClassifierWindowIncomplete(adjacent) {
+				if resultIsNeutralClassifierIncomplete(adjacent) {
 					attachBehaviorGraph(&adjacent, "unknown_role_fallback", "")
 					return adjacent
 				}
@@ -371,8 +371,10 @@ func (c *Classifier) ClassifySegmentsWithPolicy(segments []extract.Segment, mode
 }
 
 type profiledSegmentRef struct {
-	index   int
-	segment extract.Segment
+	index              int
+	physicalOrdinal    int
+	hasPhysicalOrdinal bool
+	segment            extract.Segment
 }
 
 type profiledSegmentGroup struct {
@@ -430,10 +432,23 @@ func hasProfiledSegmentMetadata(segments []extract.Segment) bool {
 	return false
 }
 
+func segmentUsesLegacyUntrustedFallback(segment extract.Segment) bool {
+	return segment.Role == extract.RoleUnknown &&
+		segment.Provenance == extract.ProvenanceContent &&
+		segment.UserAttribution == extract.UserAttributionUntrusted &&
+		!segment.IsCurrentTurn && !segment.HasTerminalCoordinates &&
+		segment.ToolAssociation == extract.ToolResultAssociationNone
+}
+
 func segmentDeclaresProfiledMetadata(segment extract.Segment) bool {
 	// Index values cannot signal presence: zero is a valid first conversation
 	// item/turn, while -1 is also emitted by the legacy extractor for unknown
-	// coordinates. Structural ownership metadata is the opt-in boundary.
+	// coordinates. Scope/path/content metadata describes structure, but cannot by
+	// itself upgrade roleless untrusted content into profiled authority. Explicit
+	// current/terminal/tool authority remains an opt-in boundary.
+	if segmentUsesLegacyUntrustedFallback(segment) {
+		return false
+	}
 	return segment.ContentKind != extract.ContentKindUnknown || segment.ScopeID != 0 ||
 		segment.FieldPathHash != "" || segment.IsCurrentTurn ||
 		segment.ToolAssociation != extract.ToolResultAssociationNone || segment.HasTerminalCoordinates
@@ -479,6 +494,7 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	truncated := false
 	quotedOrInertSuppressed := false
 	carrierProofUnavailable := false
+	pendingClassifierIncomplete := CoverageReasonNone
 	for _, group := range buildProfiledCurrentMetaControlGroups(segments) {
 		activeGroup, complete := c.profiledActiveMetaControlGroup(segments, group)
 		if !complete {
@@ -556,6 +572,15 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			candidate := c.classifyWithPolicy(
 				parts, mode, thresholds, policy, false,
 			)
+			if resultIsNeutralClassifierIncomplete(candidate) {
+				reason := classifierIncompleteReason(candidate)
+				if pendingClassifierIncomplete == CoverageReasonNone &&
+					classifierIncompleteCoverageReason(reason) {
+					pendingClassifierIncomplete = reason
+				}
+				index = end
+				continue
+			}
 			if profiledSelfContainedCarrierCandidate(candidate, thresholds) {
 				if len(refs) > 1 {
 					profiledCarrierRunClearOccurrenceOffsets(&candidate)
@@ -582,6 +607,14 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	}
 	systemCarrierGroups := buildProfiledRequestLocalSystemReactivationGroups(segments)
 	groups := buildProfiledSegmentGroups(segments, false)
+	carrierOmissions, unresolvedCarriers, carrierSuppressed, carrierOwnershipComplete :=
+		c.profiledRequestLocalSystemCarrierGenericPlan(systemCarrierGroups, true)
+	if !carrierOwnershipComplete {
+		carrierProofUnavailable = true
+	}
+	if carrierSuppressed {
+		quotedOrInertSuppressed = true
+	}
 	if candidate, ok, complete := c.bestProfiledRequestLocalSystemReactivationCandidate(
 		systemCarrierGroups, mode, thresholds, policy,
 	); !complete {
@@ -592,15 +625,22 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			best = candidate
 		}
 	}
-	if candidate, ok := c.bestProfiledCurrentNaturalLanguageCandidate(
+	candidate, ok, incompleteReason := c.bestProfiledCurrentNaturalLanguageCandidate(
 		groups, mode, thresholds, policy,
-	); ok {
+	)
+	if incompleteReason != CoverageReasonNone {
+		if pendingClassifierIncomplete == CoverageReasonNone {
+			pendingClassifierIncomplete = incompleteReason
+		}
+	}
+	if ok {
 		truncated = truncated || candidate.Truncated
 		if roleResultBetter(candidate, best) {
 			best = candidate
 		}
 	}
 	for _, group := range groups {
+		group = profiledGroupWithoutCarrierIndexes(group, carrierOmissions, unresolvedCarriers)
 		if len(group.parts) == 0 {
 			continue
 		}
@@ -630,24 +670,30 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			markQuotedOrInertSuppressed(&candidate)
 			quotedOrInertSuppressed = true
 		}
+		enforcementScope := enforcementScopeForProfiledGroup(group.refs)
 		candidate = withRoleAwareFindingOriginAndScope(
-			candidate, origin, enforcementScopeForProfiledGroup(group.refs), mode, thresholds,
+			candidate, origin, enforcementScope, mode, thresholds,
 		)
 		c.annotateProfiledResult(&candidate, group.refs, false, policy, mode, thresholds)
 		if candidate.DecisionExplanation != nil && candidate.DecisionExplanation.QuotedOrInertSuppressed {
 			quotedOrInertSuppressed = true
 		}
-		truncated = truncated || candidate.Truncated
-		if candidate.Truncated && candidate.Coverage.State == CoverageUnavailable &&
-			candidate.Coverage.Reason == CoverageReasonClassifierWindow &&
-			!resultHasEligibleBlockingCandidate(best, thresholds) {
-			// The grouped current-user scope exhausted a bounded clause/candidate
-			// proof. Per-field audit findings cannot substitute for a complete
-			// request-local identity, so return the neutral Round 9 incomplete
-			// disposition unless an independent eligible candidate was already
-			// proven without relying on this group.
-			return c.profiledProofUnavailableResult(mode, thresholds, policy)
+		classifierIncomplete := candidate.Truncated &&
+			candidate.Coverage.State == CoverageUnavailable &&
+			classifierIncompleteCoverageReason(candidate.Coverage.Reason)
+		if classifierIncomplete {
+			// Only a group with current request enforcement authority can make its
+			// unresolved classifier proof request-wide. Historical assistant/user
+			// audit groups remain inspectable evidence, but cannot change current
+			// coverage. A later independent complete block still wins regardless of
+			// physical field order.
+			if enforcementScope != EnforcementScopeNone &&
+				pendingClassifierIncomplete == CoverageReasonNone {
+				pendingClassifierIncomplete = candidate.Coverage.Reason
+			}
+			continue
 		}
+		truncated = truncated || candidate.Truncated
 		if roleResultBetter(candidate, best) {
 			best = candidate
 		}
@@ -745,8 +791,15 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			}
 		}
 	}
-	if carrierProofUnavailable && !resultHasEligibleBlockingCandidate(best, thresholds) {
-		return c.profiledProofUnavailableResult(mode, thresholds, policy)
+	if !resultHasEligibleBlockingCandidate(best, thresholds) {
+		if pendingClassifierIncomplete != CoverageReasonNone {
+			return c.profiledProofUnavailableResult(
+				mode, thresholds, policy, pendingClassifierIncomplete,
+			)
+		}
+		if carrierProofUnavailable {
+			return c.profiledProofUnavailableResult(mode, thresholds, policy)
+		}
 	}
 
 	best.Truncated = best.Truncated || truncated
@@ -769,14 +822,16 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 // Only natural-language directive fields with exact current-user coordinates
 // enter this path. Code, logs, configuration, tool carriers, historical text,
 // and unknown ownership remain governed by their existing carrier contracts.
+// The third return value preserves the first neutral classifier-local
+// incomplete while independent eligible candidates continue competing.
 func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 	groups []profiledSegmentGroup,
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
-) (Result, bool) {
+) (Result, bool, CoverageReason) {
 	if c == nil || len(groups) == 0 {
-		return Result{}, false
+		return Result{}, false, CoverageReasonNone
 	}
 
 	signals := takeClassifierSignalBuffer(c.signalCount)
@@ -794,7 +849,16 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 
 	best := Result{}
 	found := false
+	pendingClassifierIncomplete := CoverageReasonNone
 	consider := func(candidate Result) {
+		if resultIsNeutralClassifierIncomplete(candidate) {
+			reason := classifierIncompleteReason(candidate)
+			if pendingClassifierIncomplete == CoverageReasonNone &&
+				classifierIncompleteCoverageReason(reason) {
+				pendingClassifierIncomplete = reason
+			}
+			return
+		}
 		if !resultHasEligibleMaliciousWinner(candidate, thresholds) {
 			return
 		}
@@ -857,7 +921,13 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 				continue
 			}
 
-			if preserveIndependentField && c.profiledSignalBufferHasOrdinaryCandidateCore(signals) {
+			ordinaryCandidateCore := c.profiledSignalBufferHasOrdinaryCandidateCore(signals)
+			if preserveIndependentField &&
+				(ordinaryCandidateCore || len(segment.Text) > maxCompactIntentProofBytes) {
+				// Over-budget fields can end in a neutral classifier-local incomplete
+				// even when their bounded signal summary cannot prove an ordinary
+				// candidate core. Classify that field independently so a later benign
+				// field in the same scope cannot erase the unresolved proof.
 				candidate := c.classifyTrustedCurrentUserWithPolicy(
 					[]string{segment.Text}, mode, thresholds, policy,
 				)
@@ -867,7 +937,9 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 				c.annotateProfiledResult(
 					&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
 				)
-				consider(candidate)
+				if resultIsNeutralClassifierIncomplete(candidate) || ordinaryCandidateCore {
+					consider(candidate)
+				}
 			}
 			if !mayContainLocalSubcandidate {
 				// Most multi-field control-plane payloads contain only META signals.
@@ -918,13 +990,28 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 			}
 		}
 	}
-	return best, found
+	return best, found, pendingClassifierIncomplete
 }
 
 type profiledRequestLocalSystemReactivationProof struct {
 	carrierRefs []profiledSegmentRef
 	parts       []string
 	anchor      profiledSegmentRef
+}
+
+type profiledRequestLocalSystemCarrierOwnerState uint8
+
+const (
+	profiledRequestLocalSystemCarrierUnclaimed profiledRequestLocalSystemCarrierOwnerState = iota
+	profiledRequestLocalSystemCarrierSuppressed
+	profiledRequestLocalSystemCarrierActivated
+)
+
+type profiledRequestLocalSystemCarrierOwnerRun struct {
+	first  int
+	end    int
+	anchor int
+	state  profiledRequestLocalSystemCarrierOwnerState
 }
 
 // bestProfiledRequestLocalSystemReactivationCandidate supplies the narrow
@@ -1160,10 +1247,15 @@ func (c *Classifier) profiledProofUnavailableResult(
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
+	reasons ...CoverageReason,
 ) Result {
+	reason := CoverageReasonClassifierWindow
+	if len(reasons) != 0 && classifierIncompleteCoverageReason(reasons[0]) {
+		reason = reasons[0]
+	}
 	result := c.classifyWithPolicy(nil, mode, thresholds, policy, false)
 	result.Coverage = Coverage{
-		State: CoverageUnavailable, Reason: CoverageReasonClassifierWindow,
+		State: CoverageUnavailable, Reason: reason,
 	}
 	result.Truncated = true
 	result.FindingConfidence = FindingNone
@@ -1816,41 +1908,91 @@ func (c *Classifier) profiledRequestLocalSystemSurvivingOwnerIndexes(
 	if c == nil || len(refs) == 0 {
 		return nil, true
 	}
-	parts := make([]string, len(refs))
-	for index, ref := range refs {
-		if profiledRequestLocalSystemDirective(ref.segment) {
-			parts[index] = ref.segment.Text
-		}
-	}
-	indexes, complete := affirmativeProfiledPartIndexes(c, parts)
-	if !complete {
-		return nil, false
-	}
 	surviving := make([]bool, len(refs))
-	for _, index := range indexes {
-		if index >= 0 && index < len(surviving) {
-			surviving[index] = true
+	// Cancellation is a field-local transaction decision. Partition before
+	// building the reverse-scan ledger so a neighboring provider field, or the
+	// same path reused after a physical gap, cannot revoke this owner's speech act.
+	for first := 0; first < len(refs); {
+		end := first + 1
+		for end < len(refs) && profiledRequestLocalSystemOwnerTransactionContinues(
+			refs[end-1], refs[end],
+		) {
+			end++
 		}
+		parts := make([]string, end-first)
+		for index := first; index < end; index++ {
+			if profiledRequestLocalSystemDirective(refs[index].segment) {
+				parts[index-first] = refs[index].segment.Text
+			}
+		}
+		indexes, complete := affirmativeProfiledPartIndexes(c, parts)
+		if !complete {
+			return nil, false
+		}
+		for _, index := range indexes {
+			if index >= 0 && index < len(parts) {
+				surviving[first+index] = true
+			}
+		}
+		first = end
 	}
 	return surviving, true
 }
 
-func (c *Classifier) profiledRequestLocalSystemCarrierReactivationProofs(
+func profiledSegmentRefsPhysicallyAdjacent(previous, current profiledSegmentRef) bool {
+	if previous.hasPhysicalOrdinal || current.hasPhysicalOrdinal {
+		return previous.hasPhysicalOrdinal && current.hasPhysicalOrdinal &&
+			current.physicalOrdinal == previous.physicalOrdinal+1
+	}
+	return current.index == previous.index+1
+}
+
+func profiledRequestLocalSystemOwnerTransactionContinues(
+	previous, current profiledSegmentRef,
+) bool {
+	return profiledSegmentRefsPhysicallyAdjacent(previous, current) &&
+		profiledSegmentsShareLogicalTextField(previous.segment, current.segment)
+}
+
+// profiledRequestLocalSystemCarrierOwnerRuns resolves only bounded, physically
+// adjacent carrier runs in one logical provider field. Natural-language text in
+// another field or across an omitted physical unit can neither activate nor
+// suppress the carrier. The owner disposition is shared by the dedicated
+// reactivation producer and the generic group view so the two paths cannot
+// disagree about who owns the fenced body.
+func (c *Classifier) profiledRequestLocalSystemCarrierOwnerRuns(
 	refs []profiledSegmentRef,
-	requirePhysicalIndexAdjacency bool,
-) ([]profiledRequestLocalSystemReactivationProof, bool) {
+	requirePhysicalAdjacency bool,
+) ([]profiledRequestLocalSystemCarrierOwnerRun, bool) {
 	if c == nil || len(refs) == 0 {
 		return nil, true
 	}
-	survivingOwners, complete := c.profiledRequestLocalSystemSurvivingOwnerIndexes(refs)
-	if !complete {
-		return nil, false
+	if !profiledRequestLocalSystemGroupHasCarrier(refs) {
+		return nil, true
 	}
-	proofs := make([]profiledRequestLocalSystemReactivationProof, 0, 1)
+	var survivingOwners []bool
+	survivingOwnersLoaded := false
+	ownerSurvives := func(index int) (bool, bool) {
+		if !survivingOwnersLoaded {
+			// Local inert/cancellation owners need no request-wide proof. Only an
+			// affirmative owner requires the bounded cancellation scan.
+			if len(refs) > maxRoleClassifierSegments {
+				return false, false
+			}
+			var complete bool
+			survivingOwners, complete = c.profiledRequestLocalSystemSurvivingOwnerIndexes(refs)
+			if !complete {
+				return false, false
+			}
+			survivingOwnersLoaded = true
+		}
+		return index >= 0 && index < len(survivingOwners) && survivingOwners[index], true
+	}
 	adjacent := func(previous, current profiledSegmentRef) bool {
-		return (!requirePhysicalIndexAdjacency || current.index == previous.index+1) &&
+		return (!requirePhysicalAdjacency || profiledSegmentRefsPhysicallyAdjacent(previous, current)) &&
 			profiledSegmentsShareLogicalTextField(previous.segment, current.segment)
 	}
+	runs := make([]profiledRequestLocalSystemCarrierOwnerRun, 0, 1)
 	for index := 0; index < len(refs); {
 		first := refs[index]
 		if !profiledRequestLocalSystemCarrier(first.segment) ||
@@ -1870,20 +2012,21 @@ func (c *Classifier) profiledRequestLocalSystemCarrierReactivationProofs(
 			}
 			end++
 		}
-		carrierRefs := append([]profiledSegmentRef(nil), refs[index:end]...)
 		ownerAt := func(ownerIndex int, edge profiledSegmentRef) (profiledSegmentRef, bool) {
 			if ownerIndex < 0 || ownerIndex >= len(refs) {
 				return profiledSegmentRef{}, false
 			}
 			owner := refs[ownerIndex]
-			if !adjacent(edge, owner) && !adjacent(owner, edge) ||
+			if !(adjacent(edge, owner) || adjacent(owner, edge)) ||
 				!profiledRequestLocalSystemDirective(owner.segment) {
 				return profiledSegmentRef{}, false
 			}
 			return owner, true
 		}
-		before, beforeOK := ownerAt(index-1, refs[index])
-		after, afterOK := ownerAt(end, refs[end-1])
+		beforeIndex := index - 1
+		afterIndex := end
+		before, beforeOK := ownerAt(beforeIndex, refs[index])
+		after, afterOK := ownerAt(afterIndex, refs[end-1])
 		beforeDisposition := quotedReviewContinuationNone
 		afterDisposition := quotedReviewContinuationNone
 		if beforeOK {
@@ -1900,41 +2043,214 @@ func (c *Classifier) profiledRequestLocalSystemCarrierReactivationProofs(
 				return nil, false
 			}
 		}
-		if beforeDisposition == quotedReviewContinuationActive && !survivingOwners[index-1] {
-			beforeDisposition = quotedReviewContinuationNone
-		}
-		if afterDisposition == quotedReviewContinuationActive && !survivingOwners[end] {
-			afterDisposition = quotedReviewContinuationNone
-		}
-
-		anchor := profiledSegmentRef{}
-		active := false
-		switch {
-		case afterDisposition == quotedReviewContinuationActive:
-			anchor, active = after, true
-		case afterDisposition == quotedReviewContinuationCancelled:
-		case beforeDisposition == quotedReviewContinuationActive:
-			anchor, active = before, true
-		case afterDisposition == quotedReviewContinuationInert:
-		case beforeDisposition == quotedReviewContinuationCancelled ||
-			beforeDisposition == quotedReviewContinuationInert:
-		}
-		if active {
-			parts, imperative, proofComplete := c.profiledRequestLocalSystemCarrierRefs(carrierRefs)
+		if beforeDisposition == quotedReviewContinuationActive {
+			survives, proofComplete := ownerSurvives(beforeIndex)
 			if !proofComplete {
 				return nil, false
 			}
-			if !imperative {
-				index = end
+			if !survives {
+				beforeDisposition = quotedReviewContinuationNone
+			}
+		}
+		if afterDisposition == quotedReviewContinuationActive {
+			survives, proofComplete := ownerSurvives(afterIndex)
+			if !proofComplete {
+				return nil, false
+			}
+			if !survives {
+				afterDisposition = quotedReviewContinuationNone
+			}
+		}
+
+		run := profiledRequestLocalSystemCarrierOwnerRun{
+			first: index, end: end, anchor: -1,
+			state: profiledRequestLocalSystemCarrierUnclaimed,
+		}
+		switch {
+		case afterDisposition == quotedReviewContinuationActive:
+			run.anchor = afterIndex
+			run.state = profiledRequestLocalSystemCarrierActivated
+		case afterDisposition == quotedReviewContinuationCancelled:
+			run.anchor = afterIndex
+			run.state = profiledRequestLocalSystemCarrierSuppressed
+		case beforeDisposition == quotedReviewContinuationActive:
+			run.anchor = beforeIndex
+			run.state = profiledRequestLocalSystemCarrierActivated
+		case afterDisposition == quotedReviewContinuationInert:
+			run.anchor = afterIndex
+			run.state = profiledRequestLocalSystemCarrierSuppressed
+		case beforeDisposition == quotedReviewContinuationCancelled ||
+			beforeDisposition == quotedReviewContinuationInert:
+			run.anchor = beforeIndex
+			run.state = profiledRequestLocalSystemCarrierSuppressed
+		}
+		runs = append(runs, run)
+		index = end
+	}
+	return runs, true
+}
+
+// profiledRequestLocalSystemGenericCarrierView removes only a carrier run whose
+// adjacent same-field owner has been proven. Suppressed runs remain inert;
+// activated runs are classified exclusively by the dedicated reactivation
+// producer so the carrier body, anchor, scope, and referent proof stay exact.
+func (c *Classifier) profiledRequestLocalSystemGenericCarrierView(
+	parts []string,
+	refs []profiledSegmentRef,
+	requirePhysicalAdjacency bool,
+) ([]string, []profiledSegmentRef, bool, bool) {
+	if len(parts) != len(refs) {
+		return nil, nil, false, false
+	}
+	if len(refs) == 0 ||
+		enforcementScopeForProfiledGroup(refs) != EnforcementScopeRequestLocalSystem ||
+		!profiledRequestLocalSystemGroupHasCarrier(refs) {
+		return parts, refs, false, true
+	}
+	runs, complete := c.profiledRequestLocalSystemCarrierOwnerRuns(
+		refs, requirePhysicalAdjacency,
+	)
+	if !complete {
+		return nil, nil, false, false
+	}
+	excluded := make([]bool, len(refs))
+	excludedAny := false
+	suppressed := false
+	for _, run := range runs {
+		if run.state == profiledRequestLocalSystemCarrierUnclaimed {
+			continue
+		}
+		if run.state == profiledRequestLocalSystemCarrierSuppressed {
+			suppressed = true
+		}
+		for index := run.first; index < run.end; index++ {
+			excluded[index] = true
+			excludedAny = true
+		}
+	}
+	if !excludedAny {
+		return parts, refs, false, true
+	}
+	genericParts := make([]string, 0, len(parts))
+	genericRefs := make([]profiledSegmentRef, 0, len(refs))
+	for index, ref := range refs {
+		if excluded[index] {
+			continue
+		}
+		genericParts = append(genericParts, parts[index])
+		genericRefs = append(genericRefs, ref)
+	}
+	return genericParts, genericRefs, suppressed, true
+}
+
+// profiledRequestLocalSystemCarrierGenericPlan evaluates the complete carrier
+// groups, including inert log/documentation units omitted by the ordinary batch
+// group builder. Physical segment indexes then remove the exact claimed run from
+// generic groups without letting an omitted carrier member collapse a barrier.
+// Unresolved carrier indexes are kept separate from semantic state: callers may
+// still classify independent natural-language fields before returning the fixed
+// classifier-window unavailable disposition.
+func (c *Classifier) profiledRequestLocalSystemCarrierGenericPlan(
+	groups []profiledSegmentGroup,
+	requirePhysicalAdjacency bool,
+) (map[int]struct{}, map[int]struct{}, bool, bool) {
+	var omitted map[int]struct{}
+	var unresolved map[int]struct{}
+	suppressed := false
+	complete := true
+	for _, group := range groups {
+		runs, groupComplete := c.profiledRequestLocalSystemCarrierOwnerRuns(
+			group.refs, requirePhysicalAdjacency,
+		)
+		if !groupComplete {
+			complete = false
+			for _, ref := range group.refs {
+				if profiledRequestLocalSystemCarrier(ref.segment) &&
+					profiledSelfContainedCarrierKind(ref.segment.ContentKind) {
+					if unresolved == nil {
+						unresolved = make(map[int]struct{})
+					}
+					unresolved[ref.index] = struct{}{}
+				}
+			}
+			continue
+		}
+		for _, run := range runs {
+			if run.state == profiledRequestLocalSystemCarrierUnclaimed {
 				continue
 			}
-			proofs = append(proofs, profiledRequestLocalSystemReactivationProof{
-				carrierRefs: carrierRefs,
-				parts:       parts,
-				anchor:      anchor,
-			})
+			if run.state == profiledRequestLocalSystemCarrierSuppressed {
+				suppressed = true
+			}
+			if omitted == nil {
+				omitted = make(map[int]struct{})
+			}
+			for index := run.first; index < run.end; index++ {
+				omitted[group.refs[index].index] = struct{}{}
+			}
 		}
-		index = end
+	}
+	return omitted, unresolved, suppressed, complete
+}
+
+func profiledGroupWithoutCarrierIndexes(
+	group profiledSegmentGroup,
+	omitted map[int]struct{},
+	unresolved map[int]struct{},
+) profiledSegmentGroup {
+	if len(group.parts) == 0 || len(group.parts) != len(group.refs) ||
+		len(omitted) == 0 && len(unresolved) == 0 {
+		return group
+	}
+	filteredParts := make([]string, 0, len(group.parts))
+	filteredRefs := make([]profiledSegmentRef, 0, len(group.refs))
+	for index, ref := range group.refs {
+		if _, excluded := omitted[ref.index]; excluded {
+			continue
+		}
+		if _, excluded := unresolved[ref.index]; excluded {
+			continue
+		}
+		filteredParts = append(filteredParts, group.parts[index])
+		filteredRefs = append(filteredRefs, ref)
+	}
+	group.parts = filteredParts
+	group.refs = filteredRefs
+	return group
+}
+
+func (c *Classifier) profiledRequestLocalSystemCarrierReactivationProofs(
+	refs []profiledSegmentRef,
+	requirePhysicalAdjacency bool,
+) ([]profiledRequestLocalSystemReactivationProof, bool) {
+	if c == nil || len(refs) == 0 {
+		return nil, true
+	}
+	runs, complete := c.profiledRequestLocalSystemCarrierOwnerRuns(
+		refs, requirePhysicalAdjacency,
+	)
+	if !complete {
+		return nil, false
+	}
+	proofs := make([]profiledRequestLocalSystemReactivationProof, 0, 1)
+	for _, run := range runs {
+		if run.state != profiledRequestLocalSystemCarrierActivated ||
+			run.anchor < 0 || run.anchor >= len(refs) {
+			continue
+		}
+		carrierRefs := append([]profiledSegmentRef(nil), refs[run.first:run.end]...)
+		parts, imperative, proofComplete := c.profiledRequestLocalSystemCarrierRefs(carrierRefs)
+		if !proofComplete {
+			return nil, false
+		}
+		if !imperative {
+			continue
+		}
+		proofs = append(proofs, profiledRequestLocalSystemReactivationProof{
+			carrierRefs: carrierRefs,
+			parts:       parts,
+			anchor:      refs[run.anchor],
+		})
 	}
 	return proofs, true
 }

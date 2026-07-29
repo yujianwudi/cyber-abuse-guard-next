@@ -221,6 +221,105 @@ func TestRound6StreamingUntrustedFallbackPreservesIncompleteProofBudget(t *testi
 		t.Fatalf("integrated untrusted proof budget = %+v", integrated)
 	}
 	assertRound9NeutralClassifierWindowIncomplete(t, integrated)
+
+	profiledIntegration := newRound6ProfiledSession(t, c, ScanLimits{})
+	profiledExtracted, err := extract.ScanProfiledRequest(body, headers,
+		extract.RequestProfile{Source: extract.SourceProfileOpenAI}, extract.Limits{}, profiledIntegration)
+	if err != nil || !profiledExtracted.IsComplete() || profiledExtracted.RoleAware {
+		t.Fatalf("explicit profiled untrusted streaming extraction=%+v err=%v", profiledExtracted, err)
+	}
+	profiledIntegrated := profiledIntegration.Finish()
+	if profiledIntegrated.FindingConfidence != FindingNone {
+		t.Fatalf("explicit profiled untrusted proof budget = %+v", profiledIntegrated)
+	}
+	assertRound9NeutralClassifierWindowIncomplete(t, profiledIntegrated)
+}
+
+func TestRound6StreamingRolelessStructuralMetadataRequiresExplicitAuthority(t *testing.T) {
+	t.Parallel()
+	c := newDefaultClassifier(t)
+	tests := []struct {
+		name         string
+		chunk        extract.SegmentChunk
+		wantProfiled bool
+	}{
+		{
+			name: "scope path and content kind only",
+			chunk: extract.SegmentChunk{
+				Role: extract.RoleUnknown, Provenance: extract.ProvenanceContent,
+				UserAttribution:   extract.UserAttributionUntrusted,
+				ConversationIndex: -1, TurnIndex: -1, ScopeID: 7,
+				ContentKind: extract.ContentKindNaturalLanguageDirective, FieldPathHash: "roleless-input",
+			},
+		},
+		{
+			name: "current turn",
+			chunk: extract.SegmentChunk{
+				Role: extract.RoleUnknown, Provenance: extract.ProvenanceContent,
+				UserAttribution:   extract.UserAttributionUntrusted,
+				ConversationIndex: 0, TurnIndex: 0, IsCurrentTurn: true,
+			},
+			wantProfiled: true,
+		},
+		{
+			name: "terminal coordinates",
+			chunk: extract.SegmentChunk{
+				Role: extract.RoleUnknown, Provenance: extract.ProvenanceContent,
+				UserAttribution:   extract.UserAttributionUntrusted,
+				ConversationIndex: 0, TurnIndex: 0,
+				TerminalConversationIndex: 0, TerminalTurnIndex: 0, HasTerminalCoordinates: true,
+			},
+			wantProfiled: true,
+		},
+		{
+			name: "tool payload provenance",
+			chunk: extract.SegmentChunk{
+				Role: extract.RoleUnknown, Provenance: extract.ProvenanceToolPayload,
+				UserAttribution:   extract.UserAttributionUntrusted,
+				ConversationIndex: -1, TurnIndex: -1, ScopeID: 7,
+				ContentKind: extract.ContentKindToolCallArguments, FieldPathHash: "roleless-tool-payload",
+			},
+			wantProfiled: true,
+		},
+		{
+			name: "proved tool association",
+			chunk: extract.SegmentChunk{
+				Role: extract.RoleUnknown, Provenance: extract.ProvenanceContent,
+				UserAttribution:   extract.UserAttributionUntrusted,
+				ToolAssociation:   extract.ToolResultAssociationUnique,
+				ConversationIndex: -1, TurnIndex: -1,
+			},
+			wantProfiled: true,
+		},
+		{
+			name: "request local system authority",
+			chunk: extract.SegmentChunk{
+				Role: extract.RoleSystem, Provenance: extract.ProvenanceContent,
+				UserAttribution:   extract.UserAttributionUntrusted,
+				ConversationIndex: 0, TurnIndex: 0, ScopeID: 8,
+				ContentKind: extract.ContentKindNaturalLanguageDirective, FieldPathHash: "system-instruction",
+			},
+			wantProfiled: true,
+		},
+	}
+
+	for index, testCase := range tests {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			session := newRound6Session(t, c, ScanLimits{})
+			chunk := testCase.chunk
+			chunk.FieldID = uint64(index + 1)
+			chunk.Start = true
+			chunk.End = true
+			chunk.Text = []byte("sort football scores")
+			if err := session.AddSegment(chunk); err != nil {
+				t.Fatalf("AddSegment() error = %v", err)
+			}
+			if session.profiledRequest != testCase.wantProfiled {
+				t.Fatalf("profiledRequest=%t, want %t", session.profiledRequest, testCase.wantProfiled)
+			}
+		})
+	}
 }
 
 func assertRound9NeutralClassifierWindowIncomplete(t testing.TB, result Result) {

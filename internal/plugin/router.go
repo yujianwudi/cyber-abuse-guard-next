@@ -551,8 +551,11 @@ func classifierCoverageReason(coverage classifier.Coverage) extract.IncompleteRe
 			return extract.IncompleteClassificationChunkLimit
 		}
 	case classifier.CoverageUnavailable:
-		if coverage.Reason == classifier.CoverageReasonInvalidUTF8 {
+		switch coverage.Reason {
+		case classifier.CoverageReasonInvalidUTF8:
 			return extract.IncompleteParseError
+		case classifier.CoverageReasonClassifierProofBudget:
+			return extract.IncompleteClassifierProofBudget
 		}
 		return extract.IncompleteClassificationChunkLimit
 	default:
@@ -665,7 +668,7 @@ func (p *Plugin) recordIncompleteCounters(reasons []extract.IncompleteReason, de
 		p.counters.incompleteAllowed.Add(1)
 	}
 
-	var parseError, scanLimit, jsonDepth, textPart, roleAttribution, multipartLimit, multipartSchema, toolSchema, deferredTextLimit, unsupported, rpcBody bool
+	var parseError, scanLimit, jsonDepth, textPart, roleAttribution, multipartLimit, multipartSchema, toolSchema, deferredTextLimit, unsupported, rpcBody, classifierProofBudget bool
 	var truncated bool
 	for _, reason := range reasons {
 		switch reason {
@@ -686,7 +689,11 @@ func (p *Plugin) recordIncompleteCounters(reasons []extract.IncompleteReason, de
 			truncated = true
 		case extract.IncompleteRoleAttribution:
 			roleAttribution = true
-		case extract.IncompleteTotalTextLimit, extract.IncompleteClassificationChunkLimit:
+		case extract.IncompleteTotalTextLimit,
+			extract.IncompleteClassificationChunkLimit:
+			truncated = true
+		case extract.IncompleteClassifierProofBudget:
+			classifierProofBudget = true
 			truncated = true
 		case extract.IncompleteMultipartBoundaryLimit,
 			extract.IncompleteMultipartPartLimit,
@@ -744,6 +751,9 @@ func (p *Plugin) recordIncompleteCounters(reasons []extract.IncompleteReason, de
 	}
 	if rpcBody {
 		p.counters.incompleteRPCBodyLimit.Add(1)
+	}
+	if classifierProofBudget {
+		p.counters.incompleteClassifierProofBudget.Add(1)
 	}
 	if truncated {
 		p.counters.truncated.Add(1)

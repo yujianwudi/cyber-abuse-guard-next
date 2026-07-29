@@ -89,7 +89,8 @@ func metaOverrideBoundedRefusalSuppression(text string) bool {
 		return metaOverrideRefusalSuppressionClause(clause), true
 	}
 	for index, value := range text {
-		if !metaOverrideDirectiveBoundary(value) {
+		_, width, boundary := metaOverrideDirectiveBoundaryAt(text, index, value)
+		if !boundary {
 			continue
 		}
 		boundaries++
@@ -103,7 +104,6 @@ func metaOverrideBoundedRefusalSuppression(text string) bool {
 		if !complete {
 			return false
 		}
-		_, width := utf8.DecodeRuneInString(text[index:])
 		start = index + width
 	}
 	matched, _ := visit(text[start:])
@@ -459,7 +459,7 @@ func metaOverrideSingleQuoteCloses(text string, index int) bool {
 		return true
 	}
 	next, _ := utf8.DecodeRuneInString(text[index+1:])
-	return unicode.IsSpace(next) || unicode.IsPunct(next) || unicode.IsSymbol(next)
+	return next == compactHardBoundary || unicode.IsSpace(next) || unicode.IsPunct(next) || unicode.IsSymbol(next)
 }
 
 func metaOverrideEscapedAt(text string, index int) bool {
@@ -1012,7 +1012,7 @@ func metaOverridePassiveNegatedSubjectHasTarget(prefix string) bool {
 
 func metaOverridePassiveSubjectEndsWithTarget(subject string) bool {
 	subject = strings.TrimSpace(subject)
-	if subject == "" || strings.ContainsAny(subject, ",.!?;:\n\r，。！？；：\ufffd") {
+	if subject == "" || strings.ContainsAny(subject, ",.!?;:\n\r，。！？；："+compactHardBoundaryText) {
 		return false
 	}
 	for _, target := range metaOverrideDirectiveObjects {
@@ -1187,8 +1187,8 @@ func metaOverrideHasPositivePassiveApplication(text string) bool {
 func metaOverridePassiveDirectiveTail(prefix string) string {
 	boundaryEnd := 0
 	for index, r := range prefix {
-		if metaOverrideDirectiveBoundary(r) || r == ',' || r == '，' {
-			_, width := utf8.DecodeRuneInString(prefix[index:])
+		_, width, boundary := metaOverrideDirectiveBoundaryAt(prefix, index, r)
+		if boundary || r == ',' || r == '，' {
 			boundaryEnd = index + width
 		}
 	}
@@ -1196,8 +1196,9 @@ func metaOverridePassiveDirectiveTail(prefix string) string {
 }
 
 func metaOverridePassivePrefixHasBoundary(prefix string) bool {
-	for _, r := range prefix {
-		if metaOverrideDirectiveBoundary(r) || r == ',' || r == '，' {
+	for index, r := range prefix {
+		_, _, boundary := metaOverrideDirectiveBoundaryAt(prefix, index, r)
+		if boundary || r == ',' || r == '，' {
 			return true
 		}
 	}
@@ -1206,7 +1207,7 @@ func metaOverridePassivePrefixHasBoundary(prefix string) bool {
 
 func metaOverridePassiveBridgeHasTarget(bridge string) bool {
 	bridge = strings.TrimSpace(bridge)
-	if bridge == "" || strings.ContainsAny(bridge, ",.!?;:\n\r，。！？；：\ufffd") ||
+	if bridge == "" || strings.ContainsAny(bridge, ",.!?;:\n\r，。！？；："+compactHardBoundaryText) ||
 		containsAnyLiteral(bridge, metaOverrideReversalCues...) {
 		return false
 	}
@@ -1273,7 +1274,7 @@ func metaOverrideMayContainPassiveAction(text string) bool {
 
 func metaOverridePolicyListBridge(bridge string) bool {
 	bridge = strings.ToLower(strings.TrimSpace(bridge))
-	if bridge == "" || strings.ContainsAny(bridge, ".!?;:\n\r。！？；：\ufffd") ||
+	if bridge == "" || strings.ContainsAny(bridge, ".!?;:\n\r。！？；："+compactHardBoundaryText) ||
 		containsAnyLiteral(bridge, " but ", " however ", " instead ", " rather ", " although ", " except ", "但是", "然而", "而是", "不过", "除非") {
 		return false
 	}
@@ -1304,9 +1305,8 @@ func metaOverrideActionOccurrenceIsDescriptive(window string, actionIndex int) b
 	prefix := window[start:actionIndex]
 	boundaryEnd := 0
 	for index, r := range prefix {
-		switch r {
-		case '.', '!', '?', ';', ':', ',', '\n', '\r', '。', '！', '？', '；', '：', '，', '\ufffd':
-			_, width := utf8.DecodeRuneInString(prefix[index:])
+		_, width, boundary := metaOverrideDirectiveBoundaryAt(prefix, index, r)
+		if boundary || r == ',' || r == '，' {
 			boundaryEnd = index + width
 		}
 	}
@@ -1561,7 +1561,8 @@ func metaOverrideDirectiveClausesBoundedWithLimit(text string, maxClauses int) (
 	boundaryBefore := rune(0)
 	boundaries := 0
 	for index, r := range text {
-		if !metaOverrideDirectiveBoundary(r) {
+		boundaryRune, width, boundary := metaOverrideDirectiveBoundaryAt(text, index, r)
+		if !boundary {
 			continue
 		}
 		boundaries++
@@ -1573,15 +1574,14 @@ func metaOverrideDirectiveClausesBoundedWithLimit(text string, maxClauses int) (
 				return clauses, true
 			}
 			clauses = append(clauses, metaOverrideDirectiveClause{text: clause, boundaryBefore: boundaryBefore})
-			boundaryBefore = r
-		} else if boundaryBefore == 0 || !metaOverrideSplitAssociationBoundary(r) {
+			boundaryBefore = boundaryRune
+		} else if boundaryBefore == 0 || !metaOverrideSplitAssociationBoundary(boundaryRune) {
 			// Consecutive separators describe one boundary before the next
 			// non-empty clause. Preserve any stronger sentence boundary so a
 			// following newline cannot turn ".\n" or ";\n" into an allowed
 			// split-association bridge. Colon/newline-only runs remain linked.
-			boundaryBefore = r
+			boundaryBefore = boundaryRune
 		}
-		_, width := utf8.DecodeRuneInString(text[index:])
 		start = index + width
 	}
 	if clause := strings.TrimSpace(text[start:]); clause != "" {
@@ -1595,16 +1595,29 @@ func metaOverrideDirectiveClausesBoundedWithLimit(text string, maxClauses int) (
 
 func metaOverrideDirectiveBoundary(r rune) bool {
 	switch r {
-	case '.', '!', '?', ';', ':', '\n', '\r', utf8.RuneError, '。', '！', '？', '；', '：':
+	case '.', '!', '?', ';', ':', '\n', '\r', compactHardBoundary, '。', '！', '？', '；', '：':
 		return true
 	default:
 		return false
 	}
 }
 
+// metaOverrideDirectiveBoundaryAt distinguishes malformed UTF-8, which range
+// exposes as RuneError with a decoded width of one byte, from a legitimate
+// U+FFFD replacement character, whose decoded width is three bytes. Malformed
+// input retains the historical hard-boundary semantics without making literal
+// U+FFFD user content collide with the internal compactHardBoundary sentinel.
+func metaOverrideDirectiveBoundaryAt(text string, index int, r rune) (rune, int, bool) {
+	decoded, width := utf8.DecodeRuneInString(text[index:])
+	if decoded == utf8.RuneError && width == 1 {
+		return compactHardBoundary, width, true
+	}
+	return r, width, metaOverrideDirectiveBoundary(r)
+}
+
 func metaOverrideSplitAssociationBoundary(r rune) bool {
 	switch r {
-	case ':', '\n', '\r', utf8.RuneError, '：':
+	case ':', '\n', '\r', compactHardBoundary, '：':
 		return true
 	default:
 		return false
@@ -1616,7 +1629,8 @@ func metaOverrideLastDirectiveClause(text string) string {
 	start := 0
 	boundaries := 0
 	for index, r := range text {
-		if !metaOverrideDirectiveBoundary(r) {
+		_, width, boundary := metaOverrideDirectiveBoundaryAt(text, index, r)
+		if !boundary {
 			continue
 		}
 		boundaries++
@@ -1626,7 +1640,6 @@ func metaOverrideLastDirectiveClause(text string) string {
 		if clause := strings.TrimSpace(text[start:index]); clause != "" {
 			last = clause
 		}
-		_, width := utf8.DecodeRuneInString(text[index:])
 		start = index + width
 	}
 	if clause := strings.TrimSpace(text[start:]); clause != "" {

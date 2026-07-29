@@ -3,7 +3,6 @@ package extract
 import (
 	"encoding/base64"
 	"html"
-	"net/url"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -74,6 +73,14 @@ func decodeOneLayer(value string) ([]decodeStep, bool, bool) {
 	steps := make([]decodeStep, 0, 3)
 	recognized := false
 	incomplete := false
+	hasPercent := strings.Contains(value, "%")
+	validPercentEscapes, invalidPercentEscapes := 0, 0
+	closedPercentPlaceholder := false
+	if hasPercent {
+		validPercentEscapes, invalidPercentEscapes, closedPercentPlaceholder = percentEscapeCounts(value)
+	}
+	malformedPercentToken := hasPercent && hasMalformedPercentEscapeInEncodedToken(value)
+	unclosedPercentCollision := strings.Contains(value, "%%") && hasUnclosedPercentPlaceholderCollision(value)
 	appendText := func(decoded string, ok bool) bool {
 		if !ok || decoded == value || !isInspectableText([]byte(decoded)) {
 			return false
@@ -84,6 +91,9 @@ func decodeOneLayer(value string) ([]decodeStep, bool, bool) {
 
 	if decoded, found, ok := decodeTextDataURL(value); found {
 		recognized = true
+		incomplete = incomplete ||
+			invalidPercentEscapes > 0 && hasMalformedPercentEscapeOutsidePlaceholders(value) ||
+			malformedPercentToken || unclosedPercentCollision
 		if !ok {
 			incomplete = true
 		} else {
@@ -94,30 +104,37 @@ func decodeOneLayer(value string) ([]decodeStep, bool, bool) {
 		return steps, recognized, incomplete
 	}
 
-	if strings.Contains(value, "%") {
-		validEscapes, invalidEscapes := percentEscapeSignals(value)
-		if validEscapes {
+	if hasPercent {
+		recognized = recognized || closedPercentPlaceholder
+		if validPercentEscapes > 0 {
 			recognized = true
-			// net/url rejects the whole string when even one percent escape is
-			// malformed. Remember that partial encoding signal before attempting
-			// either decoder so a valid escaped prefix followed by "%ZZ" cannot
-			// silently fall back to scanning only the encoded source.
-			incomplete = incomplete || invalidEscapes
-		}
-		if decoded, err := url.PathUnescape(value); err == nil && decoded != value {
-			recognized = true
-			incomplete = !appendText(decoded, true) || incomplete
-		} else if err != nil && validEscapes {
-			incomplete = true
-		}
-		// QueryEscape represents spaces as '+'. Generate this second bounded
-		// view only when a percent escape is already present, so ordinary plus
-		// signs are never rewritten speculatively.
-		if decoded, err := url.QueryUnescape(value); err == nil && decoded != value {
-			recognized = true
-			incomplete = !appendText(decoded, true) || incomplete
-		} else if err != nil && validEscapes {
-			incomplete = true
+			incomplete = incomplete || malformedPercentToken || unclosedPercentCollision
+			decoded, ok := decodePercentEscapesBounded(value, false)
+			if !ok {
+				incomplete = true
+			} else if decoded != value {
+				if isInspectableText([]byte(decoded)) {
+					steps = append(steps, decodeStep{text: decoded})
+				} else if percentDecodedViewMustFailClosed(validPercentEscapes) {
+					incomplete = true
+				}
+			}
+
+			// QueryEscape represents spaces as '+'. Generate this second bounded
+			// view only when a percent escape is already present, so ordinary plus
+			// signs are never rewritten speculatively.
+			if strings.Contains(value, "+") {
+				decoded, ok = decodePercentEscapesBounded(value, true)
+				if !ok {
+					incomplete = true
+				} else if decoded != value {
+					if isInspectableText([]byte(decoded)) {
+						steps = append(steps, decodeStep{text: decoded})
+					} else if percentDecodedViewMustFailClosed(validPercentEscapes) {
+						incomplete = true
+					}
+				}
+			}
 		}
 	}
 	if strings.Contains(value, "&") && strings.Contains(value, ";") {
@@ -150,23 +167,310 @@ func decodeOneLayer(value string) ([]decodeStep, bool, bool) {
 	return steps, recognized, incomplete
 }
 
-func percentEscapeSignals(value string) (valid, invalid bool) {
+// hasUnclosedPercentPlaceholderCollision retains the existing fail-closed
+// contract for an unterminated double-percent identifier whose second opening
+// percent exposes a printable %HH escape. A closed collision is different: the
+// original placeholder interpretation and the reversible decoded view are both
+// bounded and scanned, so it remains complete.
+func hasUnclosedPercentPlaceholderCollision(value string) bool {
+	for start := 0; start < len(value); start++ {
+		if value[start] != '%' || !hasPercentPlaceholderCollisionPrefix(value, start) {
+			continue
+		}
+		if _, _, ok := percentPlaceholderSpan(value, start); ok {
+			continue
+		}
+
+		bodyStart := start + 2
+		bodyEnd := minInt(len(value), bodyStart+maxPercentPlaceholderBodyBytes)
+		identifierMarker := false
+		for index := bodyStart + 2; index < bodyEnd; index++ {
+			if index+1 < len(value) && value[index] == '%' && value[index+1] == '%' {
+				identifierMarker = false
+				break
+			}
+			allowed, marker := percentPlaceholderBodyByte(value[index])
+			if !allowed {
+				break
+			}
+			identifierMarker = identifierMarker || marker
+		}
+		if identifierMarker {
+			return true
+		}
+	}
+	return false
+}
+
+func percentEscapeCounts(value string) (valid, invalid int, closedPlaceholder bool) {
 	for index := 0; index < len(value); index++ {
 		if value[index] != '%' {
 			continue
 		}
+		if end, ok := percentPlaceholderEnd(value, index); ok {
+			closedPlaceholder = true
+			index = end - 1
+			continue
+		}
 		if index+2 < len(value) && isHexByte(value[index+1]) && isHexByte(value[index+2]) {
-			valid = true
+			valid++
 			index += 2
 			continue
 		}
-		invalid = true
+		invalid++
 	}
-	return valid, invalid
+	return valid, invalid, closedPlaceholder
+}
+
+// hasMalformedPercentEscapeOutsidePlaceholders keeps malformed textual data
+// URLs fail-closed without treating Windows/template placeholders such as
+// %USER% and %DB_HOST% as broken URI escapes. Closed collision forms are also
+// safe here because the source and reversible decoded view are both scanned.
+func hasMalformedPercentEscapeOutsidePlaceholders(value string) bool {
+	for index := 0; index < len(value); index++ {
+		if value[index] != '%' {
+			continue
+		}
+		if end, _, ok := percentPlaceholderSpan(value, index); ok {
+			index = end - 1
+			continue
+		}
+		if index+2 >= len(value) || !isHexByte(value[index+1]) || !isHexByte(value[index+2]) {
+			return true
+		}
+		index += 2
+	}
+	return false
+}
+
+// hasMalformedPercentEscapeInEncodedToken distinguishes an interrupted
+// percent-encoded token from unrelated percent syntax elsewhere in the same
+// string. Encoded separators end the token, so a trailing placeholder or
+// modulo expression does not poison an otherwise valid decoded view. The
+// malformed triplet remains verbatim in that view; this signal only marks the
+// inspection incomplete so enforcing callers fail closed.
+func hasMalformedPercentEscapeInEncodedToken(value string) bool {
+	tokenHasValidEscape := false
+	tokenHasMalformedEscape := false
+	finishToken := func() bool {
+		malformed := tokenHasValidEscape && tokenHasMalformedEscape
+		tokenHasValidEscape = false
+		tokenHasMalformedEscape = false
+		return malformed
+	}
+
+	for index := 0; index < len(value); {
+		if value[index] == '%' {
+			if end, ok := percentPlaceholderEnd(value, index); ok {
+				if finishToken() {
+					return true
+				}
+				index = end
+				continue
+			}
+			if index+2 < len(value) && isHexByte(value[index+1]) && isHexByte(value[index+2]) {
+				decoded := hexByteValue(value[index+1])<<4 | hexByteValue(value[index+2])
+				if isPercentTokenByte(decoded) {
+					tokenHasValidEscape = true
+				} else if finishToken() {
+					return true
+				}
+				index += 3
+				continue
+			}
+			if index+2 < len(value) && isASCIIAlphaNumeric(value[index+1]) && isASCIIAlphaNumeric(value[index+2]) {
+				tokenHasMalformedEscape = true
+				index += 3
+				continue
+			}
+			if finishToken() {
+				return true
+			}
+			index++
+			continue
+		}
+		if isPercentTokenByte(value[index]) {
+			index++
+			continue
+		}
+		if finishToken() {
+			return true
+		}
+		index++
+	}
+	return finishToken()
+}
+
+func isASCIIAlphaNumeric(value byte) bool {
+	return value >= '0' && value <= '9' || value >= 'A' && value <= 'Z' || value >= 'a' && value <= 'z'
+}
+
+func isPercentTokenByte(value byte) bool {
+	return isASCIIAlphaNumeric(value) || value == '_' || value == '-' || value == '.' || value == '~' || value >= utf8.RuneSelf
+}
+
+func percentDecodedViewMustFailClosed(validEscapes int) bool {
+	// Any recognized percent envelope that cannot produce inspectable text is an
+	// incomplete inspection. Ordinary placeholders are excluded before decoding
+	// by percentPlaceholderEnd, so malformed trailing escapes cannot be used to
+	// discard an otherwise meaningful decoded malicious prefix.
+	return validEscapes > 0
 }
 
 func isHexByte(value byte) bool {
 	return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') || (value >= 'A' && value <= 'F')
+}
+
+// decodePercentEscapesBounded decodes every valid %HH triplet while copying
+// malformed or ordinary percent signs verbatim. Decoding is lossless with
+// respect to unrecognized input and never constructs a view beyond the
+// per-variant inspection budget.
+func decodePercentEscapesBounded(value string, plusAsSpace bool) (string, bool) {
+	var builder strings.Builder
+	changed := false
+	startChangedView := func(prefixBytes int) bool {
+		// The first transformation contributes one output byte, so a prefix that
+		// already fills the budget cannot produce a bounded derived view.
+		if prefixBytes >= maxDecodedVariantBytes {
+			return false
+		}
+		builder.Grow(minInt(len(value), maxDecodedVariantBytes))
+		builder.WriteString(value[:prefixBytes])
+		changed = true
+		return true
+	}
+	for index := 0; index < len(value); index++ {
+		if changed && builder.Len() >= maxDecodedVariantBytes {
+			return "", false
+		}
+		if value[index] == '%' {
+			if end, ok := percentPlaceholderEnd(value, index); ok {
+				if changed && builder.Len()+end-index > maxDecodedVariantBytes {
+					return "", false
+				}
+				if changed {
+					builder.WriteString(value[index:end])
+				}
+				index = end - 1
+				continue
+			}
+			if index+2 < len(value) && isHexByte(value[index+1]) && isHexByte(value[index+2]) {
+				if !changed && !startChangedView(index) {
+					return "", false
+				}
+				builder.WriteByte(hexByteValue(value[index+1])<<4 | hexByteValue(value[index+2]))
+				index += 2
+				continue
+			}
+		}
+		if plusAsSpace && value[index] == '+' {
+			if !changed && !startChangedView(index) {
+				return "", false
+			}
+			builder.WriteByte(' ')
+			continue
+		}
+		if changed {
+			builder.WriteByte(value[index])
+		}
+	}
+	if !changed {
+		// Unchanged placeholder/percent syntax is already present in the source
+		// view. Reuse it without charging the derived-view output budget.
+		return value, true
+	}
+	return builder.String(), true
+}
+
+const maxPercentPlaceholderBodyBytes = 128
+
+// percentPlaceholderEnd recognizes bounded single- and double-percent
+// identifier placeholders such as %DB_HOST% and %%ABCD%%. A body must contain
+// an identifier marker, so repeated numeric percent envelopes cannot suppress
+// decoding. Printable escape-leading collisions such as %%62uild%% are
+// deliberately excluded: the caller preserves the source and also emits the
+// reversible decoded view.
+func percentPlaceholderEnd(value string, start int) (int, bool) {
+	end, body, ok := percentPlaceholderSpan(value, start)
+	if !ok || percentPlaceholderCollisionBody(body) {
+		return 0, false
+	}
+	return end, true
+}
+
+func percentPlaceholderSpan(value string, start int) (int, string, bool) {
+	if start < 0 || start >= len(value) || value[start] != '%' {
+		return 0, "", false
+	}
+	delimiterBytes := 1
+	if start+1 < len(value) && value[start+1] == '%' {
+		delimiterBytes = 2
+	}
+	bodyStart := start + delimiterBytes
+	searchEnd := minInt(len(value), bodyStart+maxPercentPlaceholderBodyBytes+delimiterBytes)
+	identifierMarker := false
+	for index := bodyStart; index < searchEnd; index++ {
+		if value[index] == '%' {
+			if delimiterBytes == 2 && (index+1 >= searchEnd || value[index+1] != '%') {
+				return 0, "", false
+			}
+			if index == bodyStart || !identifierMarker {
+				return 0, "", false
+			}
+			if delimiterBytes == 1 && index+2 < len(value) &&
+				isASCIIAlphaNumeric(value[index+1]) && isASCIIAlphaNumeric(value[index+2]) {
+				// The apparent closer is also the opening of another percent
+				// token. Keep the conservative encoded-token interpretation.
+				return 0, "", false
+			}
+			return index + delimiterBytes, value[bodyStart:index], true
+		}
+		allowed, marker := percentPlaceholderBodyByte(value[index])
+		if !allowed {
+			return 0, "", false
+		}
+		identifierMarker = identifierMarker || marker
+	}
+	return 0, "", false
+}
+
+func percentPlaceholderBodyByte(value byte) (allowed, marker bool) {
+	switch {
+	case value >= '0' && value <= '9':
+		return true, false
+	case value >= 'A' && value <= 'Z', value >= 'a' && value <= 'z':
+		return true, true
+	case value == '_' || value == '-' || value == '.':
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+func percentPlaceholderCollisionBody(body string) bool {
+	if len(body) < 2 || !isHexByte(body[0]) || !isHexByte(body[1]) {
+		return false
+	}
+	decoded := hexByteValue(body[0])<<4 | hexByteValue(body[1])
+	return decoded >= 0x20 && decoded <= 0x7e
+}
+
+func hasPercentPlaceholderCollisionPrefix(value string, start int) bool {
+	if start < 0 || start+4 > len(value) || value[start] != '%' || value[start+1] != '%' {
+		return false
+	}
+	return percentPlaceholderCollisionBody(value[start+2 : start+4])
+}
+
+func hexByteValue(value byte) byte {
+	switch {
+	case value >= '0' && value <= '9':
+		return value - '0'
+	case value >= 'a' && value <= 'f':
+		return value - 'a' + 10
+	default:
+		return value - 'A' + 10
+	}
 }
 
 func looksLikeMalformedBase64(value string) bool {
@@ -230,8 +534,8 @@ func decodeTextDataURL(value string) (decoded string, found bool, ok bool) {
 		}
 		return string(decodedBytes), true, true
 	}
-	decoded, err := url.PathUnescape(payload)
-	if err != nil || !isInspectableText([]byte(decoded)) {
+	decoded, ok = decodePercentEscapesBounded(payload, false)
+	if !ok || !isInspectableText([]byte(decoded)) {
 		return "", true, false
 	}
 	return decoded, true, true

@@ -3,6 +3,7 @@ package classifier
 import (
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
@@ -175,14 +176,36 @@ type candidateTypedMaliciousAxes struct {
 const explicitMaliciousRelationRulePrefix = "R9-EXPLICIT-"
 const maxExplicitQuotedActivationClauses = 8
 
+const (
+	explicitMaliciousRelationProofWindowOverlapBytes = 2 * maxRuleIntentLookbackBytes
+	explicitMaliciousRelationProofWindowGuardBytes   = maxRuleIntentLookbackBytes
+)
+
+type explicitMaliciousRelationProofState uint8
+
+const (
+	explicitMaliciousRelationNotMatched explicitMaliciousRelationProofState = iota
+	explicitMaliciousRelationMatched
+	explicitMaliciousRelationProofBudgetExceeded
+)
+
 var candidateExplicitMaliciousRelationActions = []string{
-	"steal", "steals", "stealing", "read", "capture", "divert", "sabotage", "apply", "use the", "extract", "interrupt",
+	"apply", "steal", "steals", "stealing", "read", "capture", "divert", "sabotage", "use the", "extract", "interrupt",
 	"execute", "exploit", "evade", "deploy", "disable", "suppress", "install", "push", "send to", "sends", "sending",
 	"deliver", "replace", "act on", "insert", "obey", "trigger", "overload", "release", "carry out", "run", "turn", "treat",
 	"compromise", "launch", "abuse", "collect", "copy", "export", "retain", "impersonate", "solicit",
 	"harvest", "gather", "gathers", "gathering", "flood", "encrypt", "append", "activate", "weaponize", "exfiltrate", "hijack", "take over",
 	"encrypts", "encrypting", "lock", "locks", "locking", "delete", "deletes", "deleting", "wipe", "wipes", "wiping", "destroy", "destroys", "destroying",
 	"move", "remove", "force", "compel", "make", "keep", "hold", "discard", "reveal", "override", "ignore", "conceal",
+	"silence", "silences", "silencing", "mute", "mutes", "muting", "unhook", "unhooks", "unhooking",
+	"tamper", "tampers", "tampering", "tamper with", "tampers with", "tampering with",
+	"stop", "stops", "stopping", "stopped", "suspend", "suspends", "suspending", "suspended",
+	"erase", "erases", "erasing", "erased", "clear", "clears", "clearing", "cleared",
+	"turn off", "turns off", "turning off", "shut down", "shuts down", "shutting down",
+	"blind", "blinds", "blinding", "neutralize", "neutralizes", "neutralizing",
+	"forward", "forwards", "forwarding", "forwarded", "route", "routes", "routing", "routed",
+	"relay", "relays", "relaying", "relayed", "intercept", "intercepts", "intercepting", "intercepted",
+	"利用", "隐藏", "躲开", "避开", "操纵", "关闭", "绕过", "规避", "禁用", "压制", "混淆",
 	"write", "writes", "writing", "build", "builds", "building", "create", "creates", "creating", "develop", "develops", "developing", "generate",
 	"利用", "取得", "进入", "攻击", "侵入", "绕过", "查看", "接管", "复制", "获取", "收集", "截取", "外传",
 	"传出", "导出", "禁用", "隐藏", "规避", "压制", "投放", "安装", "推送", "发送", "冒充", "伪装", "诱导",
@@ -351,20 +374,94 @@ func explicitMaliciousRelationCandidate(
 	inspectionComplete bool,
 	existingEligibleCategoryMasks ...uint16,
 ) (classificationCandidate, bool) {
-	category, ok := candidateExplicitMaliciousRelationCategory(text)
+	return explicitMaliciousRelationCandidatePrepared(
+		text,
+		authorizationText,
+		nil,
+		context,
+		inspectionComplete,
+		existingEligibleCategoryMasks...,
+	)
+}
+
+func explicitMaliciousRelationCandidatePrepared(
+	text string,
+	authorizationText string,
+	authorizationPhishingProof *candidatePhishingRelationProof,
+	context ContextFlags,
+	inspectionComplete bool,
+	existingEligibleCategoryMasks ...uint16,
+) (classificationCandidate, bool) {
+	normalizedText := strings.ToLower(strings.TrimSpace(text))
+	normalizedAuthorizationText := strings.ToLower(strings.TrimSpace(authorizationText))
+
+	var localCandidatePhishingProof candidatePhishingRelationProof
+	candidatePhishingProof := authorizationPhishingProof
+	if candidatePhishingProof == nil || candidatePhishingProof.text != normalizedText {
+		localCandidatePhishingProof = newCandidatePhishingRelationProof(normalizedText)
+		candidatePhishingProof = &localCandidatePhishingProof
+	}
+	var localAuthorizationPhishingProof candidatePhishingRelationProof
+	if authorizationPhishingProof == nil || authorizationPhishingProof.text != normalizedAuthorizationText {
+		if candidatePhishingProof.text == normalizedAuthorizationText {
+			authorizationPhishingProof = candidatePhishingProof
+		} else {
+			localAuthorizationPhishingProof = newCandidatePhishingRelationProof(normalizedAuthorizationText)
+			authorizationPhishingProof = &localAuthorizationPhishingProof
+		}
+	}
+
+	category, ok := candidateExplicitMaliciousRelationCategoryPrepared(normalizedText, candidatePhishingProof)
 	if !ok {
 		return classificationCandidate{}, false
 	}
-	if category == rules.CategoryPhishing &&
-		candidatePhishingSyntheticSimulationScope(strings.ToLower(strings.TrimSpace(authorizationText))) {
-		return classificationCandidate{}, false
+	if category == rules.CategoryPhishing {
+		candidateRealCredentialRelation := candidatePhishingRealCredentialInteractionRelationPrepared(
+			normalizedText, candidatePhishingProof,
+		)
+		realCredentialRelation := candidatePhishingRealCredentialInteractionRelationPrepared(
+			normalizedAuthorizationText, authorizationPhishingProof,
+		)
+		authorizationDetectionArtifact := candidatePhishingDetectionArtifactScopePrepared(
+			normalizedAuthorizationText, authorizationPhishingProof,
+		)
+		if authorizationDetectionArtifact &&
+			candidatePhishingReferencedNonExecutionScope(normalizedAuthorizationText) &&
+			!realCredentialRelation {
+			_, authorizationIndependentExecution := candidatePhishingIndependentMaliciousExecutionTailPrepared(
+				normalizedAuthorizationText, authorizationPhishingProof,
+			)
+			if !authorizationIndependentExecution {
+				return classificationCandidate{}, false
+			}
+		}
+		if candidatePhishingSyntheticSimulationScopePrepared(
+			normalizedAuthorizationText, authorizationPhishingProof,
+		) && !candidateRealCredentialRelation {
+			return classificationCandidate{}, false
+		}
+		if authorizationDetectionArtifact &&
+			candidatePhishingDetectionArtifactScopePrepared(normalizedText, candidatePhishingProof) &&
+			!candidateRealCredentialRelation {
+			return classificationCandidate{}, false
+		}
 	}
 
 	ruleID := explicitMaliciousRelationRuleID(category)
-	normalizedText := strings.ToLower(strings.TrimSpace(text))
+	activeDirective := true
+	if category == rules.CategoryPhishing {
+		// The typed phishing relation deliberately recognizes past and passive
+		// incident language so it can preserve taxonomy and evidence. That lexical
+		// relation is not itself proof of a current execution speech act.
+		activeDirective = candidatePhishingCurrentCredentialInteractionSpeechActPrepared(
+			normalizedText, candidatePhishingProof,
+		)
+	}
 	quotedActivation := candidateExplicitQuotedActivation(normalizedText)
-	independentTail, independentExecution := independentMaliciousExecutionTail(normalizedText)
-	quotedOrAnalytical := candidateQuotedOrAnalyticalScope(normalizedText) &&
+	independentTail, independentExecution := candidatePhishingIndependentMaliciousExecutionTailPrepared(
+		normalizedText, candidatePhishingProof,
+	)
+	quotedOrAnalytical := candidateQuotedOrAnalyticalScopePrepared(normalizedText, candidatePhishingProof) &&
 		!quotedActivation && !independentExecution
 	// The request-wide matcher context is only a discovery hint; it does not
 	// prove that a defensive/remediation token owns this physical candidate.
@@ -378,7 +475,9 @@ func explicitMaliciousRelationCandidate(
 	// normalizedText below. The clause walker separately suppresses a whole
 	// analytical carrier unless it contains an independent malicious execution
 	// clause, so no request-level safety label is needed here.
-	defensiveConflict := candidateExplicitRelationDefensiveConflict(category, normalizedText)
+	defensiveConflict := candidateExplicitRelationDefensiveConflictPrepared(
+		category, normalizedText, candidatePhishingProof,
+	)
 	if independentExecution {
 		defensiveConflict = candidateExplicitRelationDefensiveConflict(category, independentTail)
 	}
@@ -393,16 +492,16 @@ func explicitMaliciousRelationCandidate(
 	if quotedOrAnalytical || defensiveConflict {
 		return classificationCandidate{}, false
 	}
-	typedAxes := candidateExplicitRelationTypedAxes(category, strings.ToLower(strings.TrimSpace(text)))
+	typedAxes := candidateExplicitRelationTypedAxes(category, normalizedText)
 	eligibility := assessCandidateBlockEligibility(candidateEligibilityInput{
 		category:                    category,
 		ruleID:                      ruleID,
 		text:                        text,
 		authorizationText:           authorizationText,
 		coreComplete:                true,
-		activeDirective:             true,
-		currentExecutionProven:      true,
-		operational:                 true,
+		activeDirective:             activeDirective,
+		currentExecutionProven:      activeDirective,
+		operational:                 activeDirective,
 		ownershipProven:             true,
 		inspectionComplete:          inspectionComplete,
 		referentProofComplete:       true,
@@ -493,6 +592,23 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 	inspectionComplete bool,
 	existingEligibleCategoryMasks ...uint16,
 ) []classificationCandidate {
+	var existingEligibleCategoryMask uint16
+	if len(existingEligibleCategoryMasks) != 0 {
+		existingEligibleCategoryMask = existingEligibleCategoryMasks[0]
+	}
+	return c.explicitMaliciousRelationClauseCandidatesPrepared(
+		text, context, inspectionComplete, nil, existingEligibleCategoryMask, nil,
+	)
+}
+
+func (c *Classifier) explicitMaliciousRelationClauseCandidatesPrepared(
+	text []rune,
+	context ContextFlags,
+	inspectionComplete bool,
+	sharedPhishingProof *candidatePhishingRelationProof,
+	existingEligibleCategoryMask uint16,
+	proofBudgetExceeded *bool,
+) []classificationCandidate {
 	if c == nil || len(text) == 0 || len(text) > maxClassifierNormalizedRunes {
 		// Production inputs are capped by normalizePartsInto before this fallback
 		// runs. Keep the same absolute bound for direct/internal callers so whole-
@@ -528,63 +644,124 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 	if candidateUnclosedFencedCarrier(wholeText) {
 		return nil
 	}
-	if candidateInertLabeledCarrier(wholeText) && !wholeQuotedActivation &&
-		!hasIndependentMaliciousExecutionClause(wholeText) {
-		return nil
-	}
-	wholeAnalyticalOwner := !wholeQuotedActivation &&
-		(candidateQuotedOrAnalyticalScope(wholeText) || candidateTransformativeAnalyticalScope(wholeText))
-	wholeDefensiveOwner := !wholeQuotedActivation && candidateExplicitRelationWholeFieldDefensiveOwner(wholeText)
-	wholePhishingSimulation := candidatePhishingSyntheticSimulationScope(wholeText)
-
-	var quotedSpan explicitRelationRuneSpan
-	hasQuotedSpan := false
+	var quotedSpans [maxAnalyzedDirectiveClauses]explicitRelationRuneSpan
+	quotedSpanCount := 0
 	if candidateExplicitRelationHasStructuredQuoteSyntax(wholeText) {
-		spans, complete := metaOverrideQuotedSpansWithLimit(rawWholeText, 2)
-		if !complete || len(spans) != 1 {
+		spans, complete := metaOverrideQuotedSpansWithLimit(rawWholeText, len(quotedSpans))
+		if !complete {
 			return nil
 		}
-		quotedSpan = explicitRelationRuneSpan{
-			start: utf8.RuneCountInString(rawWholeText[:spans[0].start]),
-			end:   utf8.RuneCountInString(rawWholeText[:spans[0].end]),
+		previousByte := 0
+		previousRune := 0
+		for _, span := range spans {
+			startRune := previousRune + utf8.RuneCountInString(rawWholeText[previousByte:span.start])
+			endRune := startRune + utf8.RuneCountInString(rawWholeText[span.start:span.end])
+			quotedSpans[quotedSpanCount] = explicitRelationRuneSpan{start: startRune, end: endRune}
+			quotedSpanCount++
+			previousByte = span.end
+			previousRune = endRune
 		}
-		hasQuotedSpan = true
 	}
-
-	var existingEligibleCategoryMask uint16
-	if len(existingEligibleCategoryMasks) != 0 {
-		existingEligibleCategoryMask = existingEligibleCategoryMasks[0]
+	fieldQuotedSpans := quotedSpans[:quotedSpanCount]
+	var localWholePhishingProof candidatePhishingRelationProof
+	wholePhishingProof := sharedPhishingProof
+	if wholePhishingProof == nil || wholePhishingProof.text != wholeText {
+		localWholePhishingProof = newCandidatePhishingRelationProof(wholeText)
+		wholePhishingProof = &localWholePhishingProof
 	}
+	independentPhishingClause := false
+	independentPhishingClauseChecked := false
+	hasIndependentPhishingClause := func() bool {
+		if !independentPhishingClauseChecked {
+			independentPhishingClause = candidateFieldHasIndependentPhishingRealCredentialClause(text)
+			independentPhishingClauseChecked = true
+		}
+		return independentPhishingClause
+	}
+	independentExplicitClause := false
+	independentExplicitClauseChecked := false
+	hasIndependentExplicitClause := func() bool {
+		if !independentExplicitClauseChecked {
+			independentExplicitClause = c.candidateFieldHasIndependentExplicitMaliciousClause(text, fieldQuotedSpans)
+			independentExplicitClauseChecked = true
+		}
+		return independentExplicitClause
+	}
+	if carrier, tailState := candidateInertLabeledCarrierExecutionTailProof(wholeText); carrier {
+		// The exact first-line log/console/terminal label owns the complete
+		// remainder of this field unless a later transition explicitly reactivates
+		// that carrier. An oversized possible transition remains owned here while
+		// its neutral proof-budget state is propagated to the request result.
+		// Reactivation across parser-proven adjacent
+		// fields still follows the profiled referent path; ordinary payload lines
+		// must never materialize an eligible explicit candidate.
+		if tailState == explicitMaliciousRelationProofBudgetExceeded && proofBudgetExceeded != nil {
+			*proofBudgetExceeded = true
+		}
+		if tailState != explicitMaliciousRelationMatched {
+			return nil
+		}
+	}
+	wholeAnalyticalOwner := !wholeQuotedActivation &&
+		(candidateQuotedOrAnalyticalScopePrepared(wholeText, wholePhishingProof) ||
+			candidateTransformativeAnalyticalScope(wholeText))
+	wholeDefensiveOwner := !wholeQuotedActivation && candidateExplicitRelationWholeFieldDefensiveOwner(wholeText)
+	wholePhishingSimulation := candidatePhishingSyntheticSimulationScopePrepared(
+		wholeText, wholePhishingProof,
+	)
 
+	_, wholeIndependentExecution := candidatePhishingIndependentMaliciousExecutionTailPrepared(
+		wholeText, wholePhishingProof,
+	)
+	if len(wholeText) > maxCompactIntentProofBytes {
+		if (wholeAnalyticalOwner || wholePhishingSimulation) &&
+			!wholeIndependentExecution &&
+			!hasIndependentPhishingClause() &&
+			!hasIndependentExplicitClause() {
+			return nil
+		}
+	} else if wholeAnalyticalOwner && !wholeIndependentExecution &&
+		!hasIndependentPhishingClause() &&
+		!hasIndependentExplicitClause() {
+		return nil
+	}
+	preferredCategory, wholeRelationState := candidateExplicitMaliciousRelationCategoryProof(
+		wholeText, wholePhishingProof,
+	)
+	wholeRelationComplete := wholeRelationState == explicitMaliciousRelationMatched
+	if wholeRelationState == explicitMaliciousRelationProofBudgetExceeded {
+		if proofBudgetExceeded != nil {
+			*proofBudgetExceeded = true
+		}
+	}
 	if clauseOverflow {
 		return c.explicitMaliciousRelationOverflowCandidates(
 			text,
 			context,
 			inspectionComplete,
 			existingEligibleCategoryMask,
-			wholeAnalyticalOwner || wholeDefensiveOwner,
+			wholeAnalyticalOwner || wholeDefensiveOwner || wholePhishingSimulation,
 			wholeQuotedActivation,
 			wholePhishingSimulation,
-			quotedSpan,
-			hasQuotedSpan,
+			fieldQuotedSpans,
 		)
 	}
-	if wholeAnalyticalOwner && !hasIndependentMaliciousExecutionClause(wholeText) {
-		return nil
-	}
-	preferredCategory, wholeRelationComplete := candidateExplicitMaliciousRelationCategory(wholeText)
 	if wholeRelationComplete && !wholeQuotedActivation &&
-		candidateExplicitRelationDefensiveConflict(preferredCategory, wholeText) &&
-		!hasIndependentMaliciousExecutionClause(wholeText) {
+		candidateExplicitRelationDefensiveConflictPrepared(preferredCategory, wholeText, wholePhishingProof) &&
+		!wholeIndependentExecution &&
+		!hasIndependentPhishingClause() &&
+		!hasIndependentExplicitClause() {
 		// Preserve a candidate-local defensive/analytical owner before the clause
 		// walker discards it. Strong same-scope hostile execution is handled by the
 		// conflict helper and still reaches the per-clause assessment below.
 		return nil
 	}
 	candidates := make([]classificationCandidate, 0, 8)
-	if _, independent := independentMaliciousExecutionTail(wholeText); independent {
-		if candidate, ok := explicitMaliciousRelationCandidate(
-			wholeText, wholeText, context, inspectionComplete, existingEligibleCategoryMask,
+	if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(
+		wholeText, wholePhishingProof,
+	); independent {
+		if candidate, ok := explicitMaliciousRelationCandidatePrepared(
+			wholeText, wholeText, wholePhishingProof, context, inspectionComplete, existingEligibleCategoryMask,
 		); ok {
 			var clauseTexts [maxExplicitQuotedActivationClauses]string
 			var clauseIDs [maxExplicitQuotedActivationClauses]int
@@ -637,8 +814,8 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 	}
 	if wholeRelationComplete && wholeQuotedActivation {
 		spans, quoteComplete := metaOverrideQuotedSpans(wholeText)
-		candidate, ok := explicitMaliciousRelationCandidate(
-			wholeText, wholeText, context, inspectionComplete, existingEligibleCategoryMask,
+		candidate, ok := explicitMaliciousRelationCandidatePrepared(
+			wholeText, wholeText, wholePhishingProof, context, inspectionComplete, existingEligibleCategoryMask,
 		)
 		if quoteComplete && len(spans) != 0 && ok && candidate.category == preferredCategory {
 			var clauseTexts [maxExplicitQuotedActivationClauses]string
@@ -665,7 +842,7 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 					clauseTexts[:activationClauseCount],
 					clauseIDs[:activationClauseCount],
 				)
-				if !bound && hasQuotedSpan {
+				if !bound && quotedSpanCount != 0 {
 					// A quote-aware clause walker may retain the carrier and its
 					// external activation as one physical clause. The completed
 					// single-carrier activation proof above then supplies the local
@@ -707,13 +884,21 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 		currentClauseID := clauseID
 		clauseID++
 		clauseText := string(clause)
-		currentCandidate, currentComplete := explicitMaliciousRelationCandidate(
-			clauseText, wholeText, context, inspectionComplete, existingEligibleCategoryMask,
-		)
 		currentPhysical := linkedPhysicalClause{
 			text: clauseText, clauseID: currentClauseID, start: start, end: end,
-			explicitComplete: currentComplete,
 		}
+		if !wholeQuotedActivation && explicitRelationWindowIntersectsQuotes(
+			[]explicitRelationPhysicalClause{{runes: clause, start: start, end: end}}, fieldQuotedSpans,
+		) {
+			previousClause = linkedPhysicalClause{clauseID: -1}
+			secondPreviousClause = linkedPhysicalClause{clauseID: -1}
+			previousBoundary = directiveBoundaryStrong
+			return true
+		}
+		currentCandidate, currentComplete := explicitMaliciousRelationCandidatePrepared(
+			clauseText, wholeText, wholePhishingProof, context, inspectionComplete, existingEligibleCategoryMask,
+		)
+		currentPhysical.explicitComplete = currentComplete
 		if wholeRelationComplete && currentComplete && currentCandidate.category == preferredCategory {
 			preferredCategoryEstablished = true
 		}
@@ -722,8 +907,8 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 		)
 		if linkedPhishing {
 			joined := strings.TrimSpace(previousClause.text + "\n" + clauseText)
-			candidate, linked := explicitMaliciousRelationCandidate(
-				joined, wholeText, context, inspectionComplete, existingEligibleCategoryMask,
+			candidate, linked := explicitMaliciousRelationCandidatePrepared(
+				joined, wholeText, wholePhishingProof, context, inspectionComplete, existingEligibleCategoryMask,
 			)
 			if linked && candidate.category == rules.CategoryPhishing &&
 				(!wholeRelationComplete || candidate.category == preferredCategory) {
@@ -744,8 +929,8 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 			(!previousClause.explicitComplete || !currentComplete) &&
 			(boundary == directiveBoundarySoft || boundary == directiveBoundaryContinuation) {
 			joined := strings.TrimSpace(previousClause.text + "\n" + clauseText)
-			candidate, linked := explicitMaliciousRelationCandidate(
-				joined, wholeText, context, inspectionComplete, existingEligibleCategoryMask,
+			candidate, linked := explicitMaliciousRelationCandidatePrepared(
+				joined, wholeText, wholePhishingProof, context, inspectionComplete, existingEligibleCategoryMask,
 			)
 			if linked && (!wholeRelationComplete || candidate.category == preferredCategory) {
 				var clauseTexts = [2]string{previousClause.text, clauseText}
@@ -768,8 +953,8 @@ func (c *Classifier) explicitMaliciousRelationClauseCandidates(
 			(previousBoundary == directiveBoundarySoft || previousBoundary == directiveBoundaryContinuation) &&
 			(boundary == directiveBoundarySoft || boundary == directiveBoundaryContinuation) {
 			joined := strings.TrimSpace(secondPreviousClause.text + "\n" + previousClause.text + "\n" + clauseText)
-			candidate, linked := explicitMaliciousRelationCandidate(
-				joined, wholeText, context, inspectionComplete, existingEligibleCategoryMask,
+			candidate, linked := explicitMaliciousRelationCandidatePrepared(
+				joined, wholeText, wholePhishingProof, context, inspectionComplete, existingEligibleCategoryMask,
 			)
 			if linked && (!wholeRelationComplete || candidate.category == preferredCategory) {
 				var clauseTexts = [3]string{secondPreviousClause.text, previousClause.text, clauseText}
@@ -897,36 +1082,86 @@ var candidateExplicitRelationCoarseReversalTerms = []string{
 	"will not refuse", "won't refuse", "not refuse", "same operation",
 }
 
+const explicitRelationASCIILetterCount = int('z'-'a') + 1
+
+type explicitRelationASCIITrigramBuckets [explicitRelationASCIILetterCount][explicitRelationASCIILetterCount][explicitRelationASCIILetterCount][]string
+
 type explicitRelationCoarseTermBuckets struct {
-	ascii [utf8.RuneSelf][]string
-	other map[rune][]string
+	// Most operational verbs start with three ASCII letters. Keep those terms in
+	// a direct trigram table so long ordinary clauses do not retry every verb that
+	// happens to share their first letter. The first-rune buckets retain short or
+	// non-word prefixes, while non-ASCII terms keep their existing rune map.
+	asciiTrigrams *explicitRelationASCIITrigramBuckets
+	asciiFallback [utf8.RuneSelf][]string
+	asciiShort    [utf8.RuneSelf][]string
+	other         map[rune][]string
 }
 
-func compileExplicitRelationCoarseTermBuckets(values []string) explicitRelationCoarseTermBuckets {
+func explicitRelationASCIILetterIndex(value byte) (int, bool) {
+	if value >= 'A' && value <= 'Z' {
+		value += 'a' - 'A'
+	}
+	if value < 'a' || value > 'z' {
+		return 0, false
+	}
+	return int(value - 'a'), true
+}
+
+func explicitRelationASCIITrigram(value string) (int, int, int, bool) {
+	if len(value) < 3 {
+		return 0, 0, 0, false
+	}
+	first, firstOK := explicitRelationASCIILetterIndex(value[0])
+	second, secondOK := explicitRelationASCIILetterIndex(value[1])
+	third, thirdOK := explicitRelationASCIILetterIndex(value[2])
+	return first, second, third, firstOK && secondOK && thirdOK
+}
+
+func compileExplicitRelationCoarseTermBuckets(valueSets ...[]string) explicitRelationCoarseTermBuckets {
 	var buckets explicitRelationCoarseTermBuckets
-	for _, value := range values {
-		if value == "" {
-			continue
+	for _, values := range valueSets {
+		for _, value := range values {
+			if value == "" {
+				continue
+			}
+			if first, second, third, ok := explicitRelationASCIITrigram(value); ok {
+				if buckets.asciiTrigrams == nil {
+					buckets.asciiTrigrams = new(explicitRelationASCIITrigramBuckets)
+				}
+				buckets.asciiTrigrams[first][second][third] = append(
+					buckets.asciiTrigrams[first][second][third], value,
+				)
+				continue
+			}
+			first, _ := utf8.DecodeRuneInString(value)
+			if first >= 'A' && first <= 'Z' {
+				first += 'a' - 'A'
+			}
+			if first >= 0 && first < utf8.RuneSelf {
+				index := int(first)
+				if utf8.RuneCountInString(value) < 3 {
+					buckets.asciiShort[index] = append(buckets.asciiShort[index], value)
+				} else {
+					buckets.asciiFallback[index] = append(buckets.asciiFallback[index], value)
+				}
+				continue
+			}
+			if buckets.other == nil {
+				buckets.other = make(map[rune][]string)
+			}
+			buckets.other[first] = append(buckets.other[first], value)
 		}
-		first, _ := utf8.DecodeRuneInString(value)
-		if first >= 'A' && first <= 'Z' {
-			first += 'a' - 'A'
-		}
-		if first >= 0 && first < utf8.RuneSelf {
-			index := int(first)
-			buckets.ascii[index] = append(buckets.ascii[index], value)
-			continue
-		}
-		if buckets.other == nil {
-			buckets.other = make(map[rune][]string)
-		}
-		buckets.other[first] = append(buckets.other[first], value)
 	}
 	return buckets
 }
 
 var candidateExplicitRelationActionTermBuckets = compileExplicitRelationCoarseTermBuckets(
 	candidateExplicitMaliciousRelationActions,
+)
+
+var candidateExplicitRelationPotentialActionTermBuckets = compileExplicitRelationCoarseTermBuckets(
+	candidateExplicitMaliciousRelationActions,
+	candidatePhishingCredentialInteractionIntents,
 )
 
 var candidateExplicitRelationReversalTermBuckets = compileExplicitRelationCoarseTermBuckets(
@@ -979,7 +1214,29 @@ func runeSliceContainsAnyFoldASCIIBucketed(
 		}
 		var values []string
 		if current >= 0 && current < utf8.RuneSelf {
-			values = buckets.ascii[int(current)]
+			for _, value := range buckets.asciiShort[int(current)] {
+				if runeSliceMatchesFoldASCIIAt(text, start, value) {
+					return true
+				}
+			}
+			if buckets.asciiTrigrams != nil && start+2 < len(text) {
+				first, firstOK := explicitRelationASCIILetterIndex(byte(current))
+				secondRune := text[start+1]
+				thirdRune := text[start+2]
+				if secondRune >= 0 && secondRune < utf8.RuneSelf && thirdRune >= 0 && thirdRune < utf8.RuneSelf {
+					second, secondOK := explicitRelationASCIILetterIndex(byte(secondRune))
+					third, thirdOK := explicitRelationASCIILetterIndex(byte(thirdRune))
+					if firstOK && secondOK && thirdOK {
+						values = buckets.asciiTrigrams[first][second][third]
+					} else {
+						values = buckets.asciiFallback[int(current)]
+					}
+				} else {
+					values = buckets.asciiFallback[int(current)]
+				}
+			} else {
+				values = buckets.asciiFallback[int(current)]
+			}
 		} else if buckets.other != nil {
 			values = buckets.other[current]
 		}
@@ -993,10 +1250,24 @@ func runeSliceContainsAnyFoldASCIIBucketed(
 }
 
 func candidateExplicitRelationClausePotentialRunes(clause []rune) explicitRelationClausePotential {
-	if runeSliceContainsAnyFoldASCIIBucketed(clause, &candidateExplicitRelationActionTermBuckets) {
+	if runeSliceContainsAnyFoldASCIIBucketed(clause, &candidateExplicitRelationPotentialActionTermBuckets) {
 		return explicitRelationPotentialAction
 	}
 	return 0
+}
+
+func candidateExplicitRelationClausePreflightRunes(
+	clause []rune,
+	compactScratch *compactRuleIntentClauseScratch,
+) (explicitRelationClausePotential, bool) {
+	potential := candidateExplicitRelationClausePotentialRunes(clause)
+	// A clause with no physical action occurrence cannot independently execute
+	// this relation. Mark it non-executable without running the substantially
+	// richer negation/permission proof; if a neighboring clause owns the action,
+	// that action clause still decides whether the combined span is active.
+	clearlyNonExecutable := potential&explicitRelationPotentialAction == 0 ||
+		candidateExplicitRelationClauseClearlyNonExecutableRunes(clause, compactScratch)
+	return potential, clearlyNonExecutable
 }
 
 func explicitRelationTrimLeadingDirectiveRunes(clause []rune) []rune {
@@ -1238,10 +1509,13 @@ func (c *Classifier) explicitMaliciousRelationOverflowMayContainCandidate(text [
 			copy(window[:], window[1:])
 			windowCount--
 		}
+		potential, clearlyNonExecutable := candidateExplicitRelationClausePreflightRunes(clause, &compactScratch)
 		window[windowCount] = explicitRelationPhysicalClause{
 			runes:                clause,
 			boundaryBefore:       boundary,
-			clearlyNonExecutable: candidateExplicitRelationClauseClearlyNonExecutableRunes(clause, &compactScratch),
+			potential:            potential,
+			potentialSet:         true,
+			clearlyNonExecutable: clearlyNonExecutable,
 		}
 		windowCount++
 		for count := 1; count <= windowCount; count++ {
@@ -1285,15 +1559,24 @@ func (c *Classifier) explicitMaliciousRelationOverflowMayContainCandidate(text [
 	return found
 }
 
-func explicitRelationWindowIntersectsQuote(
+func explicitRelationWindowIntersectsQuotes(
 	clauses []explicitRelationPhysicalClause,
-	quotedSpan explicitRelationRuneSpan,
-	hasQuotedSpan bool,
+	quotedSpans []explicitRelationRuneSpan,
 ) bool {
-	if !hasQuotedSpan || len(clauses) == 0 {
+	if len(quotedSpans) == 0 || len(clauses) == 0 {
 		return false
 	}
-	return clauses[0].start < quotedSpan.end && clauses[len(clauses)-1].end > quotedSpan.start
+	windowStart := clauses[0].start
+	windowEnd := clauses[len(clauses)-1].end
+	for _, quotedSpan := range quotedSpans {
+		if quotedSpan.start >= windowEnd {
+			return false
+		}
+		if windowStart < quotedSpan.end && windowEnd > quotedSpan.start {
+			return true
+		}
+	}
+	return false
 }
 
 func explicitRelationWindowText(clauses []explicitRelationPhysicalClause) (string, bool) {
@@ -1325,7 +1608,57 @@ func explicitRelationWindowText(clauses []explicitRelationPhysicalClause) (strin
 
 func candidateExplicitRelationIndependentSpeechAct(text string) bool {
 	text = strings.TrimLeft(strings.TrimSpace(text), "-*#>,:\t")
-	return startsWithRuleIntent(text, candidateExplicitMaliciousRelationActions) || hasOperationalDeliverableFraming(text)
+	return startsWithRuleIntent(text, candidateExplicitMaliciousRelationActions) ||
+		startsWithRuleIntent(text, candidatePhishingCredentialInteractionIntents) ||
+		hasOperationalDeliverableFraming(text)
+}
+
+func (c *Classifier) candidateFieldHasIndependentExplicitMaliciousClause(
+	text []rune,
+	quotedSpans []explicitRelationRuneSpan,
+) bool {
+	if c == nil || len(text) == 0 {
+		return false
+	}
+	found := false
+	var compactScratch compactRuleIntentClauseScratch
+	transformativeOwnerOwnsNextClause := false
+	c.walkDirectiveClausesWithBoundaryRange(text, func(
+		clause []rune,
+		start, end int,
+		boundary directiveBoundaryKind,
+	) bool {
+		clauseText := strings.ToLower(strings.TrimSpace(string(clause)))
+		ownedByTransformativeOwner := transformativeOwnerOwnsNextClause
+		transformativeOwnerOwnsNextClause = clauseText != "" &&
+			candidateTransformativeAnalyticalScope(clauseText)
+		if ownedByTransformativeOwner {
+			// A bounded transformative owner such as "rewrite the dangerous
+			// request as a compliant refusal:" owns exactly the immediately
+			// following payload clause, even when a colon produced a strong
+			// physical boundary. A later execution clause is still independent.
+			return true
+		}
+		if boundary != directiveBoundaryNone && boundary != directiveBoundaryStrong {
+			return true
+		}
+		if explicitRelationWindowIntersectsQuotes(
+			[]explicitRelationPhysicalClause{{runes: clause, start: start, end: end}}, quotedSpans,
+		) || candidateExplicitRelationClauseClearlyNonExecutableRunes(clause, &compactScratch) ||
+			candidateExplicitRelationSimpleProhibitionRunes(clause) {
+			return true
+		}
+		if clauseText == "" || !candidateExplicitRelationIndependentSpeechAct(clauseText) ||
+			candidateInertLabeledCarrier(clauseText) || candidateQuotedOrAnalyticalScope(clauseText) ||
+			candidateTransformativeAnalyticalScope(clauseText) ||
+			candidateExplicitRelationWholeFieldDefensiveOwner(clauseText) ||
+			candidatePermissionOnlyScope(clauseText) || candidatePhishingDetectionArtifactScope(clauseText) {
+			return true
+		}
+		_, found = candidateExplicitMaliciousRelationCategory(clauseText)
+		return !found
+	})
+	return found
 }
 
 func bindExplicitRelationCandidateToPhysicalClauses(
@@ -1670,8 +2003,7 @@ func (c *Classifier) explicitMaliciousRelationOverflowCandidates(
 	hasWholeFieldOwner bool,
 	wholeQuotedActivation bool,
 	wholePhishingSimulation bool,
-	quotedSpan explicitRelationRuneSpan,
-	hasQuotedSpan bool,
+	quotedSpans []explicitRelationRuneSpan,
 ) []classificationCandidate {
 	var choices [8]explicitRelationCandidateChoice
 	var softChainChoices [8]explicitRelationCandidateChoice
@@ -1703,10 +2035,13 @@ func (c *Classifier) explicitMaliciousRelationOverflowCandidates(
 			copy(window[:], window[1:])
 			windowCount--
 		}
+		potential, clearlyNonExecutable := candidateExplicitRelationClausePreflightRunes(clause, &compactScratch)
 		window[windowCount] = explicitRelationPhysicalClause{
 			runes: clause, clauseID: currentClauseID, start: start, end: end,
 			boundaryBefore:               boundary,
-			clearlyNonExecutable:         candidateExplicitRelationClauseClearlyNonExecutableRunes(clause, &compactScratch),
+			potential:                    potential,
+			potentialSet:                 true,
+			clearlyNonExecutable:         clearlyNonExecutable,
 			requiresIndependentSpeechAct: hasWholeFieldOwner && ownerSeen,
 		}
 		windowCount++
@@ -1735,7 +2070,7 @@ func (c *Classifier) explicitMaliciousRelationOverflowCandidates(
 				allClearlyNonExecutable = allClearlyNonExecutable && candidateClause.clearlyNonExecutable
 			}
 			if allClearlyNonExecutable || spanRunes > maxCompactIntentProofBytes ||
-				!wholeQuotedActivation && explicitRelationWindowIntersectsQuote(physical, quotedSpan, hasQuotedSpan) {
+				!wholeQuotedActivation && explicitRelationWindowIntersectsQuotes(physical, quotedSpans) {
 				continue
 			}
 			var potential explicitRelationClausePotential
@@ -1857,7 +2192,8 @@ func candidateExplicitRelationDimensionOwnedBy(category rules.Category, dimensio
 	}
 	switch dimension {
 	case "action":
-		return candidateExplicitMaliciousRelationAction(text)
+		return candidateExplicitMaliciousRelationAction(text) ||
+			category == rules.CategoryPhishing && candidatePhishingCredentialInteractionAction(text)
 	case "harm":
 		return candidateExplicitMaliciousHostileScope(text) || candidateCovertAcquisition(text) ||
 			candidateDestructiveOutcome(category, text) || candidateSecurityControlEvasion(category, text) ||
@@ -1946,10 +2282,52 @@ func explicitMaliciousRelationRuleID(category rules.Category) string {
 }
 
 func candidateExplicitMaliciousRelationCategory(raw string) (rules.Category, bool) {
+	return candidateExplicitMaliciousRelationCategoryPrepared(raw, nil)
+}
+
+func candidateExplicitMaliciousRelationCategoryPrepared(
+	raw string,
+	phishingProof *candidatePhishingRelationProof,
+) (rules.Category, bool) {
+	category, state := candidateExplicitMaliciousRelationCategoryProof(raw, phishingProof)
+	return category, state == explicitMaliciousRelationMatched
+}
+
+func candidateExplicitMaliciousRelationCategoryProof(
+	raw string,
+	phishingProof *candidatePhishingRelationProof,
+) (rules.Category, explicitMaliciousRelationProofState) {
 	text := strings.TrimSpace(raw)
-	if text == "" || len(text) > maxCompactIntentProofBytes ||
-		candidateExplicitRelationClauseBudgetExceeded(text) {
-		return "", false
+	if text == "" {
+		return "", explicitMaliciousRelationNotMatched
+	}
+	if len(text) > maxCompactIntentProofBytes {
+		// The request-wide phishing cache may be mid-population when the explicit
+		// fallback is reached. Use an independent proof object for this tri-state
+		// preflight so a partially cached recursive owner check cannot turn a safe
+		// detection artifact into a synthetic budget overflow.
+		if candidateExplicitMaliciousRelationOversizedPotential(strings.ToLower(text), nil) {
+			return "", explicitMaliciousRelationProofBudgetExceeded
+		}
+		return "", explicitMaliciousRelationNotMatched
+	}
+	return candidateExplicitMaliciousRelationCategoryProofWithinBudget(text, phishingProof)
+}
+
+func candidateExplicitMaliciousRelationCategoryProofWithinBudget(
+	raw string,
+	phishingProof *candidatePhishingRelationProof,
+) (rules.Category, explicitMaliciousRelationProofState) {
+	text := strings.TrimSpace(raw)
+	if text == "" || len(text) > maxCompactIntentProofBytes {
+		return "", explicitMaliciousRelationNotMatched
+	}
+	if candidateExplicitRelationClauseBudgetExceeded(text) {
+		// The clause-overflow caller has its own bounded rolling-window proof and
+		// deliberately treats this whole-field view as unavailable, not as a
+		// field-wide overflow. Keep direct callers source-compatible while the
+		// enclosing scanner completes the proof clause by clause.
+		return "", explicitMaliciousRelationNotMatched
 	}
 	if tail, ok := candidatePermissionIndependentMaliciousTail(strings.ToLower(text)); ok {
 		text = tail
@@ -1957,27 +2335,31 @@ func candidateExplicitMaliciousRelationCategory(raw string) (rules.Category, boo
 	text = strings.ToLower(text)
 	if candidateExplicitRelationAmbiguousQuoteStructure(text) ||
 		candidateExplicitRelationQuotedPayloadOwnsOnlyAction(text) {
-		return "", false
+		return "", explicitMaliciousRelationNotMatched
+	}
+	if candidateExplicitRelationSimpleProhibitionRunes([]rune(text)) {
+		return "", explicitMaliciousRelationNotMatched
 	}
 	quotedActivation := candidateExplicitQuotedActivation(text)
-	independentExecution := hasIndependentMaliciousExecutionClause(text)
+	_, independentExecution := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, phishingProof)
 	if candidatePermissionOnlyScope(text) || candidateUnclosedFencedCarrier(text) {
-		return "", false
+		return "", explicitMaliciousRelationNotMatched
 	}
-	if (candidateInertLabeledCarrier(text) || candidateTransformativeAnalyticalScope(text)) &&
-		!quotedActivation && !independentExecution {
-		return "", false
-	}
-	if candidateQuotedOrAnalyticalScope(text) && !quotedActivation && !independentExecution {
-		return "", false
+	if !quotedActivation && !independentExecution {
+		analyticalOwner := candidateInertLabeledCarrier(text) ||
+			candidateTransformativeAnalyticalScope(text) ||
+			candidateQuotedOrAnalyticalScopePrepared(text, phishingProof)
+		if analyticalOwner && !candidatePhishingRealCredentialInteractionRelationPrepared(text, phishingProof) {
+			return "", explicitMaliciousRelationNotMatched
+		}
 	}
 	// Curly and modifier apostrophes are common possessive spelling variants,
 	// not independent quote carriers, in targets such as users' browsers. Keep
 	// the original text for the quote/analytical ownership checks above, then use
 	// a narrow possessive-equivalent view for the typed relation axes below.
 	relationText := possessiveApostropheEquivalent(text)
-	if !candidateExplicitMaliciousRelationAction(relationText) {
-		return "", false
+	if !candidateExplicitRelationAnyAction(relationText) {
+		return "", explicitMaliciousRelationNotMatched
 	}
 	hostile := candidateExplicitMaliciousHostileScope(relationText)
 
@@ -1985,33 +2367,365 @@ func candidateExplicitMaliciousRelationCategory(raw string) (rules.Category, boo
 	// delivery/object relation are resolved before generic data movement or
 	// service impact so their secondary consequences cannot steal the winner.
 	if candidateExplicitPromptInjectionRelation(relationText, hostile) {
-		return rules.CategoryEvasion, true
+		return rules.CategoryEvasion, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitRansomwareRelation(relationText, hostile) {
-		return rules.CategoryRansomware, true
+		return rules.CategoryRansomware, explicitMaliciousRelationMatched
 	}
-	if candidateExplicitPhishingRelation(relationText, hostile) {
-		return rules.CategoryPhishing, true
+	// A deceptive pretext must not relabel direct acquisition from an existing
+	// browser/credential store as phishing. Phishing owns credentials entered or
+	// submitted through the deceptive surface; reading an already-saved secret
+	// remains credential theft even when the attacker impersonates support.
+	if candidateStoredCredentialAcquisitionRelation(relationText) &&
+		candidateExplicitCredentialRelation(relationText, hostile) {
+		return rules.CategoryCredentialTheft, explicitMaliciousRelationMatched
+	}
+	if candidateExplicitPhishingRelationPrepared(relationText, hostile, phishingProof) {
+		return rules.CategoryPhishing, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitDefenseEvasionRelation(relationText, hostile) {
-		return rules.CategoryEvasion, true
+		return rules.CategoryEvasion, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitMalwareRelation(relationText, hostile) {
-		return rules.CategoryMalware, true
+		return rules.CategoryMalware, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitCredentialRelation(relationText, hostile) {
-		return rules.CategoryCredentialTheft, true
+		return rules.CategoryCredentialTheft, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitExploitationRelation(relationText, hostile) {
-		return rules.CategoryExploitation, true
+		return rules.CategoryExploitation, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitDisruptionRelation(relationText, hostile) {
-		return rules.CategoryDisruption, true
+		return rules.CategoryDisruption, explicitMaliciousRelationMatched
 	}
 	if candidateExplicitExfiltrationRelation(relationText, hostile) {
-		return rules.CategoryExfiltration, true
+		return rules.CategoryExfiltration, explicitMaliciousRelationMatched
 	}
-	return "", false
+	return "", explicitMaliciousRelationNotMatched
+}
+
+// candidateExplicitMaliciousRelationOversizedPotential searches a long field
+// only through UTF-8-safe, fixed-overlap windows that are each no larger than
+// the reviewed category proof budget. A matched window is a bounded positive
+// witness, not a blocking candidate: field-wide negation, ownership, and
+// occurrence identity remain unresolved, so the caller reports proof-budget
+// exhaustion unless an independent complete candidate already qualifies.
+func candidateExplicitMaliciousRelationOversizedPotential(
+	text string,
+	_ *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	textRunes := []rune(text)
+	if text == "" || candidateExplicitRelationAmbiguousQuoteStructure(text) ||
+		candidateExplicitRelationQuotedPayloadOwnsOnlyAction(text) ||
+		candidateExplicitRelationSimpleProhibitionRunes(textRunes) ||
+		candidatePermissionOnlyScope(text) || candidateUnclosedFencedCarrier(text) {
+		return false
+	}
+	if !candidateExplicitMaliciousRelationRunesHavePotentialAction(text, textRunes) {
+		return false
+	}
+
+	wholePhishingProof := newCandidatePhishingRelationProof(text)
+	quotedActivation := candidateExplicitQuotedActivation(text)
+	_, independentExecution := candidatePhishingIndependentMaliciousExecutionTailPrepared(
+		text, &wholePhishingProof,
+	)
+	if !quotedActivation && !independentExecution {
+		analyticalOwner := candidateInertLabeledCarrier(text) ||
+			candidateTransformativeAnalyticalScope(text) ||
+			candidateQuotedOrAnalyticalScopePrepared(text, &wholePhishingProof)
+		simulationOwner := candidatePhishingSyntheticSimulationScopePrepared(text, &wholePhishingProof)
+		if analyticalOwner || simulationOwner {
+			return false
+		}
+	}
+
+	found := false
+	walkDirectiveStrongScopeRunes(textRunes, func(scopeRunes []rune) bool {
+		if !candidateExplicitMaliciousRelationScopeRunesMayContainAction(scopeRunes) {
+			return true
+		}
+		scope := strings.TrimSpace(string(scopeRunes))
+		if scope == "" {
+			return true
+		}
+		if candidateExplicitMaliciousRelationOversizedScopeWindowPotential(scope) ||
+			len(scope) > maxCompactIntentProofBytes &&
+				candidateExplicitMaliciousRelationOversizedCrossWindowScopePotential(scope) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// candidateExplicitMaliciousRelationOversizedScopeWindowPotential applies the
+// bounded positive-witness scan to exactly one strong directive scope. Raw
+// byte windows must never bridge a sentence/strong boundary: otherwise an
+// ordinary action such as "install the payroll update" can borrow a risk noun
+// from the next descriptive sentence and turn a benign long field incomplete.
+func candidateExplicitMaliciousRelationOversizedScopeWindowPotential(text string) bool {
+	start := 0
+	for start < len(text) {
+		end := start + maxCompactIntentProofBytes
+		if end >= len(text) {
+			end = len(text)
+		} else {
+			for end > start && !utf8.RuneStart(text[end]) {
+				end--
+			}
+		}
+		if end <= start {
+			return false
+		}
+
+		windowText := strings.TrimSpace(text[start:end])
+		if windowText != "" &&
+			candidateExplicitMaliciousRelationWindowHasPotentialAction(windowText) {
+			windowPhishingProof := newCandidatePhishingRelationProof(windowText)
+			category, state := candidateExplicitMaliciousRelationCategoryProofWithinBudget(
+				windowText, &windowPhishingProof,
+			)
+			if state == explicitMaliciousRelationMatched &&
+				!candidateExplicitRelationDefensiveConflictPrepared(
+					category, windowText, &windowPhishingProof,
+				) {
+				return true
+			}
+		}
+		if end == len(text) {
+			break
+		}
+
+		next := end - explicitMaliciousRelationProofWindowOverlapBytes
+		if next <= start {
+			next = end
+		}
+		for next < len(text) && !utf8.RuneStart(text[next]) {
+			next++
+		}
+		if next <= start {
+			return false
+		}
+		start = next
+	}
+	return false
+}
+
+func candidateExplicitMaliciousRelationOversizedCrossWindowPotential(text string) bool {
+	found := false
+	walkDirectiveStrongScopes(text, func(scope string) bool {
+		if len(scope) <= maxCompactIntentProofBytes {
+			return true
+		}
+		if candidateExplicitMaliciousRelationOversizedCrossWindowScopePotential(scope) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// candidateExplicitMaliciousRelationOversizedCrossWindowScopePotential is
+// deliberately confined to one strong directive scope. A distant action in an
+// earlier sentence must not combine with a later risk noun merely because the
+// whole field exceeds the compact proof window. Soft/continuation clauses stay
+// in the same scope so a genuinely connected relation that straddles an
+// internal window remains fail-closed.
+func candidateExplicitMaliciousRelationOversizedCrossWindowScopePotential(text string) bool {
+	seenAction := false
+	seenRisk := false
+	start := 0
+	for start < len(text) {
+		end := start + maxCompactIntentProofBytes
+		if end >= len(text) {
+			break
+		}
+		for end > start && !utf8.RuneStart(text[end]) {
+			end--
+		}
+		if end <= start {
+			return false
+		}
+
+		next := end - explicitMaliciousRelationProofWindowOverlapBytes
+		if next <= start {
+			next = end
+		}
+		for next < len(text) && !utf8.RuneStart(text[next]) {
+			next++
+		}
+		if next <= start {
+			return false
+		}
+
+		// [start,next) is the portion owned only by the current window. Any
+		// relation between that cumulative prefix and bytes after end cannot fit
+		// in either adjacent proof window; the overlap itself is deliberately
+		// excluded because the next full window already assessed it.
+		leftExclusive := text[start:next]
+		seenAction = seenAction || candidateExplicitMaliciousRelationWindowHasPotentialAction(leftExclusive)
+		seenRisk = seenRisk || candidateExplicitMaliciousRelationOversizedRiskSignal(leftExclusive)
+
+		nextEnd := next + maxCompactIntentProofBytes
+		if nextEnd >= len(text) {
+			nextEnd = len(text)
+		} else {
+			for nextEnd > next && !utf8.RuneStart(text[nextEnd]) {
+				nextEnd--
+			}
+		}
+		if end < nextEnd {
+			rightExclusive := text[end:nextEnd]
+			if seenAction && candidateExplicitMaliciousRelationOversizedRiskSignal(rightExclusive) ||
+				seenRisk && candidateExplicitMaliciousRelationWindowHasPotentialAction(rightExclusive) {
+				return true
+			}
+		}
+		start = next
+	}
+	return false
+}
+
+func walkDirectiveStrongScopes(text string, visit func(string) bool) {
+	walkDirectiveStrongScopeRunes([]rune(text), func(scope []rune) bool {
+		return visit(string(scope))
+	})
+}
+
+func walkDirectiveStrongScopeRunes(runes []rune, visit func([]rune) bool) {
+	scopeStart := -1
+	scopeEnd := -1
+	keepGoing := true
+	flush := func() bool {
+		if scopeStart < 0 || scopeEnd <= scopeStart {
+			return true
+		}
+		return visit(runes[scopeStart:scopeEnd])
+	}
+	walkDirectiveClausesWithBoundaryRangeIntentStarts(
+		runes,
+		nil,
+		func(_ []rune, start, end int, boundaryBefore directiveBoundaryKind) bool {
+			if scopeStart < 0 {
+				scopeStart = start
+			}
+			if boundaryBefore == directiveBoundaryStrong && scopeEnd > scopeStart {
+				if !flush() {
+					keepGoing = false
+					return false
+				}
+				scopeStart = start
+			}
+			scopeEnd = end
+			return true
+		},
+	)
+	if keepGoing {
+		flush()
+	}
+}
+
+func candidateExplicitMaliciousRelationOversizedRiskSignal(text string) bool {
+	if text == "" {
+		return false
+	}
+	if candidateExplicitMaliciousHostileScope(text) {
+		return true
+	}
+	if candidatePhishingDeceptionSurface(text) && candidateExplicitCredentialMaterial(text) {
+		return true
+	}
+	if containsAnyLiteral(text,
+		"ransomware", "ransom", "hostage", "victim files", "business files", "production user files",
+		"勒索软件", "勒索程序", "勒索载荷", "勒索", "赎金", "受害文件",
+	) {
+		return true
+	}
+	if containsAnyLiteral(text,
+		"protected context", "protected instruction", "restricted instruction", "production model", "target model",
+		"受保护上下文", "受保护指令", "受限指令", "生产模型", "目标模型", "安全边界",
+	) {
+		return true
+	}
+	if containsAnyLiteral(text,
+		"hide the intrusion", "conceal the intrusion", "intrusion remains undetected", "intrusion stays undetected",
+		"malicious", "unauthorized access", "covert access", "credential theft", "persistent access", "ongoing attack",
+		"隐藏入侵", "入侵不被发现", "恶意", "未授权访问", "秘密访问", "凭证窃取", "持续访问",
+	) && containsAnyLiteral(text,
+		"edr", "antivirus", "endpoint defense", "endpoint protection", "security control", "security telemetry",
+		"security monitoring", "detection", "sandbox", "siem", "安全控制", "安全遥测", "安全监控", "检测", "防护", "杀毒", "沙箱",
+	) {
+		return true
+	}
+	return containsAnyLiteral(text,
+		"malicious traffic", "prevent the owner", "prevent operators", "cannot recover", "users remain locked out",
+		"恶意流量", "不让运维", "阻止自动迁移", "阻止恢复", "所有者无法恢复",
+	) && containsAnyLiteral(text,
+		"overload", "flood", "exhaust", "destructive load", "request storm", "connection storm",
+		"outage", "denial of service", "ddos", "耗尽", "洪泛", "拖垮", "停摆", "服务不可用", "业务中断", "拒绝服务",
+	)
+}
+
+func candidateExplicitMaliciousRelationWindowHasPotentialAction(text string) bool {
+	return containsRuleIntentPrepared(
+		text,
+		candidateExplicitMaliciousRelationActions,
+		candidateExplicitMaliciousRelationActionPatterns,
+	) || containsRuleIntentPrepared(
+		text,
+		candidatePhishingCredentialInteractionIntents,
+		candidatePhishingCredentialInteractionIntentPatterns,
+	)
+}
+
+func candidateExplicitMaliciousRelationRunesHavePotentialAction(text string, runes []rune) bool {
+	if runeSliceContainsAnyFoldASCIIBucketed(
+		runes, &candidateExplicitRelationPotentialActionTermBuckets,
+	) {
+		return true
+	}
+	// The bucketed literal preflight deliberately ignores compact/obfuscated
+	// spellings. Preserve those candidates through the reviewed compact matcher;
+	// its first-rune preflight keeps homogeneous oversized carriers allocation-free.
+	return candidateExplicitMaliciousRelationWindowHasPotentialAction(text)
+}
+
+func candidateExplicitMaliciousRelationScopeRunesMayContainAction(runes []rune) bool {
+	if runeSliceContainsAnyFoldASCIIBucketed(
+		runes, &candidateExplicitRelationPotentialActionTermBuckets,
+	) {
+		return true
+	}
+	return compactRuleIntentRunesMayContainPatternStart(
+		runes, candidateExplicitMaliciousRelationActionPatterns,
+	) || compactRuleIntentRunesMayContainPatternStart(
+		runes, candidatePhishingCredentialInteractionIntentPatterns,
+	)
+}
+
+func compactRuleIntentRunesMayContainPatternStart(
+	runes []rune,
+	patterns compactRuleIntentPatterns,
+) bool {
+	if len(runes) == 0 || len(patterns.values) == 0 {
+		return false
+	}
+	for _, r := range runes {
+		if r < utf8.RuneSelf {
+			if patterns.asciiFirst[r] {
+				return true
+			}
+			continue
+		}
+		if patterns.hasNonASCIIFirst && len(patterns.byFirst[r]) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // candidateExplicitRelationTypedAxes preserves the category-local proof that
@@ -2065,6 +2779,11 @@ func candidateExplicitMaliciousRelationAction(text string) bool {
 	)
 }
 
+func candidateExplicitRelationAnyAction(text string) bool {
+	return candidateExplicitMaliciousRelationAction(text) ||
+		candidatePhishingCredentialInteractionAction(text)
+}
+
 func candidateExplicitRelationClauseBudgetExceeded(text string) bool {
 	clauses := 1
 	for _, value := range text {
@@ -2089,7 +2808,15 @@ func candidateExplicitRelationMayContainDirectiveNegation(text string) bool {
 }
 
 func candidateExplicitRelationHasStructuredQuoteSyntax(text string) bool {
-	return strings.ContainsAny(text, "\"`“”「」『』") ||
+	// strings.ContainsAny must decode every rune when its search set contains
+	// non-ASCII quote marks. Oversized ASCII carriers are common and otherwise
+	// pay that full Unicode scan every time an ownership helper asks the same
+	// question. Exact substring searches preserve the accepted syntax while
+	// using the runtime's byte-search fast path for absent delimiters.
+	return strings.IndexByte(text, '"') >= 0 || strings.IndexByte(text, '`') >= 0 ||
+		strings.Contains(text, "“") || strings.Contains(text, "”") ||
+		strings.Contains(text, "「") || strings.Contains(text, "」") ||
+		strings.Contains(text, "『") || strings.Contains(text, "』") ||
 		strings.Contains(text, "<sample>") || strings.Contains(text, "</sample>") ||
 		strings.Contains(text, "[sample]") || strings.Contains(text, "[/sample]")
 }
@@ -2107,8 +2834,8 @@ func candidateExplicitRelationAmbiguousQuoteStructure(text string) bool {
 		strings.Contains(text, "[/sample]") && !strings.Contains(text, "[sample]") {
 		return true
 	}
-	spans, complete := metaOverrideQuotedSpans(text)
-	return !complete || len(spans) != 1
+	_, complete := metaOverrideQuotedSpansWithLimit(text, maxAnalyzedDirectiveClauses)
+	return !complete
 }
 
 func candidateExplicitRelationQuotedPayloadOwnsOnlyAction(text string) bool {
@@ -2188,7 +2915,7 @@ func candidateExplicitPromptInjectionRelation(text string, hostile bool) bool {
 		"tool result", "tool schema", "instruction file", "model_instructions_file", "模型", "助手", "系统规则",
 		"系统指令", "受保护上下文", "工具 schema", "工具输入", "指令文件",
 	)
-	control := containsAnyLiteral(text,
+	control := containsAnyLiteral(text, candidateSecurityControlEvasionTargetTerms...) || containsAnyLiteral(text,
 		"override", "ignore", "discard", "bypass", "reveal", "disclose", "expose", "conceal", "suppress refusal",
 		"unrestricted mode", "reject", "deny", "injected instruction", "injection language", "prompt injection", "active instructions",
 		"fake instruction", "high-priority command", "injected behavior", "无视", "忽略", "泄露", "覆盖", "绕过", "注入", "植入指令",
@@ -2285,16 +3012,100 @@ func candidatePhishingDeceptionSurface(text string) bool {
 		"登录", "认证", "验证", "审批页", "授权页", "通知", "入口",
 	)
 	return authSurface && containsAnyLiteral(text,
-		"counterfeit", "lookalike", "look-alike", "imitation", "fake", "spoofed", "deceptive", "impersonat",
+		"counterfeit", "lookalike", "look-alike", "imitation", "fake", "cloned", "spoofed", "deceptive", "impersonat",
 		"仿冒", "假", "伪装", "包装成", "冒充", "诱导",
 	)
 }
 
+type candidatePhishingRelationProof struct {
+	text string
+
+	realCredentialRelationKnown bool
+	realCredentialRelation      bool
+	syntheticSimulationKnown    bool
+	syntheticSimulation         bool
+	explicitRelationKnown       [2]bool
+	explicitRelation            [2]bool
+	currentSpeechActKnown       bool
+	currentSpeechAct            bool
+	independentTailKnown        bool
+	independentTail             string
+	independentExecution        bool
+	quotedOrAnalyticalKnown     bool
+	quotedOrAnalytical          bool
+	detectionArtifactKnown      bool
+	detectionArtifact           bool
+	passiveIncidentKnown        bool
+	passiveIncident             bool
+	credentialLifecycleKnown    bool
+	credentialLifecycle         bool
+	currentExecutionActKnown    bool
+	currentExecutionAct         bool
+}
+
+func newCandidatePhishingRelationProof(text string) candidatePhishingRelationProof {
+	return candidatePhishingRelationProof{text: text}
+}
+
+func candidatePhishingIndependentMaliciousExecutionTailPrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) (string, bool) {
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.independentTailKnown {
+		return proof.independentTail, proof.independentExecution
+	}
+	tail, independent := independentMaliciousExecutionTail(text)
+	if proofMatches {
+		proof.independentTailKnown = true
+		proof.independentTail = tail
+		proof.independentExecution = independent
+	}
+	return tail, independent
+}
+
 func candidateExplicitPhishingRelation(text string, hostile bool) bool {
-	if candidatePhishingSyntheticSimulationScope(text) || candidatePhishingSyntheticTelemetryScope(text) {
+	return candidateExplicitPhishingRelationPrepared(text, hostile, nil)
+}
+
+func candidateExplicitPhishingRelationPrepared(
+	text string,
+	hostile bool,
+	proof *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	proofMatches := proof != nil && proof.text == text
+	proofIndex := 0
+	if hostile {
+		proofIndex = 1
+	}
+	if proofMatches && proof.explicitRelationKnown[proofIndex] {
+		return proof.explicitRelation[proofIndex]
+	}
+	result := candidateExplicitPhishingRelationUncached(text, hostile, proof)
+	if proofMatches {
+		proof.explicitRelationKnown[proofIndex] = true
+		proof.explicitRelation[proofIndex] = result
+	}
+	return result
+}
+
+func candidateExplicitPhishingRelationUncached(
+	text string,
+	hostile bool,
+	proof *candidatePhishingRelationProof,
+) bool {
+	realCredentialRelation := candidatePhishingRealCredentialInteractionRelationPrepared(text, proof)
+	if !realCredentialRelation && candidatePhishingDetectionArtifactScopePrepared(text, proof) {
+		if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); !independent {
+			return false
+		}
+	}
+	if !realCredentialRelation &&
+		(candidatePhishingSyntheticSimulationScopePrepared(text, proof) || candidatePhishingSyntheticTelemetryScope(text)) {
 		return false
 	}
-	if candidatePhishingCredentialSecurityArtifact(text) {
+	if !realCredentialRelation && candidatePhishingCredentialSecurityArtifact(text) {
 		return false
 	}
 	deception := candidatePhishingDeceptionSurface(text)
@@ -2309,7 +3120,7 @@ func candidateExplicitPhishingRelation(text string, hostile bool) bool {
 	// A deceptive authentication surface that actively solicits credentials is
 	// itself the phishing harm relation; a generic real-target noun is not needed
 	// to manufacture non-consent for unrelated credential workflows.
-	return deception && secret && delivery && (hostile || containsAnyLiteral(
+	return realCredentialRelation || deception && secret && delivery && (hostile || containsAnyLiteral(
 		text, "phishing", "fake login", "cloned login", "deceptive", "spoofed", "impersonate", "钓鱼", "仿冒登录", "假登录", "伪装", "冒充", "诱导",
 	))
 }
@@ -2430,6 +3241,30 @@ func candidateFirstBoundedLiteralIndex(text string, terms []string) int {
 	return best
 }
 
+func candidateLastBoundedLiteralIndex(text string, terms []string) int {
+	best := -1
+	for _, term := range terms {
+		if term == "" || len(term) > len(text) {
+			continue
+		}
+		for offset := 0; offset <= len(text)-len(term); {
+			index := strings.Index(text[offset:], term)
+			if index < 0 {
+				break
+			}
+			index += offset
+			end := index + len(term)
+			leftOK := !isASCIIStringLocal(term) || index == 0 || !isASCIIWordByte(text[index-1])
+			rightOK := !isASCIIStringLocal(term) || end == len(text) || !isASCIIWordByte(text[end])
+			if leftOK && rightOK && index > best {
+				best = index
+			}
+			offset = index + 1
+		}
+	}
+	return best
+}
+
 // candidateActionTargets binds each literal, unnegated action to the first
 // recognized artifact that follows it. This prevents a detector requested for
 // a malicious sample from donating its creation/deployment verb to the sample,
@@ -2441,40 +3276,128 @@ func candidateActionTargets(
 	harmfulTargets []string,
 ) candidateActionTargetProof {
 	proof := candidateActionTargetProof{}
-	for _, intent := range intents {
-		if intent == "" || len(intent) > len(text) {
+	if text == "" {
+		return proof
+	}
+	mayContainNegation := stringMayContainNegation(text)
+	if !candidateHasUnnegatedBoundedLiteralPrepared(text, intents, mayContainNegation) {
+		return proof
+	}
+	proof.active = true
+
+	// Precompute the first target kind at or after every byte offset once. The
+	// previous implementation rescanned every defensive and harmful target over
+	// the complete suffix for every repeated action occurrence. A 16 KiB
+	// "ask ask ... employees for passwords" clause therefore became
+	// O(action_matches * bytes). The reviewed term sets are fixed; marking their
+	// bounded starts and folding the nearest target backwards makes each action
+	// lookup O(1), while preserving the existing defensive-wins-on-equal-offset
+	// contract.
+	const (
+		candidateTargetDefensive byte = 1 << iota
+		candidateTargetHarmful
+	)
+	nextTargetKind := make([]byte, len(text)+1)
+	candidateMarkBoundedLiteralStarts(text, defensiveTargets, candidateTargetDefensive, nextTargetKind)
+	candidateMarkBoundedLiteralStarts(text, harmfulTargets, candidateTargetHarmful, nextTargetKind)
+	nearest := byte(0)
+	for index := len(text) - 1; index >= 0; index-- {
+		if kinds := nextTargetKind[index]; kinds != 0 {
+			if kinds&candidateTargetDefensive != 0 {
+				nearest = candidateTargetDefensive
+			} else {
+				nearest = candidateTargetHarmful
+			}
+		}
+		nextTargetKind[index] = nearest
+	}
+
+	candidateVisitBoundedLiteralOccurrences(text, intents, func(index, end int) bool {
+		kind := nextTargetKind[end]
+		if kind == candidateTargetDefensive && proof.defensive ||
+			kind == candidateTargetHarmful && proof.harmful ||
+			kind == 0 && proof.unknown {
+			// The proof records only whether each target kind has at least one
+			// active action. Once that fact is established, later occurrences
+			// pointing at the same kind cannot change the result and need no
+			// repeated bounded negation lookback.
+			return true
+		}
+		if mayContainNegation {
+			_, negated := ruleIntentOccurrenceNegation(text, index)
+			if negated {
+				return true
+			}
+		}
+		switch kind {
+		case candidateTargetDefensive:
+			proof.defensive = true
+		case candidateTargetHarmful:
+			proof.harmful = true
+		default:
+			proof.unknown = true
+		}
+		return !proof.defensive || !proof.harmful || !proof.unknown
+	})
+	return proof
+}
+
+func candidateHasUnnegatedBoundedLiteral(text string, terms []string) bool {
+	return candidateHasUnnegatedBoundedLiteralPrepared(text, terms, stringMayContainNegation(text))
+}
+
+func candidateHasUnnegatedBoundedLiteralPrepared(text string, terms []string, mayContainNegation bool) bool {
+	found := false
+	candidateVisitBoundedLiteralOccurrences(text, terms, func(index, _ int) bool {
+		if mayContainNegation {
+			_, negated := ruleIntentOccurrenceNegation(text, index)
+			if negated {
+				return true
+			}
+		}
+		found = true
+		return false
+	})
+	return found
+}
+
+func candidateMarkBoundedLiteralStarts(text string, terms []string, kind byte, starts []byte) {
+	if kind == 0 || len(starts) < len(text)+1 {
+		return
+	}
+	candidateVisitBoundedLiteralOccurrences(text, terms, func(index, _ int) bool {
+		starts[index] |= kind
+		return true
+	})
+}
+
+func candidateVisitBoundedLiteralOccurrences(
+	text string,
+	terms []string,
+	visit func(index, end int) bool,
+) {
+	if text == "" || visit == nil {
+		return
+	}
+	for _, term := range terms {
+		if term == "" || len(term) > len(text) {
 			continue
 		}
-		for offset := 0; offset <= len(text)-len(intent); {
-			index := strings.Index(text[offset:], intent)
+		for offset := 0; offset <= len(text)-len(term); {
+			index := strings.Index(text[offset:], term)
 			if index < 0 {
 				break
 			}
 			index += offset
-			end := index + len(intent)
-			leftOK := !isASCIIStringLocal(intent) || index == 0 || !isASCIIWordByte(text[index-1])
-			rightOK := !isASCIIStringLocal(intent) || end == len(text) || !isASCIIWordByte(text[end])
-			if leftOK && rightOK {
-				_, negated := ruleIntentOccurrenceNegation(text, index)
-				if !negated {
-					proof.active = true
-					tail := text[end:]
-					defensiveIndex := candidateFirstBoundedLiteralIndex(tail, defensiveTargets)
-					harmfulIndex := candidateFirstBoundedLiteralIndex(tail, harmfulTargets)
-					switch {
-					case defensiveIndex >= 0 && (harmfulIndex < 0 || defensiveIndex <= harmfulIndex):
-						proof.defensive = true
-					case harmfulIndex >= 0:
-						proof.harmful = true
-					default:
-						proof.unknown = true
-					}
-				}
+			end := index + len(term)
+			leftOK := !isASCIIStringLocal(term) || index == 0 || !isASCIIWordByte(text[index-1])
+			rightOK := !isASCIIStringLocal(term) || end == len(text) || !isASCIIWordByte(text[end])
+			if leftOK && rightOK && !visit(index, end) {
+				return
 			}
 			offset = index + 1
 		}
 	}
-	return proof
 }
 
 func candidateExplicitMalwareControlAction(text string) bool {
@@ -2594,6 +3517,23 @@ func candidateExplicitCredentialRelation(text string, hostile bool) bool {
 	return action && hostileUse
 }
 
+func candidateStoredCredentialAcquisitionRelation(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" || !containsAnyLiteral(text,
+		"saved password", "saved passwords", "stored password", "stored passwords",
+		"browser password", "browser passwords", "browser credential", "browser credentials",
+		"credential store", "password vault",
+		"保存的密码", "已保存密码", "存储的密码", "浏览器密码", "浏览器凭据", "凭据库", "密码库",
+	) {
+		return false
+	}
+	return containsUnnegatedRuleIntentPrepared(
+		text,
+		candidateExplicitCredentialActionIntents,
+		candidateExplicitCredentialActionPatterns,
+	)
+}
+
 func candidateExplicitExploitationRelation(text string, hostile bool) bool {
 	flaw := containsAnyLiteral(text,
 		"exploit", "flaw", "weakness", "vulnerability", "failure path", "crash", "injection", "overflow", "boundary error",
@@ -2631,19 +3571,155 @@ func candidateExplicitExploitationRelation(text string, hostile bool) bool {
 		(intrusionAction && systemTarget && unauthorizedOutcome && hostile)
 }
 
+var candidateSecurityControlEvasionTargetTerms = []string{
+	"endpoint telemetry", "endpoint event collection", "event collection", "event collector", "event collectors",
+	"security telemetry", "security event collection", "event logging", "telemetry collection",
+	"endpoint sensor", "endpoint sensors", "security sensor", "security sensors", "security agent", "security agents",
+	"endpoint agent", "endpoint agents", "edr agent", "edr agents", "telemetry agent", "telemetry agents",
+	"siem agent", "siem agents", "ids agent", "ids agents", "ips agent", "ips agents", "forensic artifacts",
+	"端点遥测", "端点事件收集", "事件收集", "端点传感器", "安全传感器", "安全代理",
+	"安全监控", "安全遥测", "安全控制", "安全告警", "防护", "防护记录", "安全记录", "检测", "沙箱",
+}
+
+var candidateSecurityControlActiveEvasionIntents = []string{
+	"bypass", "bypasses", "bypassing", "evade", "evades", "evading",
+	"disable", "disables", "disabling", "suppress", "suppresses", "suppressing",
+	"hide", "hides", "hiding", "conceal", "conceals", "concealing",
+	"avoid detection", "prevent detection", "obfuscate", "obfuscates", "obfuscating",
+	"stop", "stops", "stopping", "stopped", "suspend", "suspends", "suspending", "suspended",
+	"erase", "erases", "erasing", "erased", "delete", "deletes", "deleting", "deleted",
+	"clear", "clears", "clearing", "cleared", "shut down", "shuts down", "shutting down",
+	"blind", "blinds", "blinding",
+	"silence", "silences", "silencing", "mute", "mutes", "muting",
+	"unhook", "unhooks", "unhooking", "tamper", "tampers", "tampering",
+	"tamper with", "tampers with", "tampering with", "turn off", "turns off", "turning off",
+	"neutralize", "neutralizes", "neutralizing",
+	"绕过", "规避", "躲开", "躲避检测", "避开", "禁用", "关闭", "隐藏", "压制", "混淆", "不再触发",
+}
+
+var candidateSecurityControlActiveEvasionIntentPatterns = compileCompactRuleIntentPatterns(
+	candidateSecurityControlActiveEvasionIntents,
+)
+
+// candidateSecurityControlDetectionReferenceScope recognizes a concrete
+// defensive rule whose subject is an attempted evasion, rather than a request
+// to perform that evasion. The proof is deliberately conjunctive and bounded:
+// a named detection artifact, a reviewed alert/detection purpose, and an
+// explicit attempt-reference must all be present, and a later independent
+// execution clause defeats the owner. Generic words such as "detection" or
+// "alert" therefore cannot suppress an otherwise hostile control action.
+func candidateSecurityControlDetectionReferenceScope(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" || hasIndependentMaliciousExecutionClause(text) {
+		return false
+	}
+	artifact := containsAnyLiteral(text,
+		"detection rule", "detection rules", "detection signature", "detection signatures",
+		"alert rule", "alert rules", "analytic rule", "analytic rules",
+		"soc rule", "soc rules", "soc detection rule", "soc detection rules",
+	)
+	if !artifact {
+		return false
+	}
+	detectionPurpose := containsAnyLiteral(text,
+		"should alert", "must alert", "alert when", "alerts when", "alert on", "alerts on",
+		"alert defenders", "alerts defenders", "detect attempts", "detects attempts",
+		"flag attempts", "flags attempts", "identify attempts", "identifies attempts",
+	)
+	referencedAttempt := containsAnyLiteral(text,
+		"attempts to", "attempted to", "tries to", "tried to", "for attempts to", "on attempts to",
+	)
+	return detectionPurpose && referencedAttempt &&
+		!candidateSecurityControlDetectionReferenceHostileImplementation(text)
+}
+
+// candidateSecurityControlDetectionReferenceHostileImplementation prevents a
+// defensive rule owner from washing out a concrete implementation embedded in
+// the same physical sentence. The suffix grammar is intentionally narrow: a
+// reviewed implementation introducer must own an active control-evasion action,
+// its control target, and a hostile purpose. Mere detector descriptions and
+// referenced malware behavior therefore remain defensive.
+func candidateSecurityControlDetectionReferenceHostileImplementation(text string) bool {
+	for _, boundary := range []string{
+		" using a routine that ", " using the routine that ",
+		" using a script that ", " using the script that ",
+		" using code that ", " using the code that ",
+		" using a program that ", " using the program that ",
+		" using software that ", " using the software that ",
+		" using a tool that ", " using the tool that ",
+		" using an implementation that ", " using the implementation that ",
+		" with a routine that ", " with the routine that ",
+		" with a script that ", " with the script that ",
+		" with code that ", " with the code that ",
+		" via a routine that ", " via the routine that ",
+		" via a script that ", " via the script that ",
+		" via code that ", " via the code that ",
+	} {
+		index := strings.LastIndex(text, boundary)
+		if index < 0 {
+			continue
+		}
+		tail := strings.TrimSpace(text[index+len(boundary):])
+		if tail == "" || candidatePassiveIncidentReportOrDocumentationScope(tail) ||
+			candidatePermissionOnlyScope(tail) {
+			continue
+		}
+		control := containsAnyLiteral(tail, candidateSecurityControlEvasionTargetTerms...) ||
+			containsAnyLiteral(tail,
+				"edr", "antivirus", "endpoint defense", "endpoint protection", "security control",
+				"security telemetry", "security monitoring", "monitoring", "detection", "sandbox", "siem",
+				"安全控制", "安全遥测", "安全监控", "检测", "防护", "杀毒", "沙箱",
+			)
+		active := containsUnnegatedRuleIntentPrepared(
+			tail,
+			candidateSecurityControlActiveEvasionIntents,
+			candidateSecurityControlActiveEvasionIntentPatterns,
+		)
+		if control && active && candidateSecurityControlEvasionMaliciousPurpose(tail) &&
+			candidateCurrentExecutionAct(tail) {
+			return true
+		}
+	}
+	return false
+}
+
+func candidateSecurityControlActiveEvasion(text string) bool {
+	if (isSafeDetectionArtifactClause(text) || candidateSecurityControlDetectionReferenceScope(text)) &&
+		!hasIndependentMaliciousExecutionClause(text) {
+		return false
+	}
+	if containsUnnegatedRuleIntentPrepared(
+		text,
+		candidateSecurityControlActiveEvasionIntents,
+		candidateSecurityControlActiveEvasionIntentPatterns,
+	) {
+		return true
+	}
+	// Outcome wording remains active only when this same candidate also owns an
+	// affirmative execution action. A bare historical state is not an action.
+	return candidateExplicitMaliciousRelationAction(text) && containsAnyLiteral(text,
+		"evasion", "undetected", "stays undetected", "stay undetected", "cannot detect", "cannot identify",
+		"miss the intrusion", "miss the malicious", "misses the intrusion", "misses the malicious",
+		"no longer trigger", "stops triggering", "不被发现", "不再触发",
+	)
+}
+
 func candidateExplicitDefenseEvasionRelation(text string, hostile bool) bool {
-	control := containsAnyLiteral(text,
+	control := containsAnyLiteral(text, candidateSecurityControlEvasionTargetTerms...) || containsAnyLiteral(text,
 		"endpoint defense", "defense evasion", "detection evasion", "endpoint protection", "endpoint-protection", "monitoring", "intrusion alert",
 		"security control", "security telemetry", "audit", "yara", "sigma", "siem", "ioc", "detection", "sandbox",
 		"signature scanner", "signature scanners", "edr", "antivirus", "defensive telemetry", "defensive service",
 		"endpoint analytics", "scheduled-task analytics", "threat-indicator", "indicator ingestion", "alerting pipeline",
 		"安全监控", "检测", "安全控制", "安全告警", "防护", "防护记录", "安全记录", "防御遥测", "告警处置", "阻断", "沙箱",
 	)
-	evasion := containsAnyLiteral(text,
+	evasionState := containsAnyLiteral(text,
 		"evade", "evasion", "disable", "suppress", "hide", "conceal", "bypass", "avoid detection", "undetected",
 		"cannot detect", "cannot identify", "miss the intrusion", "miss the malicious", "misses the intrusion", "misses the malicious",
 		"no longer trigger", "stops triggering", "prevent detection", "躲开", "避开", "规避", "禁用", "关闭", "隐藏", "绕过", "压制", "不被发现", "不再触发",
 	)
+	evasion := candidateSecurityControlActiveEvasion(text) ||
+		!containsDetectionArtifact(text) && !candidateSecurityControlDetectionReferenceScope(text) &&
+			evasionState && candidateExplicitMaliciousRelationAction(text)
 	maliciousPurpose := hostile || containsAnyLiteral(text,
 		"hide the intrusion", "hide an intrusion", "conceal the intrusion", "conceal an intrusion", "keep the intrusion hidden",
 		"intrusion remains undetected", "intrusion stays undetected", "malware", "malicious", "unauthorized access", "unauthorized control", "covert access", "credential theft", "theft", "exfiltrat",
@@ -2654,6 +3730,8 @@ func candidateExplicitDefenseEvasionRelation(text string, hostile bool) bool {
 	dataExportPrimary := candidateExplicitExfiltrationObject(text) && candidateExplicitExfiltrationOutbound(text)
 	primaryEvasion := hasAnyPrefix(text,
 		"evade ", "disable ", "suppress ", "hide ", "conceal ", "bypass ", "avoid detection ",
+		"stop ", "suspend ", "erase ", "delete ", "clear ", "silence ", "mute ", "unhook ",
+		"tamper ", "turn off ", "shut down ", "blind ", "neutralize ",
 		"规避", "禁用", "关闭", "隐藏", "绕过", "压制",
 	)
 	return control && evasion && maliciousPurpose && (!dataExportPrimary || primaryEvasion)
@@ -2710,6 +3788,7 @@ type candidateEligibilityInput struct {
 	ruleID         string
 	text           string
 	supportingText string
+	phishingProof  *candidatePhishingRelationProof
 	// authorizationText is a bounded request-local view used only to retain an
 	// authorization claim that prefixes the winning clause. It must never
 	// contribute harm, target, operational, or other malicious-core evidence.
@@ -2910,6 +3989,61 @@ func bindResultCandidateIdentity(
 	}
 }
 
+func candidatePassiveIncidentReportOrDocumentationScope(text string) bool {
+	return candidatePassiveIncidentReportOrDocumentationScopePrepared(text, nil)
+}
+
+func candidatePassiveIncidentReportOrDocumentationScopePrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.passiveIncidentKnown {
+		return proof.passiveIncident
+	}
+	result := candidatePassiveIncidentReportOrDocumentationScopeUncached(text, proof)
+	if proofMatches {
+		proof.passiveIncidentKnown = true
+		proof.passiveIncident = result
+	}
+	return result
+}
+
+func candidatePassiveIncidentReportOrDocumentationScopeUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	if text == "" {
+		return false
+	}
+	if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); independent {
+		return false
+	}
+	owner := hasAnyPrefix(text,
+		"incident report", "the incident report", "historical incident report", "post-incident report",
+		"forensic report", "the forensic report", "soc report", "the soc report",
+		"documentation ", "the documentation ", "incident timeline", "the incident timeline",
+		"during the incident", "during yesterday's incident", "during yesterday’s incident",
+	)
+	commissionedHistoricalDocumentation := hasAnyPrefix(text,
+		"write documentation ", "draft documentation ", "prepare documentation ",
+		"create documentation ", "produce documentation ",
+	) && containsAnyLiteral(text,
+		"during the incident", "during yesterday's incident", "after the incident",
+		"from the incident", "post-incident", "historical incident",
+	)
+	if !owner && !commissionedHistoricalDocumentation {
+		return false
+	}
+	return containsAnyLiteral(text,
+		" states ", " stated ", " documents ", " documented ", " explains ", " explained ", " explaining ",
+		" records ", " recorded ", " observed ", " showed ", " reported ", " noted ",
+		" requested ", " asked ", " required ", " submitted ", " received ",
+		" turned off ", " silenced ", " muted ", " unhooked ", " tampered ",
+	) || strings.Contains(text, ":")
+}
+
 func assessCandidateBlockEligibility(input candidateEligibilityInput) CandidateBlockEligibility {
 	metaControlCandidate := input.ruleID == metaOverrideRuleID
 	if metaControlCandidate {
@@ -2936,16 +4070,26 @@ func assessCandidateBlockEligibility(input candidateEligibilityInput) CandidateB
 	text := strings.ToLower(strings.TrimSpace(input.text))
 	supportingText := strings.ToLower(strings.TrimSpace(input.supportingText))
 	authorizationText := strings.ToLower(strings.TrimSpace(input.authorizationText))
+	phishingProof := input.phishingProof
+	var localPhishingProof candidatePhishingRelationProof
+	if phishingProof == nil || phishingProof.text != text {
+		localPhishingProof = newCandidatePhishingRelationProof(text)
+		phishingProof = &localPhishingProof
+	}
 	semanticTypedCore := strings.HasPrefix(input.ruleID, "SEMANTIC-") && input.coreComplete
 	permissionOnly := candidatePermissionOnlyScope(text) ||
 		candidatePermissionDominatesCategory(text, input.category) ||
 		authorizationText != "" && candidatePermissionDominatesCategory(authorizationText, input.category)
-	quotedOrAnalytical := input.quotedOrAnalytical
+	quotedOrAnalytical := input.quotedOrAnalytical ||
+		candidatePassiveIncidentReportOrDocumentationScopePrepared(text, phishingProof) ||
+		supportingText != "" && candidatePassiveIncidentReportOrDocumentationScope(supportingText)
 	defensiveConflict := input.defensiveConflict
 	if !input.typedExplicitMalice {
-		quotedOrAnalytical = quotedOrAnalytical || candidateQuotedOrAnalyticalScope(text) ||
+		quotedOrAnalytical = quotedOrAnalytical || candidateQuotedOrAnalyticalScopePrepared(text, phishingProof) ||
 			supportingText != "" && candidateQuotedOrAnalyticalScope(supportingText)
-		defensiveConflict = defensiveConflict || candidateDefensiveScopeConflict(input.category, text, input.context) ||
+		defensiveConflict = defensiveConflict || candidateDefensiveScopeConflictPrepared(
+			input.category, text, input.context, phishingProof,
+		) ||
 			supportingText != "" && candidateDefensiveScopeConflict(input.category, supportingText, input.context)
 	}
 	credentialReactivation := input.category == rules.CategoryCredentialTheft &&
@@ -3000,7 +4144,8 @@ func assessCandidateBlockEligibility(input candidateEligibilityInput) CandidateB
 	positiveMalice = positiveMalice || semanticTypedCore || input.typedExplicitMalice
 	authorizationConflictCore := positiveMalice || input.typedExplicitMalice ||
 		(input.coreComplete && input.activeDirective && input.operational &&
-			!quotedOrAnalytical && !defensiveConflict && !candidateCredentialLifecycle(text))
+			!quotedOrAnalytical && !defensiveConflict &&
+			!candidateCredentialLifecyclePrepared(text, phishingProof))
 	if authorizationConflictCore && (candidateAuthorizationClaimPresent(text) ||
 		candidateAuthorizationClaimPresent(supportingText) ||
 		candidateAuthorizationClaimPresent(authorizationText)) {
@@ -3018,9 +4163,11 @@ func assessCandidateBlockEligibility(input candidateEligibilityInput) CandidateB
 	currentExecution := !quotedOrAnalytical && !defensiveConflict &&
 		!permissionOnly && (input.currentExecutionProven || input.activeDirective &&
 		(semanticTypedCore && input.operational ||
-			(candidateCurrentExecutionAct(text) || compactCredentialTheft || exfiltrationCopy ||
+			(candidateCurrentExecutionActPrepared(text, phishingProof) || compactCredentialTheft || exfiltrationCopy ||
 				credentialReactivation || evasionReactivation)))
-	operational := !permissionOnly && (input.operational || candidateOperationallyActionable(input.category, text) ||
+	operational := !permissionOnly && (input.operational || candidateOperationallyActionablePrepared(
+		input.category, text, phishingProof,
+	) ||
 		compactCredentialTheft || exfiltrationCopy || credentialReactivation || evasionReactivation)
 	harmfulCore := input.coreComplete && positiveMalice
 	referentComplete := !input.referentLinked || input.referentProofComplete
@@ -3048,44 +4195,753 @@ func assessCandidateBlockEligibility(input candidateEligibilityInput) CandidateB
 	return finalizeCandidateBlockEligibility(eligibility)
 }
 
-var candidatePhishingCredentialCollectionIntents = []string{
-	"collect", "collects", "collecting", "capture", "captures", "capturing",
-	"harvest", "harvests", "harvesting", "record", "records", "recording",
-	"gather", "gathers", "gathering", "store", "stores", "storing",
-	"steal", "steals", "stealing", "prompt", "prompts", "prompting", "prompted",
-	"induce", "induces", "inducing", "induced", "receive", "receives", "receiving", "received",
+var candidatePhishingCredentialSolicitationIntents = []string{
+	"ask", "asks", "asking", "asked",
+	"request", "requests", "requesting", "requested",
+	"require", "requires", "requiring", "required",
+	"tell", "tells", "telling", "told",
+	"prompt", "prompts", "prompting", "prompted",
+	"induce", "induces", "inducing", "induced",
 	"solicit", "solicits", "soliciting", "solicited",
-	"收集", "采集", "截取", "记录", "保存", "获取", "骗取", "窃取",
+	"询问", "要求", "请求", "提示", "诱导", "让", "叫",
 }
 
-var candidatePhishingCredentialCollectionIntentPatterns = compileCompactRuleIntentPatterns(
-	candidatePhishingCredentialCollectionIntents,
+var candidatePhishingCredentialEntryIntents = []string{
+	"enter", "enters", "entering", "entered",
+	"type", "types", "typing", "typed",
+	"submit", "submits", "submitting", "submitted",
+	"provide", "provides", "providing", "provided",
+	"give", "gives", "giving", "gave", "hand over", "hands over", "handing over", "handed over",
+	"input", "inputs", "inputting", "fill in", "fills in", "filling in", "filled in",
+	"输入", "键入", "提交", "提供", "交出", "填写",
+}
+
+var candidatePhishingCredentialCollectionIntents = []string{
+	"collect", "collects", "collecting", "collected",
+	"capture", "captures", "capturing", "captured",
+	"harvest", "harvests", "harvesting", "harvested",
+	"record", "records", "recording", "recorded",
+	"gather", "gathers", "gathering", "gathered",
+	"store", "stores", "storing", "stored",
+	"save", "saves", "saving", "saved",
+	"receive", "receives", "receiving", "received",
+	"retain", "retains", "retaining", "retained",
+	"forward", "forwards", "forwarding", "forwarded",
+	"route", "routes", "routing", "routed",
+	"relay", "relays", "relaying", "relayed",
+	"intercept", "intercepts", "intercepting", "intercepted",
+	"steal", "steals", "stealing", "stolen",
+	"收集", "采集", "截取", "记录", "保存", "存储", "接收", "获取", "骗取", "窃取",
+}
+
+var candidatePhishingCredentialInteractionIntents = func() []string {
+	intents := make([]string, 0,
+		len(candidatePhishingCredentialSolicitationIntents)+
+			len(candidatePhishingCredentialEntryIntents)+
+			len(candidatePhishingCredentialCollectionIntents))
+	intents = append(intents, candidatePhishingCredentialSolicitationIntents...)
+	intents = append(intents, candidatePhishingCredentialEntryIntents...)
+	intents = append(intents, candidatePhishingCredentialCollectionIntents...)
+	return intents
+}()
+
+var candidatePhishingCredentialInteractionIntentPatterns = compileCompactRuleIntentPatterns(
+	candidatePhishingCredentialInteractionIntents,
+)
+
+var candidatePhishingCurrentSpeechActHeads = []string{
+	"build", "create", "deploy", "host", "launch", "publish", "install", "place", "send", "deliver", "push",
+	"design", "generate", "construct", "write", "implement", "produce", "make",
+	"ask", "request", "require", "tell", "prompt", "induce", "solicit",
+	"enter", "type", "submit", "provide", "give", "input", "fill in",
+	"collect", "capture", "harvest", "record", "gather", "store", "save", "receive", "retain", "steal",
+	"forward", "route", "relay", "intercept",
+	"execute", "run", "activate", "apply", "follow", "obey", "use", "carry out",
+	"部署", "投放", "上线", "托管", "发布", "安装", "放置", "发送", "推送", "构建", "创建", "设计", "生成", "制作",
+	"询问", "要求", "请求", "提示", "诱导", "输入", "键入", "提交", "提供", "交出", "填写",
+	"收集", "采集", "截取", "记录", "保存", "存储", "接收", "获取", "骗取", "窃取",
+	"执行", "运行", "启用", "应用", "遵循", "服从", "采用",
+}
+
+var candidatePhishingCurrentDeploymentIntents = []string{
+	"build", "create", "deploy", "host", "launch", "publish", "install", "place", "send", "deliver", "push",
+	"design", "generate", "construct", "write", "implement", "produce", "make",
+	"部署", "投放", "上线", "托管", "发布", "安装", "放置", "发送", "推送", "构建", "创建", "设计", "生成", "制作",
+}
+
+// These verbs are intentionally not part of the global current-speech-act
+// vocabulary. A bare hide/replace/suppress or training/notice phrase is often
+// descriptive or defensive. They become an execution proof only when one
+// bounded physical clause independently proves a hostile phishing relation and
+// the action is unnegated; this keeps the proof candidate-local.
+var candidatePhishingCurrentRelationActionIntents = []string{
+	"suppress", "suppresses", "suppressing", "suppressed",
+	"hide", "hides", "hiding", "hidden",
+	"replace", "replaces", "replacing", "replaced",
+	"skip", "skips", "skipping", "skipped",
+	"act on", "act upon",
+	"改成", "改作", "伪装成", "包装成", "冒充", "接收", "骗取", "诱导", "交出", "利用", "发送", "发给",
+}
+
+var candidatePhishingCurrentRelationActionPatterns = compileCompactRuleIntentPatterns(
+	candidatePhishingCurrentRelationActionIntents,
+)
+
+var candidatePhishingCurrentDeploymentIntentPatterns = compileCompactRuleIntentPatterns(
+	candidatePhishingCurrentDeploymentIntents,
+)
+
+func candidatePhishingCurrentSpeechActHead(text string) bool {
+	text = strings.TrimLeft(strings.TrimSpace(text), "-*#>,:\t")
+	for range 4 {
+		previous := text
+		for _, prefix := range []string{
+			"please ", "now ", "then ", "and then ", "next ", "also ", "immediately ", "right now ",
+			"i want you to ", "i need you to ", "you must ", "you should ", "must ",
+			"can you ", "could you ", "would you ", "help me ",
+			"\u7acb\u5373", "\u8fd9\u6b21", "\u76f4\u63a5",
+			"请", "现在", "然后", "接着", "我需要你", "帮我",
+		} {
+			if strings.HasPrefix(text, prefix) {
+				text = strings.TrimSpace(text[len(prefix):])
+				break
+			}
+		}
+		if text == previous {
+			break
+		}
+	}
+	if startsWithRuleIntent(text, candidatePhishingCurrentSpeechActHeads) {
+		return true
+	}
+	// Imperatives can carry a short discourse preface before the action. Inspect
+	// only the first bounded clause continuation; the caller has already proved
+	// the complete phishing relation, so this is not a global keyword allowlist.
+	for _, boundary := range []string{",", "，", ":", "：", ";", "；"} {
+		index := strings.Index(text, boundary)
+		if index < 0 || index+len(boundary) >= len(text) || index > 192 {
+			continue
+		}
+		tail := strings.TrimLeft(strings.TrimSpace(text[index+len(boundary):]), "-*#>,:\t")
+		for range 3 {
+			previous := tail
+			for _, prefix := range []string{"please ", "now ", "then ", "immediately ", "right now ", "\u7acb\u5373", "\u73b0\u5728"} {
+				if strings.HasPrefix(tail, prefix) {
+					tail = strings.TrimSpace(tail[len(prefix):])
+					break
+				}
+			}
+			if tail == previous {
+				break
+			}
+		}
+		if startsWithRuleIntent(tail, candidatePhishingCurrentSpeechActHeads) {
+			return true
+		}
+	}
+	return false
+}
+
+func candidatePhishingCurrentRelationActionPrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return false
+	}
+	// Quoted activation is already a complete current-user speech-act proof;
+	// the enclosing caller has already proved the phishing relation for this
+	// candidate. Do not ask the quoted payload to independently re-prove it: the
+	// payload is intentionally inert and the activation is the local authority.
+	if candidateExplicitQuotedActivation(text) {
+		return true
+	}
+	if !candidatePhishingDeceptionSurface(text) {
+		return false
+	}
+
+	found := false
+	walkDirectiveClauses([]rune(text), func(clause []rune) bool {
+		clauseText := strings.ToLower(strings.TrimSpace(string(clause)))
+		if clauseText == "" || candidateExplicitRelationSimpleProhibitionRunes(clause) ||
+			candidatePassiveIncidentReportOrDocumentationScope(clauseText) ||
+			candidateQuotedOrAnalyticalScope(clauseText) ||
+			candidateTransformativeAnalyticalScope(clauseText) ||
+			candidatePermissionOnlyScope(clauseText) {
+			return true
+		}
+		if !containsUnnegatedRuleIntentPrepared(
+			clauseText,
+			candidatePhishingCurrentRelationActionIntents,
+			candidatePhishingCurrentRelationActionPatterns,
+		) || !candidatePhishingDeceptionSurface(clauseText) {
+			return true
+		}
+		// Re-prove the relation inside this exact clause. The whole request may
+		// contain a hostile noun elsewhere; it must not lend authority here. Let
+		// the typed phishing relation prove its own intrinsically hostile form
+		// (for example, inducing real users to surrender account access) instead
+		// of requiring an unrelated generic non-consent marker in the clause.
+		clauseProof := newCandidatePhishingRelationProof(clauseText)
+		if !candidateExplicitPhishingRelationPrepared(
+			clauseText, candidateExplicitMaliciousHostileScope(clauseText), &clauseProof,
+		) {
+			return true
+		}
+		found = true
+		return false
+	})
+	return found
+}
+
+func candidatePhishingCurrentCredentialInteractionSpeechAct(text string) bool {
+	return candidatePhishingCurrentCredentialInteractionSpeechActPrepared(text, nil)
+}
+
+func candidatePhishingCurrentCredentialInteractionSpeechActPrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return false
+	}
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.currentSpeechActKnown {
+		return proof.currentSpeechAct
+	}
+	result := candidatePhishingCurrentCredentialInteractionSpeechActUncached(text, proof)
+	if proofMatches {
+		proof.currentSpeechActKnown = true
+		proof.currentSpeechAct = result
+	}
+	return result
+}
+
+func candidatePhishingCurrentCredentialInteractionSpeechActUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	if tail, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); independent &&
+		candidateExplicitPhishingRelation(
+			tail, candidateExplicitMaliciousHostileScope(tail),
+		) &&
+		candidatePhishingCurrentSpeechActHead(tail) {
+		return true
+	}
+	if !candidateExplicitPhishingRelationPrepared(
+		text, candidateExplicitMaliciousHostileScope(text), proof,
+	) {
+		return false
+	}
+	quotedActivation := candidateExplicitQuotedActivation(text)
+	if candidatePassiveIncidentReportOrDocumentationScopePrepared(text, proof) ||
+		candidatePhishingDetectionArtifactScopePrepared(text, proof) ||
+		candidateQuotedOrAnalyticalScopePrepared(text, proof) && !quotedActivation ||
+		candidateTransformativeAnalyticalScope(text) ||
+		candidateExplicitRelationWholeFieldDefensiveOwner(text) ||
+		candidatePermissionOnlyScope(text) ||
+		candidateExplicitRelationSimpleProhibitionRunes([]rune(text)) {
+		return false
+	}
+	return candidatePhishingCurrentSpeechActHead(text) ||
+		candidatePhishingCurrentRelationActionPrepared(text, proof) ||
+		containsUnnegatedRuleIntentPrepared(
+			text,
+			candidatePhishingCurrentDeploymentIntents,
+			candidatePhishingCurrentDeploymentIntentPatterns,
+		)
+}
+
+var candidatePhishingSyntheticSecretTerms = []string{
+	"synthetic credentials", "synthetic credential", "synthetic passwords", "synthetic password",
+	"synthetic training_token values", "synthetic training_token value", "synthetic training tokens", "synthetic training token",
+	"dummy credentials", "dummy credential", "dummy passwords", "dummy password",
+	"test credentials", "test credential", "test passwords", "test password",
+	"fictional credentials", "fictional credential", "fictional passwords", "fictional password",
+	"合成凭据", "合成密码", "虚构凭据", "虚构密码", "测试凭据", "测试密码",
+}
+
+var candidatePhishingSyntheticTargetTerms = []string{
+	"synthetic users", "synthetic user", "dummy users", "dummy user",
+	"test users", "test user", "fictional users", "fictional user",
+	"test personas", "test persona", "lab personas", "lab persona",
+	"合成用户", "测试用户", "虚构用户", "测试角色", "实验室角色",
+}
+
+var candidatePhishingCredentialNonSecretTerms = []string{
+	"password managers", "password manager", "password policies", "password policy",
+	"password hygiene", "password strength", "password reset", "password resets", "passwordless",
+	"credential policy", "credential policies", "credential guidance", "credential documentation",
+	"密码管理器", "密码策略", "密码卫生", "密码强度", "密码重置", "无密码登录", "凭据策略", "凭据文档",
+}
+
+var candidatePhishingDetectionArtifactTerms = []string{
+	"detector", "detection rule", "detection signature", "scanner", "classifier", "alert rule", "analytic rule",
+	"detection guidance", "remediation guidance", "incident report", "forensic report",
+	"检测器", "检测规则", "检测签名", "扫描器", "分类器", "告警规则", "分析规则", "检测指南", "修复指南", "事件报告", "取证报告",
+}
+
+var candidatePhishingDeceptiveSurfaceTargetTerms = []string{
+	"phishing page", "phishing site", "fake login", "fake oauth", "fake support", "fake portal",
+	"cloned login", "credential form", "spoofed sign-in", "spoofed login", "deceptive login", "lookalike login",
+	"钓鱼页面", "钓鱼站点", "假登录", "仿冒登录", "假授权页", "假支持页面", "仿冒入口", "凭据表单",
+}
+
+var candidatePhishingCredentialDefensiveTargetTerms = func() []string {
+	terms := make([]string, 0,
+		len(candidatePhishingSyntheticSecretTerms)+
+			len(candidatePhishingSyntheticTelemetryTerms)+
+			len(candidateCredentialSecurityArtifactTerms)+
+			len(candidatePhishingCredentialNonSecretTerms))
+	terms = append(terms, candidatePhishingSyntheticSecretTerms...)
+	terms = append(terms, candidatePhishingSyntheticTelemetryTerms...)
+	terms = append(terms, candidateCredentialSecurityArtifactTerms...)
+	terms = append(terms, candidatePhishingCredentialNonSecretTerms...)
+	return terms
+}()
+
+var candidatePhishingRealPersonTargetTerms = []string{
+	"real user", "real users", "end user", "end users", "user", "users",
+	"real employee", "real employees", "employee", "employees", "staff member", "staff members", "staff",
+	"real customer", "real customers", "customer", "customers",
+	"victim", "victims", "account holder", "account holders", "people", "person",
+	"真实用户", "用户", "真实员工", "员工", "职员", "真实客户", "客户", "受害者", "账户所有者",
+}
+
+var candidatePhishingExplicitHumanCredentialTerms = []string{
+	"real password", "real passwords", "actual password", "actual passwords", "live password", "live passwords",
+	"real credential", "real credentials", "actual credential", "actual credentials", "live credential", "live credentials",
+	"their password", "their passwords", "their credential", "their credentials", "their session token", "their session tokens",
+	"their browser cookie", "their browser cookies", "users' passwords", "employees' passwords",
+	"entered password", "entered passwords", "typed password", "typed passwords",
+	"submitted password", "submitted passwords", "provided credential", "provided credentials",
+	"saved password", "saved passwords", "staff credentials", "employee credentials", "user credentials",
+	"真实密码", "实际密码", "真实凭据", "实际凭据", "输入的密码", "键入的密码", "提交的密码", "提供的凭据", "保存的密码",
+}
+
+var candidatePhishingCredentialHarmfulTargetTerms = append(
+	[]string{
+		"session tokens", "account sessions", "vault secrets", "service keys", "secret materials",
+		"会话令牌", "账户会话", "保险库密钥", "服务密钥", "秘密材料",
+	},
+	candidateExplicitCredentialMaterialTerms...,
 )
 
 var candidatePhishingDeploymentIntents = []string{
 	"deploy", "deploys", "deploying", "host", "hosts", "hosting", "launch", "launches", "launching",
 	"publish", "publishes", "publishing", "install", "installs", "installing", "place", "places", "placing",
 	"send", "sends", "sending", "deliver", "delivers", "delivering", "push", "pushes", "pushing",
-	"部署", "投放", "上线", "托管", "发布", "安装", "放置", "发送", "推送",
+	"build", "builds", "building", "create", "creates", "creating", "design", "designs", "designing",
+	"generate", "generates", "generating", "construct", "constructs", "constructing",
+	"部署", "投放", "上线", "托管", "发布", "安装", "放置", "发送", "推送", "构建", "创建", "设计", "生成", "制作",
 }
 
 var candidatePhishingDeploymentIntentPatterns = compileCompactRuleIntentPatterns(
 	candidatePhishingDeploymentIntents,
 )
 
+func candidatePhishingCredentialInteractionAction(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return text != "" && containsUnnegatedRuleIntentPrepared(
+		text,
+		candidatePhishingCredentialInteractionIntents,
+		candidatePhishingCredentialInteractionIntentPatterns,
+	)
+}
+
+func candidatePhishingCredentialActionCanReachSurface(text string) bool {
+	surfaceIndex := candidateFirstBoundedLiteralIndex(text, candidatePhishingDeceptiveSurfaceTargetTerms)
+	if surfaceIndex < 0 {
+		return true
+	}
+	mayContainNegation := stringMayContainNegation(text)
+	// Precompute the two suffix facts needed by every action occurrence. The
+	// former implementation rescanned every harmful term and the entire suffix
+	// for each repeated intent, making a 16 KiB "ask ask ..." field quadratic.
+	// The reviewed term sets are fixed, so these are constant-count linear scans;
+	// the loop below then performs only O(1) bounded work per matched intent.
+	lastHarmfulTarget := candidateLastBoundedLiteralIndex(text, candidatePhishingCredentialHarmfulTargetTerms)
+	if lastHarmfulTarget < 0 {
+		return false
+	}
+	lastBoundaryBeforeSurface := candidatePhishingLastDirectiveBoundaryBefore(text, surfaceIndex)
+	for _, intent := range candidatePhishingCredentialInteractionIntents {
+		if intent == "" || len(intent) > len(text) {
+			continue
+		}
+		for offset := 0; offset <= len(text)-len(intent); {
+			index := strings.Index(text[offset:], intent)
+			if index < 0 {
+				break
+			}
+			index += offset
+			end := index + len(intent)
+			leftOK := !isASCIIStringLocal(intent) || index == 0 || !isASCIIWordByte(text[index-1])
+			rightOK := !isASCIIStringLocal(intent) || end == len(text) || !isASCIIWordByte(text[end])
+			if leftOK && rightOK {
+				negated := false
+				if mayContainNegation {
+					_, negated = ruleIntentOccurrenceNegation(text, index)
+				}
+				if !negated && lastHarmfulTarget >= end &&
+					(index >= surfaceIndex || index > lastBoundaryBeforeSurface) {
+					return true
+				}
+			}
+			offset = index + 1
+		}
+	}
+	return false
+}
+
+func candidatePhishingLastDirectiveBoundaryBefore(text string, end int) int {
+	if end <= 0 {
+		return -1
+	}
+	if end > len(text) {
+		end = len(text)
+	}
+	prefix := text[:end]
+	best := strings.LastIndexAny(prefix, ",.!?;:")
+	for _, marker := range []string{
+		"，", "。", "！", "？", "；", "：",
+		" but ", " however ", " then ", " instead ", " actually ", " while ",
+		"但是", "然而", "然后", "改为", "实际",
+	} {
+		if index := strings.LastIndex(prefix, marker); index > best {
+			best = index
+		}
+	}
+	return best
+}
+
+func candidatePhishingDirectiveBoundaryBetween(text string) bool {
+	if strings.ContainsAny(text, ",.!?;:\uff0c\u3002\uff01\uff1f\uff1b\uff1a") {
+		return true
+	}
+	for _, marker := range []string{
+		" but ", " however ", " then ", " instead ", " actually ", " while ",
+		"\u4f46\u662f", "\u7136\u800c", "\u7136\u540e", "\u6539\u4e3a", "\u5b9e\u9645",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func candidatePhishingReferencedNonExecutionScope(text string) bool {
+	return containsAnyLiteral(text,
+		"for requests that", "for requests which", "for prompts that", "for prompts which",
+		"detect requests that", "detect prompts that", "flag requests that", "flag prompts that",
+		"identify requests that", "identify prompts that", "\u8fd9\u7c7b\u8bf7\u6c42", "\u6b64\u7c7b\u8bf7\u6c42", "\u8fd9\u7c7b\u63d0\u793a", "\u6b64\u7c7b\u63d0\u793a",
+	) && containsAnyLiteral(text,
+		"do not execute", "don't execute", "must not execute", "never execute", "without executing",
+		"analysis only", "detection only", "\u4e0d\u8981\u6267\u884c", "\u4e0d\u5f97\u6267\u884c", "\u7981\u6b62\u6267\u884c", "\u4ec5\u5206\u6790", "\u4ec5\u68c0\u6d4b",
+	)
+}
+
+func candidatePhishingDetectionArtifactScope(text string) bool {
+	return candidatePhishingDetectionArtifactScopePrepared(text, nil)
+}
+
+func candidatePhishingDetectionArtifactScopePrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.detectionArtifactKnown {
+		return proof.detectionArtifact
+	}
+	result := candidatePhishingDetectionArtifactScopeUncached(text, proof)
+	if proofMatches {
+		proof.detectionArtifactKnown = true
+		proof.detectionArtifact = result
+	}
+	return result
+}
+
+func candidatePhishingDetectionArtifactScopeUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	if text == "" || !containsAnyLiteral(text, candidatePhishingDetectionArtifactTerms...) {
+		return false
+	}
+	detectionPurpose := containsAnyLiteral(text,
+		"detect", "flag", "identify", "scan", "classify", "alert", "analyze", "analyse", "review",
+		"检测", "识别", "扫描", "分类", "告警", "分析", "审查",
+	)
+	artifactCreation := containsUnnegatedRuleIntentPrepared(
+		text,
+		candidatePhishingDeploymentIntents,
+		candidatePhishingDeploymentIntentPatterns,
+	)
+	if !detectionPurpose && !artifactCreation {
+		return false
+	}
+	_, independentExecution := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof)
+	if candidatePhishingReferencedNonExecutionScope(text) && !independentExecution {
+		return true
+	}
+	if !independentExecution && containsAnyLiteral(text,
+		"fake login detector", "fake login page detector", "fake login pages detector",
+		"cloned login detector", "phishing page detector", "deceptive login detector",
+		"spoofed sign-in detector", "spoofed login detector",
+		"仿冒登录检测器", "假登录检测器", "钓鱼页面检测器", "欺骗登录检测器",
+	) {
+		return true
+	}
+	targets := candidateActionTargets(
+		text,
+		candidatePhishingDeploymentIntents,
+		candidatePhishingDetectionArtifactTerms,
+		candidatePhishingDeceptiveSurfaceTargetTerms,
+	)
+	return targets.active && targets.defensive && !targets.harmful && !targets.unknown
+}
+
+func candidateMaskPhishingLiteralTerms(text string, terms []string) string {
+	var masked []byte
+	for _, term := range terms {
+		if term == "" || len(term) > len(text) {
+			continue
+		}
+		for offset := 0; offset <= len(text)-len(term); {
+			index := strings.Index(text[offset:], term)
+			if index < 0 {
+				break
+			}
+			index += offset
+			end := index + len(term)
+			leftOK := !isASCIIStringLocal(term) || index == 0 || !isASCIIWordByte(text[index-1])
+			rightOK := !isASCIIStringLocal(term) || end == len(text) || !isASCIIWordByte(text[end])
+			if leftOK && rightOK {
+				if masked == nil {
+					masked = []byte(text)
+				}
+				for position := index; position < end; position++ {
+					masked[position] = ' '
+				}
+			}
+			offset = index + 1
+		}
+	}
+	if masked == nil {
+		return text
+	}
+	return string(masked)
+}
+
+func candidatePhishingCredentialMaterialAfterExclusions(text string) bool {
+	if !candidateExplicitCredentialMaterial(text) {
+		return false
+	}
+	if !containsAnyLiteral(text, candidatePhishingCredentialDefensiveTargetTerms...) {
+		return true
+	}
+	text = candidateMaskPhishingLiteralTerms(text, candidatePhishingCredentialDefensiveTargetTerms)
+	return candidateExplicitCredentialMaterial(text)
+}
+
+func candidatePhishingCredentialCollectionPhysicalClause(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return false
+	}
+	proofText := candidateMaskPhishingLiteralTerms(text, candidatePhishingCredentialDefensiveTargetTerms)
+	if !candidateExplicitCredentialMaterial(proofText) {
+		return false
+	}
+	targets := candidateActionTargets(
+		proofText,
+		candidatePhishingCredentialInteractionIntents,
+		nil,
+		candidatePhishingCredentialHarmfulTargetTerms,
+	)
+	return targets.active && targets.harmful
+}
+
 func candidatePhishingCredentialCollectionClause(text string) bool {
-	return candidateExplicitCredentialMaterial(text) &&
-		containsUnnegatedRuleIntentPrepared(
-			text,
-			candidatePhishingCredentialCollectionIntents,
-			candidatePhishingCredentialCollectionIntentPatterns,
-		)
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" || !candidatePhishingCredentialMaterialAfterExclusions(text) {
+		return false
+	}
+	found := false
+	walkDirectiveClauses([]rune(text), func(clause []rune) bool {
+		clauseText := strings.TrimSpace(string(clause))
+		if clauseText == "" || candidateExplicitRelationSimpleProhibitionRunes(clause) {
+			return true
+		}
+		found = candidatePhishingCredentialCollectionPhysicalClause(clauseText)
+		return !found
+	})
+	return found
+}
+
+func candidatePhishingRealCredentialTarget(text string) bool {
+	targetText := candidateMaskPhishingLiteralTerms(text, candidatePhishingSyntheticTargetTerms)
+	realPersonTarget := candidateFirstBoundedLiteralIndex(targetText, candidatePhishingRealPersonTargetTerms) >= 0
+	explicitHumanCredential := candidateFirstBoundedLiteralIndex(text, candidatePhishingExplicitHumanCredentialTerms) >= 0
+	return realPersonTarget || explicitHumanCredential
+}
+
+// candidatePhishingRealCredentialInteractionRelation proves a compact,
+// candidate-local relation between a deceptive authentication surface and an
+// unnegated request for human credentials. Synthetic secrets, synthetic users,
+// training telemetry, credential-alert artifacts, and password-policy topics
+// are removed only from this proof view; they cannot suppress a second, real
+// credential relation elsewhere in the same bounded candidate.
+func candidatePhishingRealCredentialInteractionRelation(text string) bool {
+	return candidatePhishingRealCredentialInteractionRelationPrepared(text, nil)
+}
+
+func candidatePhishingRealCredentialInteractionRelationPrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.realCredentialRelationKnown {
+		return proof.realCredentialRelation
+	}
+	result := candidatePhishingRealCredentialInteractionRelationUncached(text, proof)
+	if proofMatches {
+		proof.realCredentialRelationKnown = true
+		proof.realCredentialRelation = result
+	}
+	return result
+}
+
+func candidatePhishingRealCredentialInteractionRelationUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	if text == "" {
+		return false
+	}
+	// A complete detection/analysis request owns the quoted hostile relation in
+	// its subject. Only a later, independently executable malicious clause may
+	// reactivate that relation. Checking this boundary before the credential
+	// proof also avoids turning the detector's quoted target into a real request.
+	if candidatePhishingDetectionArtifactScopePrepared(text, proof) &&
+		candidatePhishingReferencedNonExecutionScope(text) {
+		if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); !independent {
+			return false
+		}
+	}
+	// Keep the expensive clause-local proof off unrelated candidate windows.
+	// These are necessary whole-window signals only; the walker below still has
+	// to bind the deception surface, real person, secret, and action locally.
+	if !candidatePhishingDeceptionSurface(text) ||
+		!candidatePhishingCredentialActionCanReachSurface(text) ||
+		!candidatePhishingCredentialMaterialAfterExclusions(text) ||
+		!candidatePhishingRealCredentialTarget(text) {
+		return false
+	}
+	found := false
+	pendingDeceptiveSurface := false
+	walkDirectiveClausesWithBoundary([]rune(text), func(clause []rune, boundary directiveBoundaryKind) bool {
+		if boundary == directiveBoundaryStrong {
+			pendingDeceptiveSurface = false
+		}
+		clauseText := strings.ToLower(strings.TrimSpace(string(clause)))
+		if clauseText == "" || candidateExplicitRelationSimpleProhibitionRunes(clause) ||
+			candidateQuotedOrAnalyticalScope(clauseText) ||
+			candidateTransformativeAnalyticalScope(clauseText) ||
+			candidatePermissionOnlyScope(clauseText) {
+			pendingDeceptiveSurface = false
+			return true
+		}
+
+		deceptionSurface := candidatePhishingDeceptionSurface(clauseText)
+		detectionArtifact := candidatePhishingDetectionArtifactScope(clauseText)
+		credentialRelation := candidatePhishingCredentialCollectionPhysicalClause(clauseText) &&
+			candidatePhishingRealCredentialTarget(clauseText)
+		if !detectionArtifact && credentialRelation && (deceptionSurface || pendingDeceptiveSurface) {
+			found = true
+			return false
+		}
+
+		if candidateExplicitRelationWholeFieldDefensiveOwner(clauseText) && !detectionArtifact {
+			pendingDeceptiveSurface = false
+			return true
+		}
+		pendingDeceptiveSurface = deceptionSurface &&
+			(detectionArtifact || containsUnnegatedRuleIntentPrepared(
+				clauseText,
+				candidatePhishingDeploymentIntents,
+				candidatePhishingDeploymentIntentPatterns,
+			))
+		return true
+	})
+	return found
+}
+
+// candidateFieldHasIndependentPhishingRealCredentialClause prevents an
+// unrelated analytical prefix or suffix from owning an operational phishing
+// clause in the middle of the same bounded field. Each physical clause must
+// independently prove the full local relation; quoted, analytical, defensive,
+// synthetic, and prohibited clauses remain inert.
+func candidateFieldHasIndependentPhishingRealCredentialClause(text []rune) bool {
+	found := false
+	walkDirectiveClauses(text, func(clause []rune) bool {
+		clauseText := strings.TrimSpace(string(clause))
+		if clauseText == "" || candidateExplicitRelationSimpleProhibitionRunes(clause) {
+			return true
+		}
+		found = candidatePhishingRealCredentialInteractionRelation(clauseText)
+		return !found
+	})
+	return found
 }
 
 func candidatePhishingSyntheticSimulationScope(text string) bool {
+	return candidatePhishingSyntheticSimulationScopePrepared(text, nil)
+}
+
+func candidatePhishingSyntheticSimulationScopePrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
 	text = strings.ToLower(strings.TrimSpace(text))
-	if text == "" || hasExplicitHarmConflict(text) || candidateExplicitVictimOrNonConsent(text) ||
-		candidateCovertAcquisition(text) || candidateExfiltrationOrTakeover(text) {
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.syntheticSimulationKnown {
+		return proof.syntheticSimulation
+	}
+	result := candidatePhishingSyntheticSimulationScopeUncached(text, proof)
+	if proofMatches {
+		proof.syntheticSimulationKnown = true
+		proof.syntheticSimulation = result
+	}
+	return result
+}
+
+func candidatePhishingSyntheticSimulationScopeUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	if text == "" {
+		return false
+	}
+	controlled := containsAnyLiteral(text,
+		"isolated lab", "offline lab", "test tenant", "phishing simulation", "awareness exercise", "training exercise",
+		"隔离实验室", "离线实验室", "测试租户", "钓鱼演练", "安全演练", "意识培训", "培训练习",
+	)
+	syntheticSecrets := containsAnyLiteral(text, candidatePhishingSyntheticSecretTerms...)
+	defensivePurpose := containsAnyLiteral(text,
+		"alert validation", "validate alerts", "detector validation", "detection validation", "training",
+		"验证告警", "告警验证", "检测验证", "培训",
+	)
+	if !controlled || !syntheticSecrets || !defensivePurpose {
+		return false
+	}
+	if candidatePhishingRealCredentialInteractionRelationPrepared(text, proof) || hasExplicitHarmConflict(text) ||
+		candidateExplicitVictimOrNonConsent(text) || candidateCovertAcquisition(text) ||
+		candidateExfiltrationOrTakeover(text) {
 		return false
 	}
 	realTarget := containsAnyLiteral(text,
@@ -3103,19 +4959,6 @@ func candidatePhishingSyntheticSimulationScope(text string) bool {
 	if realTarget && !realTargetExplicitlyExcluded {
 		return false
 	}
-	controlled := containsAnyLiteral(text,
-		"isolated lab", "offline lab", "test tenant", "phishing simulation", "awareness exercise", "training exercise",
-		"隔离实验室", "离线实验室", "测试租户", "钓鱼演练", "安全演练", "意识培训", "培训练习",
-	)
-	syntheticSecrets := containsAnyLiteral(text,
-		"synthetic credential", "synthetic password", "dummy credential", "dummy password",
-		"test credential", "test password", "fictional credential", "fictional password",
-		"合成凭据", "合成密码", "虚构凭据", "虚构密码", "测试凭据", "测试密码",
-	)
-	defensivePurpose := containsAnyLiteral(text,
-		"alert validation", "validate alerts", "detector validation", "detection validation", "training",
-		"验证告警", "告警验证", "检测验证", "培训",
-	)
 	return controlled && syntheticSecrets && defensivePurpose
 }
 
@@ -3132,7 +4975,8 @@ func candidateLinkedPhishingSoftPair(previous, current, ownerText string, bounda
 	joined := strings.TrimSpace(previous + "\n" + current)
 	if previous == "" || current == "" || candidateQuotedOrAnalyticalScope(ownerText) ||
 		candidateTransformativeAnalyticalScope(ownerText) || containsDetectionArtifact(ownerText) ||
-		isSafetyDeliverableClause(ownerText) || candidateCredentialLifecycle(joined) ||
+		candidatePhishingDetectionArtifactScope(ownerText) || isSafetyDeliverableClause(ownerText) ||
+		candidateCredentialLifecycle(joined) ||
 		candidatePermissionOnlyScope(joined) || candidatePhishingSyntheticSimulationScope(ownerText) {
 		return false
 	}
@@ -3359,7 +5203,7 @@ func candidateActionFor(mode Mode, score int, thresholds Thresholds, eligibility
 }
 
 func enforceResultCandidateEligibility(result *Result, mode Mode, thresholds Thresholds) {
-	if result != nil && resultIsNeutralClassifierWindowIncomplete(*result) {
+	if result != nil && resultIsNeutralClassifierIncomplete(*result) {
 		// A bounded classifier-window overflow is deliberately category-free. Do
 		// not let the generic score/behavior fallback manufacture a synthetic
 		// eligibility object for this neutral terminal result.
@@ -3396,10 +5240,15 @@ func enforceResultCandidateEligibility(result *Result, mode Mode, thresholds Thr
 	}
 }
 
-func resultIsNeutralClassifierWindowIncomplete(result Result) bool {
+func classifierIncompleteCoverageReason(reason CoverageReason) bool {
+	return reason == CoverageReasonClassifierWindow ||
+		reason == CoverageReasonClassifierProofBudget
+}
+
+func resultIsNeutralClassifierIncomplete(result Result) bool {
 	return result.Truncated && result.FindingConfidence == FindingNone &&
 		result.Coverage.State == CoverageUnavailable &&
-		result.Coverage.Reason == CoverageReasonClassifierWindow &&
+		classifierIncompleteCoverageReason(result.Coverage.Reason) &&
 		result.Score == 0 && result.Category == "" && len(result.RuleIDs) == 0
 }
 
@@ -3839,6 +5688,29 @@ func candidateExplicitRelationQuotedNonExecutionBoundary(text string) bool {
 }
 
 func candidateQuotedOrAnalyticalScope(text string) bool {
+	return candidateQuotedOrAnalyticalScopePrepared(text, nil)
+}
+
+func candidateQuotedOrAnalyticalScopePrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.quotedOrAnalyticalKnown {
+		return proof.quotedOrAnalytical
+	}
+	result := candidateQuotedOrAnalyticalScopeUncached(text, proof)
+	if proofMatches {
+		proof.quotedOrAnalyticalKnown = true
+		proof.quotedOrAnalytical = result
+	}
+	return result
+}
+
+func candidateQuotedOrAnalyticalScopeUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
 	if text == "" {
 		return false
 	}
@@ -3853,7 +5725,7 @@ func candidateQuotedOrAnalyticalScope(text string) bool {
 	if candidateTransformativeAnalyticalScope(text) {
 		return true
 	}
-	if hasIndependentMaliciousExecutionClause(text) {
+	if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); independent {
 		return false
 	}
 	if candidatePolicyStatementCarrierScope(text) {
@@ -3934,34 +5806,272 @@ func candidatePolicyStatementCarrierScope(text string) bool {
 	)
 }
 
-// candidateInertLabeledCarrier recognizes a whole current-user field whose
-// first non-empty line explicitly labels the remainder as log/console output.
-// The label is evidence ownership, not an execution speech act.  A caller can
-// still reactivate the carrier through the profiled referent path (for example,
-// an adjacent "execute it"), but the payload must not become active merely
-// because an imperative-looking line appears inside the recorded output.
+// candidateInertLabeledCarrier recognizes a whole field whose first non-empty
+// line explicitly labels the remainder as recorded log/console/terminal
+// output. The label owns every ordinary payload line in that field. A parser-
+// proven adjacent segment or field may still reactivate the carrier through the
+// established referent paths. Within the same field, only an explicit later
+// transition with either a payload referent and affirmative execution act or an
+// independently complete hostile directive can revoke that ownership; a
+// newline by itself is never such a boundary.
 func candidateInertLabeledCarrier(text string) bool {
+	carrier, tailState := candidateInertLabeledCarrierExecutionTailProof(text)
+	// A proof-budget overflow is still owned by the exact carrier. Callers that
+	// produce a disposition inspect the tri-state helper and return a neutral
+	// incomplete result; ownership-only callers must not expose the recorded
+	// payload as a fresh malicious candidate while that proof is unresolved.
+	return carrier && tailState != explicitMaliciousRelationMatched
+}
+
+func candidateInertLabeledCarrierExecutionTailProof(
+	text string,
+) (bool, explicitMaliciousRelationProofState) {
+	payload, ok := candidateInertLabeledCarrierPayload(text)
+	if !ok {
+		return false, explicitMaliciousRelationNotMatched
+	}
+	return true, candidateInertLabeledCarrierExecutionTailProofFromPayload(payload)
+}
+
+func candidateInertLabeledCarrierPayload(text string) (string, bool) {
+	text = strings.TrimSpace(strings.ToLower(text))
+	if !candidateInertLabeledCarrierSyntax(text) {
+		return "", false
+	}
+	lineEnd, boundaryWidth := candidateInertLabeledCarrierBoundary(text)
+	if lineEnd < 0 {
+		return "", false
+	}
+	payload := strings.TrimSpace(text[lineEnd+boundaryWidth:])
+	return payload, payload != ""
+}
+
+const maxInertLabeledCarrierExecutionTailBytes = 512
+const maxInertLabeledCarrierExecutionHeadBytes = 128
+
+// candidateInertLabeledCarrierHasExecutionTail admits only a narrow same-field
+// reactivation. A later physical line must explicitly transition out of the
+// recorded carrier and either refer to that carrier with an affirmative
+// execution act, or independently prove a complete malicious directive inside
+// one strong scope. Scanning all later lines prevents an attacker from hiding
+// the directive behind a final benign status line. This keeps ordinary payload
+// lines, summaries, and direct prohibitions inert while preventing an exact
+// label from laundering either a referential or self-contained hostile tail.
+func candidateInertLabeledCarrierExecutionTailProofFromPayload(
+	payload string,
+) explicitMaliciousRelationProofState {
+	carrierSeen := false
+	proofBudgetExceeded := false
+	hasNewline := strings.IndexByte(payload, '\n') >= 0
+	hasHardBoundary := strings.Contains(payload, compactHardBoundaryText)
+	lineStart := 0
+	for lineStart <= len(payload) {
+		lineEnd, width := candidateInertLabeledCarrierNextBoundary(
+			payload, lineStart, hasNewline, hasHardBoundary,
+		)
+		if lineEnd < 0 {
+			lineEnd = len(payload)
+			width = 0
+		}
+		line := strings.TrimSpace(payload[lineStart:lineEnd])
+		if line != "" {
+			if carrierSeen {
+				body, ok := candidateInertLabeledCarrierExecutionTailBody(line)
+				if ok {
+					if candidateInertLabeledCarrierTailReferencesPayload(body) {
+						if hasAffirmativeQuotedReviewContinuation(body) {
+							return explicitMaliciousRelationMatched
+						}
+					}
+					switch candidateInertLabeledCarrierIndependentMaliciousTailProof(body) {
+					case explicitMaliciousRelationMatched:
+						return explicitMaliciousRelationMatched
+					case explicitMaliciousRelationProofBudgetExceeded:
+						proofBudgetExceeded = true
+					}
+				}
+			}
+			carrierSeen = true
+		}
+		if width == 0 {
+			break
+		}
+		lineStart = lineEnd + width
+	}
+	if proofBudgetExceeded {
+		return explicitMaliciousRelationProofBudgetExceeded
+	}
+	return explicitMaliciousRelationNotMatched
+}
+
+func candidateInertLabeledCarrierIndependentMaliciousTailProof(
+	text string,
+) explicitMaliciousRelationProofState {
+	state := explicitMaliciousRelationNotMatched
+	walkDirectiveStrongScopes(text, func(scope string) bool {
+		scope = strings.TrimSpace(scope)
+		if scope == "" {
+			return true
+		}
+		executionScope := scope
+		if !candidateCurrentExecutionTail(executionScope) {
+			var ok bool
+			executionScope, ok = independentMaliciousExecutionTail(scope)
+			if !ok {
+				executionScope, ok = candidateInertLabeledCarrierCoordinatedExecutionTail(scope)
+			}
+			if !ok {
+				return true
+			}
+		}
+		proof := newCandidatePhishingRelationProof(executionScope)
+		category, proofState := candidateExplicitMaliciousRelationCategoryProof(
+			executionScope, &proof,
+		)
+		if proofState == explicitMaliciousRelationProofBudgetExceeded {
+			state = explicitMaliciousRelationProofBudgetExceeded
+			return true
+		}
+		if proofState == explicitMaliciousRelationMatched &&
+			!candidateExplicitRelationDefensiveConflictPrepared(category, executionScope, &proof) &&
+			!isLegitimateCategoryWorkflow(category, executionScope) &&
+			!hasAffirmativeSafetyPurpose(executionScope) {
+			state = explicitMaliciousRelationMatched
+			return false
+		}
+		return true
+	})
+	return state
+}
+
+func candidateInertLabeledCarrierCoordinatedExecutionTail(text string) (string, bool) {
+	const connector = " and "
+	for searchAt := 0; searchAt < len(text); {
+		index := strings.Index(text[searchAt:], connector)
+		if index < 0 {
+			break
+		}
+		index += searchAt
+		tail := strings.TrimLeftFunc(text[index+len(connector):], unicode.IsSpace)
+		head := tail
+		if len(head) > maxInertLabeledCarrierExecutionHeadBytes {
+			head = validUTF8Prefix(head, maxInertLabeledCarrierExecutionHeadBytes)
+		}
+		if candidateCurrentExecutionTail(head) {
+			// The full suffix is proved exactly once by the caller. Keeping this
+			// admission check prefix-bounded avoids rescanning every remaining
+			// connector suffix on long log/status floods.
+			return tail, true
+		}
+		searchAt = index + len(connector)
+	}
+	return "", false
+}
+
+func candidateInertLabeledCarrierNextBoundary(
+	text string,
+	start int,
+	hasNewline bool,
+	hasHardBoundary bool,
+) (index, width int) {
+	if hasNewline && !hasHardBoundary {
+		if relative := strings.IndexByte(text[start:], '\n'); relative >= 0 {
+			return start + relative, 1
+		}
+		return -1, 0
+	}
+	if hasHardBoundary && !hasNewline {
+		if relative := strings.Index(text[start:], compactHardBoundaryText); relative >= 0 {
+			return start + relative, len(compactHardBoundaryText)
+		}
+		return -1, 0
+	}
+	nextNewline := strings.IndexByte(text[start:], '\n')
+	nextHardBoundary := strings.Index(text[start:], compactHardBoundaryText)
+	if nextNewline < 0 && nextHardBoundary < 0 {
+		return -1, 0
+	}
+	if nextHardBoundary < 0 || nextNewline >= 0 && nextNewline < nextHardBoundary {
+		return start + nextNewline, 1
+	}
+	return start + nextHardBoundary, len(compactHardBoundaryText)
+}
+
+func candidateInertLabeledCarrierExecutionTailBody(tail string) (string, bool) {
+	// candidateInertLabeledCarrierPayload already supplies a lowercase view.
+	// Avoid allocating another lowercase copy for every physical log line.
+	tail = strings.TrimSpace(tail)
+	for _, transition := range []string{"now", "then"} {
+		if !strings.HasPrefix(tail, transition) || len(tail) == len(transition) {
+			continue
+		}
+		remainder := tail[len(transition):]
+		first, _ := utf8.DecodeRuneInString(remainder)
+		if !unicode.IsSpace(first) && !strings.ContainsRune(",:;-\u2014\u2013", first) {
+			continue
+		}
+		body := strings.TrimLeftFunc(remainder, func(r rune) bool {
+			return unicode.IsSpace(r) || strings.ContainsRune(",:;-\u2014\u2013", r)
+		})
+		body = strings.TrimSpace(body)
+		return body, body != ""
+	}
+	return "", false
+}
+
+func candidateInertLabeledCarrierTailReferencesPayload(text string) bool {
+	if containsAnyLiteral(text,
+		"the quoted request", "quoted request", "the request above", "the above request",
+		"the previous request", "the preceding request", "that request", "this request",
+		"the quoted instruction", "quoted instruction", "the instructions above", "the above instructions",
+		"the previous instructions", "the preceding instructions", "those instructions", "these instructions",
+		"the quoted payload", "quoted payload", "the payload above", "the above payload",
+		"the previous payload", "the preceding payload", "the payload", "that payload", "this payload",
+		"the quoted output", "quoted output", "the output above", "the above output",
+		"the previous output", "the preceding output", "the output", "that output", "this output",
+		"上述请求", "前述请求", "前面的请求", "上面的请求", "该请求", "这个请求",
+		"上述指令", "前述指令", "前面的指令", "上面的指令", "这些指令", "该指令",
+		"上述载荷", "前述载荷", "前面的载荷", "上面的载荷", "该载荷", "这个载荷",
+	) {
+		return true
+	}
+	return containsASCIIWord(text, "it") || containsASCIIWord(text, "that")
+}
+
+func candidateInertLabeledCarrierBoundary(text string) (index, width int) {
+	lineEnd := strings.IndexByte(text, '\n')
+	boundaryWidth := 1
+	if hardBoundary := strings.Index(text, compactHardBoundaryText); hardBoundary >= 0 &&
+		(lineEnd < 0 || hardBoundary < lineEnd) {
+		// The internal hard-boundary sentinel survives string conversion, so
+		// callers must advance by its full UTF-8 width.
+		lineEnd = hardBoundary
+		boundaryWidth = len(compactHardBoundaryText)
+	}
+	if lineEnd < 0 {
+		return -1, 0
+	}
+	return lineEnd, boundaryWidth
+}
+
+func candidateInertLabeledCarrierSyntax(text string) bool {
 	text = strings.TrimSpace(strings.ToLower(text))
 	if text == "" {
 		return false
 	}
-	lineEnd := strings.IndexByte(text, '\n')
-	if replacement := strings.IndexRune(text, '\uFFFD'); replacement >= 0 &&
-		(lineEnd < 0 || replacement < lineEnd) {
-		// normalizePartsInto represents hard structural line boundaries with an
-		// internal non-scalar sentinel. Converting its rune view to string yields
-		// U+FFFD; only a closed label grammar consumes that marker here.
-		lineEnd = replacement
-	}
+	lineEnd, boundaryWidth := candidateInertLabeledCarrierBoundary(text)
 	if lineEnd < 0 {
 		return false
 	}
 	label := strings.TrimSpace(strings.TrimSuffix(text[:lineEnd], "\r"))
+	if label == "log output" || label == "console output" || label == "terminal output" {
+		return false
+	}
 	switch label {
-	case "log output:", "log output", "console output:", "console output",
+	case "log output:", "console output:",
 		"terminal output:", "terminal output", "日志输出：", "日志输出",
 		"控制台输出：", "控制台输出", "终端输出：", "终端输出":
-		return strings.TrimSpace(text[lineEnd+1:]) != ""
+		return strings.TrimSpace(text[lineEnd+boundaryWidth:]) != ""
 	default:
 		return false
 	}
@@ -4043,26 +6153,48 @@ func candidateTransformativeAnalyticalScope(text string) bool {
 }
 
 func candidateDefensiveScopeConflict(category rules.Category, text string, context ContextFlags) bool {
-	if text == "" || hasIndependentMaliciousExecutionClause(text) {
+	return candidateDefensiveScopeConflictPrepared(category, text, context, nil)
+}
+
+func candidateDefensiveScopeConflictPrepared(
+	category rules.Category,
+	text string,
+	context ContextFlags,
+	phishingProof *candidatePhishingRelationProof,
+) bool {
+	if text == "" {
 		return false
 	}
-	if candidateQuotedOrAnalyticalScope(text) {
+	if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, phishingProof); independent {
+		return false
+	}
+	if candidateQuotedOrAnalyticalScopePrepared(text, phishingProof) {
 		return true
 	}
 	// Concrete safety artifacts own their dangerous examples even when those
 	// examples contain strong vocabulary. A bare "defensive"/"remediation"
 	// label, however, cannot launder a same-candidate explicit hostile action.
 	if containsDetectionArtifact(text) || isSafetyDeliverableClause(text) {
+		if candidateExplicitHostileExecution(category, text) {
+			return false
+		}
 		return true
+	}
+	localDefensiveOwner := isLegitimateCategoryWorkflow(category, text) ||
+		candidateCredentialLifecyclePrepared(text, phishingProof) || hasAffirmativeSafetyPurpose(text)
+	contextDefensiveOwner := context.Defensive || context.Remediation || context.StaticAnalysis ||
+		context.IncidentResponse || context.HighLevel
+	if !localDefensiveOwner && !contextDefensiveOwner {
+		// A hostile-execution proof matters here only as a contradiction to an
+		// otherwise established defensive owner. Running the category-specific
+		// proof on every ordinary malicious candidate repeated the complete
+		// phishing relation and clause walk without changing this false result.
+		return false
 	}
 	if candidateExplicitHostileExecution(category, text) {
 		return false
 	}
-	if isLegitimateCategoryWorkflow(category, text) || candidateCredentialLifecycle(text) ||
-		hasAffirmativeSafetyPurpose(text) {
-		return true
-	}
-	return context.Defensive || context.Remediation || context.StaticAnalysis || context.IncidentResponse || context.HighLevel
+	return true
 }
 
 // candidateExplicitRelationDefensiveConflict is deliberately narrower than
@@ -4073,13 +6205,31 @@ func candidateDefensiveScopeConflict(category rules.Category, text string, conte
 // carrier or a concrete safety deliverable can do so; an independent malicious
 // execution clause remains eligible for its own assessment.
 func candidateExplicitRelationDefensiveConflict(category rules.Category, text string) bool {
-	if text == "" || hasIndependentMaliciousExecutionClause(text) {
+	return candidateExplicitRelationDefensiveConflictPrepared(category, text, nil)
+}
+
+func candidateExplicitRelationDefensiveConflictPrepared(
+	category rules.Category,
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	if text == "" {
 		return false
 	}
-	if candidateQuotedOrAnalyticalScope(text) && !candidateExplicitQuotedActivation(text) {
+	if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); independent {
+		return false
+	}
+	if category == rules.CategoryEvasion &&
+		(candidateTelemetryRestorationWorkflow(text) || candidatePassiveTelemetryFailureReport(text)) {
+		return true
+	}
+	if candidateQuotedOrAnalyticalScopePrepared(text, proof) && !candidateExplicitQuotedActivation(text) {
 		return true
 	}
 	if containsDetectionArtifact(text) || isSafetyDeliverableClause(text) {
+		if candidateExplicitHostileExecution(category, text) {
+			return false
+		}
 		return true
 	}
 	if candidateExplicitRelationLocalDefensiveOwner(text) {
@@ -4094,7 +6244,7 @@ func candidateExplicitRelationDefensiveConflict(category rules.Category, text st
 	// hostile scope. Conversely, those positive hostile axes prevent words such
 	// as "rotation" or "incident response" from laundering the same clause.
 	return !candidateExplicitMaliciousHostileScope(text) &&
-		(isLegitimateCategoryWorkflow(category, text) || candidateCredentialLifecycle(text) ||
+		(isLegitimateCategoryWorkflow(category, text) || candidateCredentialLifecyclePrepared(text, proof) ||
 			hasAffirmativeSafetyPurpose(text))
 }
 
@@ -4128,6 +6278,26 @@ func candidateDirectRansomwareExecution(text string) bool {
 	if !containsAnyLiteral(text, "ransomware", "勒索软件", "勒索程序", "勒索载荷") {
 		return false
 	}
+	if len(text) > maxCompactIntentProofBytes {
+		found := false
+		walkDirectiveStrongScopes(text, func(scope string) bool {
+			scope = strings.TrimSpace(scope)
+			if scope == "" || len(scope) > maxCompactIntentProofBytes ||
+				!containsAnyLiteral(scope, "ransomware", "勒索软件", "勒索程序", "勒索载荷") {
+				return true
+			}
+			if containsUnnegatedRuleIntentPrepared(
+				scope,
+				candidateRansomwareExecutionIntents,
+				candidateRansomwareExecutionIntentPatterns,
+			) {
+				found = true
+				return false
+			}
+			return true
+		})
+		return found
+	}
 	return containsUnnegatedRuleIntentPrepared(
 		text,
 		candidateRansomwareExecutionIntents,
@@ -4141,6 +6311,11 @@ func candidateExplicitHostileExecution(category rules.Category, text string) boo
 		if destructiveData.encryptOrLock || destructiveData.deleteOrWipe {
 			return true
 		}
+	}
+	if category == rules.CategoryPhishing &&
+		!candidatePhishingDetectionArtifactScope(text) &&
+		candidateExplicitPhishingRelation(text, false) {
+		return true
 	}
 	if text == "" || !candidateCurrentExecutionAct(text) {
 		return false
@@ -4182,10 +6357,26 @@ func candidateCredentialHostileTargetScope(text string) bool {
 }
 
 func candidateCredentialLifecycle(text string) bool {
-	if credentialMetadataHostileConflict(text) || hasExplicitHarmConflict(text) ||
-		candidateCovertAcquisition(text) || candidateExfiltrationOrTakeover(text) {
-		return false
+	return candidateCredentialLifecyclePrepared(text, nil)
+}
+
+func candidateCredentialLifecyclePrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.credentialLifecycleKnown {
+		return proof.credentialLifecycle
 	}
+	result := candidateCredentialLifecycleUncached(text)
+	if proofMatches {
+		proof.credentialLifecycleKnown = true
+		proof.credentialLifecycle = result
+	}
+	return result
+}
+
+func candidateCredentialLifecycleUncached(text string) bool {
 	purpose := containsAnyLiteral(text,
 		"migration", "migrate", "import", "approved export", "backup", "recovery", "restore", "rotation", "rotate",
 		"expiry", "expiration", "password manager", "secrets manager", "enterprise password manager", "oauth callback",
@@ -4193,12 +6384,19 @@ func candidateCredentialLifecycle(text string) bool {
 		"迁移", "导入", "批准导出", "备份", "恢复", "轮换", "过期", "密码管理器", "企业密码管理器",
 		"公司管理的浏览器", "自有账户", "服务账号", "oauth 回调", "令牌交换",
 	)
+	if !purpose {
+		return false
+	}
 	control := containsAnyLiteral(text,
 		"approved", "company-managed", "company managed", "enterprise", "organization-owned", "company-owned",
 		"our ", "my own", "user confirmation", "after user confirmation", "documented flow", "consent",
 		"批准", "公司管理", "企业", "组织自有", "公司自有", "我们的", "自有", "用户确认", "明确确认", "同意",
 	)
-	return purpose && control
+	if !control {
+		return false
+	}
+	return !credentialMetadataHostileConflict(text) && !hasExplicitHarmConflict(text) &&
+		!candidateCovertAcquisition(text) && !candidateExfiltrationOrTakeover(text)
 }
 
 func candidateAuthorizationClaim(text string, explicitVictim, covert, exfiltration bool) AuthorizationClaimState {
@@ -4498,6 +6696,9 @@ func candidateSecurityControlEvasion(category rules.Category, text string) bool 
 	if category != rules.CategoryEvasion && !containsAnyLiteral(text, "bypass edr", "evade detection", "绕过 edr", "规避检测") {
 		return false
 	}
+	if candidateSecurityControlDetectionReferenceScope(text) {
+		return false
+	}
 	if candidateOperationalAuditLogDestructionEvasion(text) {
 		return true
 	}
@@ -4513,7 +6714,8 @@ func candidateSecurityControlEvasion(category rules.Category, text string) bool 
 func candidateSecurityControlEvasionMaliciousPurpose(text string) bool {
 	return containsAnyLiteral(text,
 		"malware", "malicious payload", "implant", "backdoor", "hide the intrusion", "hide an intrusion", "conceal the intrusion", "conceal an intrusion",
-		"keep the intrusion hidden", "intrusion remains undetected", "intrusion stays undetected", "credential theft", "exfiltrat",
+		"malicious intrusion", "keep the intrusion hidden", "intrusion remains hidden", "intrusion stays hidden",
+		"intrusion remains undetected", "intrusion stays undetected", "credential theft", "exfiltrat",
 		"unauthorized access", "unauthorized control", "covert access", "persistent access", "continuing access", "ongoing access", "theft",
 		"恶意软件", "恶意载荷", "植入程序", "后门", "入侵", "凭证窃取", "外传", "未授权访问", "未授权控制", "秘密访问", "持续访问", "窃取",
 	) || hasExplicitHarmConflict(text)
@@ -4530,20 +6732,27 @@ var candidateSecurityControlBlindIntentPatterns = compileCompactRuleIntentPatter
 // purpose in one physical clause and the control+evasion mechanism in the next;
 // the binder must still locate the mechanism without inventing either half.
 func candidateSecurityControlEvasionMechanism(text string) bool {
+	if candidateSecurityControlDetectionReferenceScope(text) {
+		return false
+	}
 	if candidateOperationalAuditLogDestructionEvasion(text) {
 		return true
 	}
-	control := containsAnyLiteral(text,
+	control := containsAnyLiteral(text, candidateSecurityControlEvasionTargetTerms...) || containsAnyLiteral(text,
 		"edr", "antivirus", "endpoint defense", "endpoint protection", "endpoint-protection", "endpoint analytics", "scheduled-task analytics",
 		"audit forwarding", "intrusion alert", "security control", "security telemetry", "security monitoring", "monitoring", "detection", "sandbox", "siem", "ioc",
 		"protection record", "protection records", "security record", "security records", "signature scanner", "signature scanners",
 		"安全控制", "安全遥测", "安全监控", "检测", "防护", "防护记录", "安全记录", "杀毒", "沙箱",
 	)
-	evasion := containsAnyLiteral(text,
+	evasionState := containsAnyLiteral(text,
 		"bypass", "evade", "avoid detection", "disable", "suppress", "conceal", "undetected", "stays undetected", "stay undetected",
 		"cannot detect", "cannot identify", "hide", "hidden", "miss it", "obfuscate", "no longer trigger", "stops triggering", "prevent detection",
 		"绕过", "规避", "躲避检测", "躲开", "避开", "禁用", "关闭", "隐藏", "压制", "不被检测", "不再触发", "混淆",
-	) || candidateSecurityControlBlindMechanism(text)
+	)
+	evasion := candidateSecurityControlActiveEvasion(text) ||
+		!containsDetectionArtifact(text) && !candidateSecurityControlDetectionReferenceScope(text) &&
+			evasionState && candidateExplicitMaliciousRelationAction(text) ||
+		candidateSecurityControlBlindMechanism(text)
 	return control && evasion
 }
 
@@ -4772,8 +6981,10 @@ func candidateRuleIntentClauseProofPrepared(
 	intents []string,
 	patterns compactRuleIntentPatterns,
 ) candidateRuleIntentClauseProof {
-	var compactScratch compactRuleIntentClauseScratch
-	return candidateRuleIntentClauseProofPreparedWithScratch(clause, intents, patterns, &compactScratch)
+	compactScratch := acquireCompactRuleIntentClauseScratch()
+	proof := candidateRuleIntentClauseProofPreparedWithScratch(clause, intents, patterns, compactScratch)
+	releaseCompactRuleIntentClauseScratch(compactScratch)
+	return proof
 }
 
 func candidateRuleIntentClauseProofPreparedWithScratch(
@@ -5011,9 +7222,11 @@ func ruleIntentOccurrencePermissionOnly(clause string, intentIndex int) bool {
 		"forbidden to", "prohibited from", "forbids", "forbid", "prohibits", "prohibit",
 		"严禁", "禁止", "拒绝",
 	} {
-		index := strings.LastIndex(prefix, marker)
+		var index int
 		if isASCIIStringLocal(marker) {
 			index = lastASCIIPhraseIndex(prefix, marker)
+		} else {
+			index = strings.LastIndex(prefix, marker)
 		}
 		if index >= 0 && (index > closest || index == closest && len(marker) > len(closestMarker)) {
 			closest = index
@@ -5057,28 +7270,68 @@ func candidateCredentialVictimAcquisitionAction(text string) bool {
 }
 
 func candidateCurrentExecutionAct(text string) bool {
+	return candidateCurrentExecutionActPrepared(text, nil)
+}
+
+func candidateCurrentExecutionActPrepared(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
+	proofMatches := proof != nil && proof.text == text
+	if proofMatches && proof.currentExecutionActKnown {
+		return proof.currentExecutionAct
+	}
+	result := candidateCurrentExecutionActUncached(text, proof)
+	if proofMatches {
+		proof.currentExecutionActKnown = true
+		proof.currentExecutionAct = result
+	}
+	return result
+}
+
+func candidateCurrentExecutionActUncached(
+	text string,
+	proof *candidatePhishingRelationProof,
+) bool {
 	if text == "" {
 		return false
 	}
-	if hasIndependentMaliciousExecutionClause(text) {
+	if _, independent := candidatePhishingIndependentMaliciousExecutionTailPrepared(text, proof); independent {
 		return true
 	}
 	if candidateOperationalAuditLogDestructionEvasion(text) {
 		return true
 	}
-	if candidateQuotedOrAnalyticalScope(text) || candidateCredentialLifecycle(text) {
+	if candidateQuotedOrAnalyticalScopePrepared(text, proof) ||
+		candidateCredentialLifecyclePrepared(text, proof) {
 		return false
 	}
 	return containsAnyLiteral(text,
 		"create", "build", "write", "implement", "provide", "produce", "design", "generate", "obtain", "recover", "take", "transfer", "export", "deploy", "execute", "install", "launch", "run", "place", "steal", "dump", "harvest",
 		"capture", "collect", "gather", "extract", "send", "exfiltrate", "bypass", "evade", "disable", "flood", "overload", "take over",
+		"stop", "suspend", "erase", "delete", "clear", "silence", "mute", "unhook", "tamper", "turn off", "shut down", "blind", "neutralize",
+		"forward", "route", "relay", "intercept",
 		"encrypt", "制作", "创建", "编写", "实现", "导出", "部署", "执行", "安装", "运行", "放置", "窃取", "转储", "收集", "提取", "外传", "回传", "加密",
 		"绕过", "规避", "禁用", "洪泛", "压垮", "接管",
 	)
 }
 
 func candidateOperationallyActionable(category rules.Category, text string) bool {
-	if !candidateCurrentExecutionAct(text) {
+	return candidateOperationallyActionablePrepared(category, text, nil)
+}
+
+func candidateOperationallyActionablePrepared(
+	category rules.Category,
+	text string,
+	phishingProof *candidatePhishingRelationProof,
+) bool {
+	if category == rules.CategoryPhishing {
+		return candidatePhishingCurrentCredentialInteractionSpeechActPrepared(text, phishingProof)
+	}
+	if category == rules.CategoryEvasion && candidateSecurityControlDetectionReferenceScope(text) {
+		return false
+	}
+	if !candidateCurrentExecutionActPrepared(text, phishingProof) {
 		return false
 	}
 	if containsAnyLiteral(text,
@@ -5101,8 +7354,6 @@ func candidateOperationallyActionable(category rules.Category, text string) bool
 		return candidateMaliciousPersistence(category, text)
 	case rules.CategoryEvasion:
 		return candidateSecurityControlEvasion(category, text)
-	case rules.CategoryPhishing:
-		return containsAnyLiteral(text, "phishing", "fake login", "cloned login", "credential form", "钓鱼", "假登录", "仿冒登录")
 	case rules.CategoryExfiltration:
 		explicitVictim := hasExplicitHarmConflict(text) || candidateExplicitVictimOrNonConsent(text)
 		exfiltration := candidateExfiltrationOrTakeover(text) || candidateExplicitExfiltrationOutbound(text)
@@ -5124,15 +7375,113 @@ func hasIndependentMaliciousExecutionClause(text string) bool {
 	return ok
 }
 
+var independentExecutionASCIITransitionBoundaries = [...]string{
+	"; then ", ", then ", ". then ", " but then ", ", but then ", " but also ",
+	" and then ", ", and then ", " additionally ", ", additionally ", " now ",
+	". separately, ", "; separately, ", ", separately, ", " separately, ",
+}
+
+var independentExecutionASCIISentenceBoundaries = [...]string{". ", "! ", "? "}
+
+var independentExecutionASCIITransitionFirst = compileASCIIBoundaryFirstIndexes(
+	independentExecutionASCIITransitionBoundaries[:],
+)
+
+var independentExecutionASCIISentenceFirst = compileASCIIBoundaryFirstIndexes(
+	independentExecutionASCIISentenceBoundaries[:],
+)
+
+func compileASCIIBoundaryFirstIndexes(boundaries []string) [256][]uint8 {
+	var byFirst [256][]uint8
+	for index, boundary := range boundaries {
+		if boundary == "" || index > int(^uint8(0)) {
+			continue
+		}
+		byFirst[boundary[0]] = append(byFirst[boundary[0]], uint8(index))
+	}
+	return byFirst
+}
+
+func lastASCIIBoundaryIndexes(
+	text string,
+	boundaries []string,
+	byFirst *[256][]uint8,
+	last []int,
+) {
+	for index := range last {
+		last[index] = -1
+	}
+	for start := 0; start < len(text); start++ {
+		for _, encodedIndex := range byFirst[text[start]] {
+			index := int(encodedIndex)
+			boundary := boundaries[index]
+			if len(boundary) <= len(text)-start && text[start:start+len(boundary)] == boundary {
+				last[index] = start
+			}
+		}
+	}
+}
+
+func independentMaliciousExecutionTailASCII(text string) (string, bool) {
+	var transitionLast [len(independentExecutionASCIITransitionBoundaries)]int
+	lastASCIIBoundaryIndexes(
+		text,
+		independentExecutionASCIITransitionBoundaries[:],
+		&independentExecutionASCIITransitionFirst,
+		transitionLast[:],
+	)
+	for index, boundary := range independentExecutionASCIITransitionBoundaries {
+		if transitionLast[index] < 0 {
+			continue
+		}
+		tail := strings.TrimSpace(text[transitionLast[index]+len(boundary):])
+		if candidateCurrentExecutionTail(tail) && candidateTailHasHarmfulObject(tail) {
+			return tail, true
+		}
+	}
+
+	var sentenceLast [len(independentExecutionASCIISentenceBoundaries)]int
+	lastASCIIBoundaryIndexes(
+		text,
+		independentExecutionASCIISentenceBoundaries[:],
+		&independentExecutionASCIISentenceFirst,
+		sentenceLast[:],
+	)
+	for index, boundary := range independentExecutionASCIISentenceBoundaries {
+		if sentenceLast[index] < 0 {
+			continue
+		}
+		tail := strings.TrimSpace(text[sentenceLast[index]+len(boundary):])
+		if candidateCurrentExecutionTail(tail) && candidateTailHasHarmfulObject(tail) {
+			return tail, true
+		}
+	}
+	return "", false
+}
+
 // independentMaliciousExecutionTail returns only a bounded, independently
 // executable hostile tail. Callers that need a separate candidate can classify
 // this text without inheriting the analytical or defensive scope that precedes
 // the boundary. The boolean helper above intentionally remains the common
 // eligibility predicate so both paths share exactly the same admission rule.
 func independentMaliciousExecutionTail(text string) (string, bool) {
+	if strings.IndexAny(text, ".,;!?") < 0 &&
+		!containsAnyLiteral(text,
+			" then ", " but also ", " additionally ", " now ", " separately, ", " separately ",
+		) {
+		if isASCIIStringLocal(text) || !containsAnyLiteral(text,
+			"；然后", "。然后", "但是随后", "但同时", "另外", "现在", "。", "！", "？",
+		) {
+			return "", false
+		}
+	}
+	if isASCIIStringLocal(text) {
+		return independentMaliciousExecutionTailASCII(text)
+	}
 	for _, boundary := range []string{
 		"; then ", ", then ", ". then ", " but then ", ", but then ", " but also ",
 		" and then ", ", and then ", " additionally ", ", additionally ", " now ",
+		". separately, ", "; separately, ", ", separately, ", " separately, ",
 		"；然后", "。然后", "但是随后", "但同时", "另外", "现在",
 	} {
 		index := strings.LastIndex(text, boundary)
@@ -5165,8 +7514,11 @@ func independentMaliciousExecutionTail(text string) (string, bool) {
 
 func candidateCurrentExecutionTail(text string) bool {
 	return hasAnyPrefix(strings.TrimSpace(text),
-		"create ", "build ", "write ", "implement ", "provide ", "produce ", "design ", "generate ", "obtain ", "recover ", "take ", "transfer ", "copy ", "deploy ", "execute ", "install ", "launch ", "run ",
-		"steal ", "dump ", "harvest ", "capture ", "collect ", "extract ", "bypass ", "disable ", "flood ", "release ", "activate ",
+		"create ", "build ", "write ", "implement ", "ask ", "request ", "require ", "tell ", "enter ", "type ", "submit ", "provide ", "produce ", "design ", "generate ", "obtain ", "recover ", "take ", "transfer ", "copy ", "deploy ", "execute ", "install ", "launch ", "run ",
+		"steal ", "dump ", "harvest ", "capture ", "collect ", "save ", "extract ", "bypass ", "disable ", "flood ", "release ", "activate ",
+		"stop ", "suspend ", "erase ", "delete ", "clear ", "silence ", "mute ", "unhook ",
+		"tamper ", "turn off ", "shut down ", "blind ", "neutralize ",
+		"forward ", "route ", "relay ", "intercept ",
 		"制作", "创建", "编写", "实现", "部署", "执行", "安装", "运行", "窃取", "转储", "收集", "提取", "绕过", "禁用", "洪泛",
 	)
 }
@@ -5174,6 +7526,8 @@ func candidateCurrentExecutionTail(text string) bool {
 func candidateTailHasHarmfulObject(text string) bool {
 	return hasExplicitHarmConflict(text) || containsAnyLiteral(text,
 		"credential", "password", "session token", "cookie", "malware", "backdoor", "victim", "edr", "security control",
+		"endpoint telemetry", "security telemetry", "event collection", "security event collection", "event logging",
+		"telemetry collection", "endpoint sensor", "security agent", "telemetry agent", "forensic artifacts",
 		"third-party", "competitor", "production users", "phishing", "ransomware", "external server",
 		"covert persistence", "unauthorized", "destructive", "request load", "victim service",
 		"凭证", "密码", "会话令牌", "cookie", "恶意软件", "后门", "受害者", "安全控制", "第三方", "竞争对手", "生产用户", "钓鱼", "勒索软件", "外部服务器",

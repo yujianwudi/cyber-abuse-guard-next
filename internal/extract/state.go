@@ -63,6 +63,7 @@ const (
 	IncompleteRPCBodyLimit                   IncompleteReason = "rpc_body_limit"
 	IncompleteTotalTextLimit                 IncompleteReason = "total_text_limit"
 	IncompleteClassificationChunkLimit       IncompleteReason = "classification_chunk_limit"
+	IncompleteClassifierProofBudget          IncompleteReason = "classifier_proof_budget_exhausted"
 )
 
 var incompleteReasonOrder = [...]IncompleteReason{
@@ -89,6 +90,7 @@ var incompleteReasonOrder = [...]IncompleteReason{
 	IncompleteRPCBodyLimit,
 	IncompleteTotalTextLimit,
 	IncompleteClassificationChunkLimit,
+	IncompleteClassifierProofBudget,
 }
 
 func (r *Result) IsComplete() bool {

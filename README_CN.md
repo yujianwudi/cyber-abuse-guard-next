@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
 > **RC 身份说明：** `v0.16-rc.3` 是不可移动的 Phase 1 失败 Tag，没有候选产物或
@@ -16,8 +16,20 @@ current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e4634646
 > **当前开发状态：** 第九轮正在以候选/子句/scope/referent 绑定的阻断资格
 > 重新设计 Balanced，并准备 Linux amd64 `v0.16-rc.4` 预发行链。固定源码/编译目标仅为 CPA
 > `v7.2.104`，并仅使用 RPC schema 2。源码变更本身不会创建标签、Release
-> 或稳定版 `v0.16`。无 checkout 的受保护 CPA 外部评估、受保护账本证明、exact-main CI
-> 和独立审计仍是必需门禁；尚未获得生产批准，也不得据此自动重新开启生产 Balanced。
+> 或稳定版 `v0.16`。无 checkout 的受保护 CPA 外部评估、受保护账本证明、当前修复的
+> exact-main CI 和新一轮独立审计仍是必需门禁；尚未获得生产批准，也不得据此自动
+> 重新开启生产 Balanced。
+
+> [!CAUTION]
+> 精确已提交基线 `150c25e6352cb237cb3956bd66c83c3278c3fe33` 使用
+> `classifier-policy-v9` /
+> 历史摘要 `e0cbc975...`
+> 与 CPA `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`；工程 CI
+> `30353591705` 通过，但隔离安全审计为 **FAIL / BLOCKED**：287 个 complete
+> 恶意样本放行、36 个恶意 incomplete 样本返回 HTTP 403、2 个 complete 正常
+> 样本误拦。当前修复源码身份为 `classifier-policy-v9` /
+> `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`；
+> 提交绑定 CI 和二号机重验仍为 **PENDING**。
 
 [![Historical CI](https://img.shields.io/badge/historical_CI-v0.15-blue)](https://github.com/yujianwudi/cyber-abuse-guard/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/badge/Go-1.26.4-00ADD8?logo=go&logoColor=white)](go.mod)
@@ -46,21 +58,24 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 源码版本 / RC 目标 | `0.16` / 仅 `v0.16-rc.4` 预发行；精确 tag、commit、tree 和产物 hash 必须由未来 clean release run 生成 |
 | 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
 | GitHub 发布 | `v0.16-rc.3` 仅有 annotated Tag，没有 Release 或 Actions artifact；当前尚无 `v0.16-rc.4` Tag 或 Release。`round9-release-rc.yml` 只能生成私有 17 资产候选，公共预发行写入保持硬阻断 |
-| 冻结的 v7.2.103 exact-main 基线 | `1a64639c0bac7a157d8201c1593bd68cf6e7fe11`；CI `30327322793`、Round 9 gate `30327322810`、CodeQL `30327322801` 在 v7.2.104 发布前均通过。它只属于 v7.2.103 开发与 Host 加载证据；当前 v7.2.104 仍待重新验证 |
+| 已审计提交基线 | `150c25e6352cb237cb3956bd66c83c3278c3fe33`；历史 classifier 摘要 `e0cbc975...`；CPA v7.2.104 |
+| 工程 CI | 精确基线的 `30353591705` **PASS**；仅是工程证据，不是安全或发行 PASS |
+| 安全审计 | **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
+| 当前修复 | classifier `classifier-policy-v9` / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`；提交绑定 CI 与二号机重验均 **PENDING** |
 | CPA 源码/编译目标 | `v7.2.104`（`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`） |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
 | 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
-| 独立审计 | 用户提供的外部 `f37a25dd` 报告称 CPA v7.2.95 多语言检查通过，并发现防御性事件响应请求误拦。该文件不是仓库绑定 attestation；当前源码仍需绑定最终 commit 重新审计 |
+| 独立审计 | 2026-07-29 对精确基线 `150c25e6` 的隔离审计为安全 **FAIL / BLOCKED**，失败计数见上；当前修复尚未接受独立重审 |
 | 生产批准 | **NOT GRANTED**；不存在稳定版 `v0.16`，也不能自动重新准入 Balanced |
 | v0.16 工作流 | `round9-gate.yml`、无 checkout 的 `round9-host-validation.yml`、`round9-release-rc.yml` 是当前第九轮链；第八轮与 v0.15 流程只读保留为历史证据 |
 | 静态分析治理 | `.github/workflows/codeql.yml` 在经过审查的稀疏源码边界内，以最小权限在 Ubuntu 上分析 Go；CodeQL 结果不能授权发布 |
 | 验证平台 | 仅 Linux amd64；产物引用的数字型 GLIBC ABI 版本必须 `<= 2.34` |
 | 不在范围 | Windows、macOS、musl/Alpine、真实 Provider、生产部署/验证 |
 | CPA 固定目标 | 仅 v7.2.104；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
-| 外部 CPA 评估 / 当前源码独立审计 | 外部评估仍为 `NOT_RUN`；仓库外的 `f37a25dd` 报告不能替代当前源码精确重审，生产批准未授予 |
+| 外部 CPA 评估 / 当前源码独立审计 | 受保护发行评估仍为 `NOT_RUN`；现有隔离审计已判安全 `FAIL`，当前修复精确重审仍待执行，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`；Host 与发行绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`；Host 与发行绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 

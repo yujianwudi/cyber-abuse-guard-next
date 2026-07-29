@@ -41,9 +41,10 @@ var (
 )
 
 // CoverageState separates complete model-visible text coverage from bounded
-// exhaustion and content that could not be safely finalized. It deliberately
-// says nothing about internal proof budgets: those retain their existing
-// fail-active semantics and do not make request coverage incomplete.
+// exhaustion and content that could not be safely finalized. A classifier may
+// also surface a fixed unavailable reason when a bounded local malicious
+// witness exists but its category proof cannot be completed within an internal
+// proof budget; unrelated long text remains coverage-complete.
 type CoverageState string
 
 const (
@@ -57,13 +58,14 @@ const (
 type CoverageReason string
 
 const (
-	CoverageReasonNone                CoverageReason = ""
-	CoverageReasonTotalTextLimit      CoverageReason = "total_text_limit"
-	CoverageReasonClassificationLimit CoverageReason = "classification_chunk_limit"
-	CoverageReasonAborted             CoverageReason = "aborted"
-	CoverageReasonInvalidUTF8         CoverageReason = "invalid_utf8"
-	CoverageReasonNormalizationCarry  CoverageReason = "normalization_carry_limit"
-	CoverageReasonClassifierWindow    CoverageReason = "classifier_window_incomplete"
+	CoverageReasonNone                  CoverageReason = ""
+	CoverageReasonTotalTextLimit        CoverageReason = "total_text_limit"
+	CoverageReasonClassificationLimit   CoverageReason = "classification_chunk_limit"
+	CoverageReasonAborted               CoverageReason = "aborted"
+	CoverageReasonInvalidUTF8           CoverageReason = "invalid_utf8"
+	CoverageReasonNormalizationCarry    CoverageReason = "normalization_carry_limit"
+	CoverageReasonClassifierWindow      CoverageReason = "classifier_window_incomplete"
+	CoverageReasonClassifierProofBudget CoverageReason = "classifier_proof_budget_exhausted"
 )
 
 // Coverage is a privacy-safe summary of incremental classification work.
@@ -75,6 +77,41 @@ type Coverage struct {
 	Bytes                   int64          `json:"bytes"`
 	PeakRetained            int            `json:"peak_retained"`
 	BoundaryReconstructions int            `json:"boundary_reconstructions"`
+}
+
+func classifierIncompleteReason(result Result) CoverageReason {
+	if result.Coverage.State == CoverageUnavailable && result.Coverage.Reason != CoverageReasonNone {
+		return result.Coverage.Reason
+	}
+	return CoverageReasonClassifierWindow
+}
+
+func (s *ScanSession) deferClassifierIncomplete(result Result) bool {
+	if s == nil || !resultIsNeutralClassifierIncomplete(result) {
+		return false
+	}
+	reason := classifierIncompleteReason(result)
+	if !classifierIncompleteCoverageReason(reason) {
+		return false
+	}
+	if s.pendingClassifierIncomplete == CoverageReasonNone {
+		s.pendingClassifierIncomplete = reason
+	}
+	return true
+}
+
+func (s *ScanSession) deferClassifierIncompleteForSegment(
+	result Result,
+	segment extract.Segment,
+) bool {
+	if s != nil && s.profiledRequest && resultIsNeutralClassifierIncomplete(result) &&
+		enforcementScopeForSegment(segment) == EnforcementScopeNone {
+		// Historical assistant/tool context is carrier material, not active request
+		// authority. Its private proof budget cannot make a complete current request
+		// fail closed merely because streaming inspected that historical field first.
+		return true
+	}
+	return s.deferClassifierIncomplete(result)
 }
 
 // FindingConfidence distinguishes a result derived from a completely scanned
@@ -536,11 +573,12 @@ type ScanSession struct {
 	limits     ScanLimits
 	overlap    int
 
-	coverage Coverage
-	active   *streamingField
-	previous *streamingFieldSummary
-	best     Result
-	hasBest  bool
+	coverage                    Coverage
+	active                      *streamingField
+	previous                    *streamingFieldSummary
+	best                        Result
+	hasBest                     bool
+	pendingClassifierIncomplete CoverageReason
 
 	previousUser                   string
 	hasPreviousUser                bool
@@ -581,6 +619,7 @@ type ScanSession struct {
 	profiledSawCurrentTurn         bool
 	profiledGroupKey               profiledSegmentGroupKey
 	profiledGroupSet               bool
+	profiledGroupPhysicalOrdinal   int
 	profiledGroupParts             []string
 	profiledGroupRefs              []profiledSegmentRef
 	profiledGroupRisk              []bool
@@ -811,6 +850,16 @@ func (s *ScanSession) Finish() Result {
 			}
 		}
 	}
+	if s.coverage.State == CoverageComplete &&
+		s.pendingClassifierIncomplete != CoverageReasonNone &&
+		(!s.hasBest || !resultHasEligibleBlockingCandidate(s.best, s.thresholds)) {
+		// A classifier-local proof can be unresolved in one field while another
+		// field independently proves a complete eligible block. Batch aggregation
+		// preserves that winner, so streaming defers the local incomplete result
+		// until every bounded field has been inspected and applies it only when no
+		// independent blocking proof exists.
+		s.setCoverage(CoverageUnavailable, s.pendingClassifierIncomplete)
+	}
 	result := s.best
 	if !s.hasBest {
 		result = s.classifier.classifyWithPolicy(nil, s.mode, s.thresholds, s.policy, false)
@@ -973,8 +1022,9 @@ func (s *ScanSession) finishField(field *streamingField) {
 	field.safetyQuote = 0
 	field.safetyClosed = 0
 	field.safetyRiskFacts.reset()
-	fieldSegment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
-	profiledField := s.profiledRequest
+	fieldSegment := streamingSegmentForField(field, "")
+	profiledField := s.profiledRequest && !segmentUsesLegacyUntrustedFallback(fieldSegment)
+	fieldSegment = s.profiledStreamingRequestSegment(fieldSegment)
 	if profiledField && profiledContentInert(fieldSegment.ContentKind) &&
 		!s.profiledStreamingPendingTool(fieldSegment) && field.totalBytes > 0 {
 		s.quotedOrInertSuppressed = true
@@ -1074,6 +1124,11 @@ func (s *ScanSession) finishField(field *streamingField) {
 				// Historical user text is independently inspected above, but only the
 				// exact closed safety-review core reconstructed by the role-summary
 				// group below may enter the bare-referent slot.
+			} else if profiledRequestLocalSystemCarrier(segment) &&
+				profiledSelfContainedCarrierKind(segment.ContentKind) {
+				// A following same-field owner may suppress or reactivate this exact
+				// carrier. The bounded group path reclassifies complete text and keeps
+				// its candidate provisional until the ownership transaction closes.
 			} else if s.profiledStreamingClassifiable(segment) || unclosedSafetyCommitted {
 				s.considerWithEnforcementScope(
 					candidate, origin, enforcementScopeForProfiledGroup(refs),
@@ -1336,6 +1391,9 @@ func streamingSegmentForField(field *streamingField, text string) extract.Segmen
 
 func segmentChunkDeclaresProfiledMetadata(chunk extract.SegmentChunk) bool {
 	return segmentDeclaresProfiledMetadata(extract.Segment{
+		Role:                   chunk.Role,
+		Provenance:             chunk.Provenance,
+		UserAttribution:        chunk.UserAttribution,
 		ToolAssociation:        chunk.ToolAssociation,
 		ConversationIndex:      chunk.ConversationIndex,
 		TurnIndex:              chunk.TurnIndex,
@@ -1408,6 +1466,9 @@ func (s *ScanSession) profiledStreamingEffectiveSegment(segment extract.Segment)
 }
 
 func (s *ScanSession) profiledStreamingRequestSegment(segment extract.Segment) extract.Segment {
+	if s == nil || segmentUsesLegacyUntrustedFallback(segment) {
+		return segment
+	}
 	if s != nil && s.profiledRequest && !segmentDeclaresProfiledCoordinates(segment) {
 		segment.ConversationIndex = -1
 		segment.TurnIndex = -1
@@ -2019,7 +2080,8 @@ func (s *ScanSession) closeProfiledStreamingGroup() bool {
 }
 
 func (s *ScanSession) appendProfiledStreamingGroupUnit(
-	physicalIndex int,
+	fieldIndex int,
+	physicalOrdinal int,
 	text string,
 	segment extract.Segment,
 	risky bool,
@@ -2030,7 +2092,8 @@ func (s *ScanSession) appendProfiledStreamingGroupUnit(
 	}
 	s.profiledGroupParts = append(s.profiledGroupParts, text)
 	s.profiledGroupRefs = append(s.profiledGroupRefs, profiledSegmentRef{
-		index: physicalIndex, segment: segment,
+		index: fieldIndex, physicalOrdinal: physicalOrdinal, hasPhysicalOrdinal: true,
+		segment: segment,
 	})
 	s.profiledGroupRisk = append(s.profiledGroupRisk, risky)
 	s.profiledGroupComplete = append(s.profiledGroupComplete, complete)
@@ -2117,6 +2180,8 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	if s == nil || current == nil || s.coverage.State != CoverageComplete {
 		return
 	}
+	physicalOrdinal := s.profiledGroupPhysicalOrdinal
+	s.profiledGroupPhysicalOrdinal++
 	segment := s.profiledStreamingRequestSegment(streamingSegmentForSummary(current, ""))
 	profiledRiskOwner := profiledStreamingCurrentReferentDirective(segment)
 	if s.profiledHasPreviousUserRisk &&
@@ -2148,7 +2213,8 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		// group membership with an incomplete marker: it may own a one-field slot,
 		// while any same-scope neighbor conservatively invalidates whole-group proof.
 		s.appendProfiledStreamingGroupUnit(
-			int(current.id), "", segment, currentRisk != nil && currentRisk.hasRisk(), false,
+			int(current.id), physicalOrdinal, "", segment,
+			currentRisk != nil && currentRisk.hasRisk(), false,
 		)
 		if !s.trimProfiledStreamingGroup(segment) {
 			return
@@ -2191,7 +2257,8 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			// the incomplete group marker guarantees that any same-scope neighbor
 			// invalidates it instead of being silently omitted from whole-group proof.
 			s.appendProfiledStreamingGroupUnit(
-				int(current.id), "", segment, currentRisk != nil && currentRisk.hasRisk(), false,
+				int(current.id), physicalOrdinal, "", segment,
+				currentRisk != nil && currentRisk.hasRisk(), false,
 			)
 			if !s.trimProfiledStreamingGroup(segment) {
 				return
@@ -2205,11 +2272,10 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			}
 			s.quotedOrInertSuppressed = true
 			s.appendProfiledStreamingGroupUnit(
-				int(current.id), "", segment, currentRisk != nil && currentRisk.hasRisk(), false,
+				int(current.id), physicalOrdinal, "", segment,
+				currentRisk != nil && currentRisk.hasRisk(), false,
 			)
-			if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem {
-				s.resetProfiledPendingSystemCarrier()
-			}
+			s.resetProfiledPendingSystemCarrier()
 			return
 		}
 		if s.profiledGroupSet && s.profiledGroupKey != key {
@@ -2286,10 +2352,13 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		return
 	}
 	s.appendProfiledStreamingGroupUnit(
-		int(current.id), text, segment, currentRisk != nil && currentRisk.hasRisk(), true,
+		int(current.id), physicalOrdinal, text, segment,
+		currentRisk != nil && currentRisk.hasRisk(), true,
 	)
-	systemCarrierGroup := s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem &&
-		profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs)
+	// A carrier may arrive before its natural-language authority owner. Keep its
+	// generic candidate provisional as soon as the carrier exists; a later owner
+	// in the same group may suppress it or reactivate it with exact referent proof.
+	systemCarrierGroup := profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs)
 	if systemCarrierGroup {
 		s.resetProfiledPendingSystemCarrier()
 		if !s.considerProfiledRequestLocalSystemCarrierReactivation(batch) {
@@ -2306,8 +2375,19 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem {
 		historicalReferent = false
 	}
+	carrierParts, carrierRefs, carrierSuppressed, carrierProofComplete :=
+		s.classifier.profiledRequestLocalSystemGenericCarrierView(
+			s.profiledGroupParts, s.profiledGroupRefs, true,
+		)
+	if !carrierProofComplete {
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return
+	}
+	if carrierSuppressed {
+		s.quotedOrInertSuppressed = true
+	}
 	genericParts, genericRefs := profiledStreamingGenericGroupView(
-		s.profiledGroupParts, s.profiledGroupRefs, historicalReferent || pendingTool,
+		carrierParts, carrierRefs, historicalReferent || pendingTool,
 	)
 	if len(genericParts) == 0 {
 		if historicalReferent && !current.hasHistoricalWindowCandidate {
@@ -2324,7 +2404,11 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		}
 		return
 	}
-	candidate, ok := batch.classify(genericParts, s.profiledGroupStructuredTool)
+	candidate, ok := batch.classifyWithIncompleteAuthority(
+		genericParts,
+		s.profiledGroupStructuredTool,
+		enforcementScopeForProfiledGroup(genericRefs) != EnforcementScopeNone,
+	)
 	if !ok {
 		if historicalReferent {
 			s.clearProfiledHistoricalCandidate()
@@ -2374,7 +2458,7 @@ func (s *ScanSession) considerProfiledRequestLocalSystemCarrierReactivation(
 		return true
 	}
 	proofs, complete := s.classifier.profiledRequestLocalSystemCarrierReactivationProofs(
-		s.profiledGroupRefs, false,
+		s.profiledGroupRefs, true,
 	)
 	if !complete {
 		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
@@ -2440,66 +2524,20 @@ func (s *ScanSession) profiledRequestLocalSystemCarrierProofUnavailable() bool {
 		len(s.profiledGroupRefs) != len(s.profiledGroupComplete) {
 		return true
 	}
-	survivingOwners, complete := s.classifier.profiledRequestLocalSystemSurvivingOwnerIndexes(
-		s.profiledGroupRefs,
+	runs, complete := s.classifier.profiledRequestLocalSystemCarrierOwnerRuns(
+		s.profiledGroupRefs, true,
 	)
 	if !complete {
 		return true
 	}
-	for index, ref := range s.profiledGroupRefs {
-		if s.profiledGroupComplete[index] || !s.profiledGroupRisk[index] ||
-			!profiledRequestLocalSystemCarrier(ref.segment) ||
-			!profiledSelfContainedCarrierKind(ref.segment.ContentKind) {
+	for _, run := range runs {
+		if run.state != profiledRequestLocalSystemCarrierActivated {
 			continue
 		}
-		ownerAt := func(ownerIndex int) (profiledSegmentRef, bool) {
-			if ownerIndex < 0 || ownerIndex >= len(s.profiledGroupRefs) {
-				return profiledSegmentRef{}, false
-			}
-			owner := s.profiledGroupRefs[ownerIndex]
-			if !profiledSegmentsShareLogicalTextField(ref.segment, owner.segment) ||
-				!profiledRequestLocalSystemDirective(owner.segment) {
-				return profiledSegmentRef{}, false
-			}
-			return owner, true
-		}
-		before, beforeOK := ownerAt(index - 1)
-		after, afterOK := ownerAt(index + 1)
-		beforeDisposition := quotedReviewContinuationNone
-		afterDisposition := quotedReviewContinuationNone
-		if beforeOK {
-			var complete bool
-			beforeDisposition, complete = s.classifier.profiledCarrierLocalOwnerDisposition(before.segment)
-			if !complete {
+		for index := run.first; index < run.end; index++ {
+			if !s.profiledGroupComplete[index] && s.profiledGroupRisk[index] {
 				return true
 			}
-		}
-		if afterOK {
-			var proofComplete bool
-			afterDisposition, proofComplete = s.classifier.profiledCarrierLocalOwnerDisposition(after.segment)
-			if !proofComplete {
-				return true
-			}
-		}
-		if beforeDisposition == quotedReviewContinuationActive && !survivingOwners[index-1] {
-			beforeDisposition = quotedReviewContinuationNone
-		}
-		if afterDisposition == quotedReviewContinuationActive && !survivingOwners[index+1] {
-			afterDisposition = quotedReviewContinuationNone
-		}
-		active := false
-		switch {
-		case afterDisposition == quotedReviewContinuationActive:
-			active = true
-		case afterDisposition == quotedReviewContinuationCancelled:
-		case beforeDisposition == quotedReviewContinuationActive:
-			active = true
-		case afterDisposition == quotedReviewContinuationInert:
-		case beforeDisposition == quotedReviewContinuationCancelled ||
-			beforeDisposition == quotedReviewContinuationInert:
-		}
-		if active {
-			return true
 		}
 	}
 	return false
@@ -2509,8 +2547,7 @@ func (s *ScanSession) flushProfiledRequestLocalSystemCarrierGroup() {
 	if s == nil {
 		return
 	}
-	if s.profiledGroupAuthorityScope == EnforcementScopeRequestLocalSystem &&
-		profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs) {
+	if profiledRequestLocalSystemGroupHasCarrier(s.profiledGroupRefs) {
 		if s.profiledRequestLocalSystemCarrierProofUnavailable() {
 			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 			s.resetProfiledPendingSystemCarrier()
@@ -4312,6 +4349,14 @@ func knownStreamingRoleSegment(segment extract.Segment) bool {
 }
 
 func (batch *roleClassificationBatch) classify(parts []string, structuredToolPayload bool) (Result, bool) {
+	return batch.classifyWithIncompleteAuthority(parts, structuredToolPayload, true)
+}
+
+func (batch *roleClassificationBatch) classifyWithIncompleteAuthority(
+	parts []string,
+	structuredToolPayload bool,
+	incompleteActionable bool,
+) (Result, bool) {
 	if batch == nil || batch.session == nil || batch.session.coverage.State != CoverageComplete {
 		return Result{}, false
 	}
@@ -4321,7 +4366,13 @@ func (batch *roleClassificationBatch) classify(parts []string, structuredToolPay
 	}
 	result := s.classifier.classifyWithPolicy(parts, s.mode, s.thresholds, s.policy, structuredToolPayload)
 	if result.Truncated {
-		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		if !incompleteActionable && resultIsNeutralClassifierIncomplete(result) {
+			return Result{}, false
+		}
+		if s.deferClassifierIncomplete(result) {
+			return Result{}, false
+		}
+		s.setCoverage(CoverageUnavailable, classifierIncompleteReason(result))
 		return Result{}, false
 	}
 	return result, true
@@ -4396,7 +4447,10 @@ func (s *ScanSession) considerUntrustedPart(batch *roleClassificationBatch, text
 	}
 	candidate := s.classifier.ClassifyUntrustedPartsWithPolicy(s.untrustedParts, s.mode, s.thresholds, s.policy)
 	if candidate.Truncated {
-		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		if s.deferClassifierIncomplete(candidate) {
+			return
+		}
+		s.setCoverage(CoverageUnavailable, classifierIncompleteReason(candidate))
 		return
 	}
 	if resultHasEligibleBlockingCandidate(candidate, s.thresholds) {
@@ -4730,6 +4784,7 @@ func (s *ScanSession) clearRoleState() {
 	s.profiledHistoricalKey = profiledSegmentGroupKey{}
 	s.profiledHistoricalSet = false
 	s.clearProfiledHistoricalCandidate()
+	s.profiledGroupPhysicalOrdinal = 0
 	s.profiledCurrentUnitOrdinal = 0
 	s.clearProfiledCurrentReferentScope()
 	s.profiledLastCurrentUnit = profiledCurrentReferentUnit{}
@@ -4746,6 +4801,7 @@ func (s *ScanSession) clearRoleState() {
 	s.profiledMaxConversationIndex = -1
 	s.profiledSawCurrentTurn = false
 	s.quotedOrInertSuppressed = false
+	s.pendingClassifierIncomplete = CoverageReasonNone
 	clear(s.isolatedUserRun)
 	s.isolatedUserRun = nil
 	s.isolatedUserRunTrusted = false
@@ -4805,18 +4861,21 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 		s.hasPreviousUserRisk && !s.previousUserComplete
 	existingFollowUpProof := s.hasPreviousQuotedReferent ||
 		profiledPreviousRisk || unprofiledPreviousRisk
-	if field.role == extract.RoleUser && field.provenance == extract.ProvenanceContent &&
-		(existingFollowUpProof || profiledPotentialProof) {
-		quotedFollowUp, _, proofComplete := s.classifier.hasRawAffirmativeQuotedReviewFollowUp(rawWindow)
-		if !proofComplete {
+	needsQuotedFollowUpProof := field.role == extract.RoleUser &&
+		field.provenance == extract.ProvenanceContent &&
+		(existingFollowUpProof || profiledPotentialProof)
+	quotedFollowUpProofCaptured := false
+	applyQuotedFollowUpProof := func(proof quotedReviewFollowUpProof) bool {
+		if !proof.complete {
 			if existingFollowUpProof {
 				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 				return false
 			}
 			field.profiledReferentProofIncomplete = true
-		} else {
-			field.quotedFollowUp = field.quotedFollowUp || quotedFollowUp
+			return true
 		}
+		field.quotedFollowUp = field.quotedFollowUp || proof.active
+		return true
 	}
 	field.tailSafetyScoped = decision.tailSafetyScoped
 	clear(field.adjacentTail)
@@ -4850,9 +4909,15 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 		s.coverage.Windows++
 		var normalizedDefensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
 		var normalizedDefensiveQuoteSignalsOut *inertQuotedSafetyReviewFrameSignals
+		var normalizedQuotedFollowUpProof quotedReviewFollowUpProof
+		var normalizedQuotedFollowUpProofOut *quotedReviewFollowUpProof
 		if needsDefensiveQuoteSignals && !provisional && compactPrefixBytes == 0 &&
 			physicalWindowText == rawWindow {
 			normalizedDefensiveQuoteSignalsOut = &normalizedDefensiveQuoteSignals
+		}
+		if needsQuotedFollowUpProof && !provisional && compactPrefixBytes == 0 &&
+			physicalWindowText == rawWindow {
+			normalizedQuotedFollowUpProofOut = &normalizedQuotedFollowUpProof
 		}
 		result := s.classifier.classifyWithPolicyCaptured(
 			[]string{segment.Text}, s.mode, s.thresholds, s.policy,
@@ -4861,13 +4926,23 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			&field.windowFacts,
 			profiledTrustedCurrentUserNaturalLanguageDirective(segment),
 			normalizedDefensiveQuoteSignalsOut,
+			normalizedQuotedFollowUpProofOut,
 		)
 		if normalizedDefensiveQuoteSignalsOut != nil {
 			field.profiledDefensiveQuoteSignals |= normalizedDefensiveQuoteSignals
 			defensiveQuoteSignalsCaptured = true
 		}
+		if normalizedQuotedFollowUpProofOut != nil {
+			quotedFollowUpProofCaptured = true
+			if !applyQuotedFollowUpProof(normalizedQuotedFollowUpProof) {
+				return false
+			}
+		}
 		if result.Truncated {
-			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			if s.deferClassifierIncompleteForSegment(result, segment) {
+				return true
+			}
+			s.setCoverage(CoverageUnavailable, classifierIncompleteReason(result))
 			return false
 		}
 		if compactPrefixBytes != 0 && resultHasEligibleMaliciousWinner(result, s.thresholds) {
@@ -4898,7 +4973,10 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 				nil,
 			)
 			if physicalResult.Truncated {
-				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				if s.deferClassifierIncompleteForSegment(physicalResult, physicalSegment) {
+					return true
+				}
+				s.setCoverage(CoverageUnavailable, classifierIncompleteReason(physicalResult))
 				return false
 			}
 			if resultHasEligibleMaliciousWinner(physicalResult, s.thresholds) {
@@ -4939,7 +5017,10 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 					nil,
 				)
 				if uniqueResult.Truncated {
-					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					if s.deferClassifierIncompleteForSegment(uniqueResult, uniqueSegment) {
+						return true
+					}
+					s.setCoverage(CoverageUnavailable, classifierIncompleteReason(uniqueResult))
 					return false
 				}
 				if standaloneMetaControlResult(uniqueResult) &&
@@ -4977,6 +5058,14 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 	}
 	if needsDefensiveQuoteSignals && !defensiveQuoteSignalsCaptured {
 		field.profiledDefensiveQuoteSignals |= streamingDefensiveQuotedReviewFrameSignals(rawWindow)
+	}
+	if needsQuotedFollowUpProof && !quotedFollowUpProofCaptured {
+		quotedFollowUp, inert, proofComplete := s.classifier.hasRawAffirmativeQuotedReviewFollowUp(rawWindow)
+		if !applyQuotedFollowUpProof(quotedReviewFollowUpProof{
+			active: quotedFollowUp, inert: inert, complete: proofComplete,
+		}) {
+			return false
+		}
 	}
 	if reconstructed {
 		s.coverage.BoundaryReconstructions++
@@ -5282,7 +5371,10 @@ func (s *ScanSession) considerAdjacent(previous, current *streamingFieldSummary)
 	s.coverage.Windows++
 	result := s.classifier.classifyWithPolicy([]string{string(previous.tail), string(current.head)}, s.mode, s.thresholds, s.policy, false)
 	if result.Truncated {
-		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		if s.deferClassifierIncomplete(result) {
+			return
+		}
+		s.setCoverage(CoverageUnavailable, classifierIncompleteReason(result))
 		return
 	}
 	origin := FindingOriginNonUserOrUntrusted
@@ -5310,7 +5402,10 @@ func (s *ScanSession) considerAdjacent(previous, current *streamingFieldSummary)
 		s.coverage.Windows++
 		joined := s.classifier.classifyWithPolicy([]string{string(previous.sample) + "\n" + string(current.sample)}, s.mode, s.thresholds, s.policy, false)
 		if joined.Truncated {
-			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			if s.deferClassifierIncomplete(joined) {
+				return
+			}
+			s.setCoverage(CoverageUnavailable, classifierIncompleteReason(joined))
 			return
 		}
 		if previousKnown && currentKnown {

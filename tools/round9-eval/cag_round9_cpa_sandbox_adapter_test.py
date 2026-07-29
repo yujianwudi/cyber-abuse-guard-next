@@ -630,22 +630,46 @@ class SandboxAdapterContractTest(unittest.TestCase):
                 fixture["output"],
             )
 
-    def make_first_event_balanced_incomplete(
+    def make_first_event_incomplete(
         self,
         fixture: dict,
         *,
+        mode: str = "balanced",
         category: str = "",
         coverage: str = "incomplete",
         reason: str = "scan_limit",
     ) -> None:
+        if mode not in {"balanced", "strict"}:
+            self.fail(f"unsupported incomplete fixture mode: {mode}")
+        strict = mode == "strict"
+        decision_kind = (
+            "block_incomplete_inspection" if strict else "audit_ineligible_risk"
+        )
+        action = "block" if strict else "audit"
+        disposition = (
+            "block_due_to_incomplete_inspection"
+            if strict
+            else "allow_due_to_incomplete_inspection"
+        )
+        explanation_schema = "decision-explanation-v2" if strict else "none"
+        explanation = (
+            {
+                "kind": "incomplete",
+                "incomplete_inspection_reason": reason,
+                "block_eligible": False,
+            }
+            if strict
+            else {}
+        )
         expectations = load_json(
             fixture["expectations_path"], "mutated expectations", 4_194_304
         )
         expectations["requests"][0].update(
             {
+                "mode": mode,
                 "kind": "incomplete",
                 "persistence": "required",
-                "expected_persisted_decision_kind": "audit_ineligible_risk",
+                "expected_persisted_decision_kind": decision_kind,
                 "expected_category": "",
             }
         )
@@ -655,15 +679,20 @@ class SandboxAdapterContractTest(unittest.TestCase):
             database.execute("DELETE FROM audit_events WHERE id='evaluated-benign'")
             database.execute(
                 """INSERT INTO audit_events VALUES (
-                       'evaluated-benign', 5, 'audit', 'balanced', ?, '[]', ?, '',
-                       'audit_ineligible_risk', ?, ?, '{}',
-                       'allow_due_to_incomplete_inspection', 'none'
+                       'evaluated-benign', 5, ?, ?, ?, '[]', ?, '',
+                       ?, ?, ?, ?, ?, ?
                    )""",
                 (
+                    action,
+                    mode,
                     category,
                     expectations["requests"][0]["request_hash"],
+                    decision_kind,
                     coverage,
                     reason,
+                    json.dumps(explanation, sort_keys=True, separators=(",", ":")),
+                    disposition,
+                    explanation_schema,
                 ),
             )
             database.commit()
@@ -922,20 +951,39 @@ class SandboxAdapterContractTest(unittest.TestCase):
         )
 
     def test_finalize_rejects_arbitrary_nonempty_incomplete_category(self) -> None:
-        fixture = self.finalize_fixture("finalize-incomplete-category")
-        self.make_first_event_balanced_incomplete(
-            fixture, category="new_malicious_taxonomy"
-        )
-        with self.assertRaisesRegex(AdapterError, "winner/category metadata"):
-            self.run_finalize_fixture(fixture)
+        for mode in ("balanced", "strict"):
+            with self.subTest(mode=mode):
+                fixture = self.finalize_fixture(f"finalize-incomplete-category-{mode}")
+                self.make_first_event_incomplete(
+                    fixture,
+                    mode=mode,
+                    category="new_malicious_taxonomy",
+                )
+                with self.assertRaisesRegex(AdapterError, "winner/category metadata"):
+                    self.run_finalize_fixture(fixture)
 
-    def test_finalize_accepts_closed_incomplete_reason_as_category(self) -> None:
-        fixture = self.finalize_fixture("finalize-incomplete-reason-category")
-        self.make_first_event_balanced_incomplete(fixture, category="scan_limit")
-        report = self.run_finalize_fixture(fixture)
-        self.assertEqual(report["runtime_checks"]["audit_database"]["evaluation_event_delta"], 122)
-        self.assertEqual(report["decision_audit"]["matched_count"], 122)
-        self.assertEqual(report["decision_audit"]["incomplete_malicious_category_count"], 0)
+    def test_finalize_accepts_classifier_proof_budget_as_closed_incomplete_reason_and_category(self) -> None:
+        for mode in ("balanced", "strict"):
+            with self.subTest(mode=mode):
+                fixture = self.finalize_fixture(
+                    f"finalize-classifier-proof-budget-{mode}"
+                )
+                self.make_first_event_incomplete(
+                    fixture,
+                    mode=mode,
+                    category="classifier_proof_budget",
+                    reason="classifier_proof_budget",
+                )
+                report = self.run_finalize_fixture(fixture)
+                self.assertEqual(
+                    report["runtime_checks"]["audit_database"]["evaluation_event_delta"],
+                    122,
+                )
+                self.assertEqual(report["decision_audit"]["matched_count"], 122)
+                self.assertEqual(
+                    report["decision_audit"]["incomplete_malicious_category_count"],
+                    0,
+                )
 
     def test_finalize_rejects_open_incomplete_reason_and_coverage_values(self) -> None:
         cases = (
@@ -948,12 +996,24 @@ class SandboxAdapterContractTest(unittest.TestCase):
                 {"coverage": "raw_request_fragment_should_not_be_coverage"},
             ),
         )
-        for name, mutation in cases:
-            with self.subTest(name=name):
-                fixture = self.finalize_fixture("finalize-incomplete-" + name)
-                self.make_first_event_balanced_incomplete(fixture, **mutation)
-                with self.assertRaisesRegex(AdapterError, "winner/category metadata"):
-                    self.run_finalize_fixture(fixture)
+        for mode in ("balanced", "strict"):
+            for name, mutation in cases:
+                with self.subTest(mode=mode, name=name):
+                    fixture = self.finalize_fixture(
+                        f"finalize-incomplete-{mode}-{name}"
+                    )
+                    self.make_first_event_incomplete(
+                        fixture,
+                        mode=mode,
+                        **mutation,
+                    )
+                    wanted_error = (
+                        "closed schema-v6 set"
+                        if mode == "strict" and name == "reason"
+                        else "winner/category metadata"
+                    )
+                    with self.assertRaisesRegex(AdapterError, wanted_error):
+                        self.run_finalize_fixture(fixture)
 
     def test_schema6_persisted_decision_mapping_covers_the_fixed_phase_matrix(self) -> None:
         cases = (

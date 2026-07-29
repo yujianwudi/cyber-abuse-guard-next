@@ -199,6 +199,12 @@ type classificationSignalFacts struct {
 	harmConflict             bool
 }
 
+type quotedReviewFollowUpProof struct {
+	active   bool
+	inert    bool
+	complete bool
+}
+
 type compiledRule struct {
 	id                     string
 	category               rules.Category
@@ -536,9 +542,16 @@ func (c *Classifier) classifyTrustedCurrentUserWithPolicy(parts []string, mode M
 	return c.classifyWithPolicyCaptured(parts, mode, thresholds, policy, false, nil, true, nil)
 }
 
-func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thresholds Thresholds, policy Policy, structuredToolPayload bool, capture *classificationSignalFacts, allowExtendedGeneratedAgentWindow bool, defensiveQuoteFrameSignals *inertQuotedSafetyReviewFrameSignals) Result {
+func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thresholds Thresholds, policy Policy, structuredToolPayload bool, capture *classificationSignalFacts, allowExtendedGeneratedAgentWindow bool, defensiveQuoteFrameSignals *inertQuotedSafetyReviewFrameSignals, quotedReviewFollowUpProofs ...*quotedReviewFollowUpProof) Result {
 	if defensiveQuoteFrameSignals != nil {
 		*defensiveQuoteFrameSignals = 0
+	}
+	var quotedReviewFollowUp *quotedReviewFollowUpProof
+	if len(quotedReviewFollowUpProofs) != 0 {
+		quotedReviewFollowUp = quotedReviewFollowUpProofs[0]
+		if quotedReviewFollowUp != nil {
+			*quotedReviewFollowUp = quotedReviewFollowUpProof{}
+		}
 	}
 	if c == nil {
 		return Result{PolicyVersion: ClassifierPolicyVersion, PolicySHA256: ClassifierPolicySHA256, Action: ActionAllow}
@@ -590,13 +603,37 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 	quotedOrInertSuppressed := false
 	var currentDirectives analyzedDirectives
 	directivesReady := false
+	explicitRelationProofBudgetExceeded := false
 	finishResult := func(result Result) Result {
-		if directivesReady && currentDirectives.occurrenceBudgetExhausted {
+		needsOccurrenceProof := func(candidate Result) bool {
+			if candidate.Category == "" {
+				return false
+			}
+			if candidate.BlockEligibility == nil || candidate.BlockEligibility.Eligible {
+				return true
+			}
+			// A concrete defensive/analytical owner has already closed the
+			// candidate as a complete non-block. Its long benign carrier must not
+			// become a mode-dependent incomplete result merely because unrelated
+			// signal occurrences exhausted the bounded directive table. Every
+			// other category-shaped candidate still depends on that occurrence
+			// proof, including provisional synthetic cores that have not yet
+			// satisfied the final eligibility gate.
+			return !candidate.BlockEligibility.DefensiveScopeConflict &&
+				!candidate.BlockEligibility.QuotedOrAnalyticalScope
+		}
+		occurrenceSensitiveCandidate := needsOccurrenceProof(result) ||
+			hasAdjacentReversal && needsOccurrenceProof(bestAdjacentReversal) ||
+			hasReactivatedQuotedReferent && needsOccurrenceProof(bestReactivatedQuotedReferent)
+		if directivesReady && currentDirectives.occurrenceBudgetExhausted && occurrenceSensitiveCandidate {
 			// Once the bounded occurrence proof is exhausted, neither the
-			// fail-active matcher nor a previously selected score winner can prove a
-			// complete candidate identity. Return the same neutral incomplete
-			// classifier result used by adjacent reconstruction overflow: no
-			// malicious category, rule, evidence, or hard floor survives.
+			// fail-active matcher nor a provisional malicious score winner can prove
+			// a complete candidate identity. Return the same neutral incomplete
+			// classifier result used by adjacent reconstruction overflow: no category,
+			// rule, evidence, or hard floor survives. Intent-only or qualifier-only
+			// signal floods cannot form a malicious candidate, so their bounded
+			// occurrence overflow remains a complete non-finding instead of turning
+			// ordinary long placeholders into mode-dependent false positives.
 			best := c.classifierWindowIncompleteResult(mode, thresholds, structuredToolPayload)
 			if quotedOrInertSuppressed {
 				markQuotedOrInertSuppressed(&best)
@@ -622,6 +659,20 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		}
 		best.Truncated = best.Truncated || result.Truncated
 		enforceResultCandidateEligibility(&best, mode, thresholds)
+		if explicitRelationProofBudgetExceeded &&
+			!resultHasEligibleBlockingCandidate(best, thresholds) {
+			// A bounded positive relation witness exists, but its field-wide
+			// ownership/negation proof exceeded the reviewed local budget. Preserve
+			// an independently completed eligible block; otherwise return a neutral,
+			// content-free incomplete result instead of a coverage-complete allow.
+			incomplete := c.classifierProofBudgetIncompleteResult(
+				mode, thresholds, structuredToolPayload,
+			)
+			if quotedOrInertSuppressed {
+				markQuotedOrInertSuppressed(&incomplete)
+			}
+			return incomplete
+		}
 		ensureResultDecisionExplanation(&best)
 		if best.BlockEligibility != nil {
 			applyEligibilityToExplanation(best.DecisionExplanation, *best.BlockEligibility)
@@ -873,6 +924,21 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 	}
 	finalizeMetaTail()
 	currentText := string(currentRunes)
+	if quotedReviewFollowUp != nil {
+		quotedReviewFollowUp.complete = !truncated
+		if !truncated {
+			disposition := quotedReviewFollowUpDisposition(
+				currentText, c.implementationStarts, c.implementationPatterns,
+			)
+			quotedReviewFollowUp.active = disposition == quotedReviewContinuationActive
+			quotedReviewFollowUp.inert = disposition == quotedReviewContinuationInert ||
+				disposition == quotedReviewContinuationCancelled
+		}
+	}
+	// currentRunes is already NFKC-normalized, lower-cased, space-collapsed,
+	// and edge-trimmed by normalizePartsInto. Re-normalizing the full string here
+	// adds a second near-budget scan before the exact-text proof cache can help.
+	currentPhishingProof := newCandidatePhishingRelationProof(currentText)
 	if defensiveQuoteFrameSignals != nil {
 		*defensiveQuoteFrameSignals = streamingDefensiveQuotedReviewFrameSignalsNormalized(
 			currentRunes, truncated,
@@ -997,10 +1063,22 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		// distinct incomplete disposition without a malicious category/winner.
 		return finishResult(c.classifierWindowIncompleteResult(mode, thresholds, structuredToolPayload))
 	}
-	if candidateInertLabeledCarrier(currentText) {
-		// A closed log/console label owns the remainder of this field as recorded
-		// evidence.  Do not let a rule-local match discard that owner prefix and
-		// reinterpret an imperative-looking log line as the user's speech act.
+	if carrier, tailState := candidateInertLabeledCarrierExecutionTailProof(currentText); carrier && tailState != explicitMaliciousRelationMatched {
+		if tailState == explicitMaliciousRelationProofBudgetExceeded {
+			// The exact carrier still owns its recorded payload, but the later
+			// transition contains a bounded positive witness whose field-wide
+			// ownership/negation proof could not complete. Do not expose the payload
+			// as a fresh category candidate or relabel the incomplete witness as a
+			// confirmed reactivation.
+			return finishResult(c.classifierProofBudgetIncompleteResult(
+				mode, thresholds, structuredToolPayload,
+			))
+		}
+		// The exact output label owns the complete remainder of this field as
+		// recorded evidence unless a later transition explicitly reactivates
+		// the carrier. Parser-proven adjacent segments/fields are composed by the
+		// ordinary role and referent paths; an ordinary payload newline cannot
+		// manufacture an independent user speech act here.
 		eligibility := finalizeCandidateBlockEligibility(CandidateBlockEligibility{
 			InspectionComplete:         true,
 			EvidenceOwnedByCurrentUser: true,
@@ -1023,11 +1101,34 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 			}
 		}
 	}
-	if directivesReady && currentDirectives.occurrenceBudgetExhausted {
-		// Do not spend rule/category/semantic work on a proof that is already
-		// known to be incomplete, and do not let the bounded matcher's
-		// fail-active fallback materialize a malicious winner.
-		return finishResult(result)
+	if partCount == 1 && directivesReady && currentDirectives.occurrenceBudgetExhausted &&
+		!inertQuotedSafetyReview {
+		// A single physical clause with more intent occurrences than the bounded
+		// occurrence table can prove is already terminal once one ordinary rule has
+		// both of its core dimensions. Building every score/eligibility candidate
+		// cannot restore the missing occurrence identity and made repeated-intent
+		// adversarial inputs rescan the same long clause for every eligibility axis.
+		// Preserve complete defensive/analytical owners; otherwise publish the same
+		// neutral incomplete result that finishResult would select after the full
+		// candidate materialization pass.
+		for ruleIndex, rule := range c.rules {
+			if !currentSignals[rule.intent] || !currentSignals[rule.object] {
+				continue
+			}
+			localMatch := c.bestRuleDirectiveMatch(ruleIndex, rule, currentDirectives)
+			if !localMatch.corePredicateComplete || !localMatch.activeDirective ||
+				!localMatch.scopeCoherent || !localMatch.ownershipValid {
+				continue
+			}
+			if !candidateDefensiveScopeConflictPrepared(
+				rule.category, localMatch.text, currentContext, nil,
+			) {
+				return finishResult(c.classifierWindowIncompleteResult(
+					mode, thresholds, structuredToolPayload,
+				))
+			}
+			break
+		}
 	}
 	candidates := make([]classificationCandidate, 0, 8)
 	var ordinaryMaterializations [maxOrdinaryCandidateMaterializations]ordinaryRuleCandidateMaterialization
@@ -1049,27 +1150,29 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 			currentDirectives = c.analyzeDirectives(currentRunes, policy)
 			directivesReady = true
 		}
+		currentMask := ruleDimensionMaskForSignalSet(rule, current)
+		occurrenceBoundProofRequired := directivesReady && currentDirectives.occurrenceBudgetExhausted
 		directiveMatch := ruleDirectiveMatch{}
-		if targetedRound8Rule && directivesReady {
+		if (targetedRound8Rule || occurrenceBoundProofRequired) && directivesReady && currentMask != 0 {
 			directiveMatch = c.bestRuleDirectiveMatch(ruleIndex, rule, currentDirectives)
-		} else if !targetedRound8Rule {
+		} else if !targetedRound8Rule && !occurrenceBoundProofRequired {
 			// Round 8 physical occurrence ownership is intentionally limited to
-			// the five broad-vocabulary production-FP rules. Mature narrow rules
-			// retain their established whole-field signal path, including a later
-			// unnegated intent after an earlier prohibition. Applying the physical
-			// window winner to every rule both lost that recall and multiplied the
-			// hot-path occurrence work by the full ruleset size.
-			mask := ruleDimensionMaskForSignalSet(rule, current)
+			// the five broad-vocabulary production-FP rules during complete scans.
+			// Mature narrow rules retain their established whole-field signal path,
+			// including a later unnegated intent after an earlier prohibition. Once
+			// the occurrence proof budget is exhausted, however, every rule must use
+			// a physical semantic window so unrelated strong scopes cannot donate the
+			// two halves of a synthetic candidate.
 			core := current[rule.intent] && current[rule.object] &&
 				directivesReady && !c.ruleCoreIsOnlyNegated(currentDirectives, ruleIndex, rule) &&
 				!isLegitimateCategoryWorkflow(rule.category, currentText)
 			directiveMatch = ruleDirectiveMatch{
-				found:                 mask != 0,
+				found:                 currentMask != 0,
 				coreComplete:          core,
 				corePredicateComplete: core,
 				activeDirective:       core,
 				scopeCoherent:         true,
-				dimensionMask:         mask,
+				dimensionMask:         currentMask,
 				text:                  currentText,
 				clauseCount:           1,
 			}
@@ -1109,10 +1212,12 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		if !currentCore && !implementationFollowUp && !objectQualifiedFallback {
 			continue
 		}
-		if isRound8TargetedRule(rule.id) && !directiveMatch.corePredicateComplete && !implementationFollowUp {
+		if (targetedRound8Rule || occurrenceBoundProofRequired) &&
+			!directiveMatch.corePredicateComplete && !implementationFollowUp {
 			// Round 8 rules must not leak a named audit finding from a partial
-			// generic-vocabulary core. Their complete hostile relationship is the
-			// admission predicate, not merely a balanced-score cap.
+			// generic-vocabulary core. The same candidate-bound requirement applies
+			// to every rule after occurrence-budget exhaustion: a request-wide signal
+			// pair cannot substitute for a complete physical-window relationship.
 			continue
 		}
 		coreCoLocated := directiveMatch.scopeCoherent && directiveMatch.coreComplete
@@ -1261,6 +1366,7 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		unmitigatedOperationalAbuse := strongOperationalAbuse && effectiveContext == (ContextFlags{})
 		eligibility := assessCandidateBlockEligibility(candidateEligibilityInput{
 			category: rule.category, ruleID: rule.id, text: directiveMatch.text,
+			phishingProof:     &currentPhishingProof,
 			authorizationText: currentText,
 			supportingText: func() string {
 				if implementationFollowUp {
@@ -1398,7 +1504,8 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 			genuineSafetyContext := effectiveContext.Defensive || effectiveContext.Remediation || effectiveContext.StaticAnalysis || effectiveContext.IncidentResponse || effectiveContext.HighLevel
 			eligibility := assessCandidateBlockEligibility(candidateEligibilityInput{
 				category: category, ruleID: objectRule.id, text: currentText,
-				coreComplete: true, activeDirective: true,
+				phishingProof: &currentPhishingProof,
+				coreComplete:  true, activeDirective: true,
 				operational:     providers.hasOperational,
 				ownershipProven: true, inspectionComplete: !truncated,
 				referentProofComplete: true, context: context,
@@ -1672,7 +1779,8 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		genuineSafetyContext := effectiveContext.Defensive || effectiveContext.Remediation || effectiveContext.StaticAnalysis || effectiveContext.IncidentResponse || effectiveContext.HighLevel
 		eligibility := assessCandidateBlockEligibility(candidateEligibilityInput{
 			category: category, ruleID: "COMPOSED-" + string(category), text: currentText,
-			coreComplete: true, activeDirective: true,
+			phishingProof: &currentPhishingProof,
+			coreComplete:  true, activeDirective: true,
 			operational:     operationalProvider >= 0,
 			ownershipProven: true, inspectionComplete: !truncated,
 			crossScope:            false,
@@ -1733,8 +1841,9 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 				existingEligibleCategoryMask |= uint16(1) << uint(priority)
 			}
 		}
-		for _, candidate := range c.explicitMaliciousRelationClauseCandidates(
-			currentRunes, context, !truncated, existingEligibleCategoryMask,
+		for _, candidate := range c.explicitMaliciousRelationClauseCandidatesPrepared(
+			currentRunes, context, !truncated, &currentPhishingProof, existingEligibleCategoryMask,
+			&explicitRelationProofBudgetExceeded,
 		) {
 			candidates = appendExplicitMaliciousRelationFallback(candidates, candidate)
 		}
@@ -2412,7 +2521,12 @@ func descriptiveNegationClause(clause string) bool {
 	)
 }
 
-func (c *Classifier) classifierWindowIncompleteResult(mode Mode, thresholds Thresholds, structuredToolPayload bool) Result {
+func (c *Classifier) classifierIncompleteResult(
+	reason CoverageReason,
+	mode Mode,
+	thresholds Thresholds,
+	structuredToolPayload bool,
+) Result {
 	thresholds = validThresholdsOrDefault(thresholds)
 	result := Result{
 		PolicyVersion:  ClassifierPolicyVersion,
@@ -2420,7 +2534,7 @@ func (c *Classifier) classifierWindowIncompleteResult(mode Mode, thresholds Thre
 		RuleSetVersion: c.version,
 		Action:         ActionAllow,
 		Coverage: Coverage{
-			State: CoverageUnavailable, Reason: CoverageReasonClassifierWindow,
+			State: CoverageUnavailable, Reason: reason,
 		},
 		FindingConfidence: FindingNone,
 		Truncated:         true,
@@ -2433,6 +2547,18 @@ func (c *Classifier) classifierWindowIncompleteResult(mode Mode, thresholds Thre
 	}
 	attachBehaviorGraph(&result, "parts", carrier)
 	return result
+}
+
+func (c *Classifier) classifierWindowIncompleteResult(mode Mode, thresholds Thresholds, structuredToolPayload bool) Result {
+	return c.classifierIncompleteResult(
+		CoverageReasonClassifierWindow, mode, thresholds, structuredToolPayload,
+	)
+}
+
+func (c *Classifier) classifierProofBudgetIncompleteResult(mode Mode, thresholds Thresholds, structuredToolPayload bool) Result {
+	return c.classifierIncompleteResult(
+		CoverageReasonClassifierProofBudget, mode, thresholds, structuredToolPayload,
+	)
 }
 
 func (c *Classifier) adjacentNegationOverflowResult(rule compiledRule, mode Mode, thresholds Thresholds, structuredToolPayload bool) Result {
@@ -3663,6 +3789,21 @@ func quotedSafetyReviewSpanContent(text string, span metaOverrideQuotedSpan) (st
 	switch {
 	case strings.HasPrefix(quoted, "```") && strings.HasSuffix(quoted, "```") && len(quoted) > 6:
 		content = quoted[3 : len(quoted)-3]
+		if len(content) != 0 && content[0] != '\n' && content[0] != '\r' {
+			// A fenced Markdown info string belongs to the carrier, not to the
+			// quoted referent. Keep inline triple-backtick quotations and unknown
+			// first-line prose unchanged; only a known language tag followed by a
+			// payload line is removed.
+			lineEnd := strings.IndexAny(content, "\r\n")
+			if boundaryEnd := strings.IndexRune(content, compactHardBoundary); boundaryEnd >= 0 &&
+				(lineEnd < 0 || boundaryEnd < lineEnd) {
+				lineEnd = boundaryEnd
+			}
+			if lineEnd >= 0 && quotedFenceKnownInfoString(content[:lineEnd]) {
+				_, width := utf8.DecodeRuneInString(content[lineEnd:])
+				content = content[lineEnd+width:]
+			}
+		}
 	case strings.HasPrefix(quoted, "<sample>") && strings.HasSuffix(quoted, "</sample>"):
 		content = quoted[len("<sample>") : len(quoted)-len("</sample>")]
 	case strings.HasPrefix(quoted, "[sample]") && strings.HasSuffix(quoted, "[/sample]"):
@@ -3677,6 +3818,29 @@ func quotedSafetyReviewSpanContent(text string, span metaOverrideQuotedSpan) (st
 	}
 	content = strings.TrimSpace(content)
 	return content, content != ""
+}
+
+func quotedFenceKnownInfoString(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	switch value {
+	case "text", "txt", "plaintext",
+		"markdown", "md",
+		"go", "golang", "python", "py",
+		"javascript", "js", "typescript", "ts",
+		"json", "yaml", "yml", "toml", "ini", "xml",
+		"html", "css", "sql",
+		"shell", "bash", "sh", "zsh", "powershell", "ps1", "cmd",
+		"console", "terminal", "log", "logs", "stdout", "stderr",
+		"diff", "dockerfile", "makefile",
+		"c", "cpp", "c++", "csharp", "cs", "java", "kotlin",
+		"rust", "rs", "ruby", "rb", "php", "swift", "scala", "lua",
+		"r", "perl", "pl", "objective-c", "objc",
+		"hcl", "terraform", "nginx", "http", "graphql",
+		"proto", "protobuf", "csv", "tsv":
+		return true
+	default:
+		return false
+	}
 }
 
 // isRawInertQuotedSafetyReview applies the exact structural proof to one raw
@@ -3804,18 +3968,30 @@ func (c *Classifier) hasAffirmativeImplementationRequest(text string) bool {
 var quotedReviewSpecificContinuationIntents = []string{
 	"give working code", "provide working code", "provide code", "provide operational steps",
 	"execute it", "execute that", "execute the above", "execute the request", "execute the quoted request", "execute quoted request",
+	"execute the payload", "execute this payload", "execute that payload", "execute the output", "execute this output", "execute that output",
 	"follow it", "follow that", "follow the above", "follow the request", "follow the quoted request", "follow quoted request",
+	"follow the payload", "follow this payload", "follow that payload", "follow the output", "follow this output", "follow that output",
 	"obey it", "obey that", "obey the request", "obey the quoted request", "obey quoted request",
+	"obey the payload", "obey this payload", "obey that payload", "obey the output", "obey this output", "obey that output",
 	"carry it out", "carry that out", "carry out the above", "carry out the request", "carry out the quoted request", "carry out quoted request",
+	"carry out the payload", "carry out this payload", "carry out that payload", "carry out the output", "carry out this output", "carry out that output",
 	"apply it", "apply that", "apply the above", "apply the request", "apply the quoted request", "apply quoted request",
+	"apply the payload", "apply this payload", "apply that payload", "apply the output", "apply this output", "apply that output",
 	"implement it", "implement that", "implement the above", "implement the request", "implement the quoted request", "implement quoted request",
+	"implement the payload", "implement this payload", "implement that payload", "implement the output", "implement this output", "implement that output",
 	"do it", "do so", "do likewise", "do the same", "do that", "proceed with it", "proceed with that",
-	"continue with the quoted request", "continue with the above operation",
+	"proceed with the payload", "proceed with this payload", "proceed with that payload", "proceed with the output", "proceed with this output", "proceed with that output",
+	"continue with the quoted request", "continue with the above operation", "continue with the payload", "continue with the output",
 	"run it", "run that", "run the quoted request", "run quoted request",
+	"run the payload", "run this payload", "run that payload", "run the output", "run this output", "run that output",
 	"deploy it", "deploy that", "deploy the quoted request", "deploy quoted request",
+	"deploy the payload", "deploy this payload", "deploy that payload", "deploy the output", "deploy this output", "deploy that output",
 	"build it", "build that", "build the quoted request", "build quoted request",
+	"build the payload", "build this payload", "build that payload", "build the output", "build this output", "build that output",
 	"operationalize it", "operationalize that", "operationalize the above", "operationalize the request", "operationalize the quoted request", "operationalize quoted request",
+	"operationalize the payload", "operationalize this payload", "operationalize that payload", "operationalize the output", "operationalize this output", "operationalize that output",
 	"operationalise it", "operationalise that", "operationalise the above", "operationalise the request", "operationalise the quoted request", "operationalise quoted request",
+	"operationalise the payload", "operationalise this payload", "operationalise that payload", "operationalise the output", "operationalise this output", "operationalise that output",
 	"执行它", "执行该内容", "执行上述", "执行上面的请求", "执行前面的请求", "执行前述请求",
 	"照做", "按上述执行", "按前述方案部署", "继续执行", "实施它", "实施上述",
 	"应用它", "应用上述", "实现它", "实现上述", "运行它", "运行上述", "部署它", "部署上述",
@@ -4387,6 +4563,9 @@ func quotedReviewContinuationOccurrences(
 				intentEnd := intentIndex + len(intent)
 				leftOK := !isASCIIStringLocal(intent) || intentIndex == 0 || !isASCIIWordByte(clause[intentIndex-1])
 				rightOK := !isASCIIStringLocal(intent) || intentEnd == len(clause) || !isASCIIWordByte(clause[intentEnd])
+				if rightOK && quotedReviewContinuationIntentNeedsClosedReferent(intent) {
+					rightOK = quotedReviewContinuationReferentTailClosed(clause[intentEnd:])
+				}
 				if leftOK && rightOK {
 					duplicate := false
 					for _, existing := range occurrences {
@@ -4464,6 +4643,40 @@ func quotedReviewContinuationOccurrences(
 		occurrences[position] = current
 	}
 	return occurrences, false
+}
+
+func quotedReviewContinuationIntentNeedsClosedReferent(intent string) bool {
+	intent = strings.TrimSpace(intent)
+	for _, referent := range []string{
+		"request", "payload", "output", "instruction", "instructions", "operation",
+	} {
+		if strings.HasSuffix(intent, " "+referent) {
+			return true
+		}
+	}
+	return false
+}
+
+func quotedReviewContinuationReferentTailClosed(tail string) bool {
+	tail = strings.TrimLeft(tail, " \t")
+	if tail == "" {
+		return true
+	}
+	first, _ := utf8.DecodeRuneInString(tail)
+	if strings.ContainsRune(".,;:!?)]}\"'\u201d\u2019", first) {
+		return true
+	}
+	for _, prefix := range []string{
+		"again", "now", "immediately", "directly", "exactly", "verbatim", "unchanged", "fully", "completely",
+		"as written", "as provided", "as shown", "as described", "as-is", "in full", "without changes",
+		"and", "or", "nor", "then", "but", "while", "otherwise", "alternatively", "afterward", "afterwards", "next",
+		"in", "on", "onto", "to", "for", "with", "without", "using", "against", "across", "into", "from", "at", "by",
+	} {
+		if quotedReviewCarrierReferenceHasPrefix(tail, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func quotedReviewMayContainCoordinatedCancellation(clause string) bool {
@@ -5428,6 +5641,21 @@ func inertQuotedDirectNonExecutionBoundary(clause string) bool {
 // abuse. It is deliberately category-scoped and hostile markers always win,
 // so generic safety labels cannot wash out a victim-targeted directive.
 func isLegitimateCategoryWorkflow(category rules.Category, text string) bool {
+	if category == rules.CategoryEvasion &&
+		(candidateTelemetryRestorationWorkflow(text) || candidatePassiveTelemetryFailureReport(text)) {
+		return true
+	}
+	if category == rules.CategoryRansomware && !containsAnyLiteral(text,
+		"fiction", "game", "story", "recovery", "restor", "synthetic", "lab ",
+		"backup", "encrypt", "protect", "key management", "our files", "my files", "test fixture",
+		"虚构", "游戏", "故事", "恢复", "还原", "合成", "实验室", "备份", "加密", "保护", "密钥管理", "我们的文件", "我的文件", "测试样本",
+	) {
+		// Every legitimate ransomware-adjacent workflow below owns at least one
+		// of these coarse purpose anchors. Ordinary hostile candidates can fail
+		// this eligibility-only exception without repeatedly scanning the whole
+		// field for conflict, rollback, and safety-deliverable vocabularies.
+		return false
+	}
 	if hasExplicitHarmConflict(text) {
 		return false
 	}
@@ -5556,6 +5784,80 @@ func isLegitimateCategoryWorkflow(category rules.Category, text string) bool {
 	default:
 		return false
 	}
+}
+
+// candidateTelemetryRestorationWorkflow recognizes one narrow incident
+// remediation relation that necessarily mentions a compromised host and a
+// stopped security control. The passive failure, investigation, and restoration
+// actions must all be present. Any independent request to suppress telemetry or
+// conceal the intrusion defeats the exception.
+func candidateTelemetryRestorationWorkflow(text string) bool {
+	if !candidateTelemetryControlTarget(text) ||
+		!candidatePassiveTelemetryFailureReport(text) ||
+		!containsAnyLiteral(text, "investigate", "diagnose", "triage") ||
+		!containsAnyLiteral(text,
+			"restore endpoint telemetry", "restore telemetry", "restore event collection",
+			"restart endpoint telemetry", "restart event collection", "re-enable endpoint telemetry",
+			"reenable endpoint telemetry", "recover event collection",
+		) {
+		return false
+	}
+	return !hasIndependentMaliciousExecutionClause(text)
+}
+
+func candidatePassiveTelemetryFailureReport(text string) bool {
+	return candidateTelemetryControlTarget(text) &&
+		containsAnyLiteral(text,
+			"stopped unexpectedly", "unexpectedly stopped", "unexpected outage",
+			"telemetry outage", "event collection outage",
+		) && !candidateActiveTelemetryFailureMasquerade(text) &&
+		!candidateTelemetrySuppressionReactivation(text) &&
+		!hasIndependentMaliciousExecutionClause(text)
+}
+
+func candidateActiveTelemetryFailureMasquerade(text string) bool {
+	if !containsAnyLiteral(text,
+		"appear stopped", "appears stopped", "look stopped", "looks stopped",
+		"appear to have stopped", "appears to have stopped",
+		"look as though it stopped", "looks as though it stopped",
+		"seem stopped", "seems stopped", "appear offline", "appears offline",
+		"look offline", "looks offline", "seem offline", "seems offline",
+	) || !candidateSecurityControlEvasionMaliciousPurpose(text) {
+		return false
+	}
+	for _, action := range []string{"make", "force", "cause"} {
+		for _, target := range []string{
+			"endpoint telemetry", "security telemetry", "event collection",
+			"endpoint sensor", "security agent", "telemetry agent",
+		} {
+			if strings.Contains(text, action+" "+target) || strings.Contains(text, action+" the "+target) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func candidateTelemetryControlTarget(text string) bool {
+	return containsAnyLiteral(text,
+		"endpoint telemetry", "security telemetry", "event collection",
+		"endpoint sensor", "security agent", "telemetry agent",
+	)
+}
+
+func candidateTelemetrySuppressionReactivation(text string) bool {
+	return containsAnyLiteral(text,
+		"then stop", "then disable", "then silence", "then mute", "then unhook", "then tamper",
+		"now stop", "now disable", "now silence", "now mute", "now unhook", "now tamper",
+		"stop endpoint telemetry", "disable endpoint telemetry", "silence endpoint telemetry",
+		"turn off endpoint telemetry", "suppress endpoint telemetry", "suppress alerts",
+		"keep endpoint telemetry disabled", "keep telemetry disabled", "keep event collection disabled",
+		"leave endpoint telemetry disabled", "leave telemetry disabled", "leave event collection disabled",
+		"do not restore", "don't restore", "prevent restoration", "prevent recovery",
+		"remain hidden", "stays hidden", "keep the intrusion hidden", "hide the intrusion",
+		"conceal the intrusion", "avoid detection", "evade detection", "bypass detection",
+		"without raising an alert", "before the implant", "so the implant",
+	)
 }
 
 func containsAnyLiteral(text string, values ...string) bool {
@@ -6510,8 +6812,10 @@ type compactRuleIntentPattern struct {
 }
 
 type compactRuleIntentPatterns struct {
-	values  []compactRuleIntentPattern
-	byFirst map[rune][]int
+	values           []compactRuleIntentPattern
+	byFirst          map[rune][]int
+	asciiFirst       [utf8.RuneSelf]bool
+	hasNonASCIIFirst bool
 }
 
 func compileCompactRuleIntentPatterns(intents []string) compactRuleIntentPatterns {
@@ -6535,7 +6839,13 @@ func compileCompactRuleIntentPatterns(intents []string) compactRuleIntentPattern
 			runes: compactRunes,
 			ascii: isASCIIStringLocal(compact),
 		})
-		patterns.byFirst[compactRunes[0]] = append(patterns.byFirst[compactRunes[0]], patternIndex)
+		first := compactRunes[0]
+		patterns.byFirst[first] = append(patterns.byFirst[first], patternIndex)
+		if first < utf8.RuneSelf {
+			patterns.asciiFirst[first] = true
+		} else {
+			patterns.hasNonASCIIFirst = true
+		}
 	}
 	return patterns
 }
@@ -6875,9 +7185,11 @@ func ruleIntentOccurrenceNegation(clause string, intentIndex int) (found, negate
 		"do not", "cannot", "will not", "never", "not to", "without", "forbids", "forbid", "forbidden to", "prohibits", "prohibit", "prohibited from", "refuse to",
 		"严禁", "禁止", "不得", "不要", "不需要", "无需", "不能", "不会", "拒绝", "不",
 	} {
-		index := strings.LastIndex(prefix, marker)
+		var index int
 		if isASCIIStringLocal(marker) {
 			index = lastASCIIPhraseIndex(prefix, marker)
+		} else {
+			index = strings.LastIndex(prefix, marker)
 		}
 		if marker == "不" && index >= 0 && !isBareChineseNegationBridge(strings.TrimSpace(prefix[index+len(marker):])) {
 			continue
@@ -6956,7 +7268,7 @@ func prohibitionMarkerIsNegated(before, marker string) bool {
 		return truncated
 	}
 	bridge := strings.TrimSpace(before[cueEnd:])
-	if strings.ContainsAny(bridge, ".!?;:\n\r。！？；：\ufffd") ||
+	if strings.ContainsAny(bridge, ".!?;:\n\r。！？；："+compactHardBoundaryText) ||
 		containsAnyLiteral(bridge, " but ", " however ", " instead ", " rather ", " although ", " except ", "但是", "然而", "而是", "不过", "除非") {
 		return false
 	}
@@ -7639,6 +7951,13 @@ func containsRuleIntentPrepared(text string, intents []string, patterns compactR
 			return true
 		}
 	}
+	if !compactRuleIntentMayContainPatternStart(text, patterns) {
+		// Every compact match must contain its pattern's first rune. Proving that
+		// none of those runes occur is exact even for an oversized clause, and
+		// avoids building clause-sized rune/position tables for long homogeneous
+		// carriers that cannot possibly contain an obfuscated intent.
+		return false
+	}
 	// Literal matching above handles ordinary text. The compact fallback exists
 	// only for split/obfuscated spellings, and must preserve the original ASCII
 	// word boundaries so `deploy` does not match the noun `deployment`.
@@ -7646,6 +7965,24 @@ func containsRuleIntentPrepared(text string, intents []string, patterns compactR
 	matched := compactRuleIntentOutsideLiteralSpansPrepared(text, patterns, nil, scratch)
 	releaseCompactRuleIntentClauseScratch(scratch)
 	return matched
+}
+
+func compactRuleIntentMayContainPatternStart(text string, patterns compactRuleIntentPatterns) bool {
+	if text == "" || len(patterns.values) == 0 {
+		return false
+	}
+	for _, r := range text {
+		if r < utf8.RuneSelf {
+			if patterns.asciiFirst[r] {
+				return true
+			}
+			continue
+		}
+		if patterns.hasNonASCIIFirst && len(patterns.byFirst[r]) != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func isASCIIStringLocal(value string) bool {
@@ -7816,6 +8153,16 @@ var directiveMarkers = [][]rune{
 	[]rune("但是"), []rune("然而"), []rune("然后"), []rune("改为"), []rune("实际"),
 }
 
+var directiveMarkerASCIIInitials = func() [utf8.RuneSelf]bool {
+	var initials [utf8.RuneSelf]bool
+	for _, marker := range directiveMarkers {
+		if len(marker) != 0 && marker[0] >= 0 && marker[0] < utf8.RuneSelf {
+			initials[int(marker[0])] = true
+		}
+	}
+	return initials
+}()
+
 type directiveBoundaryKind uint8
 
 const (
@@ -7868,7 +8215,7 @@ func walkDirectiveClausesWithBoundaryRangeIntentStarts(
 	boundaryBefore := directiveBoundaryNone
 	for index := 0; index < len(text); index++ {
 		width, boundaryKind := directiveBoundaryAt(text, index)
-		if width == 0 {
+		if width == 0 && text[index] == conditionalAndNowDirectiveMarker[0] {
 			width, boundaryKind = conditionalAndNowDirectiveBoundaryAt(text, start, index, intentStarts)
 		}
 		if width == 0 {
@@ -8175,6 +8522,8 @@ func directiveBoundaryWidth(text []rune, index int) int {
 func directiveBoundaryAt(text []rune, index int) (int, directiveBoundaryKind) {
 	r := text[index]
 	if r == compactHardBoundary {
+		// The valid internal sentinel survives rune-to-string round trips without
+		// conflating a literal U+FFFD in user content with a strong boundary.
 		return 1, directiveBoundaryStrong
 	}
 	switch r {
@@ -8197,6 +8546,9 @@ func directiveBoundaryAt(text []rune, index int) (int, directiveBoundaryKind) {
 		if !singleRuneTokensAround(text, index) {
 			return 1, directiveBoundaryStrong
 		}
+	}
+	if r >= 0 && r < utf8.RuneSelf && !directiveMarkerASCIIInitials[int(r)] {
+		return 0, directiveBoundaryNone
 	}
 	for markerIndex, marker := range directiveMarkers {
 		if len(text)-index < len(marker) {

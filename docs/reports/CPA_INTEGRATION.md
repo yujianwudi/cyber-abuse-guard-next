@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971
+current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
 ## Active compatibility target
@@ -28,6 +28,25 @@ primary_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 `CPA_COMPAT_PROFILE=primary` is the only accepted profile and is the release
 default. Old observations remain historical and are not current Host evidence.
+
+## 2026-07-29 validation status — engineering PASS, safety FAIL
+
+The last committed isolated-audit baseline is the exact audited commit
+`150c25e6352cb237cb3956bd66c83c3278c3fe33`, classifier
+historical classifier digest `e0cbc975...`,
+and CPA `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`. GitHub Actions
+run `30353591705` passed the engineering matrix for that exact baseline. It did
+not pass the safety gate: the isolated audit returned `FAIL / BLOCKED` with
+287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403
+cases, and 2 complete benign false positives.
+
+The current remediation source identifies as
+`classifier-policy-v9` /
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+No commit-bound CI or second-machine retest is available for that remediation.
+The active CPA integration and release state therefore remains
+`BLOCKED`; the engineering PASS for `150c25e6` cannot be relabeled as a safety,
+Host-release, or production PASS.
 
 ## Active validation commands
 
@@ -70,7 +89,9 @@ Actions artifact ID `8676831297` had upload digest
 This is admissible evidence only for the exact v7.2.103 identity and candidate
 bytes produced by that run. It is not protected counted-Mock, independent audit,
 external evaluation, production, or Release evidence, and must not be relabeled
-as a v7.2.104 PASS. The v7.2.104 lane must rebuild and rerun independently.
+as a v7.2.104 PASS. The later v7.2.104 baseline passed engineering CI at
+`150c25e6` but failed the isolated safety audit described above; the current
+remediation still requires a new exact-commit CI and second-machine retest.
 
 ## Historical v7.2.102 development validation
 
@@ -154,11 +175,13 @@ The current single-primary-profile matrix covers:
 - CPA Store archive naming, root layout, checksum, installation, repeat-install,
   overwrite, and published-artifact identity;
 - a native Linux integration target for plugin load and pre-upstream blocking;
-  the frozen v7.2.103 exact-main lane passed, while v7.2.104 exact-main evidence
-  remains pending;
+  the frozen v7.2.103 exact-main lane passed, and the v7.2.104 baseline passed
+  engineering CI at `150c25e6`, but its safety audit failed and remediation
+  exact-main evidence remains pending;
 - a second pure-C Router/executor fixture for priority, tie-break, fallback, and
-  target-readiness scenarios; the frozen v7.2.103 exact-main lane passed, while
-  v7.2.104 exact-main evidence remains pending.
+  target-readiness scenarios; the frozen v7.2.103 exact-main lane passed, and
+  the v7.2.104 baseline passed engineering CI at `150c25e6`, but its safety
+  audit failed and remediation exact-main evidence remains pending.
 
 The shared test fixtures under `integration/pluginstorecontract/testfixtures/`
 remain the current v7.2.104 contract inputs. The pure-C schema-1 Router fixture
