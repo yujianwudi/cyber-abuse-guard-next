@@ -66,6 +66,9 @@ binds the Go module Origin plus both checksums. All checked-in modules use the
 same v7.2.104 identity. No repository token is used. The target is intentionally
 pinned, so a later upstream Release does not silently change the supported
 source or Host target. Upstream-latest monitoring is separate and explicit:
+the required CI compatibility lane uses `CPA_COMPAT_VERIFY_REMOTE=1` with
+`CPA_COMPAT_REQUIRE_LATEST=0`, preserving exact tag/commit verification without
+coupling the supported pin to GitHub's moving latest Release.
 `CPA_COMPAT_REQUIRE_LATEST=1` additionally queries the official unauthenticated
 GitHub `releases/latest` endpoint and fails when the fixed target is no longer
 latest; that monitoring result does not invalidate compatibility with the

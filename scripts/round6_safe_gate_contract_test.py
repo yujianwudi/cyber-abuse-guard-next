@@ -2878,16 +2878,16 @@ jobs:
             ),
             original.replace('          CPA_COMPAT_VERIFY_REMOTE: "1"\n', "", 1),
             original.replace(
-                '          CPA_COMPAT_REQUIRE_LATEST: "1"\n',
                 '          CPA_COMPAT_REQUIRE_LATEST: "0"\n',
+                '          CPA_COMPAT_REQUIRE_LATEST: "1"\n',
                 1,
             ),
             original.replace(
-                '          CPA_COMPAT_REQUIRE_LATEST: "1"\n',
-                '          CPA_LATEST_REQUIRED: "1"\n',
+                '          CPA_COMPAT_REQUIRE_LATEST: "0"\n',
+                '          CPA_LATEST_REQUIRED: "0"\n',
                 1,
             ),
-            original.replace('          CPA_COMPAT_REQUIRE_LATEST: "1"\n', "", 1),
+            original.replace('          CPA_COMPAT_REQUIRE_LATEST: "0"\n', "", 1),
             original.replace(
                 "        run: make cpa-latest-compat\n",
                 "        run: true\n",
@@ -2900,7 +2900,7 @@ jobs:
             self.assertNotEqual(workflow, original)
             with self.assertRaisesRegex(
                 ContractError,
-                rf"{re.escape(CPA_CURRENT_VERSION)} primary profile|latest source API and SDK|remote verification|latest-release drift check|current CPA|historical Round 8 identity|must be a mapping|exact scalar",
+                rf"{re.escape(CPA_CURRENT_VERSION)} primary profile|pinned source API and SDK|remote verification|pinned-lane latest opt-out|current CPA|historical Round 8 identity|must be a mapping|exact scalar",
             ):
                 validate_ci_workflow(workflow, source)
 

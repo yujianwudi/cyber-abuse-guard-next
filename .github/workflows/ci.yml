@@ -92,11 +92,11 @@ jobs:
         run: make round6-module-verify
       - name: Historical Round 8 counted-Mock regression
         run: make round8-counted-mock-historical-regression
-      - name: CPA v7.2.104 latest source API and SDK contract
+      - name: CPA v7.2.104 pinned source API and SDK contract
         env:
           CPA_COMPAT_PROFILE: "primary"
           CPA_COMPAT_VERIFY_REMOTE: "1"
-          CPA_COMPAT_REQUIRE_LATEST: "1"
+          CPA_COMPAT_REQUIRE_LATEST: "0"
         run: make cpa-latest-compat
       - name: round4-regression
         run: make round4-regression

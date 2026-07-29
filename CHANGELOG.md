@@ -5,10 +5,15 @@ current_classifier_policy_version: classifier-policy-v9
 current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
 ```
 
-Source-tree status updated: 2026-07-28 (Asia/Shanghai)
+Source-tree status updated: 2026-07-30 (Asia/Shanghai)
 
 ## Unreleased - v0.16-rc.4 Round 9 candidate
 
+- Keep the required CI compatibility lane pinned to CPA v7.2.104 after the
+  upstream v7.2.105 release. CI still resolves and verifies the exact official
+  v7.2.104 Git tag, commit, module Origin, and checksums, while the moving
+  `releases/latest` probe remains an optional drift monitor rather than a
+  compatibility or release gate.
 - Repair the `150c25e6` isolation-audit findings with candidate-local quoted
   carrier ownership, request-local system/developer defensive-owner parity,
   bounded batch/streaming reactivation, real-credential phishing relations,

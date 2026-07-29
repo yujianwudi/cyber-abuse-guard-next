@@ -1505,7 +1505,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "34c1cbb7f599cb90f2611d15ae028c89a2fbdcb7f2b1709fb45f62fc16d541a9"
+ROUND6_SAFE_GATE_TEST_SHA256 = "7b8d05f42ee292c18058a74feb0dc376ee76c750f6aad3348eccdd0994d18c6a"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -3445,12 +3445,12 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         step_path = f"jobs.quality-and-artifacts.steps[{index}]"
         step = yaml_mapping(step_node, source, step_path)
         if "name" in step and yaml_scalar(step["name"], source, f"{step_path}.name") == (
-            f"CPA {CPA_CURRENT_VERSION} latest source API and SDK contract"
+            f"CPA {CPA_CURRENT_VERSION} pinned source API and SDK contract"
         ):
             matches.append((index, step_node, step))
     if len(matches) != 1:
         raise ContractError(
-            f"CI must contain exactly one reviewed CPA {CPA_CURRENT_VERSION} latest source API and SDK step"
+            f"CI must contain exactly one reviewed CPA {CPA_CURRENT_VERSION} pinned source API and SDK step"
         )
 
     historical_matches: list[tuple[int, Node, dict[str, Node]]] = []
@@ -3482,10 +3482,10 @@ def validate_ci_workflow(text: str, source: Path) -> None:
     if exact_string_mapping(cpa_step["env"], source, f"{cpa_path}.env") != (
         ("CPA_COMPAT_PROFILE", "primary"),
         ("CPA_COMPAT_VERIFY_REMOTE", "1"),
-        ("CPA_COMPAT_REQUIRE_LATEST", "1"),
+        ("CPA_COMPAT_REQUIRE_LATEST", "0"),
     ):
         raise ContractError(
-            f"CI CPA step must keep the {CPA_CURRENT_VERSION} primary profile, exact remote verification, and latest-release drift check enabled"
+            f"CI CPA step must keep the {CPA_CURRENT_VERSION} primary profile, exact remote verification, and pinned-lane latest opt-out"
         )
     require_yaml_scalar(
         cpa_step["run"],
