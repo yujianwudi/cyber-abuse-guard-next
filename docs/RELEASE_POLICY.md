@@ -1,7 +1,8 @@
 # Historical v0.16 Round 9 release admission policy
 
 > [!IMPORTANT]
-> This publication design was retired on 2026-07-30. The default branch now
+> This publication design was retired by the workflow cleanup. The default
+> branch now
 > contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create
 > or modify a GitHub Release. The owner performs independent server-side
 > sandbox review outside GitHub Actions. The remainder of this document is a

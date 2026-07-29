@@ -13,7 +13,7 @@ its YAML file is present here.
 The repository does not use an Actions workflow to create or publish a plugin
 Release. The owner performs independent server-side sandbox review separately.
 Historical candidate, prerelease, Round 8, RC, Host, promotion, and release
-workflows were removed from this executable directory on 2026-07-30; their
+workflows were removed from this executable directory; their
 definitions and run evidence remain recoverable from Git history.
 
 ## Naming and governance

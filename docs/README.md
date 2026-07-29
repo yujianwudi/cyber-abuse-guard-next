@@ -87,7 +87,7 @@ Current GitHub Actions entry points are intentionally limited to:
 CodeQL creates code-scanning evidence only. None of the three active workflows
 can publish a Release or use a self-hosted runner. Candidate, attestation,
 Round 8, Host, RC, formal-release, and promotion definitions were removed from
-the executable workflow directory on 2026-07-30 and remain recoverable from
+the executable workflow directory and remain recoverable from
 Git history.
 
 The retired attempted `v0.15-rc.2` workflow definition is archived under

@@ -74,7 +74,7 @@ or broader rules. Tag governance is separate from `main` protection and must
 not be inferred from the branch result.
 
 The successor repository protection was enabled on 2026-07-24 with those five
-contexts and rechecked during the 2026-07-30 workflow cleanup. This statement
+contexts and rechecked during this workflow cleanup. This statement
 is a configuration snapshot, not a substitute for the read-only API
 verification commands above.
 
