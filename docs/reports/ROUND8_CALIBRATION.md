@@ -2,8 +2,16 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+historical_report_classifier_policy_version: classifier-policy-v7
+historical_report_classifier_policy_sha256: ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d
+historical_report_ruleset_version: 1.0.9
 ```
+
+The `current_*` block above identifies the repository version carrying this
+report. It does not rebind the frozen metrics: the producing identity remains
+the exact `historical_report_*` identity recorded beside it and in the method
+section below.
 
 Status: **DEVELOPMENT SELF-CHECK / NOT BLIND OR HOLDOUT EVIDENCE**.
 

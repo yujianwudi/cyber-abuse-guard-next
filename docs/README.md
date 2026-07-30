@@ -2,14 +2,14 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
 The current project target is source validation on `main`, pinned to CPA
-v7.2.104. GitHub Actions no longer builds or publishes an RC or Release. The
+v7.2.109. GitHub Actions no longer builds or publishes an RC or Release. The
 owner performs the independent server-side sandbox review separately;
 production approval has not been granted and no stable `v0.16` exists.
 

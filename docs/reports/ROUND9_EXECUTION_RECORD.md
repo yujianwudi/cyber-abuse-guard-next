@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 This document is the single working record for the Round 9 Balanced redesign.
@@ -109,7 +109,7 @@ used as evidence for another boundary.
 | Evidence boundary | Required identity | Evidence path | Current status |
 |---|---|---|---|
 | Repository-local counted-Mock | Final source commit/tree and exact Linux candidate SHA-256 | No admissible result asset exists | `NOT_PROVIDED` |
-| Tencent Cloud #2 isolated counted-Mock | Same exact candidate, isolated loopback CPA v7.2.104 RPC schema-2 sandbox, no production/Provider/account/user contact | No admissible result asset exists | `NOT_PROVIDED` |
+| Tencent Cloud #2 isolated counted-Mock | Same exact candidate, isolated loopback CPA v7.2.109 RPC schema-2 sandbox, no production/Provider/account/user contact | No admissible result asset exists | `NOT_PROVIDED` |
 | Protected external evaluation and one-shot ledger | Same exact candidate, signed external-evaluation/counts, ledger event v3, and protected ledger proof v1 | No signed evaluation or ledger asset exists | `NOT_PROVIDED` |
 
 The task requires production to remain `mode=audit` and subject control to

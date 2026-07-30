@@ -1,8 +1,8 @@
-# CPA v7.2.104 schema-2 integration contract and frozen v7.2.103/v7.2.102 validation
+# CPA v7.2.109 schema-2 integration contract and frozen v7.2.104/v7.2.103/v7.2.102 validation
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 ## Active compatibility target
@@ -10,19 +10,19 @@ current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf54
 Cyber Abuse Guard pins the current Round 9 compatibility lane to one exact
 identity of `github.com/router-for-me/CLIProxyAPI/v7`:
 
-- formal target: `v7.2.104` at
-  `c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`, C ABI 1 / RPC schema 2.
+- formal target: `v7.2.109` at
+  `928478e4b91533cec05a763bfac3edad9c3e76cf`, C ABI 1 / RPC schema 2.
 
 The checked-in module layout is:
 
-- root `go.mod`: v7.2.104 primary;
-- `integration/cpalatestcontract/go.mod`: v7.2.104;
-- `integration/pluginstorecontract/go.mod`: v7.2.104 Store reference.
+- root `go.mod`: v7.2.109 primary;
+- `integration/cpalatestcontract/go.mod`: v7.2.109;
+- `integration/pluginstorecontract/go.mod`: v7.2.109 Store reference.
 
 The reviewed module identities are:
 
 ```text
-primary_module_sum: h1:59vZ1rtgxs6etE0Z3iFsLWgZ/MrcIi4mhXLt0XLSNcY=
+primary_module_sum: h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=
 primary_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 ```
 
@@ -42,7 +42,7 @@ cases, and 2 complete benign false positives.
 
 The current remediation source identifies as
 `classifier-policy-v9` /
-`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
 No commit-bound CI or second-machine retest is available for that remediation.
 The active CPA integration and release state therefore remains
 `BLOCKED`; the engineering PASS for `150c25e6` cannot be relabeled as a safety,
@@ -63,7 +63,7 @@ make round6-cpa-store-contract
 With `CPA_COMPAT_VERIFY_REMOTE=1`, the compatibility contract verifies the
 fixed Git tag-to-commit identity directly against the official Git origin and
 binds the Go module Origin plus both checksums. All checked-in modules use the
-same v7.2.104 identity. No repository token is used. The target is intentionally
+same v7.2.109 identity. No repository token is used. The target is intentionally
 pinned, so a later upstream Release does not silently change the supported
 source or Host target. Upstream-latest monitoring is separate and explicit:
 the required CI compatibility lane uses `CPA_COMPAT_VERIFY_REMOTE=1` with
@@ -72,9 +72,23 @@ coupling the supported pin to GitHub's moving latest Release.
 `CPA_COMPAT_REQUIRE_LATEST=1` additionally queries the official unauthenticated
 GitHub `releases/latest` endpoint and fails when the fixed target is no longer
 latest; that monitoring result does not invalidate compatibility with the
-reviewed v7.2.104 pin.
+reviewed v7.2.109 pin.
 `ALLOW_DIRTY_BUILD=1` is a development-only override and is not release
 evidence.
+
+## Frozen v7.2.104 exact-main engineering baseline
+
+Before v7.2.109 was published, exact main commit
+`46f26f9f822683aebb14b2c812ced2246d680fc2` completed GitHub Actions CI run
+[`30482492205`](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/runs/30482492205)
+against `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` and policy identity
+`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+Policy run `30482486027` and CodeQL run `30482486178` also passed. This is
+engineering source, SDK/API, Linux Host-load, and test evidence only for that
+exact CPA v7.2.104 identity. It is not protected counted-Mock, independent
+audit, external evaluation, production, or Release evidence, and it is not
+promoted to a v7.2.109 PASS. The v7.2.109 lane must rebuild and rerun
+independently.
 
 ## Frozen v7.2.103 exact-main baseline
 
@@ -146,7 +160,7 @@ transitive dependency graph did move `github.com/tiktoken-go/tokenizer` from
 v0.7.0 to v0.8.1 and `github.com/dlclark/regexp2` v1 to
 `github.com/dlclark/regexp2/v2` v2.5.1; the checked-in root module files reflect
 that reviewed upstream change. These results remain frozen development
-self-checks, not current v7.2.104, exact-main, or Host evidence.
+self-checks, not current v7.2.109, exact-main, or Host evidence.
 
 The pinned compatibility rerun is retained as
 `dist/round9-worklogs/cpa-v7.2.95-pinned-compat-go1.26.4-20260724.log`
@@ -155,7 +169,7 @@ The pinned compatibility rerun is retained as
 The separate `CPA_COMPAT_REQUIRE_LATEST=1` monitoring probe observed the
 official latest Release as v7.2.97 and therefore failed as designed. That
 result did not invalidate the then-selected v7.2.95 compatibility pin; neither
-historical observation overrides the current formal v7.2.104 identity above.
+historical observation overrides the current formal v7.2.109 identity above.
 
 ## Coverage
 
@@ -171,8 +185,8 @@ The current single-primary-profile matrix covers:
 - Interactions route, handler, translator, auth-selection, and direct-executor
   format contracts;
 - Raw Capture management-response transport and HTML-sanitization contracts on
-  the pinned CPA v7.2.104 source;
-- official v7.2.104 Responses continuation selectors for
+  the pinned CPA v7.2.109 source;
+- official v7.2.109 Responses continuation selectors for
   `previous_response_id`, Gemini interactions function calls and response-name
   backfill, and Gemini-to-OpenAI FIFO/fallback/explicit-ID translation paths;
 - CPA Store archive naming, root layout, checksum, installation, repeat-install,
@@ -187,7 +201,7 @@ The current single-primary-profile matrix covers:
   audit failed and remediation exact-main evidence remains pending.
 
 The shared test fixtures under `integration/pluginstorecontract/testfixtures/`
-remain the current v7.2.104 contract inputs. The pure-C schema-1 Router fixture
+remain the current v7.2.109 contract inputs. The pure-C schema-1 Router fixture
 is deliberately retained as a named legacy compatibility lane; it is not the
 production Guard enforcement path.
 
@@ -226,7 +240,7 @@ Store validation, integration compilation, and clean-tree verification. It did
 not run the native Host black-box or pure-C Router fixture targets.
 
 These commit, asset, and older CPA statements are retained only as historical
-baseline evidence. The current contract is fixed to CPA v7.2.104; exact
+baseline evidence. The current contract is fixed to CPA v7.2.109; exact
 tag/commit/tree, current CI, 17 asset hashes, and RC-versioned integration
 results are recorded at runtime in `rc-release-evidence.md` and
 `rc-release-manifest.json` rather than self-recorded in this source file.
@@ -241,7 +255,7 @@ this report is a claim that a production CPA process, real Provider, account
 pool, or production traffic was used.
 
 The remaining protected server evidence must load the clean exact Linux artifact
-in CPA v7.2.104 with a counted Mock upstream and reproduce zero deltas for
+in CPA v7.2.109 with a counted Mock upstream and reproduce zero deltas for
 locally blocked requests at Auth Selector, Provider execution, usage accounting,
 and Mock-upstream request layers. The local development blackbox proves a
 narrower boundary for its dirty `.so`: safe requests carry a CPA

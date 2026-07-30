@@ -379,9 +379,9 @@ CLEAN_EXECUTION_ENV_PATHS = {
 CPA_MODULE_PATH = "github.com/router-for-me/CLIProxyAPI/v7"
 CPA_ROUND8_VERSION = "v7.2.95"
 CPA_ROUND8_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
-CPA_CURRENT_VERSION = "v7.2.104"
-CPA_CURRENT_COMMIT = "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678"
-CPA_CURRENT_MODULE_SUM = "h1:59vZ1rtgxs6etE0Z3iFsLWgZ/MrcIi4mhXLt0XLSNcY="
+CPA_CURRENT_VERSION = "v7.2.109"
+CPA_CURRENT_COMMIT = "928478e4b91533cec05a763bfac3edad9c3e76cf"
+CPA_CURRENT_MODULE_SUM = "h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8="
 CPA_CURRENT_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 BLOCKED_TOP_LEVEL_KEYS = (
     "name",
@@ -1052,7 +1052,7 @@ CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
     "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
 }
-RC_RELEASE_SCRIPT_SHA256 = "66e78f68c532058cd10414c2bb4970b3e7e9073d7fb055d02339f0cb6b2a89db"
+RC_RELEASE_SCRIPT_SHA256 = "9d3704144468e89777ea75d40c27dc8bc932b1d05a2084117e938a0ec368d6e3"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
 RELEASE_BUILD_METADATA_SCRIPT_SHA256 = (
     "6d5312459fd238f35ddbdee6c79779cb340fba4029f49f7f6490b64f639a259c"
@@ -1174,7 +1174,7 @@ ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
-    "b942c0b905d638d708c6057274cb4c9ab1552ba796a26a4fbf81e89c3b155cda"
+    "9e5c855a5612a36727383e0f21b547c41651684b17f6b5026473d04ef2a18e1f"
 )
 ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1352,8 +1352,8 @@ ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
     "037b83d204226b759d847782406c750f445b8869953320a2acae0d6e11d3a152"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "e9d12c16f16b5cffe670c75117c9bfe00bb151af2185b42bf68d4e53b0602464",
-    "scripts/release-doc-consistency.sh": "604f9bf9f8574464437f69c9b1405d257f753c1ba29e7cd587a971bd63d0cf3d",
+    "scripts/release-doc-consistency-test.sh": "ae64a7a5c96d4d79d8b2bc216ae8601a331ca2e45a5927fd23d46191eac32a89",
+    "scripts/release-doc-consistency.sh": "576e9f6b0e6ec23e0503c9101e67904d5ef28918d625afc0bf25425c8f0b077b",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1377,7 +1377,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "c021099e8898b3622320f5df623d4ec3473c58e3f72dd435ccd9293be0d9dcdc"
+    "c915c701470066dcdac616685bcb68c0890a03b0811abb08135bebab30d8b698"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then
@@ -1403,14 +1403,14 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
     "scripts/round8_docker_sandbox.py": "30585beb793b7d35d842adce962fdc111eb76ef6a5ec963b6ab52470bbc64301",
 }
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
-    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "f1131ba45d7e2a111c90bfabaae83c96018597f9d984f4cd907a9497b64d8af5",
+    "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "d2ffad85eb62241a02f9549ccdb4f240445fbfe5636e262122a817c9071a650a",
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "f287236bbcc19213fffb86af899384db5090ebd5083ef09256737a2b1329c77a",
-    "tools/round9-eval/cag_round9_eval_broker.py": "f0d65129d6b97c38f9501fc9bde61c714b6a58cd13a4c3cdd90d42b4b14b3444",
-    "tools/round9-eval/cag_round9_eval_broker_test.py": "74a001b2e7a203d66bf56c3bfd3b36526f7ad3c41b7ae071fb64e1c955d887cd",
-    "tools/round9-eval/cag_round9_external_evaluator.py": "e8c2aa080a5e1874f922c4bc170744ac1cde7a03a52ee8043331f644c5a062fc",
-    "tools/round9-eval/cag_round9_external_evaluator_test.py": "5a9c9f84ae827dd4ea7282730dfced4d122144fe557edcaaa6ba1f2b2757d159",
-    "tools/round9-eval/round9_eval_core.py": "ece01a3da333a04f1ff70d984bb32ef70a090b55d1f41e0523fbe302a46c747d",
-    "tools/round9-eval/round9_eval_core_test.py": "6fd312efe0f64b097d2da0a0cdf78b779ed4d44607444ba7ab017ec81e74cae4",
+    "tools/round9-eval/cag_round9_eval_broker.py": "7b41e3d9236e6e962591b04339494256299993fe2991f5daa196e024c5f2e768",
+    "tools/round9-eval/cag_round9_eval_broker_test.py": "6bdb6f80f8e8a75c4202ec149178735756acfcb3a4fa5695cf5ed8fc5aa47a19",
+    "tools/round9-eval/cag_round9_external_evaluator.py": "274d881defcf761e86f5e71fcf77300b60a9d54da37a605f4ebff0808f801610",
+    "tools/round9-eval/cag_round9_external_evaluator_test.py": "86254e4f6492bf1f59fa2dd5ca0bc17a7e2dc1497341c27e02f9ad7ec11cf088",
+    "tools/round9-eval/round9_eval_core.py": "a11385d70fd057629e38f0bee03d24eeaa30207ddf793c94f359854e68abf293",
+    "tools/round9-eval/round9_eval_core_test.py": "5821d9016b8fa4b2c3c4fe6926dfaf4765c2c3173b126b11adfde52b99235bff",
     "tools/round9-eval/round9_eval_test_fixtures.py": "8b124e4c68f9576fa1d851bb86141a7d8bf3c216b8f41d3df2058dc2c7abfa62",
 }
 ROUND9_EVAL_SUBPROCESS_FUNCTION_CONTRACT = {
@@ -1457,7 +1457,7 @@ ROUND9_EVAL_INSTALL_SCRIPT_SHA256 = (
 )
 ROUND9_HOST_EVIDENCE_TEST_SCRIPT = "scripts/round9-host-evidence-test.py"
 ROUND9_HOST_EVIDENCE_TEST_SCRIPT_SHA256 = (
-    "fb39f95339a81c6bd90563d906821fcf19ba888f6bf165c6d954fe8aababe5ae"
+    "87520bd1ca47ccf9f04cc3848a3a2d5a36114953daec915777e98fc74e5fa6a0"
 )
 ROUND9_HOST_EVIDENCE_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1465,7 +1465,7 @@ ROUND9_HOST_EVIDENCE_TEST_SUBPROCESS_CONTRACT = (
 )
 ROUND9_HOST_EVIDENCE_SCRIPT = "scripts/round9_host_evidence.py"
 ROUND9_HOST_EVIDENCE_SCRIPT_SHA256 = (
-    "a57fb22dd148b40881370cda20bd2d1743aa985564f559c02edc0ac2438220e7"
+    "52a77e2501c3ae712af2895bdd283b2b45e351d20ce369f58404063e0f86cd75"
 )
 ROUND9_HOST_EVIDENCE_COMMAND_FUNCTION_CONTRACT = (
     1,

@@ -16,8 +16,8 @@ case "$rc_release_lane" in
     ;;
   round9)
     canonical_repository='yujianwudi/cyber-abuse-guard-next'
-    cpa_version='v7.2.104'
-    cpa_commit='c9417c8ae9b16fabc0386ca35d36f13bf8b1d678'
+    cpa_version='v7.2.109'
+    cpa_commit='928478e4b91533cec05a763bfac3edad9c3e76cf'
     ;;
   *) release_die "RC release assets require a reviewed lane identity" ;;
 esac

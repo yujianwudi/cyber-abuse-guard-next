@@ -80,7 +80,7 @@ func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
 // tells the interceptor adapter whether the router layer already accounted for
 // an operational failure, avoiding duplicate router_errors increments.
 func (p *Plugin) callModelRouteRequest(request pluginapi.ModelRouteRequest) (result modelRouteCallResult) {
-	// CPA v7.2.104 still routes Codex Alpha Search exclusively through the
+	// CPA v7.2.109 still routes Codex Alpha Search exclusively through the
 	// ModelRouter surface. For ordinary Host-originated requests, schema-v2
 	// RequestInterceptor is the production enforcement path and this registered
 	// router must be an O(1) no-op to avoid duplicate classification. Direct
@@ -474,7 +474,7 @@ func extractionProfile(format string) (extract.RequestProfile, bool) {
 	case "interactions":
 		profile.Source = extract.SourceProfileInteractions
 	case audit.SourceFormatCodexAlphaSearch:
-		// CPA v7.2.104 exposes Alpha Search model payloads only to ModelRouter.
+		// CPA v7.2.109 exposes Alpha Search model payloads only to ModelRouter.
 		// They have no chat-role envelope, so treat their model-visible strings as
 		// direct untrusted text while retaining a distinct structural profile.
 		profile.Source = extract.SourceProfileCodexAlphaSearch

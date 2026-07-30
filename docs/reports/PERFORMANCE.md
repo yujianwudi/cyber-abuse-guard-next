@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 Last updated: 2026-07-29 (Asia/Shanghai)
@@ -11,23 +11,16 @@ Last updated: 2026-07-29 (Asia/Shanghai)
 
 The final Round 9 classifier/source snapshot has not been frozen. The current
 source identity is `classifier-policy-v9` /
-`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`
+`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
-The complete `make round6-benchmark` recipe was rerun in isolation on 2026-07-30
-under WSL Ubuntu 26.04, Linux amd64, and Go 1.26.4; every built-in acceptance
-test and benchmark lane passed. The 10,000-sample classifier run recorded
-P50/P95/P99 `328.852 us / 412.093 us / 558.688 us`, candidate-rich and
-near-budget adversarial cases `35.943486/16.983200 ms/op`, the approximately
-1 MiB META wrapper at `113.071336 ms/op`, and the
-1,024-unique-prohibition boundary at `80.469498 ms/op`. The separate 1 MiB
-profiled defensive-quote microbenchmark measured
-`198.164561-211.251020 ms/op`, below the external `<250 ms/op>` optimization
-target and materially below the older `344.061658-366.730649 ms/op` evidence.
-This closes the local microbenchmark residual without implying Host behavior.
-Exact-commit CI, CPA Host resource measurements, and the
-Tencent Cloud #2 matrix remain **PENDING** for
-`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+CPA v7.2.109 changes only the dependency lock inside the classifier identity;
+no classifier behavior or benchmark source changed. Exact-commit performance,
+CPA Host resource measurements, and the Tencent Cloud #2 matrix remain
+**PENDING** for
+`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
+The complete isolated benchmark results below remain frozen to the predecessor
+CPA v7.2.104 identity `e7a00b02...` and are not reattributed.
 
 Evidence from the two immediate predecessors is retained without rebinding.
 Historical frozen main `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` used exact
@@ -68,7 +61,7 @@ reproducible Linux
 
 | Round 9 evidence | Current status |
 |---|---|
-| Current `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14` performance acceptance | **LOCAL LINUX SOURCE-ONLY PASS.** Isolated `make round6-benchmark` passed under WSL Ubuntu 26.04 / Linux amd64 / Go 1.26.4. Classifier P50/P95/P99 were `328.852/412.093/558.688 us`; candidate-rich/near-budget were `35.943486/16.983200 ms/op`; long META was `113.071336 ms/op`; the 1,024-unique-prohibition boundary was `80.469498 ms/op`. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, below the external `<250 ms/op` target. No CPA Host, exact-commit CI, or independent performance PASS is inferred. |
+| Frozen CPA v7.2.104 / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14` performance acceptance | **HISTORICAL LOCAL LINUX SOURCE-ONLY PASS.** Isolated `make round6-benchmark` passed under WSL Ubuntu 26.04 / Linux amd64 / Go 1.26.4. Classifier P50/P95/P99 were `328.852/412.093/558.688 us`; candidate-rich/near-budget were `35.943486/16.983200 ms/op`; long META was `113.071336 ms/op`; the 1,024-unique-prohibition boundary was `80.469498 ms/op`. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, below the external `<250 ms/op` target. No current v7.2.109, CPA Host, exact-commit CI, or independent performance PASS is inferred. |
 | Historical `150c25e6...` / `e0cbc975...` engineering and audit result | **ENGINEERING CI PASS / SECURITY AUDIT FAIL BLOCKED.** Exact-HEAD CI run `30353591705` passed, but the Tencent Cloud #2 isolated audit found 287 complete malicious fail-open cases, 36 malicious incomplete 403 cases, and 2 complete benign false positives. No performance acceptance is inferred for either that identity or the current tree. |
 | Historical `1a64639c...` / `f9529ada...` classifier gate | **HISTORICAL SOURCE-ONLY PASS.** The isolated classifier gate passed with P95 `1.5067 ms` against `<2 ms`, and the directive-overflow boundary reached at most `153.72 ms` against `<175 ms`. The complete `make round6-benchmark` recipe remained pending; this PASS is bound only to `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` and `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`. |
 | Pre-refresh complete local Linux development recipe (`2c968f70...`) | **HISTORICAL DEVELOPMENT SELF-CHECK PASS.** The complete recipe produced the detailed latency/allocation figures recorded above, including the long-prompt follow-up. It predates the current referent-policy identity and is not current-source, Host, artifact, or release evidence. |
@@ -80,7 +73,7 @@ reproducible Linux
 | Pre-fix normalized multilingual long-frame signal pass (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Three isolated Go 1.26.4 `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` runs measured 0.355-0.363 ms/op at 16 KiB (45.15-46.21 MB/s, 810-813 B/op, 2 allocs/op) and 22.230-22.564 ms/op at 1 MiB (46.47-47.17 MB/s, 841-847 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path measured 7.873-8.598 ms/op at 16 KiB (543,028-563,462 B/op, 108-110 allocs/op) and 250.230-259.302 ms/op at 1 MiB (16,886,254-17,299,688 B/op, 333-339 allocs/op). These are historical WSL source microbenchmarks, not current-identity or CPA Host evidence |
 | Pre-fix directive-clause overflow wall-clock boundary (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS WITH LIMITED CONCURRENT HEADROOM.** Three isolated Go 1.26.4 runs measured the 1,024-unique-prohibition case at 93.324-97.670 ms/op, and a later exact-commit isolated rerun measured 99.842 ms/op, 449,483 B/op, and 2,103 allocs/op against the `<175 ms/op` gate. The independent audit also observed 184-198 ms/op when unrelated package work ran concurrently. Keep the deterministic wall-clock gate isolated and treat Host concurrency, RSS, P95/P99, and near-8 MiB fields as a separate acceptance lane; no current-policy or CPA Host latency/throughput result is inferred |
 | Pre-fix diagnostic retained as history | The earlier working-tree snapshot recorded 14.948-16.418 s/op, approximately 397 MB/op, and about 1.077 million allocs/op. Its CPU profile (`6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69`) and memory profile (`fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6`) remain diagnostic chronology only and are not attributed to the current classifier identity |
-| Classifier latency and allocation acceptance on the current source identity | **LOCAL LINUX SOURCE-ONLY PASS.** The isolated hard acceptance tests and complete benchmark recipe passed for `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; final commit/tree, exact candidate artifact, CPA Host, and independent binding are not provided. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, satisfying the external `<250 ms/op` local optimization target. |
+| Classifier latency and allocation acceptance on the current source identity | **REVALIDATION PENDING.** The isolated hard acceptance tests and complete benchmark recipe passed for predecessor `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; they are not rebound to `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`. Final commit/tree, exact candidate artifact, CPA Host, and independent binding are not provided. |
 | Standalone and CPA Host RSS on the exact candidate | `NOT_PROVIDED` |
 | CPA Host latency, throughput, concurrency, and first-byte behavior | `NOT_PROVIDED` |
 | Repository-local counted-Mock runtime performance | `NOT_PROVIDED` |
@@ -117,10 +110,10 @@ is inferred from those source-only checks.
 The current remediation includes bounded classifier, streaming proof-budget,
 and eligibility-path changes. Historical `1a64639c` / `f9529ada...` has the isolated
 classifier evidence recorded above; its complete benchmark recipe remained
-pending. The current
+pending. The frozen CPA v7.2.104 /
 `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`
-identity passed the complete local recipe but
-still requires separate CPA Host concurrency/RSS/tail-latency evidence, and its
+identity passed the complete local recipe but still requires separate CPA Host
+concurrency/RSS/tail-latency evidence, and its
 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`,
 below the external `<250 ms/op` local target, before any broader performance claim.
 

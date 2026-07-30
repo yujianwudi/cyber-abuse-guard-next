@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 Last updated: 2026-07-22 (Asia/Shanghai)
@@ -16,8 +16,8 @@ Last updated: 2026-07-22 (Asia/Shanghai)
 > The current formal CPA identity is:
 >
 > ```text
-> current_formal_cpa: v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678
-> current_module_sum: h1:59vZ1rtgxs6etE0Z3iFsLWgZ/MrcIi4mhXLt0XLSNcY=
+> current_formal_cpa: v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf
+> current_module_sum: h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
 

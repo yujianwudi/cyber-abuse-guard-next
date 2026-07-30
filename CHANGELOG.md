@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 Source-tree status updated: 2026-07-30 (Asia/Shanghai)
@@ -15,6 +15,23 @@ Source-tree status updated: 2026-07-30 (Asia/Shanghai)
   active policy workflow filename to `policy-gate.yml`; retain stable required
   job contexts for branch protection; and update the workflow inventory and
   repository-governance documentation.
+
+- Advance the sole active CPA contract to official `v7.2.109`
+  (`928478e4b91533cec05a763bfac3edad9c3e76cf`) and module sum
+  `h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=` while retaining C ABI 1,
+  RPC schema 2, and the existing go.mod sum. The reviewed v7.2.104→v7.2.109
+  upstream range changes Codex model resolution, auth-file credential weights,
+  translators, and provider executors, but does not modify `sdk/pluginabi`,
+  `sdk/pluginapi`, `internal/pluginhost`, RequestInterceptor, the plugin RPC
+  lifecycle, or the upstream ModelRouter capability/dispatch implementation.
+  ModelRouter's global registration and oversized-RPC fallback already existed
+  in v7.2.104; they are documented for v7.2.109 but were not introduced by this
+  upstream range. Because the classifier identity binds `go.mod` and
+  `go.sum`, unchanged classifier behavior is rebound from the frozen CPA
+  v7.2.104 identity `e7a00b02...` to
+  `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
+  Earlier v7.2.104 CI and audit records remain historical evidence and are not
+  promoted to a v7.2.109 Host, sandbox, or production PASS.
 
 - Keep the required CI compatibility lane pinned to CPA v7.2.104 after the
   upstream v7.2.105 release. CI still resolves and verifies the exact official

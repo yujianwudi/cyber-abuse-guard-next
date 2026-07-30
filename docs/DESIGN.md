@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 ## Scope, release state, and invariants
@@ -16,9 +16,9 @@ be overwritten, relabeled, repaired, or republished as current Round 9 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.104` at
-  `c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`, module sum
-  `h1:59vZ1rtgxs6etE0Z3iFsLWgZ/MrcIi4mhXLt0XLSNcY=`, and `go.mod` sum
+- CPA `v7.2.109` at
+  `928478e4b91533cec05a763bfac3edad9c3e76cf`, module sum
+  `h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=`, and `go.mod` sum
   `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 
 The root module, `integration/cpalatestcontract`, and
@@ -68,7 +68,7 @@ audit-migration, and operator-owned rollback contracts are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Exact-main CI,
-counted-Mock Host validation on the sole pinned CPA v7.2.104 identity, and
+counted-Mock Host validation on the sole pinned CPA v7.2.109 identity, and
 independent audit remain mandatory; self-tests do not authorize production
 Balanced mode.
 
@@ -91,7 +91,7 @@ Its JSON RPC registration uses schema version 2 and declares:
   has no untrusted mutator that runs after Guard at the final interceptor stage;
 - `request_lifecycle_plugin`: remove the bounded, TTL-limited opaque RequestID
   and fingerprint entry for succeeded, failed, rejected, or canceled requests;
-- `model_router: true`: only the CPA v7.2.104 `codex-alpha-search` compatibility
+- `model_router: true`: only the CPA v7.2.109 `codex-alpha-search` compatibility
   entry is handled because those two HTTP routes do not invoke
   RequestInterceptor. Host-originated Router callbacks for every other format
   return `Handled:false` without classification; ordinary enforcement remains
@@ -113,8 +113,9 @@ executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
 before Codex auth or upstream because that handler currently accepts only a
 `provider=codex` target.
 
-CPA v7.2.104 exposes `ModelRouter` as a global capability rather than a
-source-format-scoped capability. Once CAG registers it for Alpha Search, an
+CPA v7.2.109, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
+global capability rather than a source-format-scoped capability. Once CAG
+registers it for Alpha Search, an
 ordinary routed request still incurs CPA's body clone, JSON/Base64
 serialization, and Router RPC before CAG can return `Handled:false`; the plugin
 fast path cannot remove that Host-side O(n) work. For a native RPC above 8 MiB,
@@ -889,7 +890,7 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-Both v7.2.104 compatibility contract modules first prove that the named critical
+Both v7.2.109 compatibility contract modules first prove that the named critical
 upstream Host tests still exist and then each executes the complete upstream
 `internal/pluginhost` package for the current platform. Their CI coverage is
 intentionally overlapping; it is neither an exact-name-only run nor a pair of
@@ -898,7 +899,7 @@ non-duplicative contracts. The plugin-store module also calls the official
 real build artifact. These checks cover store naming, root-only library layout,
 checksum, installed path/bytes, repeat installation, tamper repair, priority
 ordering, and documented Host fallback. They remain source/installer
-compatibility evidence. Current admission requires the v7.2.104 counted-Mock
+compatibility evidence. Current admission requires the v7.2.109 counted-Mock
 Host run on the same candidate and independent verification.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,
