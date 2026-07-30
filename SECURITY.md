@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 ## Supported versions
@@ -43,7 +43,7 @@ operator's normal incident process.
 
 The legacy `raw_preview` response field remains available for compatibility
 but is deprecated. `raw_preview_b64` is the canonical byte-stable transport
-field for the single pinned CPA v7.2.104 lane. Base64 is not encryption, access
+field for the single pinned CPA v7.2.109 lane. Base64 is not encryption, access
 control, or additional
 redaction; its decoded UTF-8 text remains sensitive request content. Review
 clients must insert decoded content into a plain-text node (for example,

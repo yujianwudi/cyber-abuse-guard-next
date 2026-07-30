@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 ## 2026-07-29 当前审计与修复门禁
@@ -26,14 +26,16 @@ CI `30353591705` 只证明上述精确 HEAD 的工程构建与测试门禁通过
 因此该基线不得发布、部署或恢复生产 Balanced。
 
 当前候选修复的源码身份是 `classifier-policy-v9` /
-`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`。
-它不是新的已审计候选：提交绑定 CI 和二号机隔离重验均为
-`PENDING`。在三类失败全部由绑定同一精确提交的新证据关闭前，当前结论保持：
+`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`，固定 CPA
+`v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf`。这是从冻结的 CPA
+v7.2.104 / `e7a00b02...` 身份进行的依赖重绑定，不是新的已审计候选：提交绑定 CI
+和二号机隔离重验均为 `PENDING`。在三类失败全部由绑定同一精确提交的新证据关闭前，
+当前结论保持：
 
 ```text
 ENGINEERING BASELINE PASS / SECURITY AUDIT FAIL /
 CURRENT POLICY IDENTITY RECORDED / LOCAL LINUX SOURCE GATES PASS /
-CPA V7.2.104 SOURCE_COMPILE CONTRACT PASS /
+CPA V7.2.109 SOURCE_COMPILE CONTRACT REVALIDATION PENDING /
 EXACT-COMMIT CI AND SECOND-MACHINE RETEST PENDING /
 BLOCKED
 ```
@@ -383,7 +385,7 @@ upstream Host 验收或独立源码/artifact 复核，更不能推翻唯一方�
 `CONSUMED / FAIL`。
 
 旧版 CPA 兼容性门禁、校验和与 CI 记录仅作为历史事实保留在 CHANGELOG 和归档报告中；
-它们不是当前 v7.2.104 准入证据，也不得替代本轮精确源码、Host 与独立审计门禁。
+它们不是当前 v7.2.109 准入证据，也不得替代本轮精确源码、Host 与独立审计门禁。
 
 第五轮审计必须单独确认以下宿主边界：
 

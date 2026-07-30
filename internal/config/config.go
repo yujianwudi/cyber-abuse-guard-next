@@ -570,11 +570,11 @@ func validateDataDir(path string) error {
 
 func validateTrustedProxy(p TrustedProxy) error {
 	if p.Enabled {
-		// CPA v7.2.104 does not expose the direct peer address to request interceptors.
+		// CPA v7.2.109 does not expose the direct peer address to request interceptors.
 		// Without that value the plugin cannot prove that a forwarded header was
 		// supplied by one of the configured proxies, so enabling it would make the
 		// subject bucket attacker-controlled.
-		return invalidf("trusted_proxy.enabled is unsupported with CPA v7.2.104 because request interception has no trusted peer address")
+		return invalidf("trusted_proxy.enabled is unsupported with CPA v7.2.109 because request interception has no trusted peer address")
 	}
 	if p.Header != "" && !isHTTPToken(p.Header) {
 		return invalidf("trusted_proxy.header must be a valid HTTP field name")

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 Last updated: 2026-07-29 (Asia/Shanghai)
@@ -11,7 +11,7 @@ Last updated: 2026-07-29 (Asia/Shanghai)
 
 The active development target is Linux amd64 `v0.16-rc.4`,
 classifier-policy-v9, ruleset 1.0.10, audit schema v6, and CPA
-`v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678` with RPC schema 2. The protected Host lane may
+`v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` with RPC schema 2. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
 counted Mock.
 
@@ -25,7 +25,7 @@ returned HTTP 403, and 2 complete benign cases were false positives.
 
 The current source snapshot carries a remediation at
 `classifier-policy-v9` /
-`e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`.
+`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
 It has no commit-bound CI or second-machine retest. Final remediation freeze,
 exact-main CI, reproducible release assets, protected
 Host execution, independent re-audit, tag, and GitHub prerelease remain pending.
@@ -44,7 +44,7 @@ audited_classifier_policy_digest: e0cbc975... / historical exact value retained 
 engineering_ci: 30353591705 / PASS / ENGINEERING ONLY
 safety_audit: FAIL / BLOCKED
 safety_findings: complete_malicious_fail_open=287 / malicious_incomplete_http_403=36 / complete_benign_false_positive=2
-remediation_source_snapshot: classifier-policy-v9 / e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14 / SOURCE GATES ONLY
+remediation_source_snapshot: classifier-policy-v9 / 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87 / SOURCE GATES ONLY
 remediation_exact_commit_ci: PENDING
 second_machine_retest: PENDING
 counted_mock_host: NOT_PROVIDED

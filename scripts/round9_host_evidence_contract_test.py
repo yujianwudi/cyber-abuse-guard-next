@@ -190,7 +190,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
             },
             "cpa": {
                 "primary": {
-                    "version": "v7.2.104",
+                    "version": "v7.2.109",
                     "commit": contract.CPA_COMMIT,
                     "image_id": "sha256:" + "5" * 64,
                     "build_date": "2026-07-23T00:00:00Z",

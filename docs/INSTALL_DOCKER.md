@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 ## Current source status
@@ -12,8 +12,8 @@ plugin release, production approval, or Balanced-mode admission is implied.
 Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
 reuse or relabel them as a build of the current source.
 
-Linux amd64 and CPA v7.2.104
-(`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) are the only compatibility target.
+Linux amd64 and CPA v7.2.109
+(`928478e4b91533cec05a763bfac3edad9c3e76cf`) are the only compatibility target.
 Runtime validation must use an isolated counted-Mock upstream with no real
 Provider or account pool. A sandbox PASS is engineering evidence only and does
 not replace independent source review or the external admission policy.
@@ -51,7 +51,7 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
 
 ## Preconditions
 
-- Run the candidate bytes against CPA v7.2.104 built with `CGO_ENABLED=1`.
+- Run the candidate bytes against CPA v7.2.109 built with `CGO_ENABLED=1`.
   Assets labelled `_no-plugin`
   cannot load native plugins. Source/compile compatibility does not substitute
   for loading the candidate `.so`. Earlier CPA checks are historical
@@ -390,7 +390,7 @@ Verify New API → CPA using an ordinary harmless request, confirm other plugins
 still behave normally, and compare the current CPA auth-file list with the saved
 inventory. Installation must not create, delete, or modify auth files.
 
-The CPA v7.2.104 Host matrix must cover OpenAI Chat, OpenAI Responses,
+The CPA v7.2.109 Host matrix must cover OpenAI Chat, OpenAI Responses,
 Claude, and Gemini allow/refusal paths, including streaming pre-SSE 403,
 Anthropic/Gemini token-count 403, and zero Auth Selector, Provider, Usage, and
 Mock Upstream counters for blocked requests. Ordinary CI does not execute that

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14
+current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
 Status: **NOT AUTHORIZED FOR EXECUTION BY CODEX**.
@@ -21,7 +21,7 @@ Before touching a production pool, record and independently verify:
 - Linux amd64 SO byte count and SHA-256;
 - classifier version and SHA-256;
 - ruleset version and SHA-256;
-- CPA `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`;
+- CPA `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf`;
 - checksum, SBOM, release manifest, artifact attestation, local counted-Mock
   evidence, Tencent counted-Mock evidence, and independent benign/malicious
   reports;

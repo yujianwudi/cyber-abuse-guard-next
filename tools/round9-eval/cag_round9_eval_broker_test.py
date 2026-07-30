@@ -543,8 +543,8 @@ class BrokerIdentityContractTest(unittest.TestCase):
             "artifact_count": len(ARTIFACT_NAMES),
             "cpa": {
                 "primary": {
-                    "version": "v7.2.104",
-                    "commit": "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678",
+                    "version": "v7.2.109",
+                    "commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
                     "source_compatibility": "PASS",
                     "counted_mock_validation": "NOT_RUN / EXTERNAL_EVALUATION_REQUIRED",
                 },
@@ -602,8 +602,8 @@ class BrokerIdentityContractTest(unittest.TestCase):
                     "asset_allowlist": sorted(ARTIFACT_NAMES),
                 },
                 "cpa_contract": {
-                    "version": "v7.2.104",
-                    "commit": "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678",
+                    "version": "v7.2.109",
+                    "commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
                     "upstream_version_policy": "fixed-no-automatic-follow",
                 },
             },
@@ -633,7 +633,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
             },
         )
         self.assertEqual(candidate["source_version"], "0.16")
-        self.assertEqual(candidate["cpa_version"], "v7.2.104")
+        self.assertEqual(candidate["cpa_version"], "v7.2.109")
         self.assertEqual(candidate["classifier_policy_sha256"], self.args.classifier_policy_sha256)
 
     def test_phase1_manifest_requires_schema6_and_closed_external_placeholders(self) -> None:
@@ -1412,8 +1412,8 @@ class BrokerIdentityContractTest(unittest.TestCase):
             "corpus": corpus,
             "sandbox": {
                 "candidate_so_sha256": "6" * 64,
-                "cpa_version": "v7.2.104",
-                "cpa_commit": "c9417c8ae9b16fabc0386ca35d36f13bf8b1d678",
+                "cpa_version": "v7.2.109",
+                "cpa_commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
                 "cpa_image_id": execution["cpa_image_id"],
                 "counted_mock_image_id": execution["counted_mock_image_id"],
                 "sandbox_id": execution["sandbox_id"],

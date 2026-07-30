@@ -106,7 +106,7 @@ plugins:
         max_migration_backups: 3
 
       trusted_proxy:
-        # CPA v7.2.104 request interception lacks a trustworthy direct-peer address;
+        # CPA v7.2.109 request interception lacks a trustworthy direct-peer address;
         # v0.16 therefore rejects enabled: true instead of trusting spoofable headers.
         enabled: false
         header: X-Forwarded-For
