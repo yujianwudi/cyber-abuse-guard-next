@@ -1405,8 +1405,8 @@ ROUND8_HOST_REVIEWED_SCRIPT_SHA256 = {
 ROUND9_EVAL_REVIEWED_SCRIPT_SHA256 = {
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter.py": "d2ffad85eb62241a02f9549ccdb4f240445fbfe5636e262122a817c9071a650a",
     "tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py": "f287236bbcc19213fffb86af899384db5090ebd5083ef09256737a2b1329c77a",
-    "tools/round9-eval/cag_round9_eval_broker.py": "c393d6bb16c40641126ee7966e9dd03c9b8e60bf75f71e3710d83d38deabd9e1",
-    "tools/round9-eval/cag_round9_eval_broker_test.py": "9409b174f625166ae2023a19ff8877f18ab4cd85648b599a0f93d9f4f4ef6cb7",
+    "tools/round9-eval/cag_round9_eval_broker.py": "7b41e3d9236e6e962591b04339494256299993fe2991f5daa196e024c5f2e768",
+    "tools/round9-eval/cag_round9_eval_broker_test.py": "6bdb6f80f8e8a75c4202ec149178735756acfcb3a4fa5695cf5ed8fc5aa47a19",
     "tools/round9-eval/cag_round9_external_evaluator.py": "274d881defcf761e86f5e71fcf77300b60a9d54da37a605f4ebff0808f801610",
     "tools/round9-eval/cag_round9_external_evaluator_test.py": "86254e4f6492bf1f59fa2dd5ca0bc17a7e2dc1497341c27e02f9ad7ec11cf088",
     "tools/round9-eval/round9_eval_core.py": "a11385d70fd057629e38f0bee03d24eeaa30207ddf793c94f359854e68abf293",

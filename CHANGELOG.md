@@ -22,8 +22,11 @@ Source-tree status updated: 2026-07-30 (Asia/Shanghai)
   RPC schema 2, and the existing go.mod sum. The reviewed v7.2.104→v7.2.109
   upstream range changes Codex model resolution, auth-file credential weights,
   translators, and provider executors, but does not modify `sdk/pluginabi`,
-  `sdk/pluginapi`, `internal/pluginhost`, RequestInterceptor, ModelRouter, or
-  the plugin RPC lifecycle. Because the classifier identity binds `go.mod` and
+  `sdk/pluginapi`, `internal/pluginhost`, RequestInterceptor, the plugin RPC
+  lifecycle, or the upstream ModelRouter capability/dispatch implementation.
+  ModelRouter's global registration and oversized-RPC fallback already existed
+  in v7.2.104; they are documented for v7.2.109 but were not introduced by this
+  upstream range. Because the classifier identity binds `go.mod` and
   `go.sum`, unchanged classifier behavior is rebound from the frozen CPA
   v7.2.104 identity `e7a00b02...` to
   `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.

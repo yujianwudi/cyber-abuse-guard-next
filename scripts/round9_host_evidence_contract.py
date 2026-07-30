@@ -25,6 +25,7 @@ CONTRACT_SCHEMA = "round9-evaluation-contract/v1"
 TAG = "v0.16-rc.4"
 CPA_VERSION = "v7.2.109"
 CPA_COMMIT = "928478e4b91533cec05a763bfac3edad9c3e76cf"
+VALIDATION_SCOPE = "CPA_V7_2_109_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION"
 CPA_HOST_IP = "127.0.0.1"
 CPA_HOST_PORT = 18394
 CPA_CONTAINER_PORT = 8317
@@ -1542,7 +1543,7 @@ def build_evidence(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "schema_version": 1,
-        "validation_scope": "CPA_V7_2_95_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION",
+        "validation_scope": VALIDATION_SCOPE,
         "candidate": {
             "tag": TAG,
             "commit": commit,
@@ -1660,7 +1661,7 @@ def validate_evidence(value: dict[str, Any], args: argparse.Namespace) -> None:
     )
     if value["schema"] != SCHEMA or value["schema_version"] != 1:
         fail("Round 9 Host evidence schema identity is invalid")
-    if value["validation_scope"] != "CPA_V7_2_95_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION":
+    if value["validation_scope"] != VALIDATION_SCOPE:
         fail("Round 9 Host evidence scope is invalid")
     candidate = exact_keys(
         value["candidate"],

@@ -5,6 +5,10 @@ current_classifier_policy_version: classifier-policy-v9
 current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
 ```
 
+The `current_*` block above identifies the repository version carrying this
+report. It does not rebind the frozen metrics: the producing identity remains
+`classifier-policy-v7` / `ea8c4dcf...` with ruleset `1.0.9`, as recorded below.
+
 Status: **DEVELOPMENT SELF-CHECK / NOT BLIND OR HOLDOUT EVIDENCE**.
 
 This report is deterministically generated from the public, synthetic Round 8 paired-mutation fixture. It contains only aggregate classifier metadata and no request text. The generated metrics load no `evaluation-v10`, retired/private dataset, or blind-holdout samples.

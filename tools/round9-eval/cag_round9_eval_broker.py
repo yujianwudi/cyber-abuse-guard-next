@@ -81,6 +81,8 @@ CONFIG_PATH = Path("/etc/cag-round9-eval-broker/config.json")
 CONFIG_SCHEMA = "round9-eval-broker-config/v1"
 ADAPTER_CONFIG_SCHEMA = "round9-cpa-sandbox-adapter-config/v1"
 TAG = "v0.16-rc.4"
+CPA_VERSION = "v7.2.109"
+CPA_COMMIT = "928478e4b91533cec05a763bfac3edad9c3e76cf"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
 HOST_WORKFLOW = ".github/workflows/round9-host-validation.yml"
 HOST_WORKFLOW_NAME = "Round 9 protected CPA Host validation"
@@ -1542,8 +1544,8 @@ def candidate_identity(args: argparse.Namespace, assets: dict[str, str]) -> dict
             "commit": args.commit,
             "tree": args.tree,
             "so_sha256": assets["so_sha256"],
-            "cpa_version": "v7.2.109",
-            "cpa_commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
+            "cpa_version": CPA_VERSION,
+            "cpa_commit": CPA_COMMIT,
             "classifier_policy_version": assets["classifier_policy_version"],
             "classifier_policy_sha256": assets["classifier_policy_sha256"],
             "ruleset_version": assets["ruleset_version"],
@@ -1570,8 +1572,8 @@ def execution_identity(config: dict[str, Any], args: argparse.Namespace) -> dict
             "sandbox_id": sandbox["sandbox_id"],
             "daemon_id": sandbox["daemon_id"],
             "probe_image_id": sandbox["probe_image_id"],
-            "cpa_version": "v7.2.109",
-            "cpa_commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
+            "cpa_version": CPA_VERSION,
+            "cpa_commit": CPA_COMMIT,
             "cpa_image_id": sandbox["cpa_image_id"],
             "counted_mock_image_id": sandbox["counted_mock_image_id"],
             "model": sandbox["model"],
@@ -1752,8 +1754,8 @@ def validate_external_aggregate(
         or sandbox["sandbox_id"] != execution["sandbox_id"]
         or sandbox["daemon_id"] != execution["daemon_id"]
         or sandbox["probe_image_id"] != execution["probe_image_id"]
-        or sandbox["cpa_version"] != "v7.2.109"
-        or sandbox["cpa_commit"] != "928478e4b91533cec05a763bfac3edad9c3e76cf"
+        or sandbox["cpa_version"] != execution["cpa_version"]
+        or sandbox["cpa_commit"] != execution["cpa_commit"]
         or sandbox["cpa_image_id"] != execution["cpa_image_id"]
         or sandbox["counted_mock_image_id"] != execution["counted_mock_image_id"]
         or sandbox["network_binding"] != execution["network_binding"]

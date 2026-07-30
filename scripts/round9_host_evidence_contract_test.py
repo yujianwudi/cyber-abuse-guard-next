@@ -480,6 +480,8 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
     def test_round9_envelope_assembles_and_validates(self):
         args = self.assemble_args()
         contract.assemble(args)
+        assembled = json.loads(args.output.read_text(encoding="utf-8"))
+        self.assertEqual(assembled["validation_scope"], contract.VALIDATION_SCOPE)
         check = contract.parser().parse_args(
             [
                 "validate",
@@ -492,6 +494,16 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
             ]
         )
         contract.validate(check)
+
+    def test_stale_cpa_validation_scope_is_rejected(self):
+        args = self.assemble_args()
+        contract.assemble(args)
+        assembled = json.loads(args.output.read_text(encoding="utf-8"))
+        assembled["validation_scope"] = (
+            "CPA_V7_2_95_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION"
+        )
+        with self.assertRaisesRegex(contract.ContractError, "scope is invalid"):
+            contract.validate_evidence(assembled, args)
 
     def test_round8_evidence_cannot_masquerade_as_round9(self):
         value = self.probe_evidence()

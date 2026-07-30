@@ -113,8 +113,9 @@ executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
 before Codex auth or upstream because that handler currently accepts only a
 `provider=codex` target.
 
-CPA v7.2.109 exposes `ModelRouter` as a global capability rather than a
-source-format-scoped capability. Once CAG registers it for Alpha Search, an
+CPA v7.2.109, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
+global capability rather than a source-format-scoped capability. Once CAG
+registers it for Alpha Search, an
 ordinary routed request still incurs CPA's body clone, JSON/Base64
 serialization, and Router RPC before CAG can return `Handled:false`; the plugin
 fast path cannot remove that Host-side O(n) work. For a native RPC above 8 MiB,
