@@ -121,32 +121,21 @@ REPOSITORY_WORKFLOW_DISPATCH_INPUT_LIMIT = 10
 ACTIVE_WORKFLOW_PATHS = (
     ".github/workflows/ci.yml",
     ".github/workflows/codeql.yml",
-    ".github/workflows/candidate.yml",
-    ".github/workflows/attested-prerelease.yml",
-    ".github/workflows/release-rc.yml",
-    ".github/workflows/round8-host-validation.yml",
-    ".github/workflows/round9-gate.yml",
-    ".github/workflows/round9-host-validation.yml",
-    ".github/workflows/round9-release-rc.yml",
-    ".github/workflows/release.yml",
-    ".github/workflows/release-promote.yml",
+    ".github/workflows/policy-gate.yml",
 )
 ACTIONLINT_VERSION = "v1.7.12"
 ACTIONLINT_CONFIG_PATH = ".github/actionlint.yaml"
 ACTIONLINT_CONFIG_TEXT = (
     "self-hosted-runner:\n"
-    "  labels:\n"
-    "    - cag-round8-sandbox\n"
-    "    - cag-round9-sandbox\n"
+    "  labels: []\n"
 )
 ACTIONLINT_COMMAND = (
     "$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) "
-    "-config-file .github/actionlint.yaml "
     + " ".join(ACTIVE_WORKFLOW_PATHS)
 )
 WORKFLOW_DIRECTORY_AUXILIARY_PATHS = (".github/workflows/README.md",)
 ACTIVE_RC_WORKFLOW_PATH = ".github/workflows/release-rc.yml"
-ROUND9_GATE_WORKFLOW_PATH = ".github/workflows/round9-gate.yml"
+ROUND9_GATE_WORKFLOW_PATH = ".github/workflows/policy-gate.yml"
 ROUND9_HOST_WORKFLOW_PATH = ".github/workflows/round9-host-validation.yml"
 ROUND9_RC_WORKFLOW_PATH = ".github/workflows/round9-release-rc.yml"
 ARCHIVED_RC_WORKFLOW_PATH = "docs/archive/workflows/release-rc-v0.15-rc.2.yml"
@@ -278,14 +267,10 @@ CANDIDATE_ADMISSION_COMMANDS = (
     '  "$response" >/dev/null',
 )
 SAFE_GATE_COMMANDS = (
-    "python3 -B scripts/round6_safe_gate_contract_test.py",
     "python3 -B scripts/round6_safe_gate_contract.py --root .",
-    "./scripts/release-doc-consistency.sh",
 )
 ROUND9_SAFE_GATE_COMMANDS = (
     "/usr/bin/python3 -I -B scripts/round6_safe_gate_contract.py --root .",
-    "/usr/bin/python3 -I -B scripts/round6_safe_gate_contract_test.py",
-    "./scripts/release-doc-consistency.sh",
 )
 ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS = (
     "set -euo pipefail",
@@ -589,7 +574,7 @@ def reviewed_sparse_pattern_options(source: Path) -> tuple[tuple[str, ...], ...]
         # Synthetic unit fixtures retain the historical boundary; the real CI
         # validator below independently requires the Round 9 exclusions.
         return (ROUND6_SPARSE_PATTERNS, ROUND9_SPARSE_PATTERNS)
-    if source.name in {"round9-gate.yml", "round9-release-rc.yml"}:
+    if source.name in {"policy-gate.yml", "round9-gate.yml", "round9-release-rc.yml"}:
         return (ROUND9_SPARSE_PATTERNS,)
     if source.name == "round9-host-validation.yml":
         return (ROUND9_HOST_SPARSE_PATTERNS,)
@@ -1164,7 +1149,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
   fi'''
 ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "afa15747b2847618d5afb7e9ad50514b2a2826a086a721022b5baf66fff2221c"
+ROUND9_GATE_WORKFLOW_SHA256 = "b1d2b4c226444ca4e86c177936e6b6a351c091633945d967aa8f8d1a8962864d"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "09ab4e5dedb90ffbfe8f2436c8dc7ee6353162dc825e9751c708bdca68c800e1"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1189,7 +1174,7 @@ ROUND9_MACHINE_REPORT_COMMAND_FUNCTION_AST_CONTRACT = (
 )
 ROUND9_MACHINE_REPORT_TEST_SCRIPT = "scripts/round9_machine_reports_test.py"
 ROUND9_MACHINE_REPORT_TEST_SCRIPT_SHA256 = (
-    "18509d7a2e267f04bcdc524530131ef9c3e2e8f465473d8fbd440d7f529699c9"
+    "b942c0b905d638d708c6057274cb4c9ab1552ba796a26a4fbf81e89c3b155cda"
 )
 ROUND9_MACHINE_REPORT_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1294,7 +1279,7 @@ ROUND8_BASE_STEP_RUN_SHA256 = {
     0: "083c67c86749f4f988952b912fd1eafa32b97998417d0cbcd4d1be423b71ecdf",
     1: "0d6ed073233abaa1e9b7849828fdc63b77166c35c6f4a15bf07a73437d6bfdb6",
 }
-CODEQL_WORKFLOW_SHA256 = "4ec3510381b925ea154845e046023a5717af63916cf661e9de7caf8b4cfc7405"
+CODEQL_WORKFLOW_SHA256 = "54cf0629dae660c38eaede7f726f6f396e007a1779fbc0032d99a9af440cd6d7"
 FORMAL_OPERATION_SCRIPTS = (
     "formal-release.sh",
     "generate-release-evidence.sh",
@@ -7350,7 +7335,7 @@ def validate_round9_independent_audit_reviewed_script(
 
 def validate_round9_gate_workflow(text: str, source: Path) -> None:
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != ROUND9_GATE_WORKFLOW_SHA256:
-        raise ContractError("Round 9 policy gate workflow differs from reviewed text")
+        raise ContractError("policy and corpus gate workflow differs from reviewed text")
     validate_workflow_safety(text, source)
     document = parse_workflow_yaml(text, source)
     root = require_yaml_keys(
@@ -7359,7 +7344,7 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         source,
         "workflow",
     )
-    require_yaml_scalar(root.get("name"), "Round 9 policy gate", source, "name")
+    require_yaml_scalar(root.get("name"), "Policy and Corpus Gate", source, "name")
     require_yaml_keys(root.get("on"), ("push", "pull_request"), source, "on")
     permissions = require_yaml_keys(
         root.get("permissions"), ("contents",), source, "permissions"
@@ -7410,7 +7395,6 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         root.get("jobs"), ("round9-policy-and-corpus",), source, "jobs"
     )
     for marker in (
-        "python3 -B scripts/round6_safe_gate_contract_test.py",
         "python3 -B scripts/round6_safe_gate_contract.py --root .",
         "python3 -B scripts/round9_external_evaluation_contract_test.py",
         "python3 -B tools/round9-eval/round9_eval_core_test.py",
@@ -9559,69 +9543,51 @@ def validate_round6_makefile_contract(text: str, source: Path) -> None:
         )
     required_script_commands = (
         "make workflow-lint",
-        "bash -n ./scripts/round6-candidate-artifacts.sh",
-        "bash -n ./scripts/round6-rc-artifacts.sh",
-        "bash -n ./scripts/round8-build-host-images.sh",
-        "bash -n ./scripts/round8-host-evidence.sh",
-        "python3 -B ./scripts/round8-host-evidence-test.py",
-        "./scripts/release-candidate-contract-test.sh",
-        "bash -n ./scripts/verify-external-release-attestation.sh",
-        "./scripts/verify-external-release-attestation-test.sh",
-        "./scripts/release-doc-consistency.sh",
+        "make shellcheck-lint",
+        "bash -n ./scripts/go-safe-development-test.sh",
+        "bash -n ./scripts/cpa-latest-compat.sh",
+        "bash -n ./scripts/round9-build-host-images.sh",
+        "bash -n ./scripts/round9-host-evidence.sh",
+        "python3 -B ./scripts/round9-host-evidence-test.py",
+        "python3 -B ./scripts/round9_machine_reports_test.py",
+        "python3 -B ./scripts/round9_host_evidence_contract_test.py",
+        "python3 -B ./scripts/round9_external_evaluation_contract_test.py",
+        "python3 -B ./scripts/round9_independent_audit_contract_test.py",
+        "python3 -B ./scripts/round6_safe_gate_contract.py --root .",
+        "./scripts/check-production-health-test.sh",
+        "GO=$(GO) ./scripts/create-store-archive-test.sh",
+        "./scripts/generate-hmac-key-test.sh",
     )
-    for target in ("script-test", "round6-script-test"):
-        target_commands = tuple(
-            " ".join(line.split())
-            for line in recipes.get(target, "").splitlines()
-            if line.strip()
-        )
-        positions: list[int] = []
-        for command in required_script_commands:
-            matches = [
-                index for index, actual in enumerate(target_commands) if actual == command
-            ]
-            if len(matches) != 1:
-                raise ContractError(
-                    f"{target} must reach the exact reviewed Round6 script gate: {command}"
-                )
-            positions.append(matches[0])
-        if positions != sorted(positions):
-            raise ContractError(
-                f"{target} must preserve the reviewed Round6 script-gate order"
-            )
     round6_commands = tuple(
         " ".join(line.split())
         for line in recipes.get("round6-script-test", "").splitlines()
         if line.strip()
     )
-    required_mutation_fixtures = (
-        "bash ./scripts/release-evidence-privacy-test.sh",
-        "bash ./scripts/round6-doc-consistency-fixture-test.sh",
-    )
-    positions = []
-    for command in required_mutation_fixtures:
+    positions: list[int] = []
+    for command in required_script_commands:
         matches = [
             index for index, actual in enumerate(round6_commands) if actual == command
         ]
         if len(matches) != 1:
             raise ContractError(
-                f"round6-script-test must execute the exact reviewed privacy-safe mutation fixture: {command}"
+                f"round6-script-test must reach the active reviewed script gate: {command}"
             )
         positions.append(matches[0])
-    real_doc_gate = "./scripts/release-doc-consistency.sh"
-    real_doc_gate_matches = [
-        index for index, actual in enumerate(round6_commands) if actual == real_doc_gate
-    ]
-    if (
-        positions != sorted(positions)
-        or len(real_doc_gate_matches) != 1
-        or real_doc_gate_matches[0] <= positions[-1]
-        or any(
-        "release-doc-consistency-test.sh" in command for command in round6_commands
-        )
-    ):
+    if positions != sorted(positions):
         raise ContractError(
-            "round6-script-test must preserve the mutation fixture boundary and then verify the real document tree"
+            "round6-script-test must preserve the active reviewed script-gate order"
+        )
+    retired_markers = (
+        "round6-candidate-artifacts",
+        "round6-rc-artifacts",
+        "round8-host",
+        "release-candidate-contract",
+        "verify-external-release-attestation",
+        "release-doc-consistency",
+    )
+    if any(marker in command for marker in retired_markers for command in round6_commands):
+        raise ContractError(
+            "round6-script-test must not execute retired candidate, Round 8, or release gates"
         )
 
 
@@ -11769,7 +11735,7 @@ def validate_actionlint_config(text: str, source: Path) -> None:
         labels = yaml_sequence(
             self_hosted["labels"], source, "actionlint.self-hosted-runner.labels"
         )
-        expected_labels = ("cag-round8-sandbox", "cag-round9-sandbox")
+        expected_labels: tuple[str, ...] = ()
         actual_labels = tuple(
             yaml_scalar(
                 node,
@@ -11780,7 +11746,7 @@ def validate_actionlint_config(text: str, source: Path) -> None:
         )
         if actual_labels != expected_labels:
             raise ContractError(
-                "actionlint must declare exactly the two reviewed sandbox runner labels"
+                "actionlint must not declare retired self-hosted runner labels"
             )
     except ContractError as exc:
         raise ContractError(f"actionlint configuration structure changed: {exc}") from exc
@@ -11818,27 +11784,14 @@ def validate_workflow_layout(root: Path) -> None:
         expected_directory_paths
     ):
         raise ContractError(
-            "workflow directory must contain exactly the eleven reviewed entrypoints and its README: "
+            "workflow directory must contain exactly the three reviewed entrypoints and its README: "
             + ", ".join(expected_directory_paths)
         )
 
-    actionlint_config_path = root / ACTIONLINT_CONFIG_PATH
-    actionlint_config_text = read_regular_text(actionlint_config_path, root)
-    validate_actionlint_config(actionlint_config_text, actionlint_config_path)
-
-    active_rc_path = root / ACTIVE_RC_WORKFLOW_PATH
-    active_rc_text = read_regular_text(active_rc_path, root)
-    validate_rc_release_workflow(active_rc_text, active_rc_path)
     round9_gate_path = root / ROUND9_GATE_WORKFLOW_PATH
     validate_round9_gate_workflow(
         read_regular_text(round9_gate_path, root), round9_gate_path
     )
-    round9_host_path = root / ROUND9_HOST_WORKFLOW_PATH
-    validate_round9_host_workflow(
-        read_regular_text(round9_host_path, root), round9_host_path
-    )
-    round9_rc_path = root / ROUND9_RC_WORKFLOW_PATH
-    validate_round9_rc_workflow(read_regular_text(round9_rc_path, root), round9_rc_path)
     safe_gate_test_path = root / ROUND6_SAFE_GATE_TEST_SCRIPT
     if safe_gate_test_path.exists() or safe_gate_test_path.is_symlink():
         safe_gate_test_text = read_regular_text(safe_gate_test_path, root)
@@ -11890,7 +11843,7 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 validate_rc_release_workflow(text, entrypoint)
             elif name == "round8-host-validation.yml":
                 validate_round8_host_workflow(text, entrypoint)
-            elif name == "round9-gate.yml":
+            elif name == "policy-gate.yml":
                 validate_round9_gate_workflow(text, entrypoint)
             elif name == "round9-host-validation.yml":
                 validate_round9_host_workflow(text, entrypoint)
@@ -11916,6 +11869,7 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
     reviewed_control_scripts = (
         REPRODUCIBILITY_WRAPPER_SCRIPT,
         FROZEN_EVALUATION_TREE_SCRIPT,
+        ROUND9_INDEPENDENT_AUDIT_SCRIPT,
     )
     if (
         (root / ".github/workflows/ci.yml").resolve()
@@ -12115,15 +12069,8 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
 
     ci_entrypoint = root / ".github/workflows/ci.yml"
     required_script_paths = {
-        "scripts/round6-candidate-artifacts.sh",
-        "scripts/release-candidate-contract-test.sh",
         REPRODUCIBILITY_WRAPPER_SCRIPT,
         FROZEN_EVALUATION_TREE_SCRIPT,
-        "scripts/verify-external-release-attestation.sh",
-        "scripts/verify-external-release-attestation-test.sh",
-        ROUND6_PRIVACY_FIXTURE_SCRIPT,
-        ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT,
-        *ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256,
         *ROUND9_INDEPENDENT_AUDIT_REVIEWED_SCRIPT_SHA256,
         *ROUND9_EVAL_REVIEWED_SCRIPT_SHA256,
         ROUND9_EVAL_INSTALL_SCRIPT,
@@ -12138,7 +12085,7 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
         missing = required_script_paths - inspected_scripts
         if missing:
             raise ContractError(
-                "Round6 CI script gates do not reach reviewed release-safety scripts: "
+                "active CI script gates do not reach reviewed audit-safety scripts: "
                 + ", ".join(sorted(missing))
             )
 

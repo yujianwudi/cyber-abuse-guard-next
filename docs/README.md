@@ -8,12 +8,10 @@ current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf54
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
-The current publication target is the Linux-only `v0.16-rc.4` Round 9
-prerelease. It uses the single CPA v7.2.104 pin and the exact loopback Host
-binding `127.0.0.1:18394 -> 8317/tcp`. Protected counted-Mock Host evidence,
-one-shot independent corpora, exact-main CI, and independent audit remain
-required; production approval has not been granted and no stable `v0.16`
-exists.
+The current project target is source validation on `main`, pinned to CPA
+v7.2.104. GitHub Actions no longer builds or publishes an RC or Release. The
+owner performs the independent server-side sandbox review separately;
+production approval has not been granted and no stable `v0.16` exists.
 
 This cleanup adds navigation without relocating frozen evaluation or Holdout
 evidence. Those files keep their existing paths so historical hashes and
@@ -24,7 +22,7 @@ references remain stable.
 Use these files for the current implementation and evidence state:
 
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
-- [v0.16 release admission policy](RELEASE_POLICY.md)
+- [Historical v0.16 release admission policy](RELEASE_POLICY.md)
 - [Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)
 - [Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md)
 - [Round 9 Linux old-SO rollback gate](ROUND9_OLD_SO_ROLLBACK_GATE.md)
@@ -73,42 +71,31 @@ evidence.
 - [Contribution guide](../CONTRIBUTING.md)
 - [Security policy](../SECURITY.md)
 
-The repository-governance document records desired GitHub settings, not proof
-that they are already enabled. The `main` controls are applied and API-verified
-only after the current hardening pull request and all named checks are green.
+The repository-governance document records the expected GitHub settings and
+the commands used to verify them. Its snapshot is not a substitute for a fresh
+read-only API check after workflow or branch-protection changes.
 
 Current GitHub Actions entry points are intentionally limited to:
 
-- `.github/workflows/ci.yml` for ordinary verification;
+- `.github/workflows/ci.yml` for Linux verification, CPA compatibility,
+  development artifacts, and reproducibility;
 - `.github/workflows/codeql.yml` for minimal-permission Linux Go static
   analysis within the reviewed sparse source boundary;
-- `.github/workflows/candidate.yml` for private unreleased candidate bytes;
-- `.github/workflows/attested-prerelease.yml` for the externally attested
-  historical development prerelease gate;
-- `.github/workflows/round9-gate.yml` for ordinary Round 9 policy/corpus
-  verification without independent-corpus execution;
-- `.github/workflows/round9-host-validation.yml` for the protected Linux
-  v7.2.104 one-shot independent-corpus and counted-Mock run;
-- `.github/workflows/round9-release-rc.yml` for the exact-main, Linux-only
-  `v0.16-rc.4` private-candidate/public-prerelease lane;
-- `.github/workflows/release-rc.yml` and
-  `.github/workflows/round8-host-validation.yml` as read-only Round 8 identity
-  records;
-- `.github/workflows/release.yml` and
-  `.github/workflows/release-promote.yml` for the formal draft and its
-  protected promotion.
+- `.github/workflows/policy-gate.yml` for benign/malicious policy, corpus,
+  performance, and bounded-fuzz acceptance.
 
-CodeQL creates code-scanning evidence only. It does not create package bytes or
-authorize publication. Only the three `round9-*` workflows define the current
-Round 9 engineering/Host/RC chain. Candidate, attestation, Round 8, formal, and
-promotion workflows remain version-locked historical machinery and do not
-authorize a stable v0.16 publication.
+CodeQL creates code-scanning evidence only. None of the three active workflows
+can publish a Release or use a self-hosted runner. Candidate, attestation,
+Round 8, Host, RC, formal-release, and promotion definitions were removed from
+the executable workflow directory and remain recoverable from
+Git history.
 
 The retired attempted `v0.15-rc.2` workflow definition is archived under
 [`archive/workflows/`](archive/workflows/) and cannot be dispatched by GitHub
 Actions. Its recorded runs failed and did not produce the public RC, which was
 published separately through the disclosed direct owner override. It remains
-historical evidence and is separate from the active v0.16-rc.4 workflow.
+historical evidence and is separate from the retired v0.16-rc.4 design recorded
+in the historical release-policy documents.
 
 The protected `v0.15-rc.3` tag is separate failed evidence. Workflow run
 29728286559 passed admission, failed before packaging, published no Actions

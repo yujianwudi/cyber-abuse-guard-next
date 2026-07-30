@@ -10,15 +10,10 @@ current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf54
 > [`yujianwudi/cyber-abuse-guard`](https://github.com/yujianwudi/cyber-abuse-guard)
 > and are intentionally not recreated here.
 
-> **Current development state:** Round 9 redesigns Balanced around
-> candidate/clause/scope/referent-bound block eligibility and prepares the Linux
-> amd64 `v0.16-rc.4` prerelease lane. The fixed source/compile target is CPA
-> `v7.2.104` with RPC schema 2 only. The immutable `v0.16-rc.3` Tag records a deterministic Phase 1
-> dependency-bootstrap failure and has no candidate assets or Release. No
-> `v0.16-rc.4` Tag, Release, or stable `v0.16` is created by the source changes
-> alone. The protected
-> no-checkout external CPA evaluation, protected-ledger proof, exact-main CI for
-> the current remediation, and a fresh independent audit are still required.
+> **Current development state:** `main` is the sole maintained source line. The
+> fixed source/compile target is CPA `v7.2.104` with RPC schema 2 only. GitHub
+> Actions performs CI, CodeQL, and policy/corpus validation; it does not create
+> an RC or Release. Independent server-side sandbox review remains owner-run.
 > Production approval has not been granted, and production Balanced must remain
 > gated.
 
@@ -32,14 +27,15 @@ current_classifier_policy_sha256: e7a00b02d7e0e4ca837204cfed476b4f371f599facbf54
 > returned HTTP 403, and 2 complete benign cases were false positives. The
 > current remediation source identity is `classifier-policy-v9` /
 > `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`;
-> its commit-bound CI and second-machine retest are still **PENDING**.
+> exact-commit GitHub checks pass at `46f26f9`, while the second-machine retest
+> is still **PENDING**.
 
-[![Historical CI](https://img.shields.io/badge/historical_CI-v0.15-blue)](https://github.com/yujianwudi/cyber-abuse-guard/actions/workflows/ci.yml)
+[![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
+[![Policy Gate](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml)
+[![CodeQL](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/codeql.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/codeql.yml)
 [![Go](https://img.shields.io/badge/Go-1.26.4-00ADD8?logo=go&logoColor=white)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-Linux%20amd64-lightgrey)](docs/ROUND6_LIMITATIONS.md)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Historical RC](https://img.shields.io/badge/historical_RC-v0.15--rc.4-orange)](docs/ROUND6_RELEASE_GATE.md)
-[![Historical stable](https://img.shields.io/badge/historical_stable-v0.15-published-success)](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15)
 
 **A local, deterministic, pre-routing cyber-abuse request guard for
 [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) (CPA).**
@@ -66,20 +62,20 @@ is not sent to a public classifier.
 
 | Item | State |
 |---|---|
-| Source version / RC target | `0.16` / `v0.16-rc.4` prerelease only; exact tag, commit, tree, and artifact hashes must come from the future clean release run |
+| Source version / publication model | `0.16` development on `main`; the repository no longer contains an automated RC or Release workflow |
 | Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
-| GitHub publication | `v0.16-rc.3` has an annotated Tag but no Release or Actions artifact; no `v0.16-rc.4` Tag or Release exists. `round9-release-rc.yml` can build only a private 17-asset Actions candidate and is hard-blocked from creating a public prerelease until separately reviewed independent evidence restores a writer |
+| GitHub publication | Historical tags and Releases are retained unchanged. Current Actions validate source and development artifacts only; they cannot create or modify a Release |
 | Audited committed baseline | `150c25e6352cb237cb3956bd66c83c3278c3fe33`; historical classifier digest `e0cbc975...`; CPA v7.2.104 |
-| Engineering CI | Run `30353591705` **PASS** for the exact audited baseline; this is engineering evidence only, not a safety or release PASS |
+| Engineering CI | Runs `30482492205`, `30482486178`, and `30482486027` **PASS** for exact `main` commit `46f26f9f822683aebb14b2c812ced2246d680fc2`; this is engineering evidence only, not a production approval |
 | Safety audit | **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
-| Current remediation | Classifier `classifier-policy-v9` / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; local Linux unit/race/script/corpus/benchmark gates pass, while commit-bound CI and second-machine retest remain **PENDING** |
-| CPA source/compile target | Local pinned source/compile matrix **PASS** for `v7.2.104` (`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) under Go 1.26.4; explicit remote latest/tag checks, live Host `.so` load, and protected runtime matrix remain pending |
+| Current remediation | Classifier `classifier-policy-v9` / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; exact-commit GitHub unit/race/script/corpus/benchmark gates pass, while independent second-machine retest remains **PENDING** |
+| CPA source/compile target | Pinned source, SDK/API, integration compile, and Linux Host `.so` load checks **PASS** for `v7.2.104` (`c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`) under Go 1.26.4; independent protected runtime testing remains pending |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
 | Independent audit | The 2026-07-29 isolated audit of exact baseline `150c25e6` is a safety **FAIL / BLOCKED** with the counts above. The current remediation has not been independently re-audited |
 | Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
-| v0.16 workflows | `round9-gate.yml`, no-checkout `round9-host-validation.yml`, and `round9-release-rc.yml` are the active Round 9 lane; Round 8 and v0.15 workflows are read-only historical machinery |
+| Active workflows | `ci.yml`, `codeql.yml`, and `policy-gate.yml` are the only executable Actions workflows; release, RC, Round 8, and automated Host workflows were removed from the default branch |
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
 | Validation platform | Linux amd64 only; emitted numeric GLIBC ABI versions must be `<= 2.34` |
 | Out of scope | Windows, macOS, musl/Alpine, real Provider traffic, production deployment/validation |

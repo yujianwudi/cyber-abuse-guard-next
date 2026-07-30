@@ -1,4 +1,15 @@
-# v0.16 Round 9 release admission policy
+# Historical v0.16 Round 9 release admission policy
+
+> [!IMPORTANT]
+> This publication design was retired by the workflow cleanup. The default
+> branch now
+> contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create
+> or modify a GitHub Release. The owner performs independent server-side
+> sandbox review outside GitHub Actions. The remainder of this document is a
+> point-in-time audit record, not an executable or current publication plan.
+
+Field names beginning with `current_` below are preserved verbatim from that
+historical snapshot; they do not describe the active workflow inventory.
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
@@ -11,14 +22,14 @@ current_ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575
 current_identity_freeze_status: PENDING_FINAL_SOURCE_FREEZE
 ```
 
-This source file defines the release process; it does not claim that external
+This source file historically defined the release process; it does not claim that external
 Host, audit, or publication gates have passed. A source commit becomes an
 official stable release only when the GitHub Release is non-draft and carries
 the attestations named below. A non-draft RC prerelease is still not a stable
 release or deployment authorization. Pull requests and source snapshots are
 never deployment authorization by themselves.
 
-## Current Round 9 prerelease lane
+## Historical Round 9 prerelease lane
 
 ```text
 current_round: 9

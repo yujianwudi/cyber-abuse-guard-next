@@ -5,10 +5,21 @@ settings live in GitHub rather than in the Git tree, so their presence must be
 verified through the GitHub API. They are **not claimed to be enabled merely
 because this document exists**.
 
-The controls below are to be enabled only after the current hardening pull
-request has passed all five named checks, has been merged, and the corresponding
-checks have appeared successfully for the repository. Creating required checks
-before their successful contexts exist can lock the default branch.
+The controls below are enabled for the successor repository and must be
+reverified after workflow or branch-protection changes. Creating a required
+check before its successful context exists can lock the default branch.
+
+## Active workflow inventory
+
+| Workflow file | Display name | Required-check contexts |
+|---|---|---|
+| `.github/workflows/ci.yml` | `CI` | `quality-and-artifacts`, `fuzz-long`, `reproducibility` |
+| `.github/workflows/codeql.yml` | `CodeQL` | `Analyze Go on Linux` |
+| `.github/workflows/policy-gate.yml` | `Policy and Corpus Gate` | `round9-policy-and-corpus` |
+
+No active workflow publishes Releases or uses a self-hosted runner. Historical
+release and Host workflow definitions remain available through Git history but
+are not executable from the default branch.
 
 ## Desired `main` protection
 
@@ -63,8 +74,9 @@ or broader rules. Tag governance is separate from `main` protection and must
 not be inferred from the branch result.
 
 The successor repository protection was enabled on 2026-07-24 with those five
-contexts. This statement is a configuration snapshot, not a substitute for the
-read-only API verification commands above.
+contexts and rechecked during this workflow cleanup. This statement
+is a configuration snapshot, not a substitute for the read-only API
+verification commands above.
 
 When a workflow or job name changes, update the required-check configuration
 and this document together. Never rename a required check without first
