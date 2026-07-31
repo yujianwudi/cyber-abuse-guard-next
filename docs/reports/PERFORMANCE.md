@@ -31,6 +31,18 @@ ten-minute hard timeout. Its JSON contains every matrix's count, p50, p95,
 p99, max, throughput, failure count, panic count, fixture SHA-256, environment,
 gate status, and SQLite queue observations.
 
+Schema `round10-performance-v2` makes the CPU applicability contract explicit.
+It records `effective_parallelism=min(NumCPU,GOMAXPROCS)`, requires at least four
+effective CPUs, and evaluates the unchanged absolute latency limits only through
+the largest configured concurrency that does not exceed that value. Higher
+matrices still run and retain their raw percentiles and throughput, but are
+reported as saturation observations with
+`oversubscribed_saturation_profile=NOT_PROVIDED` until a fixture- and
+runner-profile-bound overload baseline exists. Missing, duplicate, or unexpected
+workload matrices fail closed. On a runner with at least 16 effective CPUs, all
+absolute gates still include c=16. This development runner remains explicitly
+non-equivalent to a production-capacity SLO.
+
 ### Latest classifier-policy-v10 local source result
 
 The 2026-08-01 repository-local run is bound to
@@ -59,6 +71,25 @@ a CPA process, a container, a Provider path, or production traffic. The fixed
 workload p99 regression baseline, CPA Host/container measurements, and protected
 4,424-request external evaluation remain **`NOT_PROVIDED`**. Therefore the local
 absolute thresholds pass, but the release-level RT10-08 gate remains open.
+
+### Four-effective-CPU CI portability finding
+
+Exact-tree GitHub run `30662744941` used 4 CPUs and `GOMAXPROCS=4`. Its original
+v1 evaluator passed race and all earlier functional/performance steps, then
+failed only because it compared the over-subscribed five-repository c=16 raw
+p95 `572.674185 ms` with the unchanged `250 ms` absolute limit. The same
+workload measured c=1/4/8/16 p95
+`72.124095/108.795494/252.484294/572.674185 ms`; throughput plateaued at
+`37.569/37.832/37.983 req/s` from c=4 onward. This is evidence of 4-CPU
+saturation, not proof that the implementation regressed. The artifact still
+marks the fixture-bound p99 regression baseline as `NOT_PROVIDED`.
+
+The v2 contract was then reproduced under Linux amd64 / Go 1.26.4 on a dirty
+working tree with 20 visible CPUs and `GOMAXPROCS=4`. It applied the absolute
+gate through c=4, preserved raw c=8/c=16 results, and reported the saturation
+profile as `NOT_PROVIDED`; the measured source gates passed and the release gate
+remained `NOT_PROVIDED`. This is development validation only. Exact-commit
+GitHub revalidation is pending, and no 4-vCPU/c=16 production SLO is inferred.
 
 ### Earlier Round 10 local development run
 

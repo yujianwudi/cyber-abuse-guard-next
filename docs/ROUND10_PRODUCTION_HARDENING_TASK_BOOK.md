@@ -299,6 +299,17 @@ Acceptance gates:
 | panic/fatal/OOM/unexpected restart | zero |
 | Go race detector | pass for affected packages |
 
+The absolute latency limits apply through the largest measured concurrency that
+does not exceed both `NumCPU` and `GOMAXPROCS`; the performance lane requires at
+least four effective CPUs. All c=1/4/8/16 matrices still run and retain their
+raw p50/p95/p99/max and throughput. Matrices above the effective parallelism are
+overload/saturation observations: they do not satisfy an absolute-latency or
+production-capacity gate, and remain `NOT_PROVIDED` until a fixture- and
+runner-profile-bound overload baseline exists. A runner with at least 16
+effective CPUs still applies every absolute gate through c=16. This rule keeps
+the stated limits unchanged and prevents either CPU over-subscription or a
+simple scaled limit from hiding a real non-overloaded regression.
+
 Throughput and queue depth are reported, not converted into an unsupported
 production-capacity claim.
 
@@ -412,6 +423,21 @@ Update this section as work is completed; do not rewrite the original baseline.
   loading, counted-Mock routing, lifecycle, and container checks remain
   `NOT_PROVIDED` on the isolated CPA Host.
 - [ ] RT10-08 Linux performance/concurrency gates pass.
+  - 2026-08-01: exact-tree GitHub run `30662744941` exposed a v1 portability
+    defect in the new CI lane. Its 4-CPU / `GOMAXPROCS=4` artifact passed race
+    and every functional step, but compared the five-repository raw c=16 p95
+    `572.674185 ms` directly with the unchanged `250 ms` limit; c=4 was only
+    `108.795494 ms`, while throughput had already plateaued at about 38 req/s.
+    The same failure reproduced under local Linux amd64 / Go 1.26.4 with
+    `GOMAXPROCS=4`, so it was not classified as runner noise or an established
+    implementation regression. Schema `round10-performance-v2` now records
+    effective parallelism, applicable and over-subscribed matrices, applies the
+    unchanged absolute limits only through the largest non-over-subscribed
+    matrix, preserves the raw worst values, fails closed on missing/duplicate
+    matrices, and emits `oversubscribed_saturation_profile=NOT_PROVIDED` when no
+    bound overload baseline exists. A dirty-tree 20-CPU WSL reproduction with
+    `GOMAXPROCS=4` passed the v2 measured gates through c=4 while retaining raw
+    c=8/c=16 observations; exact-commit CI revalidation remains pending.
   - 2026-08-01: after the final source fixes, the Linux amd64 / Go 1.26.4
     repository-local policy-v10 surrogate run recorded ordinary p95
     `2.589708 ms`, five-repository surrogate p95 `112.310521 ms`, Codex-all
