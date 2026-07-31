@@ -2,12 +2,26 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
 ```
 
-Source-tree status updated: 2026-07-30 (Asia/Shanghai)
+Source-tree status updated: 2026-07-31 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
+
+- Complete the Round 10 Linux/CPA v7.2.109 production-hardening source lane:
+  add bounded historical tool-result activation for a uniquely associated
+  current-user execution directive; verify persistent audit storage and live
+  operational readiness; expose low-cardinality coverage dimensions and
+  atomic dispositions; harden SQLite quick-check/checkpoint and DB/WAL/SHM
+  identity handling; and preserve batch/stream parity across direct-compaction
+  boundaries. A direct-compaction run that exceeds 8 KiB only through trailing
+  ASCII padding now uses a bounded non-padding proof, while a real non-padding
+  proof overflow remains incomplete. These behavior changes bind
+  `classifier-policy-v9` to
+  `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`.
+  This lane publishes source and tests only; it does not create a tag, plugin
+  asset, or GitHub Release.
 
 - Reduce the executable GitHub Actions surface from eleven workflows to three:
   `CI`, `CodeQL`, and `Policy and Corpus Gate`. Retire the automated candidate,

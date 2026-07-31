@@ -91,6 +91,8 @@ counts, freed bytes, and the remaining path-free inventory.
 ```yaml
 audit:
   enabled: true
+  data_dir: /plugin-data/cyber-abuse-guard
+  require_persistent_storage: true
   retention_days: 30
   log_request_hash: true
   log_subject_hash: true
@@ -103,8 +105,9 @@ audit:
     ttl_hours: 72
 ```
 
-Raw capture requires `audit.enabled: true`. A configuration outside the safety
-contract is rejected rather than silently weakened.
+Raw capture requires `audit.enabled: true`, an explicit absolute `audit.data_dir`,
+and an explicit `audit.require_persistent_storage: true`. A configuration outside
+the safety contract is rejected rather than silently weakened.
 
 ## Authenticated query
 

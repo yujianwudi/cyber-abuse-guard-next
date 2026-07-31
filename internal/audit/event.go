@@ -84,6 +84,24 @@ const (
 	EnforcementScopeRequestLocalTool   EnforcementScope = "request_local_tool"
 )
 
+// ExplanationRelationType is the closed, content-free relation that joined a
+// winning carrier to the actor whose current directive made it enforceable.
+type ExplanationRelationType string
+
+const (
+	ExplanationRelationNone                     ExplanationRelationType = ""
+	ExplanationRelationHistoricalToolActivation ExplanationRelationType = "historical_tool_activation"
+)
+
+// ExplanationEnforcementOwner identifies the trusted actor supplying the
+// execution act. It never changes the role or evidence ownership of the carrier.
+type ExplanationEnforcementOwner string
+
+const (
+	ExplanationEnforcementOwnerNone               ExplanationEnforcementOwner = ""
+	ExplanationEnforcementOwnerCurrentTrustedUser ExplanationEnforcementOwner = "current_trusted_user"
+)
+
 const (
 	eligibilityFlagIncompleteInspection uint64 = 1 << iota
 	eligibilityFlagUntrustedOwnership
@@ -158,47 +176,49 @@ type DecisionExplanation struct {
 	// use the existing bounded score/eligibility fields below. The other three
 	// variants use only their fixed branch field and are forbidden from carrying
 	// a classifier category, rule, score breakdown, or eligibility state.
-	Kind                       string           `json:"kind,omitempty"`
-	IncompleteInspectionReason string           `json:"incomplete_inspection_reason,omitempty"`
-	OpaqueMediaReason          string           `json:"opaque_media_reason,omitempty"`
-	SubjectRiskAction          string           `json:"subject_risk_action,omitempty"`
-	WinningRuleID              string           `json:"winning_rule_id,omitempty"`
-	WinningCategory            string           `json:"winning_category,omitempty"`
-	ScoreBreakdown             []ScoreComponent `json:"score_breakdown,omitempty"`
-	CorePredicateComplete      bool             `json:"core_predicate_complete"`
-	EvidenceDimensionMask      uint64           `json:"evidence_dimension_mask"`
-	EvidenceOccurrenceCount    int              `json:"evidence_occurrence_count"`
-	EvidenceSegmentCount       int              `json:"evidence_segment_count"`
-	WinningRole                string           `json:"winning_role,omitempty"`
-	WinningProvenance          string           `json:"winning_provenance,omitempty"`
-	CurrentTurnEvidence        bool             `json:"current_turn_evidence"`
-	CrossSegmentComposition    string           `json:"cross_segment_composition,omitempty"`
-	ReferentLinkUsed           bool             `json:"referent_link_used"`
-	QuotedOrInertSuppressed    bool             `json:"quoted_or_inert_suppressed"`
-	ContextAdjustment          int              `json:"context_adjustment"`
-	HardFloorApplied           bool             `json:"hard_floor_applied"`
-	HardFloorReason            string           `json:"hard_floor_reason,omitempty"`
-	BlockEligible              bool             `json:"block_eligible"`
-	PrimaryEligibilityReason   string           `json:"primary_eligibility_reason,omitempty"`
-	EligibilityReasonFlags     uint64           `json:"eligibility_reason_flags"`
-	InspectionComplete         bool             `json:"inspection_complete"`
-	EvidenceOwnedByCurrentUser bool             `json:"evidence_owned_by_current_user"`
-	EnforcementScope           EnforcementScope `json:"enforcement_scope,omitempty"`
-	CurrentExecutionActProven  bool             `json:"current_execution_act_proven"`
-	HarmfulCoreComplete        bool             `json:"harmful_core_complete"`
-	OperationallyActionable    bool             `json:"operationally_actionable"`
-	AuthorizationClaimState    string           `json:"authorization_claim_state,omitempty"`
-	ExplicitVictimOrNonconsent bool             `json:"explicit_victim_or_nonconsent"`
-	CovertAcquisition          bool             `json:"covert_acquisition"`
-	ExfiltrationOrTakeover     bool             `json:"exfiltration_or_takeover"`
-	MaliciousPersistence       bool             `json:"malicious_persistence"`
-	DestructiveOutcome         bool             `json:"destructive_outcome"`
-	SecurityControlEvasion     bool             `json:"security_control_evasion"`
-	DefensiveScopeConflict     bool             `json:"defensive_scope_conflict"`
-	QuotedOrAnalyticalScope    bool             `json:"quoted_or_analytical_scope"`
-	CrossScopeComposition      bool             `json:"cross_scope_composition"`
-	ReferentProofComplete      bool             `json:"referent_proof_complete"`
-	EvidenceAmbiguous          bool             `json:"evidence_ambiguous"`
+	Kind                       string                      `json:"kind,omitempty"`
+	IncompleteInspectionReason string                      `json:"incomplete_inspection_reason,omitempty"`
+	OpaqueMediaReason          string                      `json:"opaque_media_reason,omitempty"`
+	SubjectRiskAction          string                      `json:"subject_risk_action,omitempty"`
+	WinningRuleID              string                      `json:"winning_rule_id,omitempty"`
+	WinningCategory            string                      `json:"winning_category,omitempty"`
+	ScoreBreakdown             []ScoreComponent            `json:"score_breakdown,omitempty"`
+	CorePredicateComplete      bool                        `json:"core_predicate_complete"`
+	EvidenceDimensionMask      uint64                      `json:"evidence_dimension_mask"`
+	EvidenceOccurrenceCount    int                         `json:"evidence_occurrence_count"`
+	EvidenceSegmentCount       int                         `json:"evidence_segment_count"`
+	WinningRole                string                      `json:"winning_role,omitempty"`
+	WinningProvenance          string                      `json:"winning_provenance,omitempty"`
+	CurrentTurnEvidence        bool                        `json:"current_turn_evidence"`
+	CrossSegmentComposition    string                      `json:"cross_segment_composition,omitempty"`
+	ReferentLinkUsed           bool                        `json:"referent_link_used"`
+	RelationType               ExplanationRelationType     `json:"relation_type,omitempty"`
+	EnforcementOwner           ExplanationEnforcementOwner `json:"enforcement_owner,omitempty"`
+	QuotedOrInertSuppressed    bool                        `json:"quoted_or_inert_suppressed"`
+	ContextAdjustment          int                         `json:"context_adjustment"`
+	HardFloorApplied           bool                        `json:"hard_floor_applied"`
+	HardFloorReason            string                      `json:"hard_floor_reason,omitempty"`
+	BlockEligible              bool                        `json:"block_eligible"`
+	PrimaryEligibilityReason   string                      `json:"primary_eligibility_reason,omitempty"`
+	EligibilityReasonFlags     uint64                      `json:"eligibility_reason_flags"`
+	InspectionComplete         bool                        `json:"inspection_complete"`
+	EvidenceOwnedByCurrentUser bool                        `json:"evidence_owned_by_current_user"`
+	EnforcementScope           EnforcementScope            `json:"enforcement_scope,omitempty"`
+	CurrentExecutionActProven  bool                        `json:"current_execution_act_proven"`
+	HarmfulCoreComplete        bool                        `json:"harmful_core_complete"`
+	OperationallyActionable    bool                        `json:"operationally_actionable"`
+	AuthorizationClaimState    string                      `json:"authorization_claim_state,omitempty"`
+	ExplicitVictimOrNonconsent bool                        `json:"explicit_victim_or_nonconsent"`
+	CovertAcquisition          bool                        `json:"covert_acquisition"`
+	ExfiltrationOrTakeover     bool                        `json:"exfiltration_or_takeover"`
+	MaliciousPersistence       bool                        `json:"malicious_persistence"`
+	DestructiveOutcome         bool                        `json:"destructive_outcome"`
+	SecurityControlEvasion     bool                        `json:"security_control_evasion"`
+	DefensiveScopeConflict     bool                        `json:"defensive_scope_conflict"`
+	QuotedOrAnalyticalScope    bool                        `json:"quoted_or_analytical_scope"`
+	CrossScopeComposition      bool                        `json:"cross_scope_composition"`
+	ReferentProofComplete      bool                        `json:"referent_proof_complete"`
+	EvidenceAmbiguous          bool                        `json:"evidence_ambiguous"`
 }
 
 // MarshalJSON preserves the exact Round 8 wire contract for read-only v1
@@ -298,6 +318,9 @@ func prepareEvent(event Event, now time.Time) (Event, error) {
 	if err := normalizeNewDecisionExplanation(&event); err != nil {
 		return Event{}, err
 	}
+	if err := validateNewDecisionExplanationRelation(event.DecisionExplanation); err != nil {
+		return Event{}, err
+	}
 	if event.Coverage == "" {
 		event.Coverage = "legacy_unknown"
 	}
@@ -308,6 +331,19 @@ func prepareEvent(event Event, now time.Time) (Event, error) {
 		return Event{}, err
 	}
 	return event, nil
+}
+
+// validateNewDecisionExplanationRelation keeps canonical writes on the current
+// closed contract while decode paths remain able to read relation-free v2 rows
+// produced by the pre-RT10 historical-tool implementation.
+func validateNewDecisionExplanationRelation(explanation *DecisionExplanation) error {
+	if explanation != nil && explanation.EnforcementScope == EnforcementScopeRequestLocalTool &&
+		explanation.CurrentTurnEvidence &&
+		(explanation.RelationType != ExplanationRelationHistoricalToolActivation ||
+			explanation.EnforcementOwner != ExplanationEnforcementOwnerCurrentTrustedUser) {
+		return errors.New("audit: new historical-tool activation explanation requires relation_type and enforcement_owner")
+	}
+	return nil
 }
 
 func normalizeNewDecisionExplanation(event *Event) error {
@@ -833,6 +869,18 @@ func validateDecisionExplanation(explanation *DecisionExplanation) error {
 		"none", "bounded_same_scope", "explicit_referent") {
 		return errors.New("audit: decision explanation cross_segment_composition is unsupported")
 	}
+	if explanation.RelationType != ExplanationRelationNone &&
+		explanation.RelationType != ExplanationRelationHistoricalToolActivation {
+		return errors.New("audit: decision explanation relation_type is unsupported")
+	}
+	if explanation.EnforcementOwner != ExplanationEnforcementOwnerNone &&
+		explanation.EnforcementOwner != ExplanationEnforcementOwnerCurrentTrustedUser {
+		return errors.New("audit: decision explanation enforcement_owner is unsupported")
+	}
+	if (explanation.RelationType == ExplanationRelationNone) !=
+		(explanation.EnforcementOwner == ExplanationEnforcementOwnerNone) {
+		return errors.New("audit: decision explanation relation_type and enforcement_owner must be present together")
+	}
 	if err := validateEligibilityExplanation(explanation); err != nil {
 		return err
 	}
@@ -983,6 +1031,8 @@ func hasMaliciousExplanationPayload(explanation *DecisionExplanation) bool {
 		explanation.EvidenceSegmentCount != 0 || explanation.WinningRole != "" ||
 		explanation.WinningProvenance != "" || explanation.CurrentTurnEvidence ||
 		explanation.CrossSegmentComposition != "" || explanation.ReferentLinkUsed ||
+		explanation.RelationType != ExplanationRelationNone ||
+		explanation.EnforcementOwner != ExplanationEnforcementOwnerNone ||
 		explanation.QuotedOrInertSuppressed || explanation.ContextAdjustment != 0 ||
 		explanation.HardFloorApplied || explanation.HardFloorReason != "" ||
 		hasEligibilityContract(explanation)
@@ -1002,6 +1052,8 @@ func hasEligibilityContract(explanation *DecisionExplanation) bool {
 		explanation.InspectionComplete ||
 		explanation.EvidenceOwnedByCurrentUser ||
 		explanation.EnforcementScope != EnforcementScopeNone ||
+		explanation.RelationType != ExplanationRelationNone ||
+		explanation.EnforcementOwner != ExplanationEnforcementOwnerNone ||
 		explanation.CurrentExecutionActProven ||
 		explanation.HarmfulCoreComplete ||
 		explanation.OperationallyActionable ||
@@ -1134,8 +1186,10 @@ func expectedEligibilityReasonFlags(explanation *DecisionExplanation) uint64 {
 // current user content. Request-local system winners must be non-user system
 // content; CurrentTurnEvidence is deliberately false so provider-native
 // top-level Responses instructions retain their valid -1 segment sentinel.
-// Request-local tool winners use the same non-current marker because only a
-// structurally terminal tool-result content segment can receive that scope.
+// Request-local tool winners keep non-user tool provenance. A terminal result
+// has no current-turn evidence; a uniquely associated historical result may set
+// CurrentTurnEvidence only when an exact current-user referent/execution proof
+// is persisted with it.
 //
 // Empty scope is retained for non-eligible v2 history and for eligible legacy
 // current-user rows written before enforcement_scope existed. That legacy path
@@ -1146,25 +1200,46 @@ func validateEnforcementScopeContract(explanation *DecisionExplanation) error {
 	if explanation == nil {
 		return errors.New("audit: decision explanation enforcement_scope requires an explanation")
 	}
+	hasActivationRelation := explanation.RelationType != ExplanationRelationNone ||
+		explanation.EnforcementOwner != ExplanationEnforcementOwnerNone
 	switch explanation.EnforcementScope {
 	case EnforcementScopeNone:
+		if hasActivationRelation {
+			return errors.New("audit: historical-tool activation relation requires request_local_tool enforcement_scope")
+		}
 		if explanation.BlockEligible && !currentUserAuthorityTupleProven(explanation) {
 			return errors.New("audit: eligible decision explanation requires enforcement_scope or legacy current-user authority")
 		}
 		return nil
 	case EnforcementScopeCurrentUser:
+		if hasActivationRelation {
+			return errors.New("audit: current_user enforcement_scope cannot carry a historical-tool activation relation")
+		}
 		if !currentUserAuthorityTupleProven(explanation) {
 			return errors.New("audit: current_user enforcement_scope requires current user-content provenance")
 		}
 	case EnforcementScopeRequestLocalSystem:
+		if hasActivationRelation {
+			return errors.New("audit: request_local_system enforcement_scope cannot carry a historical-tool activation relation")
+		}
 		if explanation.EvidenceOwnedByCurrentUser || explanation.WinningRole != "system" ||
 			explanation.WinningProvenance != "content" || explanation.CurrentTurnEvidence {
 			return errors.New("audit: request_local_system enforcement_scope requires non-user system-content provenance")
 		}
 	case EnforcementScopeRequestLocalTool:
 		if explanation.EvidenceOwnedByCurrentUser || explanation.WinningRole != "tool" ||
-			explanation.WinningProvenance != "content" || explanation.CurrentTurnEvidence {
-			return errors.New("audit: request_local_tool enforcement_scope requires terminal non-user tool-result provenance")
+			explanation.WinningProvenance != "content" {
+			return errors.New("audit: request_local_tool enforcement_scope requires non-user tool-result provenance")
+		}
+		if explanation.CurrentTurnEvidence {
+			if !explanation.BlockEligible || !explanation.ReferentLinkUsed || !explanation.ReferentProofComplete ||
+				!explanation.CurrentExecutionActProven || explanation.CrossSegmentComposition != "explicit_referent" ||
+				explanation.EvidenceSegmentCount < 2 {
+				return errors.New("audit: activated request_local_tool enforcement_scope requires a complete current-user referent proof")
+			}
+		} else if explanation.ReferentLinkUsed || explanation.CrossSegmentComposition == "explicit_referent" ||
+			hasActivationRelation {
+			return errors.New("audit: terminal request_local_tool enforcement_scope cannot carry activation fields")
 		}
 	default:
 		return errors.New("audit: decision explanation enforcement_scope is unsupported")

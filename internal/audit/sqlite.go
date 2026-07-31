@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 var (
@@ -23,6 +23,7 @@ var (
 	ErrQueueFull       = errors.New("audit: async queue is full")
 	ErrInvalidEvent    = errors.New("audit: invalid event")
 	ErrUnavailable     = errors.New("audit: database is unavailable")
+	ErrStorageBlocked  = errors.New("audit: persistent storage access is blocked")
 	ErrRawCapturePurge = errors.New("audit: raw request capture purge failed")
 )
 
@@ -70,6 +71,17 @@ type Config struct {
 	BackupBeforeMigration bool
 	MaxMigrationBackups   int
 	RawCapture            RawCaptureConfig
+	// RequirePersistentStorage selects the production file-open contract. The
+	// operator-owned data directory must already exist, existing SQLite files
+	// are validated without chmod repair, and newly created database artifacts
+	// start with private modes.
+	RequirePersistentStorage bool
+	// StorageAccessGate is supplied by the runtime that verified the production
+	// mount. It is checked both before admission and again by the writer so a
+	// latched identity/permission/capacity failure blocks queued and new writes.
+	// Subject restore also uses this gate because loading state from a replaced
+	// volume is no safer than writing to it.
+	StorageAccessGate func() error
 	// SkipDisabledPurgeOnOpen is an internal lifecycle coordination switch.
 	// Direct callers and initial plugin registration leave it false. A hot
 	// reconfiguration defers destructive purge until every migration succeeds
@@ -318,8 +330,13 @@ func openDatabase(cfg Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("audit: resolve database path: %w", err)
 	}
-	if err := prepareSQLitePath(absPath); err != nil {
+	if err := prepareSQLitePath(absPath, !cfg.RequirePersistentStorage); err != nil {
 		return nil, err
+	}
+	if cfg.RequirePersistentStorage {
+		if err := createSQLiteDatabaseFileIfMissing(absPath); err != nil {
+			return nil, err
+		}
 	}
 
 	parameters := url.Values{}
@@ -332,6 +349,11 @@ func openDatabase(cfg Config) (*sql.DB, error) {
 	// after capture is disabled so TTL, retention, cascade, and manual deletes
 	// do not silently fall back to leaving sensitive cells in freelist pages.
 	parameters.Set("_secure_delete", "true")
+	// The driver opens by pathname and does not expose a project-controlled
+	// fd-relative VFS/openat2 handoff. The plugin layer therefore validates
+	// owner/permissions and opened-object identities before and after Open and
+	// on readiness reads. That narrows, but cannot eliminate, a hostile same-UID
+	// rename race; deployment must keep the whole path outside that trust domain.
 	dsn := (&url.URL{Scheme: "file", Path: filepath.ToSlash(absPath), RawQuery: parameters.Encode()}).String()
 	db, err := sql.Open("sqlite3", dsn)
 	if err != nil {
@@ -358,11 +380,29 @@ func openDatabase(cfg Config) (*sql.DB, error) {
 			return nil, fmt.Errorf("audit: startup raw capture TTL cleanup: %w", err)
 		}
 	}
-	if err := secureSQLiteFiles(absPath); err != nil {
+	if err := verifySQLiteQuickCheck(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := secureSQLiteFiles(absPath, !cfg.RequirePersistentStorage); err != nil {
 		db.Close()
 		return nil, err
 	}
 	return db, nil
+}
+
+func verifySQLiteQuickCheck(db *sql.DB) error {
+	if db == nil {
+		return errors.New("audit: SQLite quick_check requires an open database")
+	}
+	var result string
+	if err := db.QueryRow("PRAGMA quick_check").Scan(&result); err != nil {
+		return fmt.Errorf("audit: SQLite quick_check failed: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("audit: SQLite quick_check returned %q, want exactly ok", result)
+	}
+	return nil
 }
 
 // Record performs a bounded, nonblocking enqueue. False means the audit event
@@ -373,6 +413,10 @@ func (s *Store) Record(event Event) bool { return s.Enqueue(event) == nil }
 func (s *Store) Enqueue(event Event) error {
 	if s == nil {
 		return ErrUnavailable
+	}
+	if err := s.checkStorageAccess(); err != nil {
+		s.rejected.Add(1)
+		return err
 	}
 	prepared, err := prepareEvent(event, s.cfg.Now())
 	if err != nil {
@@ -565,6 +609,17 @@ func (s *Store) handleBatch(batch []workItem) {
 		if item.event == nil && item.rawCapture == nil {
 			continue
 		}
+		storageErr := s.checkStorageAccess()
+		if storageErr != nil {
+			hadFailure = true
+			if item.event != nil {
+				s.finishWork(workItem{event: item.event}, storageErr)
+			}
+			if item.rawCapture != nil {
+				s.finishWork(workItem{rawCapture: item.rawCapture}, storageErr)
+			}
+			continue
+		}
 		if s.db == nil {
 			hadFailure = true
 			if item.event != nil {
@@ -599,7 +654,7 @@ func (s *Store) handleBatch(batch []workItem) {
 	// row. Sparse traffic retains the previous check-after-write behavior, while
 	// bursts avoid repeated Lstat/Chmod calls for every event/capture pair.
 	if anySuccess {
-		if err := secureSQLiteFiles(s.cfg.Path); err != nil {
+		if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
 			hadFailure = true
 			s.degraded.Store(true)
 			s.lastErr.Store(err.Error())
@@ -613,6 +668,19 @@ func (s *Store) handleBatch(batch []workItem) {
 	if barrier != nil {
 		close(barrier)
 	}
+}
+
+func (s *Store) checkStorageAccess() error {
+	if s == nil {
+		return ErrUnavailable
+	}
+	if s.cfg.StorageAccessGate == nil {
+		return nil
+	}
+	if err := s.cfg.StorageAccessGate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrStorageBlocked, err)
+	}
+	return nil
 }
 
 type contextExecer interface {
@@ -825,10 +893,15 @@ func (s *Store) CloseContext(ctx context.Context) error {
 			s.wg.Wait()
 			s.cancelWork()
 			if s.db != nil {
+				var checkpointErr error
 				if !s.aborted.Load() {
-					_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+					checkpointErr = checkpointWAL(s.db)
+					if checkpointErr != nil {
+						s.degraded.Store(true)
+						s.lastErr.Store(checkpointErr.Error())
+					}
 				}
-				s.closeErr = s.db.Close()
+				s.closeErr = errors.Join(checkpointErr, s.db.Close())
 			}
 			close(s.closedDone)
 		}()
@@ -844,6 +917,58 @@ func (s *Store) CloseContext(ctx context.Context) error {
 		})
 		return ctx.Err()
 	}
+}
+
+// DiscardContext closes the Store without attempting any further SQLite
+// checkpoint or queued write. Runtime owners use it after a verified storage
+// identity/permission/capacity failure, when even a normal close-time WAL
+// checkpoint would violate the latched no-write boundary.
+func (s *Store) DiscardContext(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.abortOnce.Do(func() {
+		s.aborted.Store(true)
+		close(s.abort)
+		s.cancelWork()
+	})
+	return s.CloseContext(ctx)
+}
+
+// Discard is the unbounded form of DiscardContext.
+func (s *Store) Discard() error {
+	return s.DiscardContext(context.Background())
+}
+
+func checkpointWAL(db *sql.DB) error {
+	if db == nil {
+		return errors.New("audit: WAL checkpoint requires an open database")
+	}
+	var busy, logFrames, checkpointedFrames int64
+	if err := db.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
+		// A reader may keep WAL frames pinned after every writer has drained. The
+		// frames are already durable and SQLite will recover/checkpoint them on a
+		// later open, so SQLITE_BUSY alone is not a close failure.
+		if isSQLiteBusy(err) {
+			return nil
+		}
+		return fmt.Errorf("audit: WAL checkpoint query failed: %w", err)
+	}
+	if busy == 1 {
+		return nil
+	}
+	if busy != 0 {
+		return fmt.Errorf("audit: WAL checkpoint remained busy (busy=%d log=%d checkpointed=%d)", busy, logFrames, checkpointedFrames)
+	}
+	if logFrames < 0 || checkpointedFrames < 0 || checkpointedFrames != logFrames {
+		return fmt.Errorf("audit: WAL checkpoint result is inconsistent (busy=%d log=%d checkpointed=%d)", busy, logFrames, checkpointedFrames)
+	}
+	return nil
+}
+
+func isSQLiteBusy(err error) bool {
+	var sqliteErr sqlite3.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code == sqlite3.ErrBusy
 }
 
 // Close drains the queue without a deadline. Runtime owners that have a
@@ -897,7 +1022,7 @@ func (s *Store) dropQueued() {
 	}
 }
 
-func secureSQLiteFiles(path string) error {
+func secureSQLiteFiles(path string, repair bool) error {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("audit: resolve SQLite permissions path: %w", err)
@@ -913,24 +1038,45 @@ func secureSQLiteFiles(path string) error {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 			return errors.New("audit: SQLite files must be regular files, not symlinks or directories")
 		}
-		if err := os.Chmod(candidate, 0o600); errors.Is(err, os.ErrNotExist) {
+		if !repair {
+			if info.Mode().Perm()&0o077 != 0 {
+				return fmt.Errorf("audit: SQLite file has unsafe permissions: %s", filepath.Base(candidate))
+			}
+			continue
+		}
+		file, err := os.OpenFile(candidate, os.O_RDWR, 0)
+		if errors.Is(err, os.ErrNotExist) {
 			continue
 		} else if err != nil {
-			return fmt.Errorf("audit: secure SQLite file: %w", err)
+			return fmt.Errorf("audit: open SQLite file for descriptor-level permission repair: %w", err)
+		}
+		openedInfo, statErr := file.Stat()
+		currentInfo, lstatErr := os.Lstat(candidate)
+		if statErr != nil || lstatErr != nil || currentInfo.Mode()&os.ModeSymlink != 0 || !os.SameFile(openedInfo, currentInfo) {
+			_ = file.Close()
+			return errors.New("audit: SQLite file identity changed during permission repair")
+		}
+		if err := file.Chmod(0o600); err != nil {
+			_ = file.Close()
+			return fmt.Errorf("audit: secure opened SQLite file: %w", err)
+		}
+		if err := file.Close(); err != nil {
+			return fmt.Errorf("audit: close secured SQLite file: %w", err)
 		}
 	}
 	return nil
 }
 
-func prepareSQLitePath(absPath string) error {
+func prepareSQLitePath(absPath string, createDirectory bool) error {
 	directory := filepath.Dir(absPath)
 	info, err := os.Lstat(directory)
-	created := false
 	if errors.Is(err, os.ErrNotExist) {
+		if !createDirectory {
+			return errors.New("audit: required persistent database directory does not exist")
+		}
 		if err := os.MkdirAll(directory, 0o700); err != nil {
 			return fmt.Errorf("audit: create database directory: %w", err)
 		}
-		created = true
 		info, err = os.Lstat(directory)
 	}
 	if err != nil {
@@ -942,21 +1088,41 @@ func prepareSQLitePath(absPath string) error {
 	if info.Mode().Perm()&0o022 != 0 {
 		return errors.New("audit: database directory must not be group- or world-writable")
 	}
-	if created {
-		if err := os.Chmod(directory, 0o700); err != nil {
-			return fmt.Errorf("audit: secure new database directory: %w", err)
+	for _, candidate := range []string{absPath, absPath + "-wal", absPath + "-shm"} {
+		info, candidateErr := os.Lstat(candidate)
+		if errors.Is(candidateErr, os.ErrNotExist) {
+			continue
+		}
+		if candidateErr != nil {
+			return fmt.Errorf("audit: inspect SQLite path: %w", candidateErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return errors.New("audit: database, WAL, and SHM paths must be regular files, not symlinks or directories")
+		}
+		if !createDirectory && info.Mode().Perm()&0o077 != 0 {
+			return fmt.Errorf("audit: SQLite file has unsafe permissions: %s", filepath.Base(candidate))
 		}
 	}
+	return nil
+}
 
-	databaseInfo, err := os.Lstat(absPath)
-	if errors.Is(err, os.ErrNotExist) {
+func createSQLiteDatabaseFileIfMissing(path string) error {
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if errors.Is(err, os.ErrExist) {
+		info, statErr := os.Lstat(path)
+		if statErr != nil {
+			return fmt.Errorf("audit: recheck concurrently created SQLite database: %w", statErr)
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+			return errors.New("audit: concurrently created SQLite database is unsafe")
+		}
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("audit: inspect database path: %w", err)
+		return fmt.Errorf("audit: securely create SQLite database: %w", err)
 	}
-	if databaseInfo.Mode()&os.ModeSymlink != 0 || !databaseInfo.Mode().IsRegular() {
-		return errors.New("audit: database path must be a regular file, not a symlink or directory")
+	if err := file.Close(); err != nil {
+		return fmt.Errorf("audit: close newly created SQLite database: %w", err)
 	}
 	return nil
 }

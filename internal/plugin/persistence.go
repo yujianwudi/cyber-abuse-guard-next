@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/audit"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/subject"
 )
 
@@ -98,8 +99,21 @@ func (runtime *subjectPersistenceRuntime) setError(err error) {
 	runtime.lastErr.Store(&message)
 }
 
+func (state *runtimeState) blockSubjectPersistenceForStorage() {
+	if state == nil || state.persistence == nil {
+		return
+	}
+	state.persistence.writesBlocked.Store(true)
+	state.persistence.setError(audit.ErrStorageBlocked)
+}
+
 func (state *runtimeState) restoreSubjectPersistence(p *Plugin) {
 	if state == nil || state.persistence == nil {
+		return
+	}
+	if state.currentAuditStorageVerification().blocksOperationalReadiness() {
+		state.blockSubjectPersistenceForStorage()
+		p.logSubjectPersistenceError("subject_persistence_storage_unverified")
 		return
 	}
 	if state.audit == nil {
@@ -235,6 +249,11 @@ func (state *runtimeState) saveSubjectPersistence(p *Plugin) {
 	if state == nil || state.persistence == nil || state.subject == nil || state.audit == nil {
 		return
 	}
+	if state.currentAuditStorageVerification().blocksOperationalReadiness() {
+		state.blockSubjectPersistenceForStorage()
+		p.logSubjectPersistenceError("subject_persistence_storage_unverified")
+		return
+	}
 	// Any rejected or unreadable restore makes the stored state untrusted.
 	// Preserve that snapshot for operator review instead of silently replacing
 	// it during shutdown or the periodic save cycle.
@@ -248,6 +267,9 @@ func (state *runtimeState) saveSubjectPersistence(p *Plugin) {
 		cancel()
 	}
 	if err != nil {
+		if errors.Is(err, audit.ErrStorageBlocked) {
+			state.persistence.writesBlocked.Store(true)
+		}
 		state.persistence.failed.Add(1)
 		state.persistence.setError(err)
 		p.logSubjectPersistenceError("subject_persistence_save_failed")

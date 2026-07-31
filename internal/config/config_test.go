@@ -3,6 +3,7 @@ package config
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -123,6 +124,8 @@ classifier:
 func TestParseRawCaptureExplicitOptIn(t *testing.T) {
 	t.Parallel()
 	cfg, err := Parse([]byte(`audit:
+  data_dir: "` + filepath.ToSlash(t.TempDir()) + `"
+  require_persistent_storage: true
   raw_capture:
     enabled: true
     only_blocked: true
@@ -365,6 +368,84 @@ func TestValidateAuditDataDir(t *testing.T) {
 			cfg.Audit.DataDir = path
 			if err := Validate(cfg); err != nil {
 				t.Fatalf("Validate() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestAuditPersistenceSensitiveFeaturesRequireExplicitAbsoluteStorage(t *testing.T) {
+	t.Parallel()
+
+	for _, mutate := range []func(*Config){
+		func(cfg *Config) { cfg.Audit.RequirePersistentStorage = true },
+		func(cfg *Config) {
+			cfg.Audit.RequirePersistentStorage = true
+			cfg.Audit.RawCapture.Enabled = true
+		},
+		func(cfg *Config) {
+			cfg.Audit.RequirePersistentStorage = true
+			cfg.SubjectControl.Enabled = true
+			cfg.SubjectControl.Persistence = true
+		},
+	} {
+		cfg := Default()
+		mutate(&cfg)
+		if err := Validate(cfg); err == nil {
+			t.Fatal("persistence-sensitive configuration accepted an implicit data directory")
+		}
+		cfg.Audit.DataDir = "relative/audit-data"
+		if err := Validate(cfg); err == nil {
+			t.Fatal("persistence-sensitive configuration accepted a relative data directory")
+		}
+		cfg.Audit.DataDir = "/plugin-data/cyber-abuse-guard"
+		if err := Validate(cfg); err != nil {
+			t.Fatalf("explicit absolute persistence directory rejected: %v", err)
+		}
+	}
+
+	cfg := Default()
+	cfg.Audit.RequirePersistentStorage = true
+	cfg.Audit.Enabled = false
+	cfg.Audit.DataDir = "/plugin-data/cyber-abuse-guard"
+	if err := Validate(cfg); err == nil {
+		t.Fatal("required audit persistence accepted audit.enabled=false")
+	}
+}
+
+func TestPersistentFeaturesRequireExplicitPersistenceContract(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		mutate func(*Config)
+		want   string
+	}{
+		{
+			name: "raw capture",
+			mutate: func(cfg *Config) {
+				cfg.Audit.RawCapture.Enabled = true
+			},
+			want: "audit.raw_capture.enabled requires audit.require_persistent_storage=true",
+		},
+		{
+			name: "subject persistence",
+			mutate: func(cfg *Config) {
+				cfg.SubjectControl.Enabled = true
+				cfg.SubjectControl.Persistence = true
+			},
+			want: "subject_control.persistence requires audit.require_persistent_storage=true",
+		},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := Default()
+			cfg.Audit.DataDir = "/plugin-data/cyber-abuse-guard"
+			test.mutate(&cfg)
+			err := Validate(cfg)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Validate() error=%v, want %q", err, test.want)
 			}
 		})
 	}

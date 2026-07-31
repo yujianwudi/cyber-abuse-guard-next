@@ -193,6 +193,8 @@ type shadowPlanner struct {
 	invalidToolCallMessages  map[uint64]struct{}
 	invalidToolCallScopes    map[uint64]struct{}
 	invalidGeminiPartScopes  map[uint64]struct{}
+	geminiWrapperAttempts    map[int]struct{}
+	referableToolBarriers    map[int]struct{}
 }
 
 // ScanProfiledRequest performs complete envelope validation, builds a bounded
@@ -724,6 +726,13 @@ func (p *shadowPlanner) parseObject(ctx planContext, depth int) (valueSummary, e
 			blockHasToolPayloadKey = true
 		}
 		if ctx.roleContent && (canonical == "functioncall" || canonical == "functionresponse") {
+			if p.source == SourceProfileGemini && ctx.conversationIndex >= 0 &&
+				(keyValue == "functionCall" || keyValue == "functionResponse") {
+				if p.geminiWrapperAttempts == nil {
+					p.geminiWrapperAttempts = make(map[int]struct{})
+				}
+				p.geminiWrapperAttempts[ctx.conversationIndex] = struct{}{}
+			}
 			if blockWrapperType != "" && (blockWrapperType != canonical || p.source == SourceProfileGemini) {
 				blockWrapperAmbiguous = true
 			}
@@ -1900,22 +1909,120 @@ func (p *shadowPlanner) finalizeToolAssociations(spans []plannedText) {
 	if p == nil || len(spans) == 0 || len(p.toolAssociations) == 0 {
 		return
 	}
-	authorizedSpanIDs := make(map[uint64]struct{})
+	associationsBySpanID := make(map[uint64]ToolResultAssociation)
+	terminalUserCanRefer := terminalTrustedUserCanReferToToolResult(
+		spans, p.terminalHistoryItemIndex, p.hasTerminalHistoryItem,
+	)
+	p.recordReferableToolResultBarriers(spans)
 	// Match only provider-native call/result groups inside their adjacent local
 	// transaction. Reused IDs in another transaction neither authorize a stale
 	// result nor make a valid local pair ambiguous.
 	groupsByConversation := p.toolAssociationGroupsByConversation()
 	switch p.source {
 	case SourceProfileOpenAI:
-		p.collectOpenAIChatToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+		p.collectOpenAIChatToolAssociationSpans(
+			groupsByConversation, associationsBySpanID, terminalUserCanRefer,
+		)
 	case SourceProfileOpenAIResponse:
-		p.collectOpenAIResponsesToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+		p.collectOpenAIResponsesToolAssociationSpans(
+			groupsByConversation, associationsBySpanID, terminalUserCanRefer,
+		)
 	case SourceProfileClaude:
-		p.collectClaudeToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+		p.collectClaudeToolAssociationSpans(
+			groupsByConversation, associationsBySpanID, terminalUserCanRefer,
+		)
 	case SourceProfileGemini:
-		p.collectGeminiToolAssociationSpans(groupsByConversation, authorizedSpanIDs)
+		p.collectGeminiToolAssociationSpans(
+			groupsByConversation, associationsBySpanID, terminalUserCanRefer,
+		)
 	}
-	markToolAssociations(spans, authorizedSpanIDs)
+	markToolAssociations(spans, associationsBySpanID)
+}
+
+func (p *shadowPlanner) recordReferableToolResultBarriers(spans []plannedText) {
+	if p == nil || len(spans) == 0 || len(p.toolAssociations) == 0 {
+		return
+	}
+	authorityByConversation := make(map[int]map[uint64]struct{})
+	for _, record := range p.toolAssociations {
+		if record.kind != toolAssociationObjectResult || record.conversationIndex < 0 ||
+			len(record.authoritySpanIDs) == 0 {
+			continue
+		}
+		authority := authorityByConversation[record.conversationIndex]
+		if authority == nil {
+			authority = make(map[uint64]struct{}, len(record.authoritySpanIDs))
+			authorityByConversation[record.conversationIndex] = authority
+		}
+		for _, spanID := range record.authoritySpanIDs {
+			if spanID != 0 {
+				authority[spanID] = struct{}{}
+			}
+		}
+	}
+	for _, span := range spans {
+		authority := authorityByConversation[span.conversationIndex]
+		if len(authority) == 0 || !p.plannedTextHasVisibleContent(span) {
+			continue
+		}
+		if _, authorized := authority[span.id]; authorized {
+			continue
+		}
+		if p.referableToolBarriers == nil {
+			p.referableToolBarriers = make(map[int]struct{})
+		}
+		p.referableToolBarriers[span.conversationIndex] = struct{}{}
+	}
+}
+
+func (p *shadowPlanner) plannedTextHasVisibleContent(span plannedText) bool {
+	if p == nil {
+		return false
+	}
+	if span.owned != "" {
+		return strings.TrimSpace(span.owned) != ""
+	}
+	if span.rawStart < 0 || span.rawEnd > len(p.body) || span.rawStart >= span.rawEnd {
+		return false
+	}
+	value, bounded := decodeShortJSONString(p.body[span.rawStart:span.rawEnd], maxShadowValueBytes)
+	return !bounded || strings.TrimSpace(value) != ""
+}
+
+func terminalTrustedUserCanReferToToolResult(
+	spans []plannedText,
+	terminalHistoryItemIndex int,
+	hasTerminalHistoryItem bool,
+) bool {
+	if !hasTerminalHistoryItem {
+		return false
+	}
+	for _, span := range spans {
+		if span.conversationIndex == terminalHistoryItemIndex && span.role == RoleUser &&
+			span.provenance == ProvenanceContent &&
+			span.userAttribution == UserAttributionTrusted &&
+			span.contentKind == ContentKindNaturalLanguageDirective {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *shadowPlanner) toolAssociationForTransactionEnd(
+	transactionEnd int,
+	terminalUserCanRefer bool,
+) ToolResultAssociation {
+	if p == nil || !p.hasTerminalHistoryItem {
+		return ToolResultAssociationNone
+	}
+	switch {
+	case transactionEnd == p.terminalHistoryItemIndex:
+		return ToolResultAssociationUnique
+	case terminalUserCanRefer && transactionEnd == p.terminalHistoryItemIndex-1:
+		return ToolResultAssociationReferableUnique
+	default:
+		return ToolResultAssociationNone
+	}
 }
 
 type toolAssociationGroup struct {
@@ -2037,12 +2144,22 @@ func toolAssociationRecordsMatch(
 	return len(seenResults) == len(callsByID)
 }
 
-func authorizeToolAssociationResults(
+func (p *shadowPlanner) authorizeToolAssociationResults(
 	results []toolAssociationRecord,
-	authorizedSpanIDs map[uint64]struct{},
+	association ToolResultAssociation,
+	associationsBySpanID map[uint64]ToolResultAssociation,
 ) {
-	if len(results) == 0 {
+	if len(results) == 0 ||
+		association != ToolResultAssociationReferableUnique &&
+			association != ToolResultAssociationUnique {
 		return
+	}
+	if association == ToolResultAssociationReferableUnique {
+		for _, result := range results {
+			if _, barrier := p.referableToolBarriers[result.conversationIndex]; barrier {
+				return
+			}
+		}
 	}
 	pending := make([]uint64, 0, len(results))
 	seen := make(map[uint64]struct{})
@@ -2057,18 +2174,22 @@ func authorizeToolAssociationResults(
 			if _, duplicate := seen[spanID]; duplicate {
 				return
 			}
+			if _, alreadyAssociated := associationsBySpanID[spanID]; alreadyAssociated {
+				return
+			}
 			seen[spanID] = struct{}{}
 			pending = append(pending, spanID)
 		}
 	}
 	for _, spanID := range pending {
-		authorizedSpanIDs[spanID] = struct{}{}
+		associationsBySpanID[spanID] = association
 	}
 }
 
 func (p *shadowPlanner) collectOpenAIChatToolAssociationSpans(
 	groupsByConversation map[int][]*toolAssociationGroup,
-	authorizedSpanIDs map[uint64]struct{},
+	associationsBySpanID map[uint64]ToolResultAssociation,
+	terminalUserCanRefer bool,
 ) {
 	if p == nil || !p.hasTerminalHistoryItem {
 		return
@@ -2094,9 +2215,10 @@ func (p *shadowPlanner) collectOpenAIChatToolAssociationSpans(
 			resultRecords = append(resultRecords, resultGroup.records[0])
 			nextIndex++
 		}
-		if toolAssociationRecordsMatch(callGroup.records, resultRecords, false) &&
-			nextIndex-1 == p.terminalHistoryItemIndex {
-			authorizeToolAssociationResults(resultRecords, authorizedSpanIDs)
+		association := p.toolAssociationForTransactionEnd(nextIndex-1, terminalUserCanRefer)
+		if association != ToolResultAssociationNone &&
+			toolAssociationRecordsMatch(callGroup.records, resultRecords, false) {
+			p.authorizeToolAssociationResults(resultRecords, association, associationsBySpanID)
 		}
 		if nextIndex > conversationIndex+1 {
 			conversationIndex = nextIndex
@@ -2108,7 +2230,8 @@ func (p *shadowPlanner) collectOpenAIChatToolAssociationSpans(
 
 func (p *shadowPlanner) collectOpenAIResponsesToolAssociationSpans(
 	groupsByConversation map[int][]*toolAssociationGroup,
-	authorizedSpanIDs map[uint64]struct{},
+	associationsBySpanID map[uint64]ToolResultAssociation,
+	terminalUserCanRefer bool,
 ) {
 	if p == nil || !p.hasTerminalHistoryItem {
 		return
@@ -2144,9 +2267,10 @@ func (p *shadowPlanner) collectOpenAIResponsesToolAssociationSpans(
 			resultRecords = append(resultRecords, resultGroup.records[0])
 			nextIndex++
 		}
-		if toolAssociationRecordsMatch(callRecords, resultRecords, false) &&
-			nextIndex-1 == p.terminalHistoryItemIndex {
-			authorizeToolAssociationResults(resultRecords, authorizedSpanIDs)
+		association := p.toolAssociationForTransactionEnd(nextIndex-1, terminalUserCanRefer)
+		if association != ToolResultAssociationNone &&
+			toolAssociationRecordsMatch(callRecords, resultRecords, false) {
+			p.authorizeToolAssociationResults(resultRecords, association, associationsBySpanID)
 		}
 		conversationIndex = nextIndex
 	}
@@ -2154,7 +2278,8 @@ func (p *shadowPlanner) collectOpenAIResponsesToolAssociationSpans(
 
 func (p *shadowPlanner) collectClaudeToolAssociationSpans(
 	groupsByConversation map[int][]*toolAssociationGroup,
-	authorizedSpanIDs map[uint64]struct{},
+	associationsBySpanID map[uint64]ToolResultAssociation,
+	terminalUserCanRefer bool,
 ) {
 	if p == nil || !p.hasTerminalHistoryItem {
 		return
@@ -2169,25 +2294,65 @@ func (p *shadowPlanner) collectClaudeToolAssociationSpans(
 		) {
 			continue
 		}
-		if toolAssociationRecordsMatch(callGroup.records, resultGroup.records, false) &&
-			conversationIndex+1 == p.terminalHistoryItemIndex {
-			authorizeToolAssociationResults(resultGroup.records, authorizedSpanIDs)
+		association := p.toolAssociationForTransactionEnd(conversationIndex+1, terminalUserCanRefer)
+		if association != ToolResultAssociationNone &&
+			toolAssociationRecordsMatch(callGroup.records, resultGroup.records, false) {
+			p.authorizeToolAssociationResults(resultGroup.records, association, associationsBySpanID)
 		}
 	}
 }
 
 func (p *shadowPlanner) collectGeminiToolAssociationSpans(
 	groupsByConversation map[int][]*toolAssociationGroup,
-	authorizedSpanIDs map[uint64]struct{},
+	associationsBySpanID map[uint64]ToolResultAssociation,
+	terminalUserCanRefer bool,
 ) {
 	if p == nil || !p.hasTerminalHistoryItem || p.terminalHistoryItemIndex < 1 {
 		return
 	}
 
-	resultGroups := groupsByConversation[p.terminalHistoryItemIndex]
-	callGroups := groupsByConversation[p.terminalHistoryItemIndex-1]
-	if len(resultGroups) != 1 || len(callGroups) != 1 {
+	// A terminal Gemini user item may contain trusted text alongside a native
+	// wrapper. A valid terminal transaction owns that slot. Any orphaned,
+	// mismatched, wrong-owner, duplicate, or otherwise malformed wrapper attempt
+	// is an ambiguity barrier: a generic user referent must not skip that attempt
+	// and activate an older result.
+	if resultRecords, ok := geminiToolAssociationResultRecords(
+		groupsByConversation, p.terminalHistoryItemIndex,
+	); ok {
+		p.authorizeToolAssociationResults(
+			resultRecords, ToolResultAssociationUnique, associationsBySpanID,
+		)
 		return
+	}
+	_, terminalWrapperAttempted := p.geminiWrapperAttempts[p.terminalHistoryItemIndex]
+	if terminalWrapperAttempted || len(groupsByConversation[p.terminalHistoryItemIndex]) != 0 {
+		return
+	}
+	if !terminalUserCanRefer || p.terminalHistoryItemIndex < 2 {
+		return
+	}
+	resultRecords, ok := geminiToolAssociationResultRecords(
+		groupsByConversation, p.terminalHistoryItemIndex-1,
+	)
+	if !ok {
+		return
+	}
+	p.authorizeToolAssociationResults(
+		resultRecords, ToolResultAssociationReferableUnique, associationsBySpanID,
+	)
+}
+
+func geminiToolAssociationResultRecords(
+	groupsByConversation map[int][]*toolAssociationGroup,
+	resultIndex int,
+) ([]toolAssociationRecord, bool) {
+	if resultIndex < 1 {
+		return nil, false
+	}
+	resultGroups := groupsByConversation[resultIndex]
+	callGroups := groupsByConversation[resultIndex-1]
+	if len(resultGroups) != 1 || len(callGroups) != 1 {
+		return nil, false
 	}
 	callGroup, resultGroup := callGroups[0], resultGroups[0]
 	if !toolAssociationGroupMatches(
@@ -2196,7 +2361,7 @@ func (p *shadowPlanner) collectGeminiToolAssociationSpans(
 		resultGroup, toolAssociationObjectResult, toolAssociationSubtypeGeminiFunction,
 	) ||
 		len(callGroup.records) != len(resultGroup.records) {
-		return
+		return nil, false
 	}
 
 	explicitIDs := true
@@ -2217,31 +2382,36 @@ func (p *shadowPlanner) collectGeminiToolAssociationSpans(
 	switch {
 	case explicitIDs:
 		if !toolAssociationRecordsMatch(callGroup.records, resultGroup.records, true) {
-			return
+			return nil, false
 		}
 	case nameOrdinal:
 		for index := range callGroup.records {
 			call := callGroup.records[index]
 			result := resultGroup.records[index]
 			if call.ordinal >= result.ordinal || call.nameDigest != result.nameDigest {
-				return
+				return nil, false
 			}
 		}
 	default:
-		return
+		return nil, false
 	}
-	authorizeToolAssociationResults(resultGroup.records, authorizedSpanIDs)
+	return resultGroup.records, true
 }
 
-func markToolAssociations(spans []plannedText, authorizedSpanIDs map[uint64]struct{}) {
-	if len(authorizedSpanIDs) == 0 {
+func markToolAssociations(
+	spans []plannedText,
+	associationsBySpanID map[uint64]ToolResultAssociation,
+) {
+	if len(associationsBySpanID) == 0 {
 		return
 	}
 	for index := range spans {
-		if _, authorized := authorizedSpanIDs[spans[index].id]; authorized && spans[index].role == RoleTool &&
+		association := associationsBySpanID[spans[index].id]
+		if (association == ToolResultAssociationReferableUnique ||
+			association == ToolResultAssociationUnique) && spans[index].role == RoleTool &&
 			spans[index].provenance == ProvenanceContent &&
 			spans[index].contentKind == ContentKindToolResult {
-			spans[index].toolAssociation = ToolResultAssociationUnique
+			spans[index].toolAssociation = association
 		}
 	}
 }

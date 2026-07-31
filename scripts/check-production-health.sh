@@ -9,12 +9,9 @@ set -euo pipefail
 BASE_URL="${CPA_BASE_URL:-http://127.0.0.1:8317}"
 EXPECTED_MODE="${EXPECTED_MODE:-balanced}"
 EXPECTED_PRIORITY="${EXPECTED_PRIORITY:-300}"
-MAX_ROUTER_ERRORS="${MAX_ROUTER_ERRORS:-}"
-MAX_PANICS_RECOVERED="${MAX_PANICS_RECOVERED:-}"
+MAX_ROUTER_ERRORS="${MAX_ROUTER_ERRORS:-0}"
+MAX_PANICS_RECOVERED="${MAX_PANICS_RECOVERED:-0}"
 MAX_NEW_UNKNOWN_SOURCE_FORMATS="${MAX_NEW_UNKNOWN_SOURCE_FORMATS:-}"
-ALLOW_AUDIT_DEGRADED="${ALLOW_AUDIT_DEGRADED:-0}"
-ALLOW_PERSISTENCE_DEGRADED="${ALLOW_PERSISTENCE_DEGRADED:-0}"
-ALLOW_UNSTABLE_HMAC="${ALLOW_UNSTABLE_HMAC:-0}"
 ALLOW_UNVERIFIED_BUILD="${ALLOW_UNVERIFIED_BUILD:-0}"
 CONNECT_TIMEOUT_SECONDS="${CONNECT_TIMEOUT_SECONDS:-3}"
 REQUEST_TIMEOUT_SECONDS="${REQUEST_TIMEOUT_SECONDS:-10}"
@@ -38,11 +35,11 @@ case "$EXPECTED_MODE" in
   observe | audit | balanced | strict) ;;
   *) fail "EXPECTED_MODE must be observe, audit, balanced, or strict" ;;
 esac
-case "$EXPECTED_PRIORITY:$ALLOW_AUDIT_DEGRADED:$ALLOW_PERSISTENCE_DEGRADED:$ALLOW_UNSTABLE_HMAC:$ALLOW_UNVERIFIED_BUILD" in
+case "$EXPECTED_PRIORITY:$ALLOW_UNVERIFIED_BUILD" in
   *[!0-9:]* | *::* | :* | *:) fail "priority and allow flags must be non-negative integers" ;;
 esac
-[[ -z "$MAX_ROUTER_ERRORS" || "$MAX_ROUTER_ERRORS" =~ ^[0-9]+$ ]] || fail "MAX_ROUTER_ERRORS must be empty or a non-negative integer"
-[[ -z "$MAX_PANICS_RECOVERED" || "$MAX_PANICS_RECOVERED" =~ ^[0-9]+$ ]] || fail "MAX_PANICS_RECOVERED must be empty or a non-negative integer"
+[[ "$MAX_ROUTER_ERRORS" =~ ^[0-9]+$ ]] || fail "MAX_ROUTER_ERRORS must be a non-negative integer"
+[[ "$MAX_PANICS_RECOVERED" =~ ^[0-9]+$ ]] || fail "MAX_PANICS_RECOVERED must be a non-negative integer"
 [[ -z "$MAX_NEW_UNKNOWN_SOURCE_FORMATS" || "$MAX_NEW_UNKNOWN_SOURCE_FORMATS" =~ ^[0-9]+$ ]] || fail "MAX_NEW_UNKNOWN_SOURCE_FORMATS must be empty or a non-negative integer"
 
 management_key="${CPA_MANAGEMENT_KEY:-}"
@@ -104,6 +101,18 @@ validate_status() {
   jq -e . >/dev/null 2>&1 <<<"$response_body" || fail "${phase} plugin status is not JSON"
   jq -e '.loaded == true' >/dev/null <<<"$response_body" || fail "${phase} status reports that the plugin is not loaded/registered"
   jq -e '.enforcement_ready == true' >/dev/null <<<"$response_body" || fail "${phase} status reports that the enforcement engine is not ready"
+  if ! jq -e '.operational_ready == true and (.readiness_reasons | type == "array" and length == 0)' >/dev/null <<<"$response_body"; then
+    readiness_reasons="$(jq -c '.readiness_reasons // ["status_contract_missing"]' <<<"$response_body" 2>/dev/null || printf '["status_contract_invalid"]')"
+    fail "${phase} status is not operationally ready: ${readiness_reasons}"
+  fi
+  jq -e '
+    ((.audit | type) == "object")
+    and (.audit.enabled == true)
+    and (.audit.persistence_expected == true)
+    and (.audit.persistence_verified == true)
+    and (.audit.persistence_reason == null)
+  ' >/dev/null <<<"$response_body" \
+    || fail "${phase} status requires enabled audit with verified persistent storage"
 
   status_mode="$(jq -r '.mode // ""' <<<"$response_body")"
   [[ "$status_mode" == "$EXPECTED_MODE" ]] || fail "${phase} status mode is ${status_mode}, expected ${EXPECTED_MODE}"
@@ -123,15 +132,12 @@ validate_status() {
 
   last_reconfigure_error="$(jq -r '.last_reconfigure_error // ""' <<<"$response_body")"
   [[ -z "$last_reconfigure_error" ]] || fail "${phase} status reports that the last reconfiguration was rejected"
-  if [[ "$ALLOW_AUDIT_DEGRADED" != "1" ]]; then
-    jq -e '.audit_degraded == false' >/dev/null <<<"$response_body" || fail "${phase} status reports degraded audit storage/queue"
-  fi
-  if [[ "$ALLOW_PERSISTENCE_DEGRADED" != "1" ]]; then
-    jq -e '.persistence_degraded == false' >/dev/null <<<"$response_body" || fail "${phase} status reports degraded subject persistence"
-  fi
-  if [[ "$ALLOW_UNSTABLE_HMAC" != "1" ]]; then
-    jq -e '.hmac_stable == true' >/dev/null <<<"$response_body" || fail "${phase} status reports that HMAC subject identity is not restart-stable"
-  fi
+  # operational_ready already includes these states. Keep the explicit fields
+  # fail-closed as a contract cross-check; no ALLOW_* switch may turn a red
+  # production readiness signal green.
+  jq -e '.audit_degraded == false' >/dev/null <<<"$response_body" || fail "${phase} status reports degraded audit storage/queue"
+  jq -e '.persistence_degraded == false' >/dev/null <<<"$response_body" || fail "${phase} status reports degraded subject persistence"
+  jq -e '.hmac_stable == true' >/dev/null <<<"$response_body" || fail "${phase} status reports that HMAC subject identity is not restart-stable"
 
   status_router_errors="$(jq -er '.router_errors | numbers' <<<"$response_body")" || fail "${phase} status router_errors is missing"
   status_panics_recovered="$(jq -er '.panics_recovered | numbers' <<<"$response_body")" || fail "${phase} status panics_recovered is missing"
@@ -148,18 +154,10 @@ ruleset_version="$status_ruleset_version"
 router_errors_before="$status_router_errors"
 panics_before="$status_panics_recovered"
 unknown_source_formats_before="$status_unknown_source_formats"
-if [[ -n "$MAX_ROUTER_ERRORS" ]]; then
-  max_router_errors=$((10#$MAX_ROUTER_ERRORS))
-  (( router_errors_before <= max_router_errors )) || fail "router_errors=${router_errors_before} (Router/RequestInterceptor protocol failures) exceeds ${max_router_errors}"
-elif (( router_errors_before > 0 )); then
-  printf 'NOTICE: cumulative router_errors=%s (Router/RequestInterceptor protocol failures); set MAX_ROUTER_ERRORS to enforce an absolute restart-scoped budget.\n' "$router_errors_before" >&2
-fi
-if [[ -n "$MAX_PANICS_RECOVERED" ]]; then
-  max_panics_recovered=$((10#$MAX_PANICS_RECOVERED))
-  (( panics_before <= max_panics_recovered )) || fail "panics_recovered=${panics_before} exceeds ${max_panics_recovered}"
-elif (( panics_before > 0 )); then
-  printf 'NOTICE: cumulative panics_recovered=%s; set MAX_PANICS_RECOVERED to enforce an absolute restart-scoped budget.\n' "$panics_before" >&2
-fi
+max_router_errors=$((10#$MAX_ROUTER_ERRORS))
+(( router_errors_before <= max_router_errors )) || fail "router_errors=${router_errors_before} (Router/RequestInterceptor protocol failures) exceeds ${max_router_errors}"
+max_panics_recovered=$((10#$MAX_PANICS_RECOVERED))
+(( panics_before <= max_panics_recovered )) || fail "panics_recovered=${panics_before} exceeds ${max_panics_recovered}"
 if (( unknown_source_formats_before > 0 )); then
   printf 'NOTICE: cumulative unknown_source_formats=%s; investigate unsupported CPA/provider source labels.\n' "$unknown_source_formats_before" >&2
 fi

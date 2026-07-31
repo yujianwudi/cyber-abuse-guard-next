@@ -63,6 +63,8 @@ func auditDecisionExplanation(result classifier.Result) *audit.DecisionExplanati
 		CurrentTurnEvidence:        source.CurrentTurnEvidence,
 		CrossSegmentComposition:    crossSegment,
 		ReferentLinkUsed:           source.ReferentLinkUsed,
+		RelationType:               auditExplanationRelationType(source.RelationType),
+		EnforcementOwner:           auditExplanationEnforcementOwner(source.EnforcementOwner),
 		QuotedOrInertSuppressed:    source.QuotedOrInertSuppressed,
 		ContextAdjustment:          source.ContextAdjustment,
 		HardFloorApplied:           source.HardFloorApplied,
@@ -88,6 +90,28 @@ func auditDecisionExplanation(result classifier.Result) *audit.DecisionExplanati
 		ReferentProofComplete:      source.ReferentProofComplete,
 		EvidenceAmbiguous:          source.EvidenceAmbiguous,
 		CrossScopeComposition:      source.CrossScopeComposition,
+	}
+}
+
+func auditExplanationRelationType(
+	relation classifier.ExplanationRelationType,
+) audit.ExplanationRelationType {
+	switch relation {
+	case classifier.ExplanationRelationHistoricalToolActivation:
+		return audit.ExplanationRelationHistoricalToolActivation
+	default:
+		return audit.ExplanationRelationNone
+	}
+}
+
+func auditExplanationEnforcementOwner(
+	owner classifier.ExplanationEnforcementOwner,
+) audit.ExplanationEnforcementOwner {
+	switch owner {
+	case classifier.ExplanationEnforcementOwnerCurrentTrustedUser:
+		return audit.ExplanationEnforcementOwnerCurrentTrustedUser
+	default:
+		return audit.ExplanationEnforcementOwnerNone
 	}
 }
 

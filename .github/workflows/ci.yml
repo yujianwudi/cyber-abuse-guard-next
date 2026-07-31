@@ -125,6 +125,19 @@ jobs:
         run: make round9-public-corpus
       - name: benchmark-acceptance
         run: make round6-benchmark
+      - name: Round 10 bounded concurrency performance
+        timeout-minutes: 12
+        env:
+          ROUND10_PERFORMANCE_OUTPUT: ${{ runner.temp }}/round10-performance.json
+        run: make round10-performance ROUND10_PERFORMANCE_OUTPUT="$ROUND10_PERFORMANCE_OUTPUT"
+      - name: Upload Round 10 performance JSON
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: round10-performance-linux-amd64
+          path: ${{ runner.temp }}/round10-performance.json
+          if-no-files-found: warn
+          retention-days: 14
       - name: dependency-vulnerability-gate
         run: make round6-vulncheck
       - name: Linux Host loads candidate .so and builds development artifacts

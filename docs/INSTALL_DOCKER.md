@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
 ```
 
 ## Current source status
@@ -247,6 +247,14 @@ An existing audit directory must not be group/world writable. The database,
 WAL, SHM, and final data directory must not be symlinks. Keep the entire path
 outside attacker-controlled or same-user-writable ancestors.
 
+The Linux readiness guard opens and records the data-directory and existing
+DB/WAL/SHM device+inode identities, records the mount identity, rechecks after
+SQLite opens, and probes them again for every authenticated status read. This
+narrows replacement races but does not claim a complete same-UID TOCTOU fix:
+the current Go SQLite driver does not provide this project a fd-relative custom
+VFS/openat2 database open. Production must therefore keep every ancestor and
+the mounted data directory outside an untrusted process sharing the plugin UID.
+
 Mount code read-only, data read-write, and the HMAC file read-only:
 
 ```yaml
@@ -254,7 +262,7 @@ services:
   cli-proxy-api:
     volumes:
       - ./plugins:/CLIProxyAPI/plugins:ro
-      - ./plugin-data:/root/.cli-proxy-api/plugins
+      - ./plugin-data/cyber-abuse-guard:/plugin-data/cyber-abuse-guard
       - /opt/cliproxyapi/secrets/cyber-abuse-guard-hmac.key:/run/secrets/cyber-abuse-guard-hmac.key:ro
     environment:
       CYBER_ABUSE_GUARD_HMAC_KEY_FILE: /run/secrets/cyber-abuse-guard-hmac.key
@@ -308,6 +316,8 @@ plugins:
         max_subjects: 10000
       audit:
         enabled: true
+        data_dir: /plugin-data/cyber-abuse-guard
+        require_persistent_storage: true
         backup_before_migration: true
         max_migration_backups: 3
         log_original_text: false
@@ -324,27 +334,56 @@ cooldown, and manual-block state. To enable persistence later, keep audit
 enabled, keep `max_subjects <= 10000`, and first verify `hmac_stable: true`.
 Subject-state rows contain only HMAC IDs and typed state.
 
+Authenticated local status exposes the persistence contract under `audit`:
+`storage_type`, `persistence_expected`, `persistence_verified`,
+`persistence_reason`, and `database_path`. The database path is operator data;
+it is not returned by unauthenticated management responses or written into
+request audit events. `enforcement_ready` remains true when classification can
+still fail open around audit storage, while `operational_ready` is false whenever
+required persistence is unverified. Raw capture and persistent subject control
+are rejected unless `require_persistent_storage: true` is explicit and
+`audit.data_dir` is an explicit absolute path.
+
 ## 6. Upgrade and database migration
 
-At first v0.15 open, supported legacy databases are migrated atomically to
-schema v3. With backup enabled, a consistent mode-0400
-`events.db.pre-v3-*.bak` is created through SQLite `VACUUM INTO`; only the
-newest configured number is retained.
+The current source uses audit schema v6. A supported schema v1-v5 database is
+migrated atomically to v6 only after a mandatory, exact mode-0400 SQLite Online
+Backup is created as `events.db.pre-v6-*.bak`. Its adjacent manifest binds the
+source/target schema versions, byte count, SHA-256, `quick_check: ok`, and
+`exact_snapshot: true`; only the newest configured number is retained. Crossing
+into v6 cannot be made backup-free by setting `backup_before_migration: false`,
+because an older binary must be paired with the exact pre-v6 database.
 
-Before restart, make a separate operator backup while CPA is stopped if the
-database is business-critical:
+Before restart, make a cold operator backup while CPA is stopped. Treat the
+database and every present `-wal`/`-shm` sidecar as one consistency unit; never
+copy only `events.db` from a live or incompletely stopped runtime. Archive the
+complete data directory from one quiescent point:
 
 ```bash
 docker compose stop cli-proxy-api
-cp -p plugin-data/cyber-abuse-guard/events.db \
-  "rollback/cyber-abuse-guard/events.${stamp}.db" 2>/dev/null || true
+test -z "$(docker compose ps -q --status running cli-proxy-api)"
+mkdir -p rollback/cyber-abuse-guard
+archive="$(pwd -P)/rollback/cyber-abuse-guard/audit-data.${stamp}.tar.gz"
+tar -C plugin-data -czpf \
+  "$archive" \
+  cyber-abuse-guard
+sha256sum "$archive" >"${archive}.sha256"
+tar -tzf "$archive" >/dev/null
 docker compose up -d cli-proxy-api
 ```
 
+Restore that cold archive only while CPA is stopped, replacing the complete
+data directory as one unit. Do not mix an archived database with live WAL/SHM
+sidecars, and do not retain a destination sidecar absent from the archive.
+Schema-migration backups are different: they are verified standalone exact
+SQLite Online Backup snapshots, so the documented schema rollback removes live
+sidecars before installing exactly one backup whose manifest and SHA-256 have
+been verified.
+
 Migration failure must not partially advance the schema, but it can leave audit
 degraded and must block promotion. Check status `audit.schema_version` and
-`audit_degraded`. Older binaries are not claimed to read schema v3; restore the
-matching pre-migration database when rolling the binary back.
+`audit_degraded`. Older binaries are not claimed to read schema v6; restore the
+matching exact pre-v6 database before loading an older binary.
 
 ## 7. Restart and baseline checks
 
@@ -358,13 +397,22 @@ EXPECTED_MODE=observe \
 ./scripts/check-production-health.sh
 ```
 
+The production watchdog defaults both cumulative restart-scoped budgets,
+`MAX_ROUTER_ERRORS` and `MAX_PANICS_RECOVERED`, to zero. A reviewed non-zero
+budget must be explicit. Audit, subject-persistence, or HMAC degradation cannot
+be bypassed with an `ALLOW_*` switch; a red operational readiness signal stays
+red.
+
 The watchdog is read-only and loopback-only. It checks CPA reachability,
-authenticated status, loaded/ready state, exact mode and priority, build/ruleset
-identity, degradation, router/panic counters, and two built-in local probes. The
+authenticated status, enforcement and operational readiness, verified audit
+persistence, exact mode and priority, build/ruleset identity, degradation,
+router/panic counters, and two built-in local probes. The
 malicious probe never enters a provider route, auth selector, usage queue, or
 upstream.
 
-`enforcement_ready` is plugin-internal state only. It does not prove the binary
+`enforcement_ready` is the request-decision engine state; `operational_ready`
+also requires the configured audit persistence contract and other local
+readiness dependencies. Neither field alone proves the binary
 was loaded/registered, was not fused, won Router ordering, or passed CPA's
 per-request self-executor readiness checks. A missing plugin, registration
 failure, fused plugin, Router error/panic, invalid or empty target, not-ready
@@ -422,7 +470,8 @@ events. Monitor:
 - request/classification counts and latency;
 - CPU, memory, goroutines, and CPA 5xx;
 - `router_errors` and `panics_recovered` deltas;
-- `loaded`, `enforcement_ready`, `ruleset_version_match`, and dirty build state;
+- `loaded`, `enforcement_ready`, `operational_ready`, an empty
+  `readiness_reasons`, `ruleset_version_match`, and dirty build state;
 - HMAC, audit, queue, and persistence degradation;
 - opaque-media counts and expected traffic mix.
 
@@ -502,23 +551,48 @@ Do not delete the audit database or HMAC secret as part of the fastest rollback.
 
 ## 10. Roll back to the previous binary and database
 
-Stop CPA, remove v0.15 from the active directory, restore exactly one previous
-`.so`, restore the matching configuration, and—when moving back to v0.1.1—use
-the saved pre-migration database:
+Stop CPA, remove the exact currently deployed candidate from the active
+directory, restore exactly one previous `.so`, and restore its matching
+configuration. If that binary cannot read schema v6, it must be paired with the
+exact pre-v6 Online Backup named in its verified manifest:
 
 ```bash
 set -eu
+: "${CURRENT_PLUGIN_FILE:?set the exact active candidate filename}"
+: "${PREVIOUS_PLUGIN_ROLLBACK_FILE:?set the exact reviewed rollback filename}"
+: "${PREVIOUS_CONFIG_ROLLBACK_FILE:?set the exact reviewed config backup filename}"
+case "$CURRENT_PLUGIN_FILE" in
+  */*|*\\*) exit 64 ;;
+  cyber-abuse-guard*.so) ;;
+  *) exit 64 ;;
+esac
+case "$PREVIOUS_PLUGIN_ROLLBACK_FILE" in
+  */*|*\\*) exit 64 ;;
+  cyber-abuse-guard*.so) ;;
+  *) exit 64 ;;
+esac
+case "$PREVIOUS_CONFIG_ROLLBACK_FILE" in
+  */*|*\\*) exit 64 ;;
+  config.*.yaml) ;;
+  *) exit 64 ;;
+esac
+test -f "plugins/linux/amd64/$CURRENT_PLUGIN_FILE"
+test -f "rollback/cyber-abuse-guard/$PREVIOUS_PLUGIN_ROLLBACK_FILE"
+test -f "rollback/cyber-abuse-guard/$PREVIOUS_CONFIG_ROLLBACK_FILE"
 docker compose stop cli-proxy-api
-rm -f -- plugins/linux/amd64/cyber-abuse-guard-v0.15.so
-install -m 0755 \
-  rollback/cyber-abuse-guard/cyber-abuse-guard-v0.1.1.so \
-  plugins/linux/amd64/cyber-abuse-guard-v0.1.1.so
-cp -p rollback/cyber-abuse-guard/config.REPLACE_WITH_STAMP.yaml config.yaml
+rm -f -- "plugins/linux/amd64/$CURRENT_PLUGIN_FILE"
+install -m 0755 -- \
+  "rollback/cyber-abuse-guard/$PREVIOUS_PLUGIN_ROLLBACK_FILE" \
+  "plugins/linux/amd64/$PREVIOUS_PLUGIN_ROLLBACK_FILE"
+cp -p -- \
+  "rollback/cyber-abuse-guard/$PREVIOUS_CONFIG_ROLLBACK_FILE" \
+  config.yaml
 
-# Only for a full schema rollback after operator review:
+# Only for a full schema rollback after verifying the pre-v6 manifest,
+# exact_snapshot=true, sqlite_quick_check=ok, and the backup SHA-256:
 # rm -f -- plugin-data/cyber-abuse-guard/events.db-wal \
 #   plugin-data/cyber-abuse-guard/events.db-shm
-# install -m 0600 rollback/cyber-abuse-guard/events.REPLACE_WITH_STAMP.db \
+# install -m 0600 rollback/cyber-abuse-guard/events.db.pre-v6-REPLACE.bak \
 #   plugin-data/cyber-abuse-guard/events.db
 
 test "$(find plugins/linux/amd64 -maxdepth 1 -type f \
@@ -538,21 +612,32 @@ operator opt-in and never touch CPA auth files:
 ```bash
 set -eu
 : "${REMOVE_CYBER_ABUSE_GUARD:?set to YES only after backup and review}"
+: "${CURRENT_PLUGIN_FILE:?set the exact active candidate filename}"
+case "$CURRENT_PLUGIN_FILE" in
+  */*|*\\*) exit 64 ;;
+  cyber-abuse-guard*.so) ;;
+  *) exit 64 ;;
+esac
 test "$REMOVE_CYBER_ABUSE_GUARD" = YES
+test -f "plugins/linux/amd64/$CURRENT_PLUGIN_FILE"
+if [ "${REMOVE_PLUGIN_DATA:-NO}" = YES ]; then
+  test -d plugin-data/cyber-abuse-guard
+fi
+if [ "${REMOVE_HMAC_SECRET:-NO}" = YES ]; then
+  sudo test -f /opt/cliproxyapi/secrets/cyber-abuse-guard-hmac.key
+fi
 
 docker compose stop cli-proxy-api
-rm -f -- plugins/linux/amd64/cyber-abuse-guard-v0.15.so
+rm -f -- "plugins/linux/amd64/$CURRENT_PLUGIN_FILE"
 
 # Remove the cyber-abuse-guard config block from config.yaml manually. Do not
 # delete the global plugins section or another plugin's configuration.
 
 if [ "${REMOVE_PLUGIN_DATA:-NO}" = YES ]; then
-  test -d plugin-data/cyber-abuse-guard
   rm -rf -- plugin-data/cyber-abuse-guard
 fi
 
 if [ "${REMOVE_HMAC_SECRET:-NO}" = YES ]; then
-  sudo test -f /opt/cliproxyapi/secrets/cyber-abuse-guard-hmac.key
   sudo rm -f -- /opt/cliproxyapi/secrets/cyber-abuse-guard-hmac.key
 fi
 

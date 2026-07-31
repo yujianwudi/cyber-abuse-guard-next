@@ -15,7 +15,7 @@ func TestRound9ManagementDisclosesAndDoubleConfirmsMigrationBackupCleanup(t *tes
 	t.Cleanup(p.Shutdown)
 	directory := t.TempDir()
 	dataDir := filepath.ToSlash(directory)
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
 
 	databasePath := filepath.Join(directory, "events.db")
 	backupPath := databasePath + ".pre-v6-20260720T010203.000000000Z.bak"
@@ -30,7 +30,7 @@ func TestRound9ManagementDisclosesAndDoubleConfirmsMigrationBackupCleanup(t *tes
 	// Raw Capture disable must purge the active table without silently deleting
 	// the exact pre-v6 rollback snapshot.
 	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
-		"mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: false\nsubject_control:\n  enabled: false\n"))
+		"mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: false\nsubject_control:\n  enabled: false\n"))
 	if code != 0 {
 		t.Fatalf("reconfigure code=%d envelope=%s", code, raw)
 	}
@@ -109,7 +109,7 @@ func TestRound9ManagementDisclosesAndDoubleConfirmsMigrationBackupCleanup(t *tes
 	}
 }
 
-func TestRound9ManagementMigrationBackupInventoryWorksWithAuditDisabled(t *testing.T) {
+func TestRound9ManagementMigrationBackupInventoryWorksButPurgeFailsClosedWithAuditDisabled(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	directory := t.TempDir()
@@ -135,10 +135,10 @@ func TestRound9ManagementMigrationBackupInventoryWorksWithAuditDisabled(t *testi
 	}
 	response, raw := callManagementResponse(t, p, authenticatedManagementRequest(
 		http.MethodPost, managementMigrationBackupPurgePath, body))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("disabled-audit cleanup status=%d body=%s", response.StatusCode, raw)
+	if response.StatusCode != http.StatusServiceUnavailable || bodyErrorCode(raw) != "migration_backup_cleanup_failed" {
+		t.Fatalf("disabled-audit cleanup did not fail closed: status=%d body=%s", response.StatusCode, raw)
 	}
-	if _, err := os.Stat(backupPath); !os.IsNotExist(err) {
-		t.Fatalf("disabled-audit cleanup retained backup: %v", err)
+	if content, err := os.ReadFile(backupPath); err != nil || string(content) != "disabled-audit-sensitive-preview" {
+		t.Fatalf("disabled-audit cleanup changed backup: content=%q err=%v", content, err)
 	}
 }

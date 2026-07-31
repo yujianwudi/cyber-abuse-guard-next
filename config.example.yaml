@@ -54,8 +54,10 @@ plugins:
         # not correlate requests or accumulate cross-request subject risk.
         enabled: false
         # false keeps risk/cooldown/manual-block state in memory only; restart
-        # clears it. true requires audit.enabled, max_subjects <= 10000, and a
-        # stable CYBER_ABUSE_GUARD_HMAC_KEY_FILE.
+        # clears it. true requires audit.enabled,
+        # audit.require_persistent_storage=true, an explicit absolute
+        # audit.data_dir, max_subjects <= 10000, and a stable
+        # CYBER_ABUSE_GUARD_HMAC_KEY_FILE.
         persistence: false
         max_subjects: 10000
         window_minutes: 60
@@ -65,8 +67,12 @@ plugins:
 
       audit:
         enabled: true
-        # Empty uses ~/.cli-proxy-api/plugins/cyber-abuse-guard.
-        data_dir: ""
+        # Production must mount this directory from a dedicated writable Linux
+        # volume. Do not place it on CPA's auth tmpfs or the container layer.
+        data_dir: /plugin-data/cyber-abuse-guard
+        # Keeps enforcement available on storage failure, but sets
+        # operational_ready=false so deployment promotion fails closed.
+        require_persistent_storage: true
         retention_days: 30
         max_db_mb: 256
         # Observe never persists per-request events and therefore does not hash
@@ -86,7 +92,9 @@ plugins:
         # Compatibility field: true is always rejected. There is no debug
         # mode that persists unrestricted original prompt/request text.
         log_original_text: false
-        # Sensitive operator-only false-positive review. Disabled by default.
+        # Sensitive operator-only false-positive review. Disabled by default;
+        # enabling it requires require_persistent_storage=true and a verified
+        # production volume.
         # When enabled, only requests whose final disposition prevents upstream
         # routing (block, including subject cooldown) receive a separate
         # redacted, UTF-8-safe truncated preview. Redaction is best
@@ -100,8 +108,9 @@ plugins:
           max_bytes: 8192
           # 1..87600 hours; when enabled, no longer than retention_days * 24.
           ttl_hours: 72
-        # v0.1.1 databases are detected as schema v1. Migration to schema v2
-        # is atomic; optional VACUUM INTO backups are read-only and bounded.
+        # The current durable audit schema is v6. Opening a supported v1-v5
+        # database creates a mandatory exact SQLite Online Backup plus a
+        # SHA-256/quick_check manifest before the atomic v6 migration.
         backup_before_migration: true
         max_migration_backups: 3
 

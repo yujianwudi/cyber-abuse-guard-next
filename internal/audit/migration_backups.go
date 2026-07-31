@@ -45,6 +45,15 @@ type MigrationBackupCleanupResult struct {
 	Remaining        MigrationBackupStatus `json:"remaining"`
 }
 
+// MigrationBackupPurgeVerifier is the mandatory last-mile storage gate for a
+// destructive migration-backup purge. It must return nil only when the audit
+// storage is currently verified and still has the identity approved by the
+// caller. The callback runs after the backup directory has been securely
+// opened and inventoried, but before the first artifact is removed.
+type MigrationBackupPurgeVerifier func(context.Context, string) error
+
+var errMigrationBackupPurgeUnverified = errors.New("audit: migration-backup cleanup requires a storage verifier")
+
 type migrationBackupArtifact struct {
 	backupPath   string
 	manifestPath string
@@ -72,23 +81,38 @@ func InspectMigrationBackups(databasePath string) (MigrationBackupStatus, error)
 	return inventory.status, nil
 }
 
-// PurgeMigrationBackupsAtPath is the filesystem form used when auditing is
-// disabled and no Store exists. Callers must enforce their own authorization
-// and explicit destructive confirmation before invoking it.
+// PurgeMigrationBackupsAtPath is retained as a fail-closed compatibility
+// boundary. Destructive callers must use PurgeMigrationBackupsAtPathVerified.
 func PurgeMigrationBackupsAtPath(ctx context.Context, databasePath string) (MigrationBackupCleanupResult, error) {
-	return purgeMigrationBackupArtifacts(ctx, databasePath)
+	return MigrationBackupCleanupResult{}, errMigrationBackupPurgeUnverified
 }
 
-// PurgeMigrationBackups removes migration snapshots and their manifests. It is
-// intentionally separate from PurgeRawCaptures: disabling Raw Capture must not
-// silently destroy the exact database required for an older-SO rollback.
+// PurgeMigrationBackupsAtPathVerified purges only after verifier confirms that
+// the caller's storage verification remains valid.
+func PurgeMigrationBackupsAtPathVerified(ctx context.Context, databasePath string, verifier MigrationBackupPurgeVerifier) (MigrationBackupCleanupResult, error) {
+	return purgeMigrationBackupArtifacts(ctx, databasePath, verifier)
+}
+
+// PurgeMigrationBackups is retained as a fail-closed compatibility boundary.
+// Disabling Raw Capture must not silently destroy the exact database required
+// for an older-SO rollback; destructive callers must supply a verifier through
+// PurgeMigrationBackupsVerified.
 func (s *Store) PurgeMigrationBackups(ctx context.Context) (MigrationBackupCleanupResult, error) {
+	if s == nil {
+		return MigrationBackupCleanupResult{}, ErrUnavailable
+	}
+	return MigrationBackupCleanupResult{}, errMigrationBackupPurgeUnverified
+}
+
+// PurgeMigrationBackupsVerified is the Store form of the verified destructive
+// operation. Store serialization does not replace storage verification.
+func (s *Store) PurgeMigrationBackupsVerified(ctx context.Context, verifier MigrationBackupPurgeVerifier) (MigrationBackupCleanupResult, error) {
 	if s == nil {
 		return MigrationBackupCleanupResult{}, ErrUnavailable
 	}
 	s.migrationBackupMu.Lock()
 	defer s.migrationBackupMu.Unlock()
-	return purgeMigrationBackupArtifacts(ctx, s.cfg.Path)
+	return purgeMigrationBackupArtifacts(ctx, s.cfg.Path, verifier)
 }
 
 func inspectMigrationBackupArtifacts(databasePath string) (migrationBackupInventory, error) {
@@ -192,65 +216,20 @@ func inspectMigrationBackupArtifacts(databasePath string) (migrationBackupInvent
 	return migrationBackupInventory{status: status, backups: backups, orphanManifests: orphanManifests}, nil
 }
 
-func purgeMigrationBackupArtifacts(ctx context.Context, databasePath string) (MigrationBackupCleanupResult, error) {
+func purgeMigrationBackupArtifacts(ctx context.Context, databasePath string, verifier MigrationBackupPurgeVerifier) (MigrationBackupCleanupResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ctx.Err(); err != nil {
 		return MigrationBackupCleanupResult{}, fmt.Errorf("audit: migration-backup cleanup canceled: %w", err)
 	}
-	inventory, err := inspectMigrationBackupArtifacts(databasePath)
-	if err != nil {
-		return MigrationBackupCleanupResult{}, err
+	if verifier == nil {
+		return MigrationBackupCleanupResult{}, errMigrationBackupPurgeUnverified
 	}
-	result := MigrationBackupCleanupResult{}
-	for _, backup := range inventory.backups {
-		if err := ctx.Err(); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, err)
-		}
-		if _, statErr := os.Lstat(backup.manifestPath); statErr == nil {
-			if err := requireRegularMigrationArtifact(backup.manifestPath, "manifest"); err != nil {
-				return migrationBackupCleanupFailure(databasePath, result, err)
-			}
-			if err := os.Remove(backup.manifestPath); err != nil {
-				return migrationBackupCleanupFailure(databasePath, result, fmt.Errorf("remove migration-backup manifest: %w", err))
-			}
-			result.DeletedManifests++
-		} else if !errors.Is(statErr, os.ErrNotExist) {
-			return migrationBackupCleanupFailure(databasePath, result, statErr)
-		}
-		if err := requireRegularMigrationArtifact(backup.backupPath, "backup"); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, err)
-		}
-		if err := os.Remove(backup.backupPath); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, fmt.Errorf("remove migration backup: %w", err))
-		}
-		result.DeletedBackups++
-		result.FreedBytes += backup.bytes
+	if strings.TrimSpace(databasePath) == "" {
+		return MigrationBackupCleanupResult{}, errors.New("audit: database path is empty")
 	}
-	for _, manifestPath := range inventory.orphanManifests {
-		if err := ctx.Err(); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, err)
-		}
-		if err := requireRegularMigrationArtifact(manifestPath, "manifest"); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, err)
-		}
-		if err := os.Remove(manifestPath); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, fmt.Errorf("remove orphan migration-backup manifest: %w", err))
-		}
-		result.DeletedManifests++
-	}
-	if result.DeletedBackups > 0 || result.DeletedManifests > 0 {
-		if err := syncMigrationBackupDirectory(filepath.Dir(databasePath)); err != nil {
-			return migrationBackupCleanupFailure(databasePath, result, err)
-		}
-	}
-	remaining, err := InspectMigrationBackups(databasePath)
-	result.Remaining = remaining
-	if err != nil {
-		return result, err
-	}
-	return result, nil
+	return purgeMigrationBackupArtifactsPlatform(ctx, databasePath, verifier)
 }
 
 func migrationBackupCleanupFailure(databasePath string, result MigrationBackupCleanupResult, cause error) (MigrationBackupCleanupResult, error) {

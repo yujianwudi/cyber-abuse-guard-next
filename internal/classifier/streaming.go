@@ -226,6 +226,9 @@ type streamingField struct {
 	head                            []byte
 	roleSummary                     []byte
 	roleComplete                    bool
+	directCompactionProof           []byte
+	directCompactionProofComplete   bool
+	directCompactionPendingSpace    int64
 	compactCarry                    []rune
 	pendingBoundary                 bool
 	safetyContext                   bool
@@ -648,6 +651,14 @@ type ScanSession struct {
 	profiledPendingToolIncomplete  bool
 	profiledPendingIncompleteTurn  int
 	profiledPendingIncompleteConv  int
+	profiledReferableToolResult    Result
+	profiledReferableToolHasResult bool
+	profiledReferableToolSeen      bool
+	profiledReferableToolAmbiguous bool
+	profiledReferableToolTurnIndex int
+	profiledReferableToolConvIndex int
+	profiledReferableToolScopeID   uint64
+	profiledReferableToolRefCount  int
 	profiledRequest                bool
 	quotedOrInertSuppressed        bool
 
@@ -681,21 +692,23 @@ func (c *Classifier) newScanSession(mode Mode, thresholds Thresholds, policy Pol
 		return nil, fmt.Errorf("%w: compiled overlap %d must be smaller than WindowBytes %d", ErrInvalidScanLimits, overlap, normalized.WindowBytes)
 	}
 	return &ScanSession{
-		classifier:                    c,
-		mode:                          mode,
-		thresholds:                    validThresholdsOrDefault(thresholds),
-		policy:                        policy,
-		limits:                        normalized,
-		overlap:                       overlap,
-		coverage:                      Coverage{State: CoverageComplete},
-		profiledActiveTurnIndex:       -1,
-		profiledMaxTurnIndex:          -1,
-		profiledMaxConversationIndex:  -1,
-		profiledPendingToolTurnIndex:  -1,
-		profiledPendingToolConvIndex:  -1,
-		profiledPendingIncompleteTurn: -1,
-		profiledPendingIncompleteConv: -1,
-		profiledRequest:               profiledRequest,
+		classifier:                     c,
+		mode:                           mode,
+		thresholds:                     validThresholdsOrDefault(thresholds),
+		policy:                         policy,
+		limits:                         normalized,
+		overlap:                        overlap,
+		coverage:                       Coverage{State: CoverageComplete},
+		profiledActiveTurnIndex:        -1,
+		profiledMaxTurnIndex:           -1,
+		profiledMaxConversationIndex:   -1,
+		profiledPendingToolTurnIndex:   -1,
+		profiledPendingToolConvIndex:   -1,
+		profiledPendingIncompleteTurn:  -1,
+		profiledPendingIncompleteConv:  -1,
+		profiledReferableToolTurnIndex: -1,
+		profiledReferableToolConvIndex: -1,
+		profiledRequest:                profiledRequest,
 	}, nil
 }
 
@@ -773,7 +786,15 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 	if field == nil || field.id != chunk.FieldID {
 		return ErrInvalidSegmentOrder
 	}
+	if chunk.Start && s.profiledRequest {
+		segment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
+		field.directCompactionProofComplete =
+			(profiledStreamingCurrentTrustedCarrier(segment) ||
+				profiledStreamingCurrentReferentDirective(segment)) &&
+				s.profiledDirectCompactionScopeActive(segment)
+	}
 	if !s.aborted && s.coverage.State == CoverageComplete {
+		field.captureDirectCompactionProof(chunk.Text)
 		s.consume(field, chunk.Text, chunk.End)
 	}
 	if chunk.End {
@@ -1105,10 +1126,14 @@ func (s *ScanSession) finishField(field *streamingField) {
 			candidate := field.best
 			if pendingTool {
 				candidate = s.prepareProfiledCandidate(candidate, refs, true)
-				s.rememberProfiledPendingToolCandidate(
-					candidate, segment.ConversationIndex, segment.TurnIndex,
-					enforcementScopeForProfiledGroup(refs),
-				)
+				if profiledHistoricalToolResultCarrier(segment) {
+					s.rememberProfiledReferableToolCandidate(candidate, segment, len(refs))
+				} else {
+					s.rememberProfiledPendingToolCandidate(
+						candidate, segment.ConversationIndex, segment.TurnIndex,
+						enforcementScopeForProfiledGroup(refs),
+					)
+				}
 			} else if profiledHistoricalReferentEligible(segment) {
 				s.classifier.annotateProfiledResult(&candidate, refs, false, s.policy, s.mode, s.thresholds)
 			} else {
@@ -1173,6 +1198,58 @@ func (s *ScanSession) finishField(field *streamingField) {
 	}
 	if summary.sampleComplete {
 		summary.sample = append([]byte(nil), field.roleSummary...)
+	}
+	if profiledField && !summary.sampleComplete &&
+		profiledStreamingCurrentReferentDirective(fieldSegment) &&
+		field.totalBytes <= maxMetaOverrideDirectControlWindowBytes &&
+		field.totalBytes == int64(len(field.buffer)) &&
+		s.profiledDirectCompactionApplication(string(field.buffer)) {
+		// Preserve only the exact bounded current-user compaction speech act that
+		// can own a following same-field fenced carrier. Ordinary long directives
+		// keep the 512-byte role summary and therefore retain the established
+		// proof-loss behavior.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		profiledStreamingCurrentTrustedCarrier(fieldSegment) &&
+		s.profiledDefensiveQuoteScopeActive(fieldSegment, field.totalBytes) &&
+		field.totalBytes <= maxInertQuotedReviewReferentBytes &&
+		field.totalBytes == int64(len(field.buffer)) {
+		// Provider extraction may split one quoted-review JSON string into a
+		// natural-language frame, a fenced carrier, and a trailing frame. Once a
+		// complete same-field prefix has proved the bounded defensive-review frame
+		// attempt, retain this one carrier so finalization can validate the whole
+		// wrapper exactly. Invalid or activating wrappers are still classified as
+		// current-user text; arbitrary fenced fields never enter this path.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		field.directCompactionProofComplete &&
+		len(field.directCompactionProof) > 0 &&
+		s.profiledDirectCompactionRunRetainable(
+			fieldSegment, int64(len(field.directCompactionProof)),
+		) {
+		// The complete logical piece exceeded the physical classifier window only
+		// because of trailing ASCII whitespace. Retain the exact non-padding prefix
+		// under the same 8 KiB direct-compaction proof cap. Internal bytes and field
+		// ownership stay unchanged, so a real cross-window semantic composition still
+		// fails closed instead of borrowing this narrow exception.
+		summary.sample = append([]byte(nil), field.directCompactionProof...)
+		summary.sampleComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		(profiledStreamingCurrentTrustedCarrier(fieldSegment) ||
+			profiledStreamingCurrentReferentDirective(fieldSegment)) &&
+		s.profiledDirectCompactionRunRetainable(fieldSegment, field.totalBytes) &&
+		field.totalBytes == int64(len(field.buffer)) {
+		// A preceding piece proved an exact direct-compaction application in this
+		// same logical text field. Preserve following carrier/directive pieces only
+		// while the complete run remains inside the reviewed 8 KiB proof bound.
+		// Arbitrary quoted/code fields retain the 512-byte summary contract.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
 	}
 	if profiledField && !summary.sampleComplete &&
 		profiledRequestLocalSystemCarrier(fieldSegment) &&
@@ -1496,7 +1573,8 @@ func (s *ScanSession) profiledStreamingPendingFallbackTool(segment extract.Segme
 func profiledStreamingDeferredToolCarrier(segment extract.Segment) bool {
 	return segment.ContentKind == extract.ContentKindToolCallArguments ||
 		segment.Provenance == extract.ProvenanceToolPayload ||
-		profiledRequestLocalToolResultCarrier(segment)
+		profiledRequestLocalToolResultCarrier(segment) ||
+		profiledHistoricalToolResultCarrier(segment)
 }
 
 func (s *ScanSession) profiledStreamingPendingTool(segment extract.Segment) bool {
@@ -1534,6 +1612,76 @@ func (s *ScanSession) rememberProfiledPendingToolCandidate(
 		s.profiledPendingToolTurnIndex = turnIndex
 		s.profiledPendingToolScope = scope
 	}
+}
+
+// rememberProfiledReferableToolCandidate retains one bounded, content-free
+// classifier result for a uniquely associated non-terminal tool result. It is
+// never ranked directly: only an immediately following terminal trusted-user
+// affirmative anchor may activate it. A second tool scope in the same provider
+// item makes the generic "preceding content" relation ambiguous.
+func (s *ScanSession) rememberProfiledReferableToolCandidate(
+	candidate Result,
+	segment extract.Segment,
+	refCount int,
+) {
+	if s == nil || !profiledHistoricalToolResultCarrier(segment) {
+		return
+	}
+	// Batch classification records every non-terminal tool result as inert
+	// unless the terminal user supplies a complete activation proof. Preserve
+	// that explanation state even when multiple referable results make the
+	// relation ambiguous and no candidate is ranked.
+	s.quotedOrInertSuppressed = true
+	if !s.profiledReferableToolSeen {
+		s.profiledReferableToolResult = Result{}
+		s.profiledReferableToolHasResult = false
+		s.profiledReferableToolSeen = true
+		s.profiledReferableToolAmbiguous = false
+		s.profiledReferableToolConvIndex = segment.ConversationIndex
+		s.profiledReferableToolTurnIndex = segment.TurnIndex
+		s.profiledReferableToolScopeID = segment.ScopeID
+		s.profiledReferableToolRefCount = refCount
+	} else if segment.ConversationIndex != s.profiledReferableToolConvIndex ||
+		segment.TurnIndex != s.profiledReferableToolTurnIndex ||
+		segment.ScopeID != s.profiledReferableToolScopeID {
+		// The extractor marks every result in the one nearest completed
+		// transaction ReferableUnique. Distinct result coordinates are therefore
+		// multiple possible payloads for a generic current-user referent, not a
+		// reason to discard the earlier candidate and choose the last result.
+		s.profiledReferableToolAmbiguous = true
+		s.profiledReferableToolResult = Result{}
+		s.profiledReferableToolHasResult = false
+		if segment.ConversationIndex > s.profiledReferableToolConvIndex ||
+			segment.ConversationIndex == s.profiledReferableToolConvIndex &&
+				segment.TurnIndex > s.profiledReferableToolTurnIndex {
+			s.profiledReferableToolConvIndex = segment.ConversationIndex
+			s.profiledReferableToolTurnIndex = segment.TurnIndex
+			s.profiledReferableToolScopeID = segment.ScopeID
+		}
+		return
+	} else if refCount > s.profiledReferableToolRefCount {
+		s.profiledReferableToolRefCount = refCount
+	}
+	if s.profiledReferableToolAmbiguous || candidate.Truncated ||
+		candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete ||
+		candidate.Category == "" || candidate.FindingConfidence == FindingNone ||
+		!candidate.CandidateIdentityBlockingProofComplete() {
+		return
+	}
+	candidate = withRoleAwareFindingOrigin(
+		candidate, FindingOriginNonUserOrUntrusted, s.mode, s.thresholds,
+	)
+	s.profiledReferableToolResult = candidate
+	s.profiledReferableToolHasResult = true
+	if refCount > 0 {
+		s.profiledReferableToolRefCount = refCount
+	}
+}
+
+func (s *ScanSession) profiledReferableToolOwnsAnchor(anchor extract.Segment) bool {
+	return s != nil && s.profiledReferableToolSeen &&
+		profiledHistoricalToolActivationAnchor(anchor) &&
+		s.profiledReferableToolConvIndex+1 == anchor.ConversationIndex
 }
 
 func (s *ScanSession) rememberProfiledPendingToolIncomplete(segment extract.Segment) {
@@ -1758,6 +1906,32 @@ func (field *streamingField) captureRoleSummary(text []byte) {
 		return
 	}
 	field.roleSummary = append(field.roleSummary, text...)
+}
+
+func (field *streamingField) captureDirectCompactionProof(text []byte) {
+	if field == nil || !field.directCompactionProofComplete || len(text) == 0 {
+		return
+	}
+	for _, value := range text {
+		if profiledDirectCompactionASCIISpace(value) {
+			field.directCompactionPendingSpace++
+			continue
+		}
+		required := int64(len(field.directCompactionProof)) +
+			field.directCompactionPendingSpace + 1
+		if required > maxMetaOverrideDirectControlWindowBytes {
+			clear(field.directCompactionProof)
+			field.directCompactionProof = nil
+			field.directCompactionProofComplete = false
+			field.directCompactionPendingSpace = 0
+			return
+		}
+		for field.directCompactionPendingSpace > 0 {
+			field.directCompactionProof = append(field.directCompactionProof, ' ')
+			field.directCompactionPendingSpace--
+		}
+		field.directCompactionProof = append(field.directCompactionProof, value)
+	}
 }
 
 func streamingBytesContainQuote(text []byte) bool {
@@ -2422,10 +2596,14 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		// candidate is provisional so the final explanation and occurrences can
 		// pass the same audit provenance contract as batch classification.
 		candidate = s.prepareProfiledCandidate(candidate, refs, true)
-		s.rememberProfiledPendingToolCandidate(
-			candidate, segment.ConversationIndex, segment.TurnIndex,
-			s.profiledGroupAuthorityScope,
-		)
+		if profiledHistoricalToolResultCarrier(segment) {
+			s.rememberProfiledReferableToolCandidate(candidate, segment, len(refs))
+		} else {
+			s.rememberProfiledPendingToolCandidate(
+				candidate, segment.ConversationIndex, segment.TurnIndex,
+				s.profiledGroupAuthorityScope,
+			)
+		}
 		if historicalReferent {
 			s.clearProfiledHistoricalCandidate()
 			s.rememberProfiledHistoricalCandidate(candidate, len(refs))
@@ -2588,7 +2766,7 @@ func (s *ScanSession) observeProfiledCurrentReferentScope(
 	current *streamingFieldSummary,
 	segment extract.Segment,
 ) {
-	if s == nil || current == nil || s.coverage.State != CoverageComplete || !segment.IsCurrentTurn {
+	if s == nil || current == nil || s.coverage.State != CoverageComplete {
 		return
 	}
 	unit, nonempty := profiledStreamingCurrentReferentUnit(
@@ -2598,6 +2776,17 @@ func (s *ScanSession) observeProfiledCurrentReferentScope(
 		return
 	}
 	s.profiledCurrentUnitOrdinal++
+	if !segment.IsCurrentTurn {
+		// Batch locality uses physical segment indexes, so every intervening
+		// non-current provider unit must terminate a current-scope run as well.
+		// Retain only a content-free barrier; raw historical text never enters the
+		// current referent state.
+		barrier := profiledCurrentReferentBarrier(unit)
+		for index := range s.profiledCurrentReferents {
+			s.appendProfiledCurrentReferentUnit(&s.profiledCurrentReferents[index], barrier)
+		}
+		return
+	}
 	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
 	if segment.ScopeID == 0 {
 		barrier := profiledCurrentReferentBarrier(unit)
@@ -2626,6 +2815,158 @@ func (s *ScanSession) observeProfiledCurrentReferentScope(
 	s.appendProfiledCurrentReferentUnit(state, unit)
 	s.profiledLastCurrentUnit = unit
 	s.profiledLastCurrentUnitSet = true
+}
+
+func (s *ScanSession) profiledDirectCompactionApplication(text string) bool {
+	if s == nil || s.classifier == nil {
+		return false
+	}
+	return profiledDirectCompactionApplicationText(text)
+}
+
+func profiledDirectCompactionApplicationText(text string) bool {
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	return !views.truncated && metaOverrideDirectCompactionApplication(string(views.standardRunes))
+}
+
+func (s *ScanSession) profiledDirectCompactionScopeActive(segment extract.Segment) bool {
+	_, active := s.profiledDirectCompactionRunBytes(segment)
+	return active
+}
+
+func (s *ScanSession) profiledDirectCompactionRunRetainable(
+	segment extract.Segment,
+	incomingBytes int64,
+) bool {
+	if incomingBytes <= 0 || incomingBytes > maxMetaOverrideDirectControlWindowBytes {
+		return false
+	}
+	retainedBytes, active := s.profiledDirectCompactionRunBytes(segment)
+	return active && retainedBytes <= maxMetaOverrideDirectControlWindowBytes-int(incomingBytes)
+}
+
+func (s *ScanSession) profiledDirectCompactionRunBytes(segment extract.Segment) (int, bool) {
+	if s == nil || !segment.IsCurrentTurn || segment.ScopeID == 0 || segment.FieldPathHash == "" {
+		return 0, false
+	}
+	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
+	for index := range s.profiledCurrentReferents {
+		state := &s.profiledCurrentReferents[index]
+		if !state.set || state.key != key {
+			continue
+		}
+		// Activation belongs to one contiguous logical-field run, not merely to
+		// the surrounding turn/scope. A field/path change, a foreign-scope
+		// barrier, or eviction of the application unit closes the retention grant.
+		totalBytes := 0
+		application := false
+		leadingApplication := false
+		matched := false
+		for unitIndex := len(state.units) - 1; unitIndex >= 0; unitIndex-- {
+			unit := state.units[unitIndex]
+			if unit.barrier || !profiledSegmentsShareLogicalTextField(unit.ref.segment, segment) {
+				if !matched {
+					return 0, false
+				}
+				break
+			}
+			matched = true
+			if !unit.complete || len(unit.text) > maxMetaOverrideDirectControlWindowBytes-totalBytes {
+				return 0, false
+			}
+			totalBytes += len(unit.text)
+			isApplication := unit.directive && unit.complete &&
+				s.profiledDirectCompactionApplication(unit.text)
+			leadingApplication = isApplication
+			if isApplication {
+				application = true
+			}
+		}
+		return totalBytes, application && leadingApplication
+	}
+	return 0, false
+}
+
+func (s *ScanSession) profiledDefensiveQuoteScopeActive(segment extract.Segment, incomingBytes int64) bool {
+	if s == nil || s.classifier == nil || !profiledStreamingCurrentTrustedCarrier(segment) ||
+		!segment.IsCurrentTurn || segment.ScopeID == 0 || segment.FieldPathHash == "" || incomingBytes <= 0 {
+		return false
+	}
+	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	if incomingBytes > maxReconstructedBytes {
+		return false
+	}
+	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
+	for index := range s.profiledCurrentReferents {
+		state := &s.profiledCurrentReferents[index]
+		if !state.set || state.key != key || len(state.units) == 0 {
+			continue
+		}
+		end := len(state.units)
+		start := end
+		for start > 0 && profiledSegmentsShareLogicalTextField(
+			state.units[start-1].ref.segment, segment,
+		) {
+			start--
+		}
+		if start == end {
+			return false
+		}
+		totalBytes := int(incomingBytes)
+		frameBytes := 0
+		var frame strings.Builder
+		for unitIndex := start; unitIndex < end; unitIndex++ {
+			unit := state.units[unitIndex]
+			if !unit.complete || len(unit.text) > maxReconstructedBytes-totalBytes {
+				return false
+			}
+			totalBytes += len(unit.text)
+			if !unit.directive {
+				continue
+			}
+			if len(unit.text) > maxInertQuotedReviewFrameBytes-frameBytes {
+				return false
+			}
+			frameBytes += len(unit.text)
+			frame.WriteString(unit.text)
+		}
+		return frameBytes > 0 && s.profiledDefensiveQuoteRetentionFrame(frame.String())
+	}
+	return false
+}
+
+func (s *ScanSession) profiledDefensiveQuoteRetentionFrame(text string) bool {
+	if s == nil || s.classifier == nil || text == "" {
+		return false
+	}
+	signals, complete := s.classifier.rawInertQuotedSafetyReviewFrameSignals(text)
+	if !complete || !signals.attempted() {
+		return false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated {
+		return false
+	}
+	clauses, overflow := metaOverrideDirectiveClausesBoundedWithLimit(
+		string(views.standardRunes), maxInertQuotedReviewFrameClauses,
+	)
+	if overflow {
+		return false
+	}
+	for _, clause := range clauses {
+		if inertQuotedSafetyAnalysisGovernor(clause.text, true) {
+			return true
+		}
+	}
+	return false
 }
 
 func profiledCurrentReferentBarrier(unit profiledCurrentReferentUnit) profiledCurrentReferentUnit {
@@ -3399,6 +3740,10 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 			return
 		}
 	}
+	s.considerProfiledDirectCompactionApplications(state)
+	if s.coverage.State != CoverageComplete {
+		return
+	}
 	directiveParts := make([]string, 0, len(state.units))
 	directiveUnits := make([]int, 0, len(state.units))
 	hasIncompleteDirective := false
@@ -3507,6 +3852,37 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 			continue
 		}
 
+		if s.profiledReferableToolOwnsAnchor(anchor.ref.segment) {
+			active, complete := s.classifier.profiledHistoricalToolActivationDirective(anchor.ref.segment.Text)
+			if !complete {
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return
+			}
+			if !active {
+				// The nearest referable tool result still owns the historical
+				// slot, but a bare implementation/continuation request cannot
+				// activate it or skip backward to older user history.
+				continue
+			}
+			if s.profiledReferableToolAmbiguous || !s.profiledReferableToolHasResult {
+				continue
+			}
+			referent := cloneProfiledReferentResult(s.profiledReferableToolResult)
+			ensureResultDecisionExplanation(&referent)
+			markResultRequestLocalReferentActivated(
+				&referent, EnforcementScopeRequestLocalTool, true, s.mode, s.thresholds,
+			)
+			bindResultCandidateReferentAnchor(&referent, anchor.ref, true, s.mode, s.thresholds)
+			markResultHistoricalToolActivationExplanation(
+				&referent, s.profiledReferableToolRefCount+1,
+			)
+			if !resultHasEligibleMaliciousWinner(referent, s.thresholds) {
+				continue
+			}
+			s.considerRanked(referent)
+			continue
+		}
+
 		if !s.profiledHistoricalHasResult {
 			continue
 		}
@@ -3525,6 +3901,95 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 				s.profiledHistoricalRefCount + 1
 		}
 		s.consider(referent, FindingOriginUserContent)
+	}
+}
+
+// considerProfiledDirectCompactionApplications restores batch/stream parity for
+// narrow current-user control-plane transactions. Provider extraction splits
+// a fenced block into separate content-kind units even though it remains one
+// JSON text field. When the preceding natural-language unit exactly proves that
+// the custom instructions below must be persisted into a model-visible compact
+// summary, classify the complete same-field units together under the existing
+// 8 KiB direct-control bound. Ordinary quoted review, historical content, and
+// unrelated code blocks stay on the inert carrier path. Every logical-field run
+// is inspected independently; a benign or weaker first run must not suppress a
+// later run or the ordinary defensive/self-contained/direct/referent pipelines.
+func (s *ScanSession) considerProfiledDirectCompactionApplications(
+	state *profiledCurrentReferentScope,
+) {
+	if s == nil || s.classifier == nil || state == nil {
+		return
+	}
+	for start := 0; start < len(state.units); {
+		first := state.units[start]
+		if first.barrier {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
+			end++
+		}
+		applicationIndex := -1
+		hasCarrierAfterApplication := false
+		complete := true
+		totalBytes := 0
+		parts := make([]string, 0, end-start)
+		refs := make([]profiledSegmentRef, 0, end-start)
+		for index := start; index < end; index++ {
+			unit := state.units[index]
+			complete = complete && unit.complete
+			if applicationIndex < 0 && unit.directive && unit.complete &&
+				s.profiledDirectCompactionApplication(unit.text) {
+				applicationIndex = index
+			} else if applicationIndex >= 0 && unit.carrier {
+				hasCarrierAfterApplication = true
+			}
+			if unit.text == "" {
+				continue
+			}
+			totalBytes += len(unit.text)
+			parts = append(parts, unit.text)
+			refs = append(refs, unit.ref)
+		}
+		if applicationIndex < 0 {
+			start = end
+			continue
+		}
+		if applicationIndex != start || !hasCarrierAfterApplication || !complete || totalBytes == 0 ||
+			totalBytes > maxMetaOverrideDirectControlWindowBytes {
+			// This proof loss is local to the one compaction run. Defer the
+			// request-level incomplete disposition until all independent fields and
+			// runs have had a chance to establish a complete eligible winner.
+			if s.pendingClassifierIncomplete == CoverageReasonNone {
+				s.pendingClassifierIncomplete = CoverageReasonClassifierWindow
+			}
+			start = end
+			continue
+		}
+		// Each independent logical-field run spends its own classification unit.
+		// Reusing one charged batch across runs would under-account an adversarial
+		// scope containing many compaction applications.
+		batch := &roleClassificationBatch{session: s}
+		candidate, ok := batch.classify(parts, false)
+		if !ok {
+			if s.coverage.State != CoverageComplete {
+				return
+			}
+			start = end
+			continue
+		}
+		candidate = withRoleAwareFindingOrigin(
+			candidate, FindingOriginUserContent, s.mode, s.thresholds,
+		)
+		s.classifier.annotateProfiledResult(
+			&candidate, refs, false, s.policy, s.mode, s.thresholds,
+		)
+		if standaloneMetaControlResult(candidate) &&
+			resultHasEligibleBlockingCandidate(candidate, s.thresholds) {
+			s.consider(candidate, FindingOriginUserContent)
+		}
+		start = end
 	}
 }
 
@@ -4797,6 +5262,14 @@ func (s *ScanSession) clearRoleState() {
 	s.profiledPendingToolIncomplete = false
 	s.profiledPendingIncompleteConv = -1
 	s.profiledPendingIncompleteTurn = -1
+	s.profiledReferableToolResult = Result{}
+	s.profiledReferableToolHasResult = false
+	s.profiledReferableToolSeen = false
+	s.profiledReferableToolAmbiguous = false
+	s.profiledReferableToolConvIndex = -1
+	s.profiledReferableToolTurnIndex = -1
+	s.profiledReferableToolScopeID = 0
+	s.profiledReferableToolRefCount = 0
 	s.profiledMaxTurnIndex = -1
 	s.profiledMaxConversationIndex = -1
 	s.profiledSawCurrentTurn = false
@@ -5473,6 +5946,7 @@ func (s *ScanSession) clearActive() {
 	clear(s.active.buffer)
 	clear(s.active.head)
 	clear(s.active.roleSummary)
+	clear(s.active.directCompactionProof)
 	clear(s.active.compactCarry)
 	clear(s.active.adjacentTail)
 	clear(s.active.quotedReviewSearchCarry)

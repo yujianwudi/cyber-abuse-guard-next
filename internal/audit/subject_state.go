@@ -23,6 +23,9 @@ const (
 // SaveSubjectSnapshot atomically replaces the optional persisted subject
 // state. Its typed input cannot contain a plaintext credential.
 func (s *Store) SaveSubjectSnapshot(ctx context.Context, snapshot subject.PersistentSnapshot) error {
+	if err := s.checkStorageAccess(); err != nil {
+		return err
+	}
 	db, err := s.availableDB()
 	if err != nil {
 		return err
@@ -99,6 +102,9 @@ hmac_key_id=excluded.hmac_key_id, saved_at_ns=excluded.saved_at_ns, updated_at_n
 // A key mismatch is explicit so callers cannot silently correlate hashes made
 // with different HMAC keys.
 func (s *Store) LoadSubjectSnapshot(ctx context.Context, expectedHMACKeyID string) (subject.PersistentSnapshot, bool, error) {
+	if err := s.checkStorageAccess(); err != nil {
+		return subject.PersistentSnapshot{}, false, err
+	}
 	db, err := s.availableDB()
 	if err != nil {
 		return subject.PersistentSnapshot{}, false, err
@@ -158,6 +164,9 @@ func (s *Store) LoadSubjectSnapshot(ctx context.Context, expectedHMACKeyID strin
 }
 
 func (s *Store) DeleteSubjectSnapshot(ctx context.Context) error {
+	if err := s.checkStorageAccess(); err != nil {
+		return err
+	}
 	db, err := s.availableDB()
 	if err != nil {
 		return err

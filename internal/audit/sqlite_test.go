@@ -13,11 +13,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 func TestStoreRoundTripPrivacyAndSafeExports(t *testing.T) {
@@ -283,6 +285,52 @@ func TestOpenFailureReturnsUsableDegradedStore(t *testing.T) {
 	}
 }
 
+func TestQueuedEventRechecksStorageGateBeforeSQLiteWrite(t *testing.T) {
+	workerEntered := make(chan struct{})
+	releaseWorker := make(chan struct{})
+	var calls atomic.Uint64
+	var blocked atomic.Bool
+	store, err := Open(Config{
+		Path:      filepath.Join(t.TempDir(), "queued-gate.db"),
+		QueueSize: 4,
+		StorageAccessGate: func() error {
+			if calls.Add(1) == 2 {
+				close(workerEntered)
+				<-releaseWorker
+			}
+			if blocked.Load() {
+				return errors.New("test storage replacement")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Discard() })
+	if err := store.Enqueue(testEvent("queued-before-storage-failure", time.Now().UTC())); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-workerEntered:
+	case <-time.After(5 * time.Second):
+		close(releaseWorker)
+		t.Fatal("writer did not reach its second storage-gate check")
+	}
+	blocked.Store(true)
+	close(releaseWorker)
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	events, err := store.Query(context.Background(), Query{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 || store.Status().Failed == 0 {
+		t.Fatalf("queued write crossed latched gate: events=%#v status=%#v", events, store.Status())
+	}
+}
+
 func TestOpenNeverChangesExistingSharedDirectoryPermissions(t *testing.T) {
 	t.Parallel()
 
@@ -307,6 +355,91 @@ func TestOpenNeverChangesExistingSharedDirectoryPermissions(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o755 {
 		t.Fatalf("shared directory permissions changed to %04o, want 0755", got)
+	}
+}
+
+func TestRequiredPersistentOpenDoesNotCreateMissingOperatorDirectory(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "operator-volume", "audit")
+	store, err := Open(Config{
+		Path:                     filepath.Join(directory, "events.db"),
+		RequirePersistentStorage: true,
+	})
+	if store == nil {
+		t.Fatal("required Open failure returned a nil degraded store")
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err == nil || !strings.Contains(err.Error(), "does not exist") {
+		t.Fatalf("required missing-directory Open error=%v", err)
+	}
+	if _, statErr := os.Lstat(directory); !os.IsNotExist(statErr) {
+		t.Fatalf("required Open created operator directory: %v", statErr)
+	}
+}
+
+func TestRequiredPersistentOpenRejectsUnsafeDatabaseModeWithoutChmod(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Unix mode contract is Linux-only")
+	}
+	directory := filepath.Join(t.TempDir(), "audit")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(directory, "events.db")
+	if err := os.WriteFile(databasePath, []byte("operator-owned"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(databasePath, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := Open(Config{Path: databasePath, RequirePersistentStorage: true})
+	if store == nil {
+		t.Fatal("unsafe-mode Open returned a nil degraded store")
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err == nil || !strings.Contains(err.Error(), "unsafe permissions") {
+		t.Fatalf("unsafe existing database mode error=%v", err)
+	}
+	info, statErr := os.Stat(databasePath)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Fatalf("required Open chmod-repaired operator database to %04o", got)
+	}
+}
+
+func TestRequiredPersistentOpenCreatesPrivateSQLiteArtifacts(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Unix mode contract is Linux-only")
+	}
+	directory := filepath.Join(t.TempDir(), "audit")
+	if err := os.Mkdir(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(directory, "events.db")
+	store, err := Open(Config{Path: databasePath, RequirePersistentStorage: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if !store.Record(testEvent("secure-artifacts", time.Now().UTC())) {
+		t.Fatal("Record was rejected")
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{databasePath, databasePath + "-wal", databasePath + "-shm"} {
+		info, statErr := os.Stat(path)
+		if os.IsNotExist(statErr) {
+			continue
+		}
+		if statErr != nil {
+			t.Fatal(statErr)
+		}
+		if got := info.Mode().Perm(); got&0o077 != 0 {
+			t.Fatalf("new SQLite artifact %s mode=%04o, want private", filepath.Base(path), got)
+		}
 	}
 }
 
@@ -370,7 +503,7 @@ func TestSecureSQLiteFilesRejectsSidecarSymlinkWithoutChangingTarget(t *testing.
 	if err := os.Symlink(targetPath, databasePath+"-wal"); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	if err := secureSQLiteFiles(databasePath); err == nil || !strings.Contains(err.Error(), "symlink") {
+	if err := secureSQLiteFiles(databasePath, true); err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("secureSQLiteFiles(sidecar symlink) error = %v, want symlink rejection", err)
 	}
 	info, err := os.Stat(targetPath)
@@ -379,6 +512,101 @@ func TestSecureSQLiteFilesRejectsSidecarSymlinkWithoutChangingTarget(t *testing.
 	}
 	if got := info.Mode().Perm(); got != 0o644 {
 		t.Fatalf("sidecar symlink target mode changed to %04o, want 0644", got)
+	}
+}
+
+func TestOpenRejectsSidecarSymlinkBeforeSQLiteConnect(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	databasePath := filepath.Join(root, "events.db")
+	targetPath := filepath.Join(root, "target")
+	original := []byte("must-survive")
+	if err := os.WriteFile(targetPath, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(targetPath, databasePath+"-wal"); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	store, err := Open(Config{Path: databasePath})
+	if store == nil {
+		t.Fatal("Open failure returned a nil degraded store")
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err == nil || !strings.Contains(err.Error(), "WAL") {
+		t.Fatalf("Open(sidecar symlink) error=%v", err)
+	}
+	got, readErr := os.ReadFile(targetPath)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !bytes.Equal(got, original) {
+		t.Fatalf("sidecar target changed before rejection: %q", got)
+	}
+}
+
+func TestOpenRejectsDatabaseWhenQuickCheckIsNotExactlyOK(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "quick-check-corrupt.db")
+	store, err := Open(Config{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite3", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE quick_check_canary (value BLOB NOT NULL)`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	for range 64 {
+		if _, err := db.Exec(`INSERT INTO quick_check_canary(value) VALUES(zeroblob(2048))`); err != nil {
+			_ = db.Close()
+			t.Fatal(err)
+		}
+	}
+	var rootPage, pageSize int64
+	if err := db.QueryRow(`SELECT rootpage FROM sqlite_master WHERE name = 'quick_check_canary'`).Scan(&rootPage); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`PRAGMA page_size`).Scan(&pageSize); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if rootPage <= 1 || pageSize <= 0 {
+		t.Fatalf("unexpected canary root page/page size: %d/%d", rootPage, pageSize)
+	}
+	file, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteAt([]byte{0xff}, (rootPage-1)*pageSize); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	degraded, openErr := Open(Config{Path: path})
+	if degraded == nil {
+		t.Fatal("corrupt Open returned a nil degraded store")
+	}
+	t.Cleanup(func() { _ = degraded.Close() })
+	if openErr == nil || !strings.Contains(openErr.Error(), "quick_check") {
+		t.Fatalf("corrupt Open error=%v, want quick_check rejection", openErr)
 	}
 }
 
@@ -471,6 +699,154 @@ func TestCloseContextHonorsDeadlineAndFinishesAfterUnlock(t *testing.T) {
 	defer finishCancel()
 	if err := store.CloseContext(finishCtx); err != nil {
 		t.Fatalf("CloseContext() after unlock = %v", err)
+	}
+}
+
+func TestCloseIgnoresBusyWALCheckpointHeldByReader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "checkpoint-reader.db")
+	store, err := Open(Config{
+		Path:        path,
+		BusyTimeout: 25 * time.Millisecond,
+		QueueSize:   4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !store.Record(testEvent("checkpoint-before-reader", time.Now().UTC())) {
+		t.Fatal("first Record was rejected")
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(path)+"?_busy_timeout=25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	tx, err := reader.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM audit_events`).Scan(&count); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if !store.Record(testEvent("checkpoint-after-reader", time.Now().UTC().Add(time.Second))) {
+		_ = tx.Rollback()
+		t.Fatal("second Record was rejected")
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+
+	if closeErr := store.Close(); closeErr != nil {
+		_ = tx.Rollback()
+		t.Fatalf("Close treated a reader-pinned durable WAL as fatal: %v", closeErr)
+	}
+	if status := store.Status(); status.Degraded || status.LastError != "" {
+		_ = tx.Rollback()
+		t.Fatalf("busy close latched a false storage failure: status=%#v", status)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(Config{Path: path, BusyTimeout: 25 * time.Millisecond})
+	if err != nil {
+		t.Fatalf("reopen after releasing reader: %v", err)
+	}
+	events, err := reopened.Query(context.Background(), Query{Limit: 10})
+	if err != nil || len(events) != 2 {
+		_ = reopened.Close()
+		t.Fatalf("recovered WAL events=%d err=%v, want both durable events", len(events), err)
+	}
+	if err := reopened.Close(); err != nil {
+		t.Fatalf("clean close after releasing reader: %v", err)
+	}
+}
+
+func TestCloseReportsNonBusyWALCheckpointError(t *testing.T) {
+	store, err := Open(Config{Path: filepath.Join(t.TempDir(), "checkpoint-error.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Closing the underlying pool makes the close-time checkpoint query fail
+	// with a non-SQLite-busy error while leaving Store.Close to run its normal
+	// finalizer and error-latching path.
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closeErr := store.Close()
+	if closeErr == nil || !strings.Contains(closeErr.Error(), "WAL checkpoint query failed") {
+		t.Fatalf("Close error=%v, want genuine checkpoint failure", closeErr)
+	}
+	status := store.Status()
+	if !status.Degraded || !strings.Contains(status.LastError, "WAL checkpoint query failed") {
+		t.Fatalf("genuine checkpoint failure was not latched: status=%#v", status)
+	}
+}
+
+func TestSQLiteBusyRecognitionIsNarrow(t *testing.T) {
+	if !isSQLiteBusy(fmt.Errorf("wrapped checkpoint: %w", sqlite3.Error{Code: sqlite3.ErrBusy})) {
+		t.Fatal("wrapped SQLITE_BUSY was not recognized")
+	}
+	if isSQLiteBusy(fmt.Errorf("wrapped checkpoint: %w", sqlite3.Error{Code: sqlite3.ErrLocked})) {
+		t.Fatal("SQLITE_LOCKED was incorrectly treated as reader checkpoint contention")
+	}
+	if isSQLiteBusy(errors.New("database is locked")) {
+		t.Fatal("error text without the SQLite driver code was treated as SQLITE_BUSY")
+	}
+}
+
+func TestDiscardSkipsBusyWALCheckpointHeldByReader(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "discard-checkpoint-reader.db")
+	store, err := Open(Config{
+		Path:        path,
+		BusyTimeout: 25 * time.Millisecond,
+		QueueSize:   4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !store.Record(testEvent("discard-before-reader", time.Now().UTC())) {
+		t.Fatal("first Record was rejected")
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(path)+"?_busy_timeout=25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	tx, err := reader.BeginTx(context.Background(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM audit_events`).Scan(&count); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if !store.Record(testEvent("discard-after-reader", time.Now().UTC().Add(time.Second))) {
+		_ = tx.Rollback()
+		t.Fatal("second Record was rejected")
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+
+	if err := store.Discard(); err != nil {
+		_ = tx.Rollback()
+		t.Fatalf("Discard attempted a busy WAL checkpoint: %v", err)
+	}
+	if err := tx.Rollback(); err != nil {
+		t.Fatal(err)
 	}
 }
 

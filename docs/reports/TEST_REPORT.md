@@ -1,31 +1,38 @@
-# Test Report — v0.16 Round 9 candidate and historical evidence
+# Test Report — v0.16 Round 10 source validation and historical evidence
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
 ```
 
-Last updated: 2026-07-30 (Asia/Shanghai)
+Last updated: 2026-07-31 (Asia/Shanghai)
 
-## Current Round 9 source-tree snapshot verification
+## Current Round 10 source-tree snapshot verification
 
 The active target is Linux amd64 `v0.16-rc.4`, classifier-policy-v9, ruleset
 1.0.10, audit schema v6, and CPA
 `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` with RPC schema 2. The protected Host contract
 uses only `127.0.0.1:18394 -> 8317/tcp`. The current working-tree development
 identity is classifier-policy-v9 /
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`
+`755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`
 and ruleset 1.0.10 /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The source tree is still converging, and evidence is partitioned across the
 current remediation identity and two frozen historical identities:
 
-- The current dependency-rebound source snapshot is `classifier-policy-v9` /
-  `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
-  It pins CPA v7.2.109 while preserving classifier behavior. Exact-commit
+- The current production-hardening source snapshot is `classifier-policy-v9` /
+  `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`.
+  It pins CPA v7.2.109 and changes bounded historical-tool activation,
+  direct-compaction overflow handling, persistent-audit readiness, and coverage
+  accounting. Exact-commit
   source/API/SDK, Linux Host-load, race, corpus, benchmark, and Tencent Cloud #2
   isolated revalidation are **PENDING** for this identity; no predecessor result
   is relabeled as current evidence.
+- The dependency-only CPA v7.2.109 rebind at `main@08bbc34c` used historical
+  policy digest
+  `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
+  Its results remain predecessor evidence and are not rebound to the current
+  behavior-changing policy identity.
 - Historical `main@150c25e6352cb237cb3956bd66c83c3278c3fe33` used exact
   policy digest
   `e0cbc975c126a12649a1b8e309e4e2a95efc64e46346467771ecae61b3e14971`.
@@ -41,7 +48,7 @@ current remediation identity and two frozen historical identities:
   v7.2.102 Host/Router, and exact-main CI results remain valid historical PASS
   evidence only for that commit/digest pair; none is rebound to `e0cbc975...`
   or the current
-  `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`
+  `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`
   identity.
 
 The predecessor main snapshot `d23c94ffb7ac3812b2799f0e0cf49dff1da74cde`
@@ -60,7 +67,7 @@ quoted credential-theft carrier was blocked in Balanced and Strict. The later
 historical `1a64639c` / `f9529ada...` source and local CPA v7.2.102 checks
 addressed that false positive. Neither external file is checked into or
 cryptographically bound by this repository, and neither supplies current
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`
+`755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`
 evidence.
 The visible development-only active corpus is `round9-public-adversarial-v13` (481448 bytes,
 SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`);
@@ -83,10 +90,10 @@ Host rows below are retained as historical `1a64639c` / `f9529ada...` evidence.
 | Round 9 evidence identity/check | Result |
 |---|---|
 | Source version / candidate | `0.16` / `v0.16-rc.4`, Linux amd64 prerelease, `latest=false` |
-| Classifier policy | `classifier-policy-v9` / `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87` / **CPA v7.2.109 DEPENDENCY-REBOUND SOURCE IDENTITY; EXACT-MAIN AND COUNTED-MOCK REVALIDATION PENDING** |
+| Classifier policy | `classifier-policy-v9` / `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9` / **CPA v7.2.109 DEPENDENCY-REBOUND SOURCE IDENTITY; EXACT-MAIN AND COUNTED-MOCK REVALIDATION PENDING** |
 | Ruleset | `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0` / **WORKING-TREE DEVELOPMENT IDENTITY; FINAL SOURCE FREEZE PENDING** |
 | Frozen CPA v7.2.104 / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14` source checks | **HISTORICAL LOCAL LINUX SOURCE-ONLY PASS.** The targeted percent-decoding, phishing-relation, request-interceptor, request-local carrier, proof-budget, and long benign-text regressions passed. Package tests and module/format/diff/vet gates passed. `scripts/go-safe-development-test.sh test` passed with classifier `149.855s` and plugin `170.503s`. The safe-gate mutation suite passed 207 tests in `73.505s` standalone and `71.386s` inside `make round6-script-test`; the main contract passed with 11 entrypoints, 39 Make targets, and 60 scripts. `make round9-corpus-contract`, `make round9-public-corpus`, the 13-test evaluator core suite, and the 20-test CPA sandbox adapter suite passed. The full safe-development race closure passed with classifier `399.952s` and plugin `797.676s`. Both visible corpus runners, `make benchmark`, and the pinned CPA v7.2.104 source/compile compatibility matrix passed. These results are not current v7.2.109 evidence. |
-| Historical `150c25e6...` / `e0cbc975...` exact-main and isolated audit | **ENGINEERING CI PASS / SECURITY AUDIT FAIL BLOCKED.** Exact-HEAD CI run `30353591705` passed. The Tencent Cloud #2 isolated audit nevertheless found 287 complete malicious fail-open requests reaching upstream, 36 malicious incomplete cases returning 403 only by fail-close, and 2 complete benign false positives. This result is bound only to `main@150c25e6352cb237cb3956bd66c83c3278c3fe33`; it is not current `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87` evidence. |
+| Historical `150c25e6...` / `e0cbc975...` exact-main and isolated audit | **ENGINEERING CI PASS / SECURITY AUDIT FAIL BLOCKED.** Exact-HEAD CI run `30353591705` passed. The Tencent Cloud #2 isolated audit nevertheless found 287 complete malicious fail-open requests reaching upstream, 36 malicious incomplete cases returning 403 only by fail-close, and 2 complete benign false positives. This result is bound only to `main@150c25e6352cb237cb3956bd66c83c3278c3fe33`; it is not current `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9` evidence. |
 | Historical `1a64639c...` / `f9529ada...` Linux source and race gates | **HISTORICAL PASS / SOURCE ONLY.** Under WSL Ubuntu 26.04 and Go 1.26.4, that frozen generation passed `make unit-test`, `make round6-vet`, `make round6-module-verify`, `make round6-script-test`, `make round9-corpus-contract`, and `go test -race ./internal/classifier -count=1`; the race run completed in 281.834 seconds with no data race. These results remain bound to `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` and `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`. |
 | CPA v7.2.104 source/API/SDK compatibility | **LOCAL LINUX SOURCE/COMPILE CONTRACT PASS; HOST PENDING.** `make cpa-latest-compat` passed under exact Go 1.26.4 for `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`, module sum `h1:59vZ1rtgxs6etE0Z3iFsLWgZ/MrcIi4mhXLt0XLSNcY=`, and go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The isolated direct-cache Origin proof, root/plugin compile probes, C ABI 1, RPC schema 2 RequestInterceptor/request-lifecycle contracts, before/after-auth termination tests, Interactions overlays, Raw Capture management, SDK `pluginabi`/`pluginapi`, and Store contracts passed. Explicit remote tag and latest-release API checks were skipped by the local pinned profile, so this is not an exact-main CI, live Host, `.so` load, or latest-release drift PASS. |
 | CPA v7.2.102 local development Host/Router | **PASS / REAL LOCAL HOST FOR DIRTY DEVELOPMENT BYTES; NOT RELEASE EVIDENCE.** `GOTOOLCHAIN=go1.26.4 ALLOW_DIRTY_BUILD=1 make integration-test` exited 0. CPA Store installed the generated Linux amd64 `0.16-dirty` `.so`; the real Host test passed in 33.359 s and every checked-in isolated Router scenario passed. Safe requests carried a valid CPA credential-selection trace and reached provider execution plus Mock upstream; blocked requests returned 403 with no credential-selection trace and no provider, usage, or upstream side effects. This local harness does not claim a counted Auth Selector delta. Encoded carriers, inert historical assistant tool-call payloads, explicit current-user harmful restatements, safe incident-response reviews, and independently complete current request-local system/terminal-tool malicious candidates were covered. The latter are direct candidate evaluations, not bare-referent promotion: only the newest eligible trusted RoleUser review may be reactivated by a bare current-user referent; assistant/system/tool/unknown history, tool schemas, and assistant tool-call arguments remain ineligible. Clean exact-main CI, a clean exact-candidate `.so`, protected external evaluation, and independent artifact audit remain pending |
@@ -110,9 +117,9 @@ Host rows below are retained as historical `1a64639c` / `f9529ada...` evidence.
 | Protected Host execution boundary | **NO SOURCE CHECKOUT**; a fixed root-owned broker owns corpus decryption, evaluator/adapter paths, keys, image identities, result directory, and protected one-shot ledger |
 | External evidence schemas | evaluation v3, evaluator aggregate v3, ledger event v3, ledger proof v1, external counted-Mock v1, CPA sandbox descriptor v2 |
 | CPA external evaluation | **NOT RUN / PENDING** for the exact v7.2.109 RPC schema-2 loopback lane; Audit→Balanced→Strict plus database/restart/panic/usage/Raw Capture runtime checks are required for `PASS` |
-| Current `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87` exact-commit CI / tag / Release | **PENDING.** No commit-bound CI, tag, artifact, or Release result is claimed by this source snapshot. |
+| Current `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9` exact-commit CI / tag / Release | **PENDING.** No commit-bound CI, tag, artifact, or Release result is claimed by this source snapshot. |
 | Historical `1a64639c...` / `f9529ada...` exact-main CI | **HISTORICAL ENGINEERING PASS.** Frozen commit `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` passed CI `30327322793`, Round 9 gate `30327322810`, and CodeQL `30327322801`. Those runs are bound to that commit and policy digest only. |
-| Independent audit | Historical `150c25e6...` / `e0cbc975...` Tencent Cloud #2 audit: **FAIL BLOCKED** with 287 complete malicious fail-open, 36 malicious incomplete 403, and 2 complete benign false positives. Current `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87` matrix/re-audit: **PENDING**. The older user-supplied `f37a25dd` report remains remediation input but is not repository-attested. |
+| Independent audit | Historical `150c25e6...` / `e0cbc975...` Tencent Cloud #2 audit: **FAIL BLOCKED** with 287 complete malicious fail-open, 36 malicious incomplete 403, and 2 complete benign false positives. Current `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9` matrix/re-audit: **PENDING**. The older user-supplied `f37a25dd` report remains remediation input but is not repository-attested. |
 | Production approval | **NOT_GRANTED** |
 | Overall | **BLOCKED / NOT PROVIDED / REQUIRES INDEPENDENT AUDIT** |
 
@@ -120,7 +127,7 @@ Host rows below are retained as historical `1a64639c` / `f9529ada...` evidence.
 
 This block is retained as historical `1a64639c` / `f9529ada...` evidence. It
 does not bind any PASS to the current
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`
+`755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`
 working tree.
 
 The exact false-positive fixture failed before the production grammar change
@@ -870,7 +877,7 @@ current_formal_cpa: v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf
 ruleset_version: 1.0.10
 ruleset_sha256: e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0
 working_tree_classifier_policy_version: classifier-policy-v9
-working_tree_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+working_tree_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
 classifier_policy_freeze: PENDING_FINAL_SOURCE_FREEZE
 completed_current_checks: LOCAL_SAFE_GATE_DIFF_POLICY_IDENTITY_AND_UPSTREAM_RELEASE_TAG_IDENTITY_PASS
 pending_current_checks: CPA_V7_2_109_SOURCE_COMPILE_EXACT_COMMIT_CI_CPA_HOST_TENCENT_2_MATRIX

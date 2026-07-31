@@ -67,14 +67,15 @@ func TestRound9MigrationBackupsAreVisibleAndRequireSeparateCleanup(t *testing.T)
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := store.PurgeMigrationBackups(canceled); !errors.Is(err, context.Canceled) {
+	verified := func(context.Context, string) error { return nil }
+	if _, err := store.PurgeMigrationBackupsVerified(canceled, verified); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled cleanup error=%v", err)
 	}
 	if _, err := os.Stat(oldBackup); err != nil {
 		t.Fatalf("canceled cleanup removed migration backup: %v", err)
 	}
 
-	result, err := store.PurgeMigrationBackups(context.Background())
+	result, err := store.PurgeMigrationBackupsVerified(context.Background(), verified)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,10 +108,82 @@ func TestRound9MigrationBackupCleanupRejectsSymlinkArtifacts(t *testing.T) {
 	if err == nil || status.InventoryAvailable || status.SensitiveDataWarning != MigrationBackupInventoryWarning {
 		t.Fatalf("symlink inventory status=%+v err=%v", status, err)
 	}
-	if _, err := PurgeMigrationBackupsAtPath(context.Background(), databasePath); err == nil {
+	if _, err := PurgeMigrationBackupsAtPathVerified(context.Background(), databasePath, func(context.Context, string) error { return nil }); err == nil {
 		t.Fatal("cleanup accepted a symlink migration backup")
 	}
 	if content, err := os.ReadFile(target); err != nil || string(content) != "must-survive" {
 		t.Fatalf("symlink target changed: content=%q err=%v", content, err)
+	}
+}
+
+func TestMigrationBackupPurgeEntrypointsFailClosedWithoutVerifier(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	if _, err := PurgeMigrationBackupsAtPath(context.Background(), databasePath); err == nil {
+		t.Fatal("path cleanup accepted an unverified request")
+	}
+	store := &Store{cfg: Config{Path: databasePath}}
+	if _, err := store.PurgeMigrationBackups(context.Background()); err == nil {
+		t.Fatal("Store cleanup accepted an unverified request")
+	}
+	if _, err := store.PurgeMigrationBackupsVerified(context.Background(), nil); err == nil {
+		t.Fatal("verified Store cleanup accepted a nil verifier")
+	}
+}
+
+func TestMigrationBackupPurgeVerifierRejectsBeforeDeletion(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("secure migration backup purge is Linux-only")
+	}
+	directory := t.TempDir()
+	databasePath := filepath.Join(directory, "events.db")
+	backup := databasePath + ".pre-v6-20260720T010203.000000000Z.bak"
+	manifest := backup + ".manifest.json"
+	for _, path := range []string{backup, manifest} {
+		if err := os.WriteFile(path, []byte("must-survive"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rejected := errors.New("storage identity changed")
+	_, err := PurgeMigrationBackupsAtPathVerified(context.Background(), databasePath, func(context.Context, string) error {
+		return rejected
+	})
+	if !errors.Is(err, rejected) {
+		t.Fatalf("cleanup error=%v, want verifier rejection", err)
+	}
+	for _, path := range []string{backup, manifest} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("verifier rejection removed %s: %v", filepath.Base(path), err)
+		}
+	}
+}
+
+func TestMigrationBackupPurgeRefusesSymlinkDirectory(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("secure migration backup purge is Linux-only")
+	}
+	realDirectory := t.TempDir()
+	linkRoot := t.TempDir()
+	linkedDirectory := filepath.Join(linkRoot, "audit")
+	if err := os.Symlink(realDirectory, linkedDirectory); err != nil {
+		t.Fatal(err)
+	}
+	databasePath := filepath.Join(linkedDirectory, "events.db")
+	backup := filepath.Join(realDirectory, "events.db.pre-v6-20260720T010203.000000000Z.bak")
+	if err := os.WriteFile(backup, []byte("must-survive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	verifierCalled := false
+	_, err := PurgeMigrationBackupsAtPathVerified(context.Background(), databasePath, func(context.Context, string) error {
+		verifierCalled = true
+		return nil
+	})
+	if err == nil {
+		t.Fatal("cleanup followed a symlink directory")
+	}
+	if verifierCalled {
+		t.Fatal("verifier ran despite unsafe directory traversal")
+	}
+	if content, err := os.ReadFile(backup); err != nil || string(content) != "must-survive" {
+		t.Fatalf("symlink-directory target changed: content=%q err=%v", content, err)
 	}
 }

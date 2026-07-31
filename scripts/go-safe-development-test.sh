@@ -233,7 +233,7 @@ expected_round9_extract_entries=(
   TestRound9StructuredToolResultAuthorityBudgetTruncationFailsClosed
   TestRound9StructuredToolResultAuthorityDoesNotCrossTerminalTransactionBoundary
   TestRound9StructuredToolResultAuthorityFailsClosedAndDoesNotPartiallyCommit
-  TestRound9StructuredToolResultAuthorityRejectsNonterminalAndMismatchedTransactions
+  TestRound9StructuredToolResultAssociationDistinguishesReferableAndMalformedTransactions
   TestRound9StructuredToolResultTextLeavesAreAtomicAndProviderExact
   TestRound9ToolAssociationFieldNamesRemainVisibleOutsideClosedProviderObjects
   TestRound9GeminiDuplicateWrappersFailClosed
@@ -266,7 +266,7 @@ expected_round9_plugin_entries=(
   TestAuthorizationPolicyCannotCreateOrRemoveMaliciousEligibility
   TestRound9EligibleStandaloneMetaBlockRetainsWinnerWithoutSubjectRisk
   TestRound9ManagementDisclosesAndDoubleConfirmsMigrationBackupCleanup
-  TestRound9ManagementMigrationBackupInventoryWorksWithAuditDisabled
+  TestRound9ManagementMigrationBackupInventoryWorksButPurgeFailsClosedWithAuditDisabled
   TestRound9PublicRunnerDefensiveQuotedAmbiguityFullRouteRegression
   TestRound9RequestLocalToolBlockPersistsEndToEnd
   TestIncidentResponseRoleMatrix
@@ -301,6 +301,58 @@ require_reviewed_entries ./internal/extract "round-nine extractor" \
 require_reviewed_entries ./internal/plugin "round-nine plugin" \
   '^(TestRound9[A-Za-z0-9_]*|TestClassifierProofBudgetIncompleteDispositionContract|TestInspectionDisposition[A-Za-z0-9_]*|TestFourRepositoryRequestLocalAuthorityAndInertCarrierBoundaries|TestManagementAuditEndpointsDistinguishDisabledFromUnavailable|TestAuthorizationPolicyCannotCreateOrRemoveMaliciousEligibility|TestIncidentResponseRoleMatrix|TestNERVExplicitIntentRoutesBlockAcrossRolesAndTransports|TestNERVProviderLongSystemAndTerminalToolRoutesBlock|TestNERVNeutralAndDefensiveRequestsRouteUpstream|TestProviderToolAuthorityRoutingContract|TestProviderToolAuthorityRoutePersistsCanonicalAuditFields|TestProviderStructuredToolAuthorityCompositionBoundary|TestRequestLocalStandaloneMetaTakeoverRoutesBlockBatchAndStream|TestRequestLocalMetaQuotedConcealmentDoesNotRouteBlock|TestRequestLocalToolResultRequiresUniqueMatchingTerminalCall|TestRound6LongText270KiBActiveRolePositionMatrixBlocks|TestAuthenticatedRequestLocalSystemBlocksWithoutPoisoningCleanFollowUp|TestToolPayloadMetadataNamedFieldsDoNotCreateCurrentUserEligibility|TestAdjacentNegationProofBudgetCannotCreateRolelessMaliciousEligibility|TestLargeTopLevelToolDefinitionDoesNotCreateBlockingEligibility|TestRequestInterceptorPhishingTrainingTelemetryRealCredentialMatrix|TestRequestInterceptorPhishingTrainingTelemetryTransferVerbMatrix|TestRequestInterceptorDefensiveQuotedSystemDeveloperBoundary|TestRequestInterceptorStrictFailsClosedOnTokenInternalMalformedPercentEscape|TestRequestInterceptorMalformedTextDataURLUsesModePolicy|TestRequestInterceptorLongPercentPlaceholdersRemainComplete|TestRequestInterceptorPercentPlaceholderCollisionBlocksSemantically|TestRequestInterceptorClassifierProofBudgetUsesModePolicyAndAudit)$' \
   "${expected_round9_plugin_entries[@]}"
+
+# Round10 production-hardening tests are public synthetic regressions. Keep the
+# extractor and plugin prefixes closed so a renamed or newly added test cannot
+# silently bypass the reviewed development/race boundary.
+expected_round10_extract_entries=(
+  TestRound10ProviderToolResultAssociationDistinguishesReferableAndTerminal
+  TestRound10ReferableToolResultAssociationFailsClosedAtNewBoundary
+  TestRound10RoleAmbiguousTerminalItemCannotCreateReferableAssociation
+  TestRound10ToolResultAssociationKeepsExistingNumericValues
+)
+expected_round10_plugin_entries=(
+  TestRound10ByteAccountingMismatchHasDedicatedReason
+  TestRound10ClassifierCoverageReasonsUseOneExactBucket
+  TestRound10ColocatedToolResultUserTextIsAmbiguityBarrier
+  TestRound10CompatibilityTotalsDoNotCollapseCoverageReasons
+  TestRound10CompleteCoverageDoesNotIncrementReasonCounters
+  TestRound10CompleteNonsemanticBlockDoesNotCountSemanticBlock
+  TestRound10CoverageDimensionCountersAreConcurrentAndRaceSafe
+  TestRound10CoverageDimensionKeysAreFixedAndRequestIndependent
+  TestRound10CoverageDimensionsAccountBoundedSinkChunks
+  TestRound10CoverageFailuresAreCrossDimensionAttributable
+  TestRound10CoverageObservationStorageIsFixedAndBounded
+  TestRound10CoveragePositionDoesNotInventBackForUnterminatedField
+  TestRound10CoverageReasonCountersAreConcurrentAndFixed
+  TestRound10CoverageSnapshotsStayRequestConsistentDuringConcurrentCommits
+  TestRound10DecidedEarlyReturnsCommitFinalDisposition
+  TestRound10EarlyFailureSnapshotsStayStableAndConcurrent
+  TestRound10ExtractorCoverageReasonsUseBoundedStageBuckets
+  TestRound10FinalDispositionCommitIsAtomicUnderConcurrentSnapshots
+  TestRound10FinalDispositionProjectionDoesNotMutateWinnerOrCategory
+  TestRound10FinalDispositionSeparatesIncompleteFailClosedFromSemanticBlock
+  TestRound10FinalDispositionSeparatesSemanticWinnerFromModeAction
+  TestRound10GeminiTerminalWrapperAttemptsBlockHistoricalFallback
+  TestRound10HistoricalToolUserFollowupAllowsInertAndUnprovenRelations
+  TestRound10HistoricalToolUserFollowupBlocksBeforeUpstream
+  TestRound10IncompleteDispositionDoesNotMutateSemanticWinner
+  TestRound10LinuxPerformanceGate
+  TestRound10OperationalCoverageReasonsSeparateTimeoutFromExtractorSink
+  TestRound10OversizedRPCUsesAtomicCoverageCommit
+  TestRound10PerformanceGateContract
+  TestRound10ProductionRouteCoverageDimensionsReconcileCompleteAndIncomplete
+  TestRound10RecoveredRouterErrorDoesNotCommitCandidateFinalDisposition
+  TestRound10SinkAndTimeoutFailuresEnterUnifiedCoverageDenominator
+  TestRound10StrictUnknownSourceUsesAtomicCoverageCommit
+  TestRound10SubjectRiskBlockCountsCompleteNonsemanticDisposition
+  TestRound10TolerantUnknownSourcesCommitFinalDispositionAfterClassification
+  TestRound10UnclassifiedRuntimeFailuresCommitFinalDisposition
+)
+require_reviewed_entries ./internal/extract "round-ten extractor" \
+  '^TestRound10[A-Za-z0-9_]*$' "${expected_round10_extract_entries[@]}"
+require_reviewed_entries ./internal/plugin "round-ten plugin" \
+  '^TestRound10[A-Za-z0-9_]*$' "${expected_round10_plugin_entries[@]}"
 
 expected_round8_classifier_entries=(
 	TestRound8ActiveCredentialNounsAloneAreNotHostileConflicts
@@ -558,6 +610,23 @@ expected_round9_classifier_entries=(
   TestRound9RequestLocalToolAuthorityRequiresUniqueMatchingCall
   TestRound9ProviderToolAuthorityContractMatrix
   TestRound9StreamingSegmentAdaptersPreserveTerminalMetadata
+)
+
+expected_round10_classifier_entries=(
+  TestRound10DirectCompactionCarrierBeforeApplicationIsIncomplete
+  TestRound10DirectCompactionLogicalFieldIdentityAndLifecycle
+  TestRound10DirectCompactionNonCurrentProviderUnitIsBarrier
+  TestRound10DirectCompactionProcessesEveryRunAndLaterPipelines
+  TestRound10DirectCompactionRejectsMixedRuleInertCarriers
+  TestRound10DirectCompactionTrueBatchFieldwiseBytewiseProtocolParity
+  TestRound10DirectCompactionWindowBoundariesAndIndependentWinner
+  TestRound10HistoricalToolActivationNearWindowPositionsParity
+  TestRound10HistoricalToolResultRequiresExplicitAdjacentCurrentUserActivation
+  TestRound10ProtocolHistoricalToolActivationRequiresActionAndReferent
+  TestRound10ProtocolHistoricalToolAmbiguityBarriersBatchStreamingParity
+  TestRound10PublicCompactDirectCurrentUserBlocksAcrossProductionScanners
+  TestRound10PublicCompactQuotedAndDefensiveHistoryRemainNonBlocking
+  TestRound10ReferableHistoricalToolAloneRemainsInert
 )
 
 # Every classifier test-like entry visible without the consumed_evaluation build
@@ -838,6 +907,7 @@ expected_safe_classifier_entries=(
 )
 expected_safe_classifier_entries+=("${expected_round8_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round9_classifier_entries[@]}")
+expected_safe_classifier_entries+=("${expected_round10_classifier_entries[@]}")
 declare -A safe_seen=()
 for name in "${expected_safe_classifier_entries[@]}"; do
 	if [[ -v safe_seen["$name"] ]]; then
@@ -890,9 +960,14 @@ case "$mode" in
       ${#expected_round9_plugin_entries[@]} +
       ${#expected_round9_classifier_entries[@]}
     ))
-    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d\n' \
+    round10_entry_count=$((
+      ${#expected_round10_extract_entries[@]} +
+      ${#expected_round10_plugin_entries[@]} +
+      ${#expected_round10_classifier_entries[@]}
+    ))
+    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d\n' \
       "${#safe_packages[@]}" "${#expected_safe_classifier_entries[@]}" \
-      "$round8_entry_count" "$round9_entry_count"
+      "$round8_entry_count" "$round9_entry_count" "$round10_entry_count"
     ;;
   test)
     "$go_bin" test -tags="$test_tags" -count=1 "${safe_packages[@]}"

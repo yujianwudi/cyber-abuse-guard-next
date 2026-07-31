@@ -251,6 +251,9 @@ func (s *Store) Delete(ctx context.Context, query Query) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, ErrUnavailable
 	}
+	if err := s.checkStorageAccess(); err != nil {
+		return 0, err
+	}
 	if err := s.Flush(ctx); err != nil {
 		return 0, err
 	}

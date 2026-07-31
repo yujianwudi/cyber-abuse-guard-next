@@ -256,19 +256,21 @@ func round9AssertStructuredToolAuthorityAbsent(
 	}
 }
 
-func TestRound9StructuredToolResultAuthorityRejectsNonterminalAndMismatchedTransactions(t *testing.T) {
+func TestRound9StructuredToolResultAssociationDistinguishesReferableAndMalformedTransactions(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name    string
 		profile SourceProfile
 		body    string
 		target  string
+		want    ToolResultAssociation
 	}{
 		{
-			name:    "chat nonterminal structured result",
+			name:    "chat referable structured result",
 			profile: SourceProfileOpenAI,
 			body:    `{"messages":[{"role":"assistant","tool_calls":[{"id":"nonterminal-chat","type":"function","function":{"name":"lookup","arguments":"{}"}}]},{"role":"tool","tool_call_id":"nonterminal-chat","content":[{"type":"text","text":"nonterminal-chat-result"}]},{"role":"user","content":"nonterminal-boundary"}]}`,
 			target:  "nonterminal-chat-result",
+			want:    ToolResultAssociationReferableUnique,
 		},
 		{
 			name:    "responses id mismatch",
@@ -300,8 +302,12 @@ func TestRound9StructuredToolResultAuthorityRejectsNonterminalAndMismatchedTrans
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			batch, chunks := round9ExtractToolAssociationParity(t, test.profile, test.body)
-			round9AssertNoToolAssociationForText(t, batch.Segments, chunks, test.target)
+			round9AssertToolAssociationParity(
+				t,
+				test.profile,
+				test.body,
+				[]round9ToolAssociationExpectation{{text: test.target, want: test.want}},
+			)
 		})
 	}
 }

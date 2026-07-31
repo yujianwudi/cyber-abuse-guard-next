@@ -496,12 +496,53 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	carrierProofUnavailable := false
 	pendingClassifierIncomplete := CoverageReasonNone
 	for _, group := range buildProfiledCurrentMetaControlGroups(segments) {
+		for _, run := range profiledDirectCompactionRuns(group) {
+			if !run.hasCarrier || run.totalBytes == 0 {
+				if pendingClassifierIncomplete == CoverageReasonNone {
+					pendingClassifierIncomplete = CoverageReasonClassifierWindow
+				}
+				continue
+			}
+			if run.totalBytes > maxMetaOverrideDirectControlWindowBytes {
+				proof, proofBytes, complete := profiledDirectCompactionBoundedProof(run.group)
+				if !complete {
+					if pendingClassifierIncomplete == CoverageReasonNone {
+						pendingClassifierIncomplete = CoverageReasonClassifierWindow
+					}
+					continue
+				}
+				run.group = proof
+				run.totalBytes = proofBytes
+			}
+			candidate := c.classifyProfiledGroupWithPolicy(run.group, mode, thresholds, policy)
+			if resultIsNeutralClassifierIncomplete(candidate) {
+				reason := classifierIncompleteReason(candidate)
+				if pendingClassifierIncomplete == CoverageReasonNone &&
+					classifierIncompleteCoverageReason(reason) {
+					pendingClassifierIncomplete = reason
+				}
+				continue
+			}
+			if !standaloneMetaControlResult(candidate) ||
+				!resultHasEligibleBlockingCandidate(candidate, thresholds) {
+				continue
+			}
+			candidate = withRoleAwareFindingOrigin(
+				candidate, FindingOriginUserContent, mode, thresholds,
+			)
+			c.annotateProfiledResult(&candidate, run.group.refs, false, policy, mode, thresholds)
+			truncated = truncated || candidate.Truncated
+			if roleResultBetter(candidate, best) {
+				best = candidate
+			}
+		}
 		activeGroup, complete := c.profiledActiveMetaControlGroup(segments, group)
 		if !complete {
 			carrierProofUnavailable = true
 			continue
 		}
-		if len(activeGroup.parts) < 2 {
+		activeGroup = profiledGroupWithoutDirectCompactionApplications(activeGroup)
+		if !activeGroup.activeDirective || len(activeGroup.parts) < 2 {
 			continue
 		}
 		candidate := c.classifyProfiledGroupWithPolicy(activeGroup, mode, thresholds, policy)
@@ -644,6 +685,14 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 		if len(group.parts) == 0 {
 			continue
 		}
+		if profiledHistoricalUserSharesToolResultConversation(group, segments) {
+			// A provider item that mixes result payload and trusted-user text has
+			// no unique generic referent. The text is a locality barrier, not an
+			// independently rankable historical user request; retaining it as an
+			// audit winner would also diverge from bounded streaming state.
+			quotedOrInertSuppressed = true
+			continue
+		}
 		candidate := c.classifyProfiledGroupWithPolicy(group, mode, thresholds, policy)
 		origin := findingOriginForSegment(group.refs[0].segment)
 		roleOwnedWrapper := profiledRoleOwnedWrapper(candidate, origin)
@@ -774,6 +823,20 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 						}
 					}
 				}
+			} else if referent, _, claimed, ok, complete :=
+				c.nearestProfiledHistoricalToolReferent(segments, anchor, mode, thresholds, policy); claimed {
+				if !complete {
+					return c.profiledProofUnavailableResult(mode, thresholds, policy)
+				}
+				if !ok {
+					// The immediately preceding provider item owns the referent slot
+					// even when it is benign or structurally ambiguous. Never skip it
+					// and bind a current execution act to older history.
+					continue
+				}
+				if roleResultBetter(referent, best) {
+					best = referent
+				}
 			} else if referent, historical, evidenceRefs, ok := c.nearestProfiledHistoricalReferent(segments, mode, thresholds, policy); ok {
 				referent = withRoleAwareFindingOrigin(referent, FindingOriginUserContent, mode, thresholds)
 				c.annotateProfiledResult(&referent, evidenceRefs, false, policy, mode, thresholds)
@@ -810,6 +873,27 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	}
 	attachBehaviorGraph(&best, "role_aware_profiled", "")
 	return best
+}
+
+func profiledHistoricalUserSharesToolResultConversation(
+	group profiledSegmentGroup,
+	segments []extract.Segment,
+) bool {
+	if len(group.refs) == 0 {
+		return false
+	}
+	owner := group.refs[0].segment
+	if owner.IsCurrentTurn || owner.ConversationIndex < 0 || !trustedUserContentSegment(owner) {
+		return false
+	}
+	for _, segment := range segments {
+		if segment.ConversationIndex == owner.ConversationIndex &&
+			segment.Role == extract.RoleTool && segment.Provenance == extract.ProvenanceContent &&
+			segment.ContentKind == extract.ContentKindToolResult {
+			return true
+		}
+	}
+	return false
 }
 
 // bestProfiledCurrentNaturalLanguageCandidate preserves candidate boundaries
@@ -1451,6 +1535,167 @@ func (c *Classifier) profiledActiveMetaControlGroup(
 	return active, true
 }
 
+type profiledDirectCompactionRun struct {
+	group      profiledSegmentGroup
+	hasCarrier bool
+	totalBytes int
+}
+
+// profiledDirectCompactionRuns partitions a current-user scope back into the
+// physically contiguous logical text fields that the provider extractor proved.
+// Direct compaction is a field-local quoted-carrier operation; a matching speech
+// act in one JSON field must never lend authority to a carrier in another field
+// or across an omitted/interleaved provider unit.
+func profiledDirectCompactionRuns(group profiledSegmentGroup) []profiledDirectCompactionRun {
+	if len(group.refs) == 0 || len(group.refs) != len(group.parts) {
+		return nil
+	}
+	var runs []profiledDirectCompactionRun
+	for start := 0; start < len(group.refs); {
+		end := start + 1
+		for end < len(group.refs) &&
+			profiledSegmentRefsPhysicallyAdjacent(group.refs[end-1], group.refs[end]) &&
+			profiledSegmentsShareLogicalTextField(
+				group.refs[start].segment, group.refs[end].segment,
+			) {
+			end++
+		}
+
+		applicationIndex := -1
+		hasCarrierAfterApplication := false
+		totalBytes := 0
+		for index := start; index < end; index++ {
+			segment := group.refs[index].segment
+			totalBytes += len(group.parts[index])
+			if applicationIndex < 0 && profiledDirectCompactionDirectiveSegment(segment) &&
+				profiledDirectCompactionApplicationText(group.parts[index]) {
+				applicationIndex = index
+				continue
+			}
+			if applicationIndex >= 0 && profiledReferentCarrierKind(segment.ContentKind) {
+				hasCarrierAfterApplication = true
+			}
+		}
+		if applicationIndex >= 0 {
+			run := profiledSegmentGroup{
+				refs:            append([]profiledSegmentRef(nil), group.refs[start:end]...),
+				parts:           append([]string(nil), group.parts[start:end]...),
+				activeDirective: true,
+			}
+			for _, ref := range run.refs {
+				run.structuredTool = run.structuredTool ||
+					ref.segment.Provenance == extract.ProvenanceToolPayload ||
+					ref.segment.ContentKind == extract.ContentKindToolCallArguments
+			}
+			runs = append(runs, profiledDirectCompactionRun{
+				group: run,
+				// Direct compaction is a leading-boundary operation whose
+				// referenced carrier must follow the application speech act.
+				hasCarrier: applicationIndex == start && hasCarrierAfterApplication,
+				totalBytes: totalBytes,
+			})
+		}
+		start = end
+	}
+	return runs
+}
+
+// profiledDirectCompactionBoundedProof removes only trailing ASCII whitespace
+// from each extractor-proven logical piece. Provider padding after a complete
+// application/carrier is semantically inert and must not turn an otherwise
+// bounded proof into a blanket classifier_window_incomplete result. Internal
+// bytes and piece boundaries remain unchanged; if the non-padding proof still
+// exceeds the reviewed 8 KiB cap, the caller fails closed as incomplete.
+func profiledDirectCompactionBoundedProof(
+	group profiledSegmentGroup,
+) (profiledSegmentGroup, int, bool) {
+	if len(group.parts) == 0 || len(group.parts) != len(group.refs) {
+		return profiledSegmentGroup{}, 0, false
+	}
+	proof := group
+	proof.parts = make([]string, len(group.parts))
+	totalBytes := 0
+	for index, part := range group.parts {
+		end := len(part)
+		for end > 0 && profiledDirectCompactionASCIISpace(part[end-1]) {
+			end--
+		}
+		part = part[:end]
+		if len(part) > maxMetaOverrideDirectControlWindowBytes-totalBytes {
+			return profiledSegmentGroup{}, 0, false
+		}
+		proof.parts[index] = part
+		totalBytes += len(part)
+	}
+	return proof, totalBytes, totalBytes > 0
+}
+
+func profiledDirectCompactionASCIISpace(value byte) bool {
+	switch value {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
+		return true
+	default:
+		return false
+	}
+}
+
+func profiledDirectCompactionDirectiveSegment(segment extract.Segment) bool {
+	if !segment.IsCurrentTurn || !trustedUserContentSegment(segment) ||
+		segment.ScopeID == 0 || segment.FieldPathHash == "" {
+		return false
+	}
+	switch segment.ContentKind {
+	case extract.ContentKindNaturalLanguageDirective, extract.ContentKindUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
+// The dedicated run producer above owns exact compaction speech acts. Remove
+// only those application units from the generic same-scope META view so the
+// latter can keep its established cross-field signal composition without using
+// a compaction wrapper to activate an unrelated carrier.
+func profiledGroupWithoutDirectCompactionApplications(
+	group profiledSegmentGroup,
+) profiledSegmentGroup {
+	hasApplication := false
+	for index, ref := range group.refs {
+		if index >= len(group.parts) {
+			break
+		}
+		if profiledDirectCompactionDirectiveSegment(ref.segment) &&
+			profiledDirectCompactionApplicationText(group.parts[index]) {
+			hasApplication = true
+			break
+		}
+	}
+	if !hasApplication {
+		return group
+	}
+	filtered := profiledSegmentGroup{
+		refs:  make([]profiledSegmentRef, 0, len(group.refs)),
+		parts: make([]string, 0, len(group.parts)),
+	}
+	for index, ref := range group.refs {
+		if index >= len(group.parts) {
+			break
+		}
+		if profiledDirectCompactionDirectiveSegment(ref.segment) &&
+			profiledDirectCompactionApplicationText(group.parts[index]) {
+			continue
+		}
+		filtered.refs = append(filtered.refs, ref)
+		filtered.parts = append(filtered.parts, group.parts[index])
+		filtered.activeDirective = filtered.activeDirective ||
+			profiledContentActiveDirective(ref.segment.ContentKind)
+		filtered.structuredTool = filtered.structuredTool ||
+			ref.segment.Provenance == extract.ProvenanceToolPayload ||
+			ref.segment.ContentKind == extract.ContentKindToolCallArguments
+	}
+	return filtered
+}
+
 func buildProfiledHistoricalReferentGroups(segments []extract.Segment) []profiledSegmentGroup {
 	groups := make([]profiledSegmentGroup, 0, len(segments))
 	indexes := make(map[profiledSegmentGroupKey]int, len(segments))
@@ -1506,7 +1751,8 @@ func (c *Classifier) profiledReferentCarrierPossible(segments []extract.Segment)
 		return false
 	}
 	for _, segment := range segments {
-		if profiledTrustedCurrentUserCarrier(segment) || profiledHistoricalReferentEligible(segment) {
+		if profiledTrustedCurrentUserCarrier(segment) || profiledHistoricalReferentEligible(segment) ||
+			profiledHistoricalToolResultCarrier(segment) {
 			return true
 		}
 		if segment.IsCurrentTurn && trustedUserContentSegment(segment) &&
@@ -1518,6 +1764,219 @@ func (c *Classifier) profiledReferentCarrierPossible(segments []extract.Segment)
 		}
 	}
 	return false
+}
+
+var profiledHistoricalToolExplicitActivationIntents = []string{
+	"execute the preceding tool output", "execute the preceding tool result",
+	"execute the previous tool output", "execute the previous tool result",
+	"carry out the preceding tool output", "carry out the preceding tool result",
+	"carry out the previous tool output", "carry out the previous tool result",
+	"proceed with the preceding tool output", "proceed with the preceding tool result",
+	"proceed with the previous tool output", "proceed with the previous tool result",
+	"continue with the preceding tool output", "continue with the preceding tool result",
+	"continue with the previous tool output", "continue with the previous tool result",
+}
+
+// profiledHistoricalToolActivationDirective proves that one physical current-
+// user directive contains both an affirmative execution/continuation act and
+// an explicit anaphoric reference. The generic continuation parser intentionally
+// recognizes useful direct requests such as "Provide code" and terse turns such
+// as "Proceed"; those speech acts may activate a same-scope carrier, but cannot
+// borrow an unrelated historical tool result without this stronger relation.
+func (c *Classifier) profiledHistoricalToolActivationDirective(text string) (bool, bool) {
+	if c == nil || strings.TrimSpace(text) == "" {
+		return false, true
+	}
+	explicitIntents := make([]string, 0,
+		len(c.implementationStarts)+len(profiledHistoricalToolExplicitActivationIntents))
+	explicitIntents = append(explicitIntents, c.implementationStarts...)
+	explicitIntents = append(explicitIntents, profiledHistoricalToolExplicitActivationIntents...)
+	allIntents := make([]string, 0,
+		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(explicitIntents))
+	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
+	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
+	allIntents = append(allIntents, explicitIntents...)
+	decisions, complete := profiledPartIntentDecisions(c, text, explicitIntents, allIntents, true)
+	if !complete {
+		return false, false
+	}
+	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
+	for _, decision := range decisions {
+		switch decision.disposition {
+		case quotedReviewContinuationActive:
+			cancelled := false
+			for _, cancellation := range cancellations {
+				if quotedReviewContinuationIntentsEquivalent(decision.intent, cancellation.intent) {
+					cancelled = true
+					break
+				}
+			}
+			if !cancelled && profiledHistoricalToolIntentHasExplicitReferent(decision.intent) {
+				return true, true
+			}
+		case quotedReviewContinuationCancelled:
+			if !decision.alternative {
+				cancellations = append(cancellations, decision)
+			}
+		}
+	}
+	return false, true
+}
+
+func profiledHistoricalToolIntentHasExplicitReferent(intent string) bool {
+	intent = strings.TrimSpace(intent)
+	if containsASCIIWord(intent, "it") || containsASCIIWord(intent, "that") ||
+		containsASCIIWord(intent, "above") {
+		return true
+	}
+	return containsAnyLiteral(intent,
+		"do so", "do likewise", "do the same", "the above",
+		"the request", "quoted request", "the quoted instruction", "the quoted instructions",
+		"the payload", "this payload", "that payload",
+		"the output", "this output", "that output",
+		"preceding tool output", "preceding tool result", "previous tool output", "previous tool result",
+		"preceding role content", "previous role content",
+		"它", "该内容", "上述", "上面", "前面", "前述", "照做",
+	)
+}
+
+// nearestProfiledHistoricalToolReferent implements the deliberately narrow
+// provider transaction used by tool-result activation:
+//
+//	uniquely associated non-terminal tool result -> immediately following
+//	terminal trusted-user execution speech act
+//
+// The immediately preceding non-empty provider item owns the referent slot even
+// when it is benign or malformed. This prevents a bare pronoun from skipping a
+// nearer tool item and activating older user history. Tool evidence keeps its
+// non-user origin; the current-user anchor supplies only the exact execution
+// relation, so subject state cannot be poisoned by tool-provided text.
+func (c *Classifier) nearestProfiledHistoricalToolReferent(
+	segments []extract.Segment,
+	anchor profiledSegmentRef,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (Result, profiledSegmentGroup, bool, bool, bool) {
+	if c == nil || anchor.index < 0 || anchor.index >= len(segments) ||
+		!profiledHistoricalToolActivationAnchor(anchor.segment) {
+		return Result{}, profiledSegmentGroup{}, false, false, true
+	}
+	targetConversation := anchor.segment.ConversationIndex - 1
+	if targetConversation < 0 {
+		return Result{}, profiledSegmentGroup{}, false, false, true
+	}
+
+	claimed := false
+	for _, segment := range segments {
+		if segment.ConversationIndex != targetConversation || strings.TrimSpace(segment.Text) == "" {
+			continue
+		}
+		claimed = true
+		if !profiledHistoricalToolResultCarrier(segment) {
+			return Result{}, profiledSegmentGroup{}, true, false, true
+		}
+	}
+	if !claimed {
+		return Result{}, profiledSegmentGroup{}, false, false, true
+	}
+	active, activationComplete := c.profiledHistoricalToolActivationDirective(anchor.segment.Text)
+	if !activationComplete {
+		return Result{}, profiledSegmentGroup{}, true, false, false
+	}
+	if !active {
+		return Result{}, profiledSegmentGroup{}, true, false, true
+	}
+
+	var (
+		group             profiledSegmentGroup
+		groupKey          profiledSegmentGroupKey
+		groupConversation int
+		keySet            bool
+	)
+	for index, segment := range segments {
+		if strings.TrimSpace(segment.Text) == "" ||
+			!profiledHistoricalToolResultCarrier(segment) {
+			continue
+		}
+		key := profiledSegmentGroupKey{
+			role: segment.Role, provenance: segment.Provenance, attribution: segment.UserAttribution,
+			toolAssociation: segment.ToolAssociation,
+			turnIndex:       segment.TurnIndex, currentTurn: false, scopeID: segment.ScopeID,
+		}
+		if !keySet {
+			groupKey = key
+			groupConversation = segment.ConversationIndex
+			keySet = true
+		} else if key != groupKey || segment.ConversationIndex != groupConversation {
+			// Every ReferableUnique result belongs to the extractor-proven nearest
+			// completed transaction. More than one result scope or provider item
+			// therefore leaves a generic "preceding content" referent ambiguous;
+			// never select the final payload merely because it is adjacent.
+			return Result{}, profiledSegmentGroup{}, true, false, true
+		}
+		if len(group.refs) >= maxRoleClassifierSegments {
+			return Result{}, profiledSegmentGroup{}, true, false, false
+		}
+		group.refs = append(group.refs, profiledSegmentRef{index: index, segment: segment})
+		group.parts = append(group.parts, segment.Text)
+	}
+	if len(group.refs) == 0 || groupConversation != targetConversation {
+		return Result{}, profiledSegmentGroup{}, true, false, true
+	}
+
+	candidate := c.classifyWithPolicy(group.parts, mode, thresholds, policy, false)
+	if resultIsNeutralClassifierIncomplete(candidate) || candidate.Truncated ||
+		candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete {
+		return Result{}, profiledSegmentGroup{}, true, false, false
+	}
+	if candidate.FindingConfidence == FindingNone || candidate.Category == "" {
+		return Result{}, group, true, false, true
+	}
+	candidate = withRoleAwareFindingOrigin(
+		candidate, FindingOriginNonUserOrUntrusted, mode, thresholds,
+	)
+	c.annotateProfiledResult(&candidate, group.refs, false, policy, mode, thresholds)
+	markResultRequestLocalReferentActivated(
+		&candidate, EnforcementScopeRequestLocalTool, true, mode, thresholds,
+	)
+	bindResultCandidateReferentAnchor(&candidate, anchor, true, mode, thresholds)
+	markResultHistoricalToolActivationExplanation(&candidate, len(group.refs)+1)
+	if !resultHasEligibleMaliciousWinner(candidate, thresholds) {
+		return Result{}, group, true, false, true
+	}
+	return candidate, group, true, true, true
+}
+
+func profiledHistoricalToolActivationAnchor(segment extract.Segment) bool {
+	return segment.IsCurrentTurn && trustedUserContentSegment(segment) &&
+		segment.ScopeID != 0 && segment.FieldPathHash != "" &&
+		segment.ContentKind == extract.ContentKindNaturalLanguageDirective &&
+		segment.HasTerminalCoordinates && segment.ConversationIndex >= 0 &&
+		segment.ConversationIndex == segment.TerminalConversationIndex &&
+		segment.TurnIndex >= 0 && segment.TurnIndex == segment.TerminalTurnIndex
+}
+
+func markResultHistoricalToolActivationExplanation(result *Result, evidenceSegmentCount int) {
+	if result == nil || result.DecisionExplanation == nil {
+		return
+	}
+	explanation := result.DecisionExplanation
+	explanation.CurrentTurnEvidence = true
+	explanation.CrossSegmentComposition = true
+	explanation.ReferentLinkUsed = true
+	explanation.RelationType = ExplanationRelationHistoricalToolActivation
+	explanation.EnforcementOwner = ExplanationEnforcementOwnerCurrentTrustedUser
+	explanation.EvidenceSegmentCount = evidenceSegmentCount
+}
+
+func profiledHistoricalToolResultCarrier(segment extract.Segment) bool {
+	return segment.Role == extract.RoleTool && segment.Provenance == extract.ProvenanceContent &&
+		segment.UserAttribution != extract.UserAttributionTrusted &&
+		segment.ContentKind == extract.ContentKindToolResult && segment.ScopeID != 0 &&
+		segment.FieldPathHash != "" && !segment.IsCurrentTurn && segment.HasTerminalCoordinates &&
+		segment.ConversationIndex >= 0 && segment.TurnIndex >= -1 &&
+		segment.ToolAssociation == extract.ToolResultAssociationReferableUnique
 }
 
 func (c *Classifier) profiledHistoricalSafetyReviewReferent(

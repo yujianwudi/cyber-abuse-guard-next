@@ -22,6 +22,7 @@ STORE_ZIP := $(DIST_DIR)/$(PLUGIN_ID)_$(ARTIFACT_VERSION)_linux_amd64.zip
 AUDIT_BUNDLE := $(DIST_DIR)/$(PLUGIN_ID)-v$(ARTIFACT_VERSION)-audit-bundle.zip
 TEST_TAGS := sqlite_omit_load_extension
 ROUND9_FUZZTIME ?= 5s
+ROUND10_PERFORMANCE_OUTPUT ?= $(if $(TMPDIR),$(TMPDIR),/tmp)/cyber-abuse-guard-round10-performance.json
 ROUND6_SAFE_PACKAGES := \
 	./cmd/cyber-abuse-guard \
 	./cmd/development-adversarial-v11-prep-validator \
@@ -59,7 +60,7 @@ CPA_ROUTER_FIXTURE_SCENARIOS := guard-priority-higher fixture-priority-higher \
 .NOTPARALLEL: release round6-development-artifacts
 
 .PHONY: all format-check round6-format-check git-diff-check round6-git-diff-check module-verify round6-module-verify test unit-test vet round6-vet race workflow-lint shellcheck-lint repository-secret-scan \
-	fuzz-smoke round9-fuzz round9-old-so-rollback-gate script-test corpus-regression development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus consumed-boundary-test holdout-test benchmark round6-benchmark build-linux-amd64 round8-counted-mock-historical-regression \
+	fuzz-smoke round9-fuzz round9-old-so-rollback-gate script-test corpus-regression development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus consumed-boundary-test holdout-test benchmark round6-benchmark round10-performance build-linux-amd64 round8-counted-mock-historical-regression \
 	integration-compile integration-test cpa-host-blackbox cpa-router-fixture-blackbox cpa-host-fixture-contract cpa-latest-compat round4-regression round5-regression round6-regression round6-development-artifacts round6-reproducibility-test round6-script-test round6-cpa-store-contract management-proxy-413-test ruleset-manifest sbom vulncheck round6-vulncheck release-preflight \
 	package-release package-source-release release release-evidence formal-release external-release-attestation frozen-evaluation-v10-tree release-doc-consistency release-doc-consistency-test verify-release verification-fault-test cpa-store-contract artifact-hash \
 	reproducibility-test clean-tree-check tools clean
@@ -412,6 +413,23 @@ round6-benchmark: benchmark
 	$(GO) test -tags=$(TEST_TAGS) ./internal/plugin -run='^$$' \
 		-bench='^(BenchmarkFourRepositoryModelRoute|BenchmarkFourRepositoryParallelCleanSubjectEnabled|BenchmarkBalancedAuditOnWrapperOnly17166ModelRoute)$$' \
 		-benchmem -benchtime=3x -count=1
+
+round10-performance:
+	@set -euo pipefail; \
+		[[ "$$(uname -s)" == Linux ]] || { echo 'round10-performance requires a Linux host' >&2; exit 1; }; \
+		case "$$(uname -m)" in x86_64|amd64) ;; *) echo 'round10-performance requires linux/amd64' >&2; exit 1 ;; esac; \
+		[[ "$$($(GO) env GOOS)" == linux && "$$($(GO) env GOARCH)" == amd64 ]] || { echo 'round10-performance requires GOOS=linux GOARCH=amd64' >&2; exit 1; }; \
+		[[ "$$($(GO) version | awk '{print $$3}')" == go1.26.4 ]] || { echo 'round10-performance requires Go 1.26.4' >&2; exit 1; }
+	@$(GO) test -tags=$(TEST_TAGS) ./internal/plugin -list='^TestRound10LinuxPerformanceGate$$' | \
+		grep -Fxq 'TestRound10LinuxPerformanceGate' || { \
+		echo 'required Round10 performance gate is missing' >&2; exit 1; \
+		}
+	CAG_ROUND10_PERFORMANCE=1 \
+	CAG_ROUND10_PERFORMANCE_OUTPUT="$(abspath $(ROUND10_PERFORMANCE_OUTPUT))" \
+		$(GO) test -tags=$(TEST_TAGS) ./internal/plugin -count=1 -v \
+		-run='^TestRound10LinuxPerformanceGate$$' -timeout=10m
+	@test -s "$(abspath $(ROUND10_PERFORMANCE_OUTPUT))"
+	@printf 'round10_performance_json=%s\n' "$(abspath $(ROUND10_PERFORMANCE_OUTPUT))"
 
 round4-regression:
 	@listed="$$($(GO) test ./internal/extract ./internal/plugin -list='^(TestExtractRequestMediaObjectMemberOrderInvariant|TestExtractRequestMultipartUnknownFieldIsIncompleteAndPrivate|TestBalancedMultipartUnknownFieldAllowsWithoutClassification|TestStrictMultipartUnknownFieldBlocksWithoutClassification)$$')" || exit $$?; \

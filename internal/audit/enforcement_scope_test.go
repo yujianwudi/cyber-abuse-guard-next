@@ -59,6 +59,120 @@ func TestEnforcementScopeValidationAndJSONContract(t *testing.T) {
 	}
 }
 
+func TestRequestLocalToolScopeAcceptsCompleteCurrentUserActivationProof(t *testing.T) {
+	t.Parallel()
+	explanation := eligibleExplanationForEnforcementScope(EnforcementScopeRequestLocalTool)
+	explanation.CurrentTurnEvidence = true
+	explanation.ReferentLinkUsed = true
+	explanation.ReferentProofComplete = true
+	explanation.CurrentExecutionActProven = true
+	explanation.CrossSegmentComposition = "explicit_referent"
+	explanation.RelationType = ExplanationRelationHistoricalToolActivation
+	explanation.EnforcementOwner = ExplanationEnforcementOwnerCurrentTrustedUser
+	explanation.EvidenceSegmentCount = 2
+	if err := validateDecisionExplanation(explanation); err != nil {
+		t.Fatalf("complete historical-tool activation rejected: %v", err)
+	}
+	if !auditRequestBlockAuthorityProven(explanation) {
+		t.Fatalf("complete historical-tool activation lost request authority: %#v", explanation)
+	}
+	encoded, err := marshalDecisionExplanationForSchema(explanation, DecisionExplanationSchemaV2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(encoded, `"relation_type":"historical_tool_activation"`) ||
+		!strings.Contains(encoded, `"enforcement_owner":"current_trusted_user"`) {
+		t.Fatalf("encoded explanation omitted historical-tool relation: %s", encoded)
+	}
+	decoded, err := decodeDecisionExplanationForSchema(encoded, DecisionExplanationSchemaV2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(decoded, explanation) {
+		t.Fatalf("historical-tool JSON round trip = %#v, want %#v", decoded, explanation)
+	}
+	legacy := cloneDecisionExplanation(explanation)
+	legacy.RelationType = ExplanationRelationNone
+	legacy.EnforcementOwner = ExplanationEnforcementOwnerNone
+	legacyJSON, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyDecoded, err := decodeDecisionExplanationForSchema(
+		string(legacyJSON), DecisionExplanationSchemaV2,
+	)
+	if err != nil {
+		t.Fatalf("pre-RT10 historical-tool explanation rejected: %v", err)
+	}
+	if legacyDecoded.RelationType != ExplanationRelationNone ||
+		legacyDecoded.EnforcementOwner != ExplanationEnforcementOwnerNone {
+		t.Fatalf("pre-RT10 explanation manufactured a relation: %#v", legacyDecoded)
+	}
+	legacyEvent := round9MaliciousBlockEventFixture()
+	legacyEvent.DecisionExplanation = legacy
+	if _, err := prepareEvent(legacyEvent, time.Now().UTC()); err == nil ||
+		!strings.Contains(err.Error(), "relation_type") {
+		t.Fatalf("canonical write accepted relation-free historical-tool explanation: %v", err)
+	}
+
+	for _, mutate := range []func(*DecisionExplanation){
+		func(value *DecisionExplanation) { value.CurrentTurnEvidence = false },
+		func(value *DecisionExplanation) { value.ReferentLinkUsed = false },
+		func(value *DecisionExplanation) { value.ReferentProofComplete = false },
+		func(value *DecisionExplanation) { value.CurrentExecutionActProven = false },
+		func(value *DecisionExplanation) { value.CrossSegmentComposition = "none" },
+		func(value *DecisionExplanation) { value.RelationType = ExplanationRelationNone },
+		func(value *DecisionExplanation) { value.EnforcementOwner = ExplanationEnforcementOwnerNone },
+		func(value *DecisionExplanation) { value.EvidenceSegmentCount = 1 },
+	} {
+		invalid := cloneDecisionExplanation(explanation)
+		mutate(invalid)
+		if err := validateDecisionExplanation(invalid); err == nil {
+			t.Fatalf("accepted incomplete historical-tool activation: %#v", invalid)
+		}
+	}
+	for name, mutate := range map[string]func(*DecisionExplanation){
+		"unknown relation": func(value *DecisionExplanation) {
+			value.RelationType = ExplanationRelationType("request_fragment")
+		},
+		"unknown owner": func(value *DecisionExplanation) {
+			value.EnforcementOwner = ExplanationEnforcementOwner("caller_supplied_owner")
+		},
+		"wrong scope": func(value *DecisionExplanation) {
+			value.EnforcementScope = EnforcementScopeCurrentUser
+			value.EvidenceOwnedByCurrentUser = true
+			value.WinningRole = "user"
+		},
+	} {
+		invalid := cloneDecisionExplanation(explanation)
+		mutate(invalid)
+		if err := validateDecisionExplanation(invalid); err == nil {
+			t.Fatalf("accepted %s historical-tool relation: %#v", name, invalid)
+		}
+	}
+}
+
+func TestRequestLocalToolScopeRejectsActivationFieldsWithoutCurrentTurnProof(t *testing.T) {
+	t.Parallel()
+	for _, mutate := range []func(*DecisionExplanation){
+		func(value *DecisionExplanation) { value.ReferentLinkUsed = true },
+		func(value *DecisionExplanation) { value.CrossSegmentComposition = "explicit_referent" },
+		func(value *DecisionExplanation) {
+			value.RelationType = ExplanationRelationHistoricalToolActivation
+			value.EnforcementOwner = ExplanationEnforcementOwnerCurrentTrustedUser
+		},
+	} {
+		explanation := eligibleExplanationForEnforcementScope(EnforcementScopeRequestLocalTool)
+		if explanation.CurrentTurnEvidence {
+			t.Fatalf("terminal fixture unexpectedly has current-turn proof: %#v", explanation)
+		}
+		mutate(explanation)
+		if err := validateDecisionExplanation(explanation); err == nil {
+			t.Fatalf("terminal tool result carried activation fields: %#v", explanation)
+		}
+	}
+}
+
 func TestEnforcementScopeLegacyCurrentUserV2JSONAndEventRemainReadable(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 25, 9, 15, 0, 0, time.UTC)
@@ -76,7 +190,9 @@ func TestEnforcementScopeLegacyCurrentUserV2JSONAndEventRemainReadable(t *testin
 	if err != nil {
 		t.Fatalf("archived eligible v2 current-user JSON rejected: %v", err)
 	}
-	if decoded.EnforcementScope != EnforcementScopeNone || !auditRequestBlockAuthorityProven(decoded) {
+	if decoded.EnforcementScope != EnforcementScopeNone || !auditRequestBlockAuthorityProven(decoded) ||
+		decoded.RelationType != ExplanationRelationNone ||
+		decoded.EnforcementOwner != ExplanationEnforcementOwnerNone {
 		t.Fatalf("archived eligible v2 current-user authority not preserved: %#v", decoded)
 	}
 

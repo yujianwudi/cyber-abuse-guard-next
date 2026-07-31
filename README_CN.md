@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
 ```
 
 > **仓库沿革：** 这是采用全新 Git 历史的后续项目。旧 tag、分支、Release
@@ -24,10 +24,11 @@ current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4a
 > 恶意样本放行、36 个恶意 incomplete 样本返回 HTTP 403、2 个 complete 正常
 > 样本误拦。上一份 CPA v7.2.104 修复身份为 `classifier-policy-v9` /
 > `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`；
-> 精确提交 GitHub 检查已经通过，二号机重验仍为 **PENDING**。将依赖固定点升级
-> 到 CPA v7.2.109 后，相同分类行为重新绑定为
-> `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`；
-> 新身份仍须独立完成精确提交 GitHub 检查和沙盒复核。
+> 精确提交 GitHub 检查已经通过，二号机重验仍为 **PENDING**。第十轮在 CPA
+> v7.2.109 目标上新增了有界历史工具激活、持久审计 readiness、原子 coverage
+> 归因和 direct-compaction 边界修复；这些行为变更绑定为
+> `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`，
+> 新身份仍须独立完成精确提交 GitHub 检查和隔离沙盒复核。
 
 [![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
 [![Policy Gate](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml)
@@ -59,7 +60,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 已审计提交基线 | `150c25e6352cb237cb3956bd66c83c3278c3fe33`；历史 classifier 摘要 `e0cbc975...`；CPA v7.2.104 |
 | 工程 CI | 精确 `main` 提交 `46f26f9f822683aebb14b2c812ced2246d680fc2` 的 `30482492205`、`30482486178`、`30482486027` 均 **PASS**；仅是工程证据，不是生产批准 |
 | 安全审计 | **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
-| 当前修复 | classifier `classifier-policy-v9` / `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`；这是 CPA v7.2.109 的依赖身份重绑定，仍须精确提交 GitHub 与二号机独立重验 |
+| 当前修复 | 第十轮 classifier `classifier-policy-v9` / `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`；历史工具权限、direct-compaction、持久审计 readiness 与 coverage 记账均发生行为变更，仍须精确提交 GitHub 与二号机独立重验 |
 | CPA 源码/编译目标 | 固定 `v7.2.109`（`928478e4b91533cec05a763bfac3edad9c3e76cf`），C ABI 1 / RPC schema 2；源码、SDK/API、集成编译与 Linux Host `.so` 加载结论仅以精确提交 GitHub 门禁为准，独立受保护运行时验证仍待执行 |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
@@ -73,12 +74,13 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | CPA 固定目标 | 仅 v7.2.109；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 当前源码独立审计 | 受保护发行评估仍为 `NOT_RUN`；现有隔离审计已判安全 `FAIL`，当前修复精确重审仍待执行，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`；Host 与发行绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v9` / `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`；Host 与发行绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 
 ### 最新源码修复
 
+- 第十轮要求当前可信用户指令同时包含执行动作与明确指代，才可激活唯一关联的历史工具结果；`Proceed`、`Provide code` 等无指代或无关续写保持完整放行。未知格式和超大 RPC 等早退路径统一进入原子 request/reason/disposition 账本，并提供有界的 reason×role×content-kind×position 归因。生产审计目录可强制要求显式验证的 Linux 持久卷，实时 readiness 不会向未认证调用方泄露数据库路径。
 - 当前兼容目标已升级到官方最新 CPA `v7.2.109` / `928478e4b91533cec05a763bfac3edad9c3e76cf`。Linux CI 会执行完整上游 Host 测试和公开插件 ABI/API 测试，校验该固定版本仍是 GitHub `releases/latest`，并通过真实 CPA Host 路径加载构建出的候选 `.so`；历史第六/八轮及 v0.15/v0.16-rc.2 证据仍保留原始 CPA v7.2.95 身份。
 - 普通模型请求的生产主链已迁移到 RPC schema 2 的 RequestInterceptor 与 request lifecycle。before-auth 会完成分类，恶意 batch/stream 会在 Auth、Provider、Usage、Executor、Mock upstream 和 SSE 之前直接 403；生命周期缓存只保留 `RequestID` 与覆盖规范化 SourceFormat、body、大小写归一的 header 名、保持原值及顺序的 header values、stream 的进程随机密钥、RequestID 域分离 HMAC-SHA256 指纹，相同输入的 after-auth 只计算指纹并跳过重复分类/审计/风险副作用，任一安全相关输入变化都会重新分类。before-auth 若发生可放行的运行时故障则不写入“已检查”缓存，after-auth 仍会重试。完成回调清理有界、带 TTL 的 ID/指纹状态。CPA v7.2.109 的两条 Alpha Search 路由不调用该拦截链，因此 CAG 额外注册一个仅处理 `codex-alpha-search` 的窄 ModelRouter：安全搜索继续走 Codex，本地判恶意时在 Codex 认证和上游之前失败关闭；受 CPA 当前 handler 限制，该路径返回 503 而不是插件原生 403。
 - 已补齐 `prompt`、`induce`、`receive`、`solicit` 及其时态，防止训练 telemetry 遮蔽真实凭据索取；四角色批处理/流式回归都要求完整钓鱼阻断。重复入侵告警降噪、监控维护和退役规则审计保持放行，只有明确用于隐藏恶意软件、未授权访问等敌意目的时才按规避阻断。
