@@ -548,6 +548,28 @@ func TestRound9DecisionExplanationV2CanonicalizesEmptyCollections(t *testing.T) 
 			}
 		})
 	}
+
+	t.Run("event clone uses the same canonical collections", func(t *testing.T) {
+		empty := &DecisionExplanation{
+			Kind:           decisionExplanationKindMalicious,
+			ScoreBreakdown: []ScoreComponent{},
+		}
+		if cloned := cloneDecisionExplanation(empty); cloned.ScoreBreakdown != nil {
+			t.Fatalf("clone retained empty score breakdown: %#v", cloned.ScoreBreakdown)
+		}
+
+		nested := &DecisionExplanation{
+			Kind: decisionExplanationKindMalicious,
+			ScoreBreakdown: []ScoreComponent{{
+				Dimension:   "final_score",
+				EvidenceIDs: []string{},
+			}},
+		}
+		cloned := cloneDecisionExplanation(nested)
+		if len(cloned.ScoreBreakdown) != 1 || cloned.ScoreBreakdown[0].EvidenceIDs != nil {
+			t.Fatalf("clone retained empty evidence IDs: %#v", cloned.ScoreBreakdown)
+		}
+	})
 }
 
 func TestRound9DecisionKindQueryStatsAndExports(t *testing.T) {

@@ -401,23 +401,40 @@ Update this section as work is completed; do not rewrite the original baseline.
     measured absolute threshold with zero failures/panics. The exact-fixture
     p99 baseline regression and CPA Host/container restart evidence remain
     `NOT_PROVIDED`, so RT10-08 stays open; see `docs/reports/PERFORMANCE.md`.
+  - 2026-07-31: clean post-review commit `4425fe6` passed the absolute matrix:
+    ordinary c=16 p95 `0.887389 ms`, five-repository surrogate c=16 p95
+    `114.071418 ms`, Codex-all surrogate c=16 p95 `50.441207 ms`, public c=16
+    p95/p99 `9.669526/10.342969 ms`, and SQLite c=16 p95 `1.206374 ms`.
+    All gates with locally measurable inputs passed with zero failures and zero
+    recovered panics; fixed-workload historical p99 and container restart remain
+    explicitly `NOT_PROVIDED` until the final Host run.
 - [ ] RT10-09 local Linux evidence is complete, but exact-commit GitHub and
   isolated CPA Host evidence remain pending.
-  - Go 1.26.4 Linux amd64: safe boundary `round10_entries=54`, safe suite, full
+  - Go 1.26.4 Linux amd64: safe boundary `round10_entries=56`, safe suite, full
     `go test -tags=sqlite_omit_load_extension ./...`, module/format/diff/vet,
     scripts, secret scan, public/development corpora, fuzz smoke, and bounded
     real fuzz all passed.
   - Complete race passed: plugin `553.353s`, classifier `366.950s`, with no data
     race. The isolated `make round6-benchmark` recipe and the post-review
     `make round10-performance` absolute gates passed.
+  - The exact `4425fe6` plugin race passed in `582.921s`. A later bounded audit
+    fuzz run found and froze an empty-slice JSON round-trip regression; v1/v2
+    decoding and event cloning now canonicalize empty score/evidence collections
+    to `nil`, with the persisted schema and `omitempty` output unchanged.
   - The post-review dirty-tree Round 10 c=16 observations were ordinary p95
     `0.719216 ms`, five-repository surrogate p95 `104.455691 ms`, Codex-all
     surrogate p95 `46.145925 ms`, public p95/p99 `8.484287/9.107864 ms`, and
     SQLite p95 `1.005217 ms`; all 2,304 operations completed with zero failures
     and zero recovered panics.
   - Three iterative CodeRabbit reviews reduced the tracked-diff issues from
-    eight to two to zero. A committed exact-diff review is still required so
-    newly added files are included.
+    eight to two to zero. The first committed-diff review then raised eleven
+    additional issues hidden by the earlier untracked-file scope; valid storage,
+    mount, coverage, cancellation, fixture, and report findings were fixed. The
+    Go 1.26.x relaxation and a value-type short-circuit rewrite were rejected
+    with contract and language evidence. Final GitHub PR review remains pending.
+  - Strict script/archive review also repaired the stale SHA-256 binding for the
+    CPA-v7.2.109-updated external-evaluation verifier; `make script-test` passes
+    again on the committed tree.
   - No local CPA process or container was started. Host execution remains bound
     to the authorized Tencent Cloud #2 isolated sandbox.
 - [ ] RT10-10 PR merged into remote `main`.
