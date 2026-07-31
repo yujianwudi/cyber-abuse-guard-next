@@ -24,6 +24,18 @@ func TestParseAuditMountInfoChoosesDeepestMountAndPreservesReadOnly(t *testing.T
 	}
 }
 
+func TestParseAuditMountInfoLaterDuplicateMountOverridesEarlierEntry(t *testing.T) {
+	t.Parallel()
+	raw := []byte("36 25 0:32 / / rw,relatime - overlay overlay rw,lowerdir=/lower\n" +
+		"42 36 0:32 /volume /plugin-data/cyber-abuse-guard rw,nosuid,nodev - overlay overlay rw\n" +
+		"43 36 8:1 /srv/cag /plugin-data/cyber-abuse-guard rw,nosuid,nodev - ext4 /dev/vdb1 rw,errors=remount-ro\n")
+
+	mount, ok := parseAuditMountInfo(raw, "/plugin-data/cyber-abuse-guard/events.db")
+	if !ok || mount.mountPoint != "/plugin-data/cyber-abuse-guard" || mount.fsType != "ext4" || mount.identity != "43:8:1" {
+		t.Fatalf("duplicate mount=%#v ok=%v", mount, ok)
+	}
+}
+
 func TestParseAuditMountInfoDecodesEscapedMountPoint(t *testing.T) {
 	t.Parallel()
 	raw := []byte("42 36 8:1 /srv/cag /plugin-data/cyber\\040guard rw - xfs /dev/vdb1 rw\n")
@@ -82,6 +94,62 @@ func TestFinalizeAuditStoragePlatformRejectsUnverifiedLocations(t *testing.T) {
 				t.Fatalf("finalizeAuditStoragePlatform()=%#v", got)
 			}
 		})
+	}
+}
+
+func TestReconcileAuditStorageFilesystemCrossChecksMountAndDescriptor(t *testing.T) {
+	t.Parallel()
+	base := auditStorageVerification{
+		PersistenceExpected: true,
+		Writable:            true,
+		CapacityOK:          true,
+	}
+	volume := auditMountInfo{
+		mountPoint: "/plugin-data/cyber-abuse-guard",
+		fsType:     "ext4",
+		identity:   "43:8:1",
+	}
+	status, consistent := reconcileAuditStorageFilesystem(base, volume, true, 0xef53)
+	if !consistent {
+		t.Fatalf("matching bind/volume was rejected: %#v", status)
+	}
+	status = finalizeAuditStoragePlatform(status)
+	if !status.PersistenceVerified || status.PersistenceReason != "" || status.StorageType != "ext4" || !status.SeparateMount {
+		t.Fatalf("matching bind/volume status=%#v", status)
+	}
+
+	mismatch := volume
+	mismatch.fsType = "overlay"
+	status, consistent = reconcileAuditStorageFilesystem(base, mismatch, true, 0xef53)
+	if consistent || status.State != "unverified" || status.PersistenceReason != "filesystem_type_mismatch" ||
+		status.StorageType != "unknown" || status.PersistenceVerified || !status.blocksOperationalReadiness() {
+		t.Fatalf("filesystem mismatch status=%#v consistent=%v", status, consistent)
+	}
+
+	development := base
+	development.PersistenceExpected = false
+	status, consistent = reconcileAuditStorageFilesystem(development, mismatch, true, 0xef53)
+	if consistent || !status.preventsDatabaseOpen() {
+		t.Fatalf("development mismatch did not fail closed: %#v consistent=%v", status, consistent)
+	}
+}
+
+func TestAuditStorageFilesystemTypeAgreementAllowsKernelAliases(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		mountType string
+		magic     int64
+	}{
+		{mountType: "ext2", magic: 0xef53},
+		{mountType: "ext3", magic: 0xef53},
+		{mountType: "ext4", magic: 0xef53},
+		{mountType: "overlayfs", magic: auditStorageOverlayMagic},
+		{mountType: "zfs", magic: auditStorageZFSMagic},
+	}
+	for _, test := range tests {
+		if magicType := auditFilesystemTypeFromMagic(test.magic); !auditStorageFilesystemTypesMatch(test.mountType, magicType) {
+			t.Errorf("mount type %q did not match statfs type %q", test.mountType, magicType)
+		}
 	}
 }
 

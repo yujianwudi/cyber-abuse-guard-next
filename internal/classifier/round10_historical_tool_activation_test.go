@@ -77,6 +77,7 @@ func TestRound10HistoricalToolResultRequiresExplicitAdjacentCurrentUserActivatio
 			name: "intervening assistant barrier",
 			segments: func() []extract.Segment {
 				segments := round10HistoricalToolActivationSegments(round9ExplicitMalware, "Execute it now.")
+				segments[0].TerminalConversationIndex = 3
 				segments[1].ConversationIndex = 3
 				segments[1].TerminalConversationIndex = 3
 				segments = append([]extract.Segment{segments[0], {

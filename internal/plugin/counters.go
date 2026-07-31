@@ -361,6 +361,16 @@ const (
 	// SegmentChunk reserves bit 61 for decoded/derived views and bit 62 for
 	// content-kind pieces. These are structural namespaces, not hashes or caller
 	// fields. Keep the decoding local to the transient request observer.
+	//
+	// The extractor emits these as sibling views of one unflagged base field ID:
+	// contentPieceFieldID(span.id, ordinal) for source pieces and
+	// derivedFieldID(span.id, ordinal) for decoded views. It never passes one
+	// namespaced ID into the other constructor. Base IDs are bounded by
+	// extract.HardMaxTextParts, content-piece ordinals by the classification-chunk
+	// limit, and decoded-view ordinals by the extractor's fixed variant limit, so
+	// a valid SegmentChunk FieldID cannot carry both flags. The boundary and
+	// combined-invalid cases are locked by
+	// TestRound10CoverageLogicalFieldIDNamespaceInvariant.
 	coverageDerivedFieldIDFlag      = uint64(1) << 61
 	coverageContentPieceFieldIDFlag = uint64(1) << 62
 	coverageDerivedFieldOrdinalBits = 8
@@ -369,10 +379,10 @@ const (
 
 func coverageLogicalFieldID(fieldID uint64) (uint64, bool) {
 	if fieldID&coverageContentPieceFieldIDFlag != 0 {
-		return (fieldID &^ coverageContentPieceFieldIDFlag) >> coverageContentPieceOrdinalBits, false
+		return (fieldID &^ (coverageContentPieceFieldIDFlag | coverageDerivedFieldIDFlag)) >> coverageContentPieceOrdinalBits, false
 	}
 	if fieldID&coverageDerivedFieldIDFlag != 0 {
-		return (fieldID &^ coverageDerivedFieldIDFlag) >> coverageDerivedFieldOrdinalBits, true
+		return (fieldID &^ (coverageContentPieceFieldIDFlag | coverageDerivedFieldIDFlag)) >> coverageDerivedFieldOrdinalBits, true
 	}
 	return fieldID, false
 }

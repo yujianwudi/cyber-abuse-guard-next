@@ -31,6 +31,9 @@ func purgeMigrationBackupArtifactsPlatform(ctx context.Context, databasePath str
 	if err := verifier(ctx, databasePath); err != nil {
 		return MigrationBackupCleanupResult{}, fmt.Errorf("audit: migration-backup storage verification failed: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		return MigrationBackupCleanupResult{}, fmt.Errorf("audit: migration-backup cleanup canceled: %w", err)
+	}
 	result := MigrationBackupCleanupResult{}
 	remove := func(path, kind string, bytes int64) error {
 		if err := ctx.Err(); err != nil {

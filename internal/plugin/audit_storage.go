@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
 )
@@ -43,19 +44,27 @@ type auditStorageObjectIdentity struct {
 	inode   uint64
 }
 
+// One second bounds the interval in which a newly failed mount can still use
+// the last verified result, while keeping mountinfo/statfs and object identity
+// probes out of the per-write hot path. time.Time carries its monotonic reading
+// through Add, so wall-clock adjustments cannot extend this interval.
+const auditStorageMinimumReprobeInterval = time.Second
+
 // auditStorageGate binds every production storage access to the identity
 // captured after SQLite Open. The first failed live verification is permanent
 // for this runtime: a later probe cannot silently turn writes back on. An
 // explicit reconfigure/reopen constructs a new gate and is the only recovery
 // boundary.
 type auditStorageGate struct {
-	mu       sync.Mutex
-	baseline auditStorageVerification
-	current  auditStorageVerification
-	maxBytes int64
-	inspect  func(string, bool, bool, int64) auditStorageVerification
-	armed    bool
-	latched  bool
+	mu          sync.Mutex
+	baseline    auditStorageVerification
+	current     auditStorageVerification
+	maxBytes    int64
+	inspect     func(string, bool, bool, int64) auditStorageVerification
+	now         func() time.Time
+	nextProbeAt time.Time
+	armed       bool
+	latched     bool
 }
 
 func newAuditStorageGate(
@@ -68,6 +77,7 @@ func newAuditStorageGate(
 		current:  baseline,
 		maxBytes: maxBytes,
 		inspect:  inspect,
+		now:      time.Now,
 	}
 }
 
@@ -78,6 +88,7 @@ func (gate *auditStorageGate) arm(baseline auditStorageVerification) {
 	gate.mu.Lock()
 	gate.baseline = baseline
 	gate.current = baseline
+	gate.nextProbeAt = time.Time{}
 	gate.armed = true
 	gate.latched = baseline.blocksOperationalReadiness()
 	gate.mu.Unlock()
@@ -89,6 +100,7 @@ func (gate *auditStorageGate) latch(status auditStorageVerification) {
 	}
 	gate.mu.Lock()
 	gate.current = status
+	gate.nextProbeAt = time.Time{}
 	gate.armed = true
 	gate.latched = true
 	gate.mu.Unlock()
@@ -103,10 +115,21 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 	if gate.latched || !gate.armed {
 		return gate.current
 	}
+	now := time.Now
+	if gate.now != nil {
+		now = gate.now
+	}
+	if probeTime := now(); !gate.nextProbeAt.IsZero() && probeTime.Before(gate.nextProbeAt) {
+		return gate.current
+	}
 	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, false, gate.inspect)
 	gate.current = fresh
 	if fresh.blocksOperationalReadiness() {
 		gate.latched = true
+	} else {
+		// Start the minimum interval after the potentially slow live probe. This
+		// guarantees back-to-back callers cannot immediately repeat it.
+		gate.nextProbeAt = now().Add(auditStorageMinimumReprobeInterval)
 	}
 	return gate.current
 }
@@ -158,7 +181,8 @@ func (status auditStorageVerification) hasUnsafeDatabasePath() bool {
 		"unsafe_sqlite_file", "database_stat_failed", "statfs_failed",
 		"unsafe_storage_owner", "unsafe_storage_permissions", "storage_open_failed",
 		"directory_identity_changed", "mount_identity_changed",
-		"database_identity_changed", "wal_identity_changed", "shm_identity_changed":
+		"database_identity_changed", "wal_identity_changed", "shm_identity_changed",
+		"filesystem_type_mismatch":
 		return true
 	case "path_not_absolute":
 		return status.PersistenceExpected

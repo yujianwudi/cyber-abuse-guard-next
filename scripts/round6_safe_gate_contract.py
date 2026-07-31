@@ -654,7 +654,7 @@ CONSUMED_BOUNDARY_LINES = {
         "  '!/.round9-local-sandbox/**'",
         'git -C "$sparse_fixture" sparse-checkout set --no-cone "${sparse_patterns[@]}"',
         "verifier_path='scripts/round9_external_evaluation_contract.py'",
-        "verifier_sha256='43f5df13a6f805e65d7289f5b327c3af2f7d75511a833667e388ec24b2a5262b'",
+        "verifier_sha256='36b377975b981d040df12c183a56f54fc9cee2beed597d00a53be7a17234f434'",
         "verifier_test_path='scripts/round9_external_evaluation_contract_test.py'",
         "verifier_test_sha256='7f32dc75f6354777eadf8791cc3b56ba9f9ac8db37334b8a66c7d046ded7ba48'",
         'verifier_sha="$(tar -xOf "$archive" "$verifier_path" | sha256sum | awk \'{print $1}\')"',
@@ -1052,7 +1052,7 @@ CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
     "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
 }
-RC_RELEASE_SCRIPT_SHA256 = "9d3704144468e89777ea75d40c27dc8bc932b1d05a2084117e938a0ec368d6e3"
+RC_RELEASE_SCRIPT_SHA256 = "de031087a7e54577fc6a41f21d7b15a6ffe5ce200bb8344a0cc6fc171a1d6619"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
 RELEASE_BUILD_METADATA_SCRIPT_SHA256 = (
     "6d5312459fd238f35ddbdee6c79779cb340fba4029f49f7f6490b64f639a259c"

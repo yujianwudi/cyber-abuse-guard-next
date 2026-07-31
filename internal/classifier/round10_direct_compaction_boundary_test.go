@@ -385,6 +385,9 @@ func TestRound10DirectCompactionWindowBoundariesAndIndependentWinner(t *testing.
 			total += len(segment.Text)
 		}
 		target := maxMetaOverrideDirectControlWindowBytes + 1024
+		if total > target {
+			t.Fatalf("cannot construct non-padding proof overflow: total=%d target=%d", total, target)
+		}
 		padding := strings.Repeat("x", target-total)
 		run[carrier].Text = run[carrier].Text[:closing] + padding + run[carrier].Text[closing:]
 		results := round10DirectClassificationResults(t, guard, run, ModeBalanced)

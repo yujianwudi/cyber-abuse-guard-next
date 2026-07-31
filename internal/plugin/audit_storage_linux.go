@@ -52,6 +52,7 @@ const (
 	auditStorageTmpfsMagic   = 0x01021994
 	auditStorageRamfsMagic   = 0x858458f6
 	auditStorageOverlayMagic = 0x794c7630
+	auditStorageZFSMagic     = 0x2fc12fc1
 )
 
 type auditMountInfo struct {
@@ -128,22 +129,61 @@ func inspectAuditStoragePlatform(
 		}
 	}
 
-	mount, ok := auditMountForPath(directory)
-	if ok {
-		status.StorageType = boundedAuditFilesystemType(mount.fsType)
-		status.SeparateMount = filepath.Clean(mount.mountPoint) != string(filepath.Separator)
-		status.identity.mount = mount.identity
-		if mount.readOnly {
-			status.Writable = false
-		}
-	} else {
-		status.StorageType = auditFilesystemTypeFromMagic(int64(stats.Type))
-	}
-	if status.StorageType == "unknown" {
-		status.StorageType = auditFilesystemTypeFromMagic(int64(stats.Type))
+	mount, found := auditMountForPath(directory)
+	status, filesystemConsistent := reconcileAuditStorageFilesystem(status, mount, found, int64(stats.Type))
+	if !filesystemConsistent {
+		return status
 	}
 
 	return finalizeAuditStoragePlatform(status)
+}
+
+// reconcileAuditStorageFilesystem cross-checks the pathname-based mountinfo
+// view with Fstatfs on the already-open directory. A disagreement can indicate
+// an overmount race or a stale/ambiguous mountinfo entry, so neither source is
+// trusted and the storage gate fails closed. Bind mounts and named volumes
+// report the same underlying filesystem magic and remain valid.
+func reconcileAuditStorageFilesystem(
+	status auditStorageVerification,
+	mount auditMountInfo,
+	found bool,
+	statfsType int64,
+) (auditStorageVerification, bool) {
+	magicType := auditFilesystemTypeFromMagic(statfsType)
+	if !found {
+		status.StorageType = magicType
+		return status, true
+	}
+
+	mountType := boundedAuditFilesystemType(mount.fsType)
+	status.SeparateMount = filepath.Clean(mount.mountPoint) != string(filepath.Separator)
+	status.identity.mount = mount.identity
+	if mount.readOnly {
+		status.Writable = false
+	}
+	if !auditStorageFilesystemTypesMatch(mountType, magicType) {
+		status.StorageType = "unknown"
+		status.State = "unverified"
+		status.PersistenceVerified = false
+		status.PersistenceReason = "filesystem_type_mismatch"
+		return status, false
+	}
+	status.StorageType = mountType
+	return status, true
+}
+
+func auditStorageFilesystemTypesMatch(mountType, magicType string) bool {
+	canonical := func(value string) string {
+		switch value {
+		case "ext2", "ext3", "ext4":
+			return "ext"
+		case "overlayfs":
+			return "overlay"
+		default:
+			return value
+		}
+	}
+	return canonical(mountType) == canonical(magicType)
 }
 
 func auditStorageIdentityFromStat(stat unix.Stat_t) auditStorageObjectIdentity {
@@ -292,7 +332,7 @@ func parseAuditMountInfo(raw []byte, path string) (auditMountInfo, bool) {
 			continue
 		}
 		mountPoint := filepath.Clean(unescapeAuditMountField(left[4]))
-		if !auditPathWithinMount(path, mountPoint) || len(mountPoint) <= bestLength {
+		if !auditPathWithinMount(path, mountPoint) || len(mountPoint) < bestLength {
 			continue
 		}
 		best = auditMountInfo{
@@ -377,6 +417,8 @@ func auditFilesystemTypeFromMagic(value int64) string {
 		return "ramfs"
 	case auditStorageOverlayMagic:
 		return "overlay"
+	case auditStorageZFSMagic:
+		return "zfs"
 	case 0xef53:
 		return "ext4"
 	case 0x58465342:

@@ -97,6 +97,147 @@ func TestRound10CoverageDimensionsAccountBoundedSinkChunks(t *testing.T) {
 	}
 }
 
+func TestRound10CoverageLogicalFieldIDNamespaceInvariant(t *testing.T) {
+	t.Parallel()
+
+	const (
+		parent                  = uint64(extract.HardMaxTextParts)
+		allNamespaceFlags       = coverageDerivedFieldIDFlag | coverageContentPieceFieldIDFlag
+		maxDerivedOrdinal       = uint64(1<<coverageDerivedFieldOrdinalBits) - 2
+		maxContentPieceOrdinal  = uint64(1<<coverageContentPieceOrdinalBits) - 2
+		actualMaxDerivedOrdinal = uint64(7) // extract.maxDecodedVariants is fixed at 8.
+		actualMaxContentOrdinal = uint64(extract.HardMaxClassificationChunks - 1)
+	)
+
+	tests := []struct {
+		name      string
+		fieldID   uint64
+		wantID    uint64
+		derived   bool
+		wantFlags uint64
+	}{
+		{name: "ordinary", fieldID: parent, wantID: parent},
+		{
+			name:      "derived first ordinal",
+			fieldID:   coverageDerivedFieldIDFlag | parent<<coverageDerivedFieldOrdinalBits | 1,
+			wantID:    parent,
+			derived:   true,
+			wantFlags: coverageDerivedFieldIDFlag,
+		},
+		{
+			name:      "derived actual maximum ordinal",
+			fieldID:   coverageDerivedFieldIDFlag | parent<<coverageDerivedFieldOrdinalBits | actualMaxDerivedOrdinal + 1,
+			wantID:    parent,
+			derived:   true,
+			wantFlags: coverageDerivedFieldIDFlag,
+		},
+		{
+			name:      "derived adjacent to encoding maximum ordinal",
+			fieldID:   coverageDerivedFieldIDFlag | parent<<coverageDerivedFieldOrdinalBits | maxDerivedOrdinal,
+			wantID:    parent,
+			derived:   true,
+			wantFlags: coverageDerivedFieldIDFlag,
+		},
+		{
+			name:      "derived encoding maximum ordinal",
+			fieldID:   coverageDerivedFieldIDFlag | parent<<coverageDerivedFieldOrdinalBits | maxDerivedOrdinal + 1,
+			wantID:    parent,
+			derived:   true,
+			wantFlags: coverageDerivedFieldIDFlag,
+		},
+		{
+			name:      "content piece first ordinal",
+			fieldID:   coverageContentPieceFieldIDFlag | parent<<coverageContentPieceOrdinalBits | 1,
+			wantID:    parent,
+			wantFlags: coverageContentPieceFieldIDFlag,
+		},
+		{
+			name:      "content piece actual maximum ordinal",
+			fieldID:   coverageContentPieceFieldIDFlag | parent<<coverageContentPieceOrdinalBits | actualMaxContentOrdinal + 1,
+			wantID:    parent,
+			wantFlags: coverageContentPieceFieldIDFlag,
+		},
+		{
+			name:      "content piece adjacent to encoding maximum ordinal",
+			fieldID:   coverageContentPieceFieldIDFlag | parent<<coverageContentPieceOrdinalBits | maxContentPieceOrdinal,
+			wantID:    parent,
+			wantFlags: coverageContentPieceFieldIDFlag,
+		},
+		{
+			name:      "content piece encoding maximum ordinal",
+			fieldID:   coverageContentPieceFieldIDFlag | parent<<coverageContentPieceOrdinalBits | maxContentPieceOrdinal + 1,
+			wantID:    parent,
+			wantFlags: coverageContentPieceFieldIDFlag,
+		},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := testCase.fieldID & allNamespaceFlags; got != testCase.wantFlags {
+				t.Fatalf("namespace flags=%#x, want %#x", got, testCase.wantFlags)
+			}
+			if testCase.fieldID&allNamespaceFlags == allNamespaceFlags {
+				t.Fatalf("valid extractor field ID unexpectedly combined both namespace flags: %#x", testCase.fieldID)
+			}
+			gotID, gotDerived := coverageLogicalFieldID(testCase.fieldID)
+			if gotID != testCase.wantID || gotDerived != testCase.derived {
+				t.Fatalf("coverageLogicalFieldID(%#x)=(%d,%v), want (%d,%v)",
+					testCase.fieldID, gotID, gotDerived, testCase.wantID, testCase.derived)
+			}
+		})
+	}
+
+	// This shape is deliberately synthetic: neither extractor constructor can
+	// produce it from the bounded base IDs and ordinals above. Keeping it explicit
+	// makes any future decision to compose the namespaces a reviewed contract
+	// change instead of silently invalidating coverageLogicalFieldID's precedence.
+	combinedInvalid := allNamespaceFlags | parent<<coverageContentPieceOrdinalBits | 1
+	if got := combinedInvalid & allNamespaceFlags; got != allNamespaceFlags {
+		t.Fatalf("combined-invalid sentinel flags=%#x, want %#x", got, allNamespaceFlags)
+	}
+	if logicalID, derived := coverageLogicalFieldID(combinedInvalid); logicalID != parent || derived {
+		t.Fatalf("combined-invalid sentinel decoded to logical ID %d derived=%v, want content-piece precedence (%d,false)",
+			logicalID, derived, parent)
+	}
+}
+
+func TestRound10CoverageLogicalPartsDoNotSplitAcrossContentPieceOrdinals(t *testing.T) {
+	t.Parallel()
+
+	const (
+		parent                 = uint64(17)
+		maxContentPieceOrdinal = uint64(1<<coverageContentPieceOrdinalBits) - 2
+		maxDerivedOrdinal      = uint64(1<<coverageDerivedFieldOrdinalBits) - 2
+	)
+	var observation coverageDimensionObservation
+	for _, ordinal := range []uint64{0, 1, maxContentPieceOrdinal - 1, maxContentPieceOrdinal} {
+		observation.add(extract.SegmentChunk{
+			Role:        extract.RoleUser,
+			ContentKind: extract.ContentKindNaturalLanguageDirective,
+			FieldID:     coverageContentPieceFieldIDFlag | parent<<coverageContentPieceOrdinalBits | ordinal + 1,
+			Start:       true,
+			End:         true,
+			Text:        []byte("x"),
+		})
+	}
+	for _, ordinal := range []uint64{0, 1, maxDerivedOrdinal - 1, maxDerivedOrdinal} {
+		observation.add(extract.SegmentChunk{
+			Role:        extract.RoleUser,
+			ContentKind: extract.ContentKindNaturalLanguageDirective,
+			FieldID:     coverageDerivedFieldIDFlag | parent<<coverageDerivedFieldOrdinalBits | ordinal + 1,
+			Start:       true,
+			End:         true,
+			Text:        []byte("x"),
+		})
+	}
+
+	if got := observation.logicalParts[coverageRoleUser]; got != 1 {
+		t.Fatalf("logical parts=%d, want one parent across adjacent and maximum namespace ordinals", got)
+	}
+	if got := observation.derivedCarrierBytes; got != 4 {
+		t.Fatalf("derived carrier bytes=%d, want 4", got)
+	}
+}
+
 func TestRound10CoveragePositionDoesNotInventBackForUnterminatedField(t *testing.T) {
 	t.Parallel()
 	var observation coverageDimensionObservation

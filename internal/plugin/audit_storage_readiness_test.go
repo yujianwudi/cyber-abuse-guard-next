@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
@@ -23,6 +24,7 @@ func TestAuditPersistenceVerificationLatchesOperationalReadiness(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	dataDir := filepath.ToSlash(t.TempDir())
+	p.auditStorageInspect = verifiedAuditStorageInspectorForTest
 	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\nsubject_control:\n  enabled: false\n")
 
 	state := p.runtime.Load()
@@ -82,6 +84,147 @@ func TestAuditStorageDisabledDoesNotRequirePersistence(t *testing.T) {
 	}
 }
 
+func TestAuditStorageGateCachesSuccessfulProbeUntilMinimumInterval(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, 1)
+	var calls atomic.Uint64
+	now := time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC)
+	gate := newAuditStorageGate(baseline, 1, func(path string, explicit, expected bool, maxBytes int64) auditStorageVerification {
+		calls.Add(1)
+		return verifiedAuditStorageInspectorForTest(path, explicit, expected, maxBytes)
+	})
+	gate.now = func() time.Time { return now }
+	gate.arm(baseline)
+
+	if status := gate.verification(); !status.PersistenceVerified || calls.Load() != 1 {
+		t.Fatalf("first verification status=%#v calls=%d", status, calls.Load())
+	}
+	if err := gate.access(); err != nil || calls.Load() != 1 {
+		t.Fatalf("cached access error=%v calls=%d", err, calls.Load())
+	}
+	now = now.Add(auditStorageMinimumReprobeInterval - time.Nanosecond)
+	if status := gate.verification(); !status.PersistenceVerified || calls.Load() != 1 {
+		t.Fatalf("pre-expiry verification status=%#v calls=%d", status, calls.Load())
+	}
+	now = now.Add(time.Nanosecond)
+	if status := gate.verification(); !status.PersistenceVerified || calls.Load() != 2 {
+		t.Fatalf("expired verification status=%#v calls=%d", status, calls.Load())
+	}
+
+	// Re-arming is a fresh open boundary and must not inherit a cached deadline.
+	gate.arm(baseline)
+	if status := gate.verification(); !status.PersistenceVerified || calls.Load() != 3 {
+		t.Fatalf("re-armed verification status=%#v calls=%d", status, calls.Load())
+	}
+}
+
+func TestAuditStorageGateExpiredFailureLatchesPermanently(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, 1)
+	var calls atomic.Uint64
+	healthy := true
+	now := time.Date(2026, 7, 31, 0, 0, 0, 0, time.UTC)
+	gate := newAuditStorageGate(baseline, 1, func(path string, explicit, expected bool, maxBytes int64) auditStorageVerification {
+		calls.Add(1)
+		status := verifiedAuditStorageInspectorForTest(path, explicit, expected, maxBytes)
+		if !healthy {
+			status.State = "read_only"
+			status.PersistenceVerified = false
+			status.PersistenceReason = "read_only"
+			status.Writable = false
+		}
+		return status
+	})
+	gate.now = func() time.Time { return now }
+	gate.arm(baseline)
+
+	if err := gate.access(); err != nil {
+		t.Fatalf("initial verified access: %v", err)
+	}
+	healthy = false
+	now = now.Add(auditStorageMinimumReprobeInterval)
+	if err := gate.access(); err == nil || !strings.Contains(err.Error(), "read_only") {
+		t.Fatalf("expired failure access error=%v", err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("failure probe calls=%d, want 2", calls.Load())
+	}
+
+	healthy = true
+	now = now.Add(10 * auditStorageMinimumReprobeInterval)
+	if err := gate.access(); err == nil || !strings.Contains(err.Error(), "read_only") {
+		t.Fatalf("latched access error=%v", err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("latched gate re-probed %d times", calls.Load())
+	}
+}
+
+func TestAuditStorageGateConcurrentAccessSharesOneLiveProbe(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, 1)
+	var calls atomic.Uint64
+	probeStarted := make(chan struct{})
+	releaseProbe := make(chan struct{})
+	var signalProbe sync.Once
+	gate := newAuditStorageGate(baseline, 1, func(path string, explicit, expected bool, maxBytes int64) auditStorageVerification {
+		calls.Add(1)
+		signalProbe.Do(func() { close(probeStarted) })
+		<-releaseProbe
+		return verifiedAuditStorageInspectorForTest(path, explicit, expected, maxBytes)
+	})
+	gate.arm(baseline)
+
+	const callers = 64
+	start := make(chan struct{})
+	errorsSeen := make(chan error, callers)
+	var callersDone sync.WaitGroup
+	callersDone.Add(callers)
+	for range callers {
+		go func() {
+			defer callersDone.Done()
+			<-start
+			errorsSeen <- gate.access()
+		}()
+	}
+	close(start)
+	<-probeStarted
+	close(releaseProbe)
+	callersDone.Wait()
+	close(errorsSeen)
+	for err := range errorsSeen {
+		if err != nil {
+			t.Fatalf("concurrent access error=%v", err)
+		}
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("concurrent inspector calls=%d, want 1", calls.Load())
+	}
+}
+
+func TestAuditStorageGateNilUnarmedAndLatchedPathsDoNotProbe(t *testing.T) {
+	baseline := verifiedAuditStorageInspectorForTest(filepath.Join(t.TempDir(), "events.db"), true, true, 1)
+	var calls atomic.Uint64
+	gate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+		calls.Add(1)
+		return baseline
+	})
+	if status := gate.verification(); !status.PersistenceVerified || calls.Load() != 0 {
+		t.Fatalf("unarmed verification status=%#v calls=%d", status, calls.Load())
+	}
+	failure := baseline
+	failure.PersistenceVerified = false
+	failure.PersistenceReason = "read_only"
+	gate.latch(failure)
+	if status := gate.verification(); status.PersistenceReason != "read_only" || calls.Load() != 0 {
+		t.Fatalf("latched verification status=%#v calls=%d", status, calls.Load())
+	}
+	var nilGate *auditStorageGate
+	if status := nilGate.verification(); status.State != "disabled" {
+		t.Fatalf("nil gate verification=%#v", status)
+	}
+}
+
 func TestRequiredUnverifiedStorageNeverOpensSQLiteOrSubjectPersistence(t *testing.T) {
 	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
 	tests := []struct {
@@ -135,9 +278,9 @@ func TestRequiredUnverifiedStorageNeverOpensSQLiteOrSubjectPersistence(t *testin
 			if status["audit_degraded"] != true || status["persistence_degraded"] != true || status["operational_ready"] != false {
 				t.Fatalf("unverified storage status=%#v", status)
 			}
-			auditStatus := status["audit"].(map[string]any)
-			if auditStatus["persistence_reason"] != test.reason || auditStatus["persistence_verified"] != false || auditStatus["degraded"] != true {
-				t.Fatalf("unverified audit status=%#v", auditStatus)
+			auditStatus, ok := status["audit"].(map[string]any)
+			if !ok || auditStatus["persistence_reason"] != test.reason || auditStatus["persistence_verified"] != false || auditStatus["degraded"] != true {
+				t.Fatalf("unverified audit status=%#v", status["audit"])
 			}
 			for _, want := range []string{"audit_runtime_degraded", "audit_persistence_unverified", "subject_persistence_degraded"} {
 				if !containsReadinessReason(status["readiness_reasons"], want) {
@@ -223,7 +366,10 @@ func TestRequiredStorageReconfigureRecoversAfterVerifiedVolumeAppears(t *testing
 	}
 	decodeOKResult(t, raw, &map[string]any{})
 	state := p.runtime.Load()
-	if state == nil || state.audit == nil || state.audit.Status().Degraded || !state.auditStorage.PersistenceVerified {
+	if state == nil || state.audit == nil {
+		t.Fatalf("verified-volume runtime was not published: %#v", state)
+	}
+	if state.audit.Status().Degraded || !state.auditStorage.PersistenceVerified {
 		t.Fatalf("verified-volume runtime audit=%#v storage=%#v", state.audit.Status(), state.auditStorage)
 	}
 	if _, err := os.Stat(databasePath); err != nil {
@@ -242,6 +388,7 @@ func TestRequiredStorageReconfigureRecoversAfterVerifiedVolumeAppears(t *testing
 	}
 
 	verified.Store(false)
+	forceAuditStorageGateReprobeForTest(state.auditStorageGate)
 	status = managementJSON(t, p, http.MethodGet, managementBasePath+"/status", nil)
 	if status["audit_degraded"] != true || status["operational_ready"] != false {
 		t.Fatalf("live storage failure status=%#v", status)
@@ -388,6 +535,7 @@ func TestRuntimeStorageFailureLatchesAllPersistenceWritesUntilReconfigure(t *tes
 			liveMu.Lock()
 			live = failure
 			liveMu.Unlock()
+			forceAuditStorageGateReprobeForTest(state.auditStorageGate)
 
 			before := state.audit.Status()
 			if route := callRoute(t, p, maliciousRequest); !route.Handled {
@@ -431,7 +579,7 @@ func TestRuntimeStorageFailureLatchesAllPersistenceWritesUntilReconfigure(t *tes
 			}
 			decodeOKResult(t, raw, &map[string]any{})
 			recovered := p.runtime.Load()
-			if recovered == state || recovered.audit == nil {
+			if recovered == nil || recovered == state || recovered.audit == nil {
 				t.Fatalf("reconfigure did not replace runtime: old=%p new=%p", state, recovered)
 			}
 			if err := recovered.audit.Enqueue(audit.Event{}); !errors.Is(err, audit.ErrInvalidEvent) {
@@ -530,6 +678,15 @@ func TestRequiredAuditStoragePolicyPreventsEveryUnverifiedOpen(t *testing.T) {
 	if development.preventsDatabaseOpen() {
 		t.Fatalf("default-off development audit storage was rejected: %#v", development)
 	}
+}
+
+func forceAuditStorageGateReprobeForTest(gate *auditStorageGate) {
+	if gate == nil {
+		return
+	}
+	gate.mu.Lock()
+	gate.nextProbeAt = time.Time{}
+	gate.mu.Unlock()
 }
 
 func verifiedAuditStorageInspectorForTest(

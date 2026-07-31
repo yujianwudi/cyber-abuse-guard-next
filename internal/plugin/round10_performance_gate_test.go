@@ -271,6 +271,33 @@ func TestRound10PerformanceGateContract(t *testing.T) {
 	if measured != "FAIL" {
 		t.Fatalf("ordinary p95 above the absolute limit produced measured status %s", measured)
 	}
+
+	t.Run("report output directory errors", func(t *testing.T) {
+		t.Run("missing", func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "missing", "round10-performance.json")
+			err := round10WritePerformanceReport(path, round10PerformanceReport{})
+			if !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("missing output directory error=%v, want os.ErrNotExist", err)
+			}
+		})
+
+		t.Run("not a directory", func(t *testing.T) {
+			directory := filepath.Join(t.TempDir(), "not-a-directory")
+			if err := os.WriteFile(directory, []byte("ordinary file"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			err := round10WritePerformanceReport(
+				filepath.Join(directory, "round10-performance.json"),
+				round10PerformanceReport{},
+			)
+			if err == nil || !strings.Contains(err.Error(), "is not a directory") {
+				t.Fatalf("non-directory output error=%v, want explicit directory rejection", err)
+			}
+			if strings.Contains(err.Error(), "%!w(<nil>)") {
+				t.Fatalf("non-directory output wrapped a nil error: %v", err)
+			}
+		})
+	})
 }
 
 func assertRound10GateContract(t testing.TB, gates []round10PerformanceGate, id string, limit float64, status string) {
@@ -713,8 +740,12 @@ func round10CommandIdentity(name string, args ...string) string {
 
 func round10WritePerformanceReport(path string, report round10PerformanceReport) error {
 	directory := filepath.Dir(path)
-	if info, err := os.Stat(directory); err != nil || !info.IsDir() {
+	info, err := os.Stat(directory)
+	if err != nil {
 		return fmt.Errorf("output directory is unavailable: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("output directory is unavailable: %s is not a directory", directory)
 	}
 	raw, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
