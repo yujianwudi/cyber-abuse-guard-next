@@ -358,20 +358,23 @@ func finalRouteDispositionFor(coverage coverageDisposition, decision inspectionD
 }
 
 const (
-	// SegmentChunk reserves bit 61 for decoded/derived views and bit 62 for
+	// SegmentChunk reserves bit 30 for decoded/derived views and bit 62 for
 	// content-kind pieces. These are structural namespaces, not hashes or caller
 	// fields. Keep the decoding local to the transient request observer.
 	//
 	// The extractor emits these as sibling views of one unflagged base field ID:
 	// contentPieceFieldID(span.id, ordinal) for source pieces and
 	// derivedFieldID(span.id, ordinal) for decoded views. It never passes one
-	// namespaced ID into the other constructor. Base IDs are bounded by
-	// extract.HardMaxTextParts, content-piece ordinals by the classification-chunk
-	// limit, and decoded-view ordinals by the extractor's fixed variant limit, so
-	// a valid SegmentChunk FieldID cannot carry both flags. The boundary and
-	// combined-invalid cases are locked by
+	// namespaced ID into the other constructor. Planner spans are bounded by
+	// extract.HardMaxJSONNodes, and owned text adds at most
+	// extract.HardMaxTextParts IDs after those spans. This combined parent bound
+	// stays below bit 22; content-piece ordinals are bounded by the classification
+	// chunk limit and decoded-view ordinals by the extractor's fixed variant limit.
+	// In a content-piece ID, parent bit 14 naturally occupies encoded bit 30, so
+	// bit 30 is payload once bit 62 selects the content-piece format. The boundary
+	// cases are locked by
 	// TestRound10CoverageLogicalFieldIDNamespaceInvariant.
-	coverageDerivedFieldIDFlag      = uint64(1) << 61
+	coverageDerivedFieldIDFlag      = uint64(1) << 30
 	coverageContentPieceFieldIDFlag = uint64(1) << 62
 	coverageDerivedFieldOrdinalBits = 8
 	coverageContentPieceOrdinalBits = 16
@@ -379,7 +382,7 @@ const (
 
 func coverageLogicalFieldID(fieldID uint64) (uint64, bool) {
 	if fieldID&coverageContentPieceFieldIDFlag != 0 {
-		return (fieldID &^ (coverageContentPieceFieldIDFlag | coverageDerivedFieldIDFlag)) >> coverageContentPieceOrdinalBits, false
+		return (fieldID &^ coverageContentPieceFieldIDFlag) >> coverageContentPieceOrdinalBits, false
 	}
 	if fieldID&coverageDerivedFieldIDFlag != 0 {
 		return (fieldID &^ (coverageContentPieceFieldIDFlag | coverageDerivedFieldIDFlag)) >> coverageDerivedFieldOrdinalBits, true

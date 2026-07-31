@@ -41,6 +41,7 @@ var classifierPolicySourceFiles = []string{
 	"internal/extract/stream_multipart.go",
 	"internal/extract/stream_scan.go",
 	"internal/explanation/hard_floor.go",
+	"internal/plugin/counters.go",
 	"internal/rules/loader.go",
 	"internal/rules/types.go",
 	"rules/contexts.yaml",

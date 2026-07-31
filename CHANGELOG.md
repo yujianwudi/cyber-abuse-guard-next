@@ -1,8 +1,8 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 Source-tree status updated: 2026-07-31 (Asia/Shanghai)
@@ -18,8 +18,8 @@ Source-tree status updated: 2026-07-31 (Asia/Shanghai)
   boundaries. A direct-compaction run that exceeds 8 KiB only through trailing
   ASCII padding now uses a bounded non-padding proof, while a real non-padding
   proof overflow remains incomplete. These behavior changes bind
-  `classifier-policy-v9` to
-  `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`.
+  `classifier-policy-v10` to
+  `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
   This lane publishes source and tests only; it does not create a tag, plugin
   asset, or GitHub Release.
 

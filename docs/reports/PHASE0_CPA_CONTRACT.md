@@ -1,8 +1,8 @@
 # CPA v7.2.109 Packaging and Contract Baseline
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 This path is retained by the audit-bundle contract, but its contents describe

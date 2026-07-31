@@ -1018,6 +1018,8 @@ type explicitRelationPhysicalClause struct {
 	clauseID                     int
 	start                        int
 	end                          int
+	startByte                    int
+	endByte                      int
 	boundaryBefore               directiveBoundaryKind
 	potential                    explicitRelationClausePotential
 	potentialSet                 bool

@@ -149,7 +149,7 @@ class ExternalEvaluationContractTest(unittest.TestCase):
             commit="5" * 40,
             tree="6" * 40,
             so_sha256="7" * 64,
-            classifier_policy_version="classifier-policy-v9",
+            classifier_policy_version="classifier-policy-v10",
             classifier_policy_sha256="8" * 64,
             ruleset_version="1.0.10",
             ruleset_sha256="9" * 64,

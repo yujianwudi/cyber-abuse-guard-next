@@ -384,6 +384,91 @@ type profiledSegmentGroup struct {
 	structuredTool  bool
 }
 
+type profiledDeferredFieldCandidate struct {
+	ref       profiledSegmentRef
+	candidate Result
+}
+
+type profiledIncompleteCorrelation struct {
+	reason       CoverageReason
+	scope        EnforcementScope
+	scopeID      uint64
+	fieldID      int
+	fieldSet     bool
+	correlatable bool
+}
+
+func (pending *profiledIncompleteCorrelation) rememberUncorrelated(reason CoverageReason) {
+	if pending == nil || reason == CoverageReasonNone {
+		return
+	}
+	if pending.reason == CoverageReasonNone {
+		pending.reason = reason
+	}
+	pending.scope = EnforcementScopeNone
+	pending.scopeID = 0
+	pending.fieldID = 0
+	pending.fieldSet = false
+	pending.correlatable = false
+}
+
+func (pending *profiledIncompleteCorrelation) rememberField(
+	reason CoverageReason,
+	ref profiledSegmentRef,
+) {
+	if pending == nil || reason == CoverageReasonNone {
+		return
+	}
+	scope := enforcementScopeForProfiledGroup([]profiledSegmentRef{ref})
+	if scope == EnforcementScopeNone || ref.segment.ScopeID == 0 || ref.index < 0 {
+		pending.rememberUncorrelated(reason)
+		return
+	}
+	if pending.reason == CoverageReasonNone {
+		pending.reason = reason
+		pending.scope = scope
+		pending.scopeID = ref.segment.ScopeID
+		pending.fieldID = ref.index
+		pending.fieldSet = true
+		pending.correlatable = true
+		return
+	}
+	if pending.reason != reason || !pending.correlatable || !pending.fieldSet ||
+		pending.scope != scope || pending.scopeID != ref.segment.ScopeID ||
+		pending.fieldID != ref.index {
+		pending.rememberUncorrelated(pending.reason)
+	}
+}
+
+func (pending *profiledIncompleteCorrelation) merge(other profiledIncompleteCorrelation) {
+	if pending == nil || other.reason == CoverageReasonNone {
+		return
+	}
+	if !other.correlatable || !other.fieldSet {
+		pending.rememberUncorrelated(other.reason)
+		return
+	}
+	if pending.reason == CoverageReasonNone {
+		*pending = other
+		return
+	}
+	if pending.reason != other.reason || !pending.correlatable || !pending.fieldSet ||
+		pending.scope != other.scope || pending.scopeID != other.scopeID ||
+		pending.fieldID != other.fieldID {
+		pending.rememberUncorrelated(pending.reason)
+	}
+}
+
+func (pending profiledIncompleteCorrelation) resolvedBy(
+	result Result,
+	thresholds Thresholds,
+) bool {
+	return pending.reason != CoverageReasonNone && pending.correlatable && pending.fieldSet &&
+		resultHasCompleteBlockForProfiledField(
+			result, thresholds, pending.scope, pending.scopeID, pending.fieldID,
+		)
+}
+
 type profiledSegmentGroupKey struct {
 	role            extract.Role
 	provenance      extract.SegmentProvenance
@@ -490,25 +575,24 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	thresholds Thresholds,
 	policy Policy,
 ) Result {
+	if state, reason := profiledBatchInputCoverageFailure(segments); reason != CoverageReasonNone {
+		return c.profiledCoverageFailureResult(mode, thresholds, policy, state, reason)
+	}
 	best := c.classifyWithPolicy(nil, mode, thresholds, policy, false)
 	truncated := false
 	quotedOrInertSuppressed := false
 	carrierProofUnavailable := false
-	pendingClassifierIncomplete := CoverageReasonNone
+	var pendingClassifierIncomplete profiledIncompleteCorrelation
 	for _, group := range buildProfiledCurrentMetaControlGroups(segments) {
 		for _, run := range profiledDirectCompactionRuns(group) {
 			if !run.hasCarrier || run.totalBytes == 0 {
-				if pendingClassifierIncomplete == CoverageReasonNone {
-					pendingClassifierIncomplete = CoverageReasonClassifierWindow
-				}
+				pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
 				continue
 			}
 			if run.totalBytes > maxMetaOverrideDirectControlWindowBytes {
 				proof, proofBytes, complete := profiledDirectCompactionBoundedProof(run.group)
 				if !complete {
-					if pendingClassifierIncomplete == CoverageReasonNone {
-						pendingClassifierIncomplete = CoverageReasonClassifierWindow
-					}
+					pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
 					continue
 				}
 				run.group = proof
@@ -517,9 +601,8 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			candidate := c.classifyProfiledGroupWithPolicy(run.group, mode, thresholds, policy)
 			if resultIsNeutralClassifierIncomplete(candidate) {
 				reason := classifierIncompleteReason(candidate)
-				if pendingClassifierIncomplete == CoverageReasonNone &&
-					classifierIncompleteCoverageReason(reason) {
-					pendingClassifierIncomplete = reason
+				if classifierIncompleteCoverageReason(reason) {
+					pendingClassifierIncomplete.rememberUncorrelated(reason)
 				}
 				continue
 			}
@@ -615,9 +698,8 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			)
 			if resultIsNeutralClassifierIncomplete(candidate) {
 				reason := classifierIncompleteReason(candidate)
-				if pendingClassifierIncomplete == CoverageReasonNone &&
-					classifierIncompleteCoverageReason(reason) {
-					pendingClassifierIncomplete = reason
+				if classifierIncompleteCoverageReason(reason) {
+					pendingClassifierIncomplete.rememberUncorrelated(reason)
 				}
 				index = end
 				continue
@@ -666,14 +748,12 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			best = candidate
 		}
 	}
-	candidate, ok, incompleteReason := c.bestProfiledCurrentNaturalLanguageCandidate(
-		groups, mode, thresholds, policy,
+	var activationProofs map[int]profiledIndependentWindowRecoveryProof
+	var activationCandidates []Result
+	candidate, ok, incompleteCorrelation := c.bestProfiledCurrentNaturalLanguageCandidate(
+		groups, mode, thresholds, policy, &activationProofs, &activationCandidates,
 	)
-	if incompleteReason != CoverageReasonNone {
-		if pendingClassifierIncomplete == CoverageReasonNone {
-			pendingClassifierIncomplete = incompleteReason
-		}
-	}
+	pendingClassifierIncomplete.merge(incompleteCorrelation)
 	if ok {
 		truncated = truncated || candidate.Truncated
 		if roleResultBetter(candidate, best) {
@@ -682,6 +762,7 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	}
 	for _, group := range groups {
 		group = profiledGroupWithoutCarrierIndexes(group, carrierOmissions, unresolvedCarriers)
+		group = profiledMultiFieldGroupWithRecoveryRangesMasked(group, activationProofs)
 		if len(group.parts) == 0 {
 			continue
 		}
@@ -724,6 +805,16 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			candidate, origin, enforcementScope, mode, thresholds,
 		)
 		c.annotateProfiledResult(&candidate, group.refs, false, policy, mode, thresholds)
+		if len(group.refs) == 1 {
+			ref := group.refs[0]
+			if proof, ok := activationProofs[ref.index]; ok &&
+				c.profiledOrdinaryWinnerWithinInertIndependentWindow(
+					candidate, thresholds, policy, ref.segment.Text, proof,
+				) {
+				quotedOrInertSuppressed = true
+				continue
+			}
+		}
 		if candidate.DecisionExplanation != nil && candidate.DecisionExplanation.QuotedOrInertSuppressed {
 			quotedOrInertSuppressed = true
 		}
@@ -736,9 +827,12 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			// audit groups remain inspectable evidence, but cannot change current
 			// coverage. A later independent complete block still wins regardless of
 			// physical field order.
-			if enforcementScope != EnforcementScopeNone &&
-				pendingClassifierIncomplete == CoverageReasonNone {
-				pendingClassifierIncomplete = candidate.Coverage.Reason
+			if enforcementScope != EnforcementScopeNone {
+				if len(group.refs) == 1 {
+					pendingClassifierIncomplete.rememberField(candidate.Coverage.Reason, group.refs[0])
+				} else {
+					pendingClassifierIncomplete.rememberUncorrelated(candidate.Coverage.Reason)
+				}
 			}
 			continue
 		}
@@ -758,14 +852,11 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			segments, group, mode, thresholds, policy,
 		)
 		if !proofComplete {
-			// The direct code/config association proof is bounded. It may be skipped
-			// only when an independently complete, current-user candidate has already
-			// qualified to block without borrowing the adjacent carrier. Otherwise the
-			// unresolved relation remains inspection-incomplete and must fail open.
-			if resultHasEligibleBlockingCandidate(best, thresholds) {
-				continue
-			}
-			return c.profiledProofUnavailableResult(mode, thresholds, policy)
+			// A winner from another field does not reconstruct the direct code/config
+			// association whose proof was lost here. Keep ranking complete candidates,
+			// but preserve the request-wide incomplete disposition independently.
+			pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
+			continue
 		}
 		for _, candidate := range directCandidates {
 			truncated = truncated || candidate.Truncated
@@ -784,12 +875,9 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	if c.profiledReferentCarrierPossible(segments) {
 		currentReferents, referentProofComplete := affirmativeCurrentReferents(c, groups)
 		if !referentProofComplete {
-			// A proven independent candidate does not depend on referent
-			// reactivation. Preserve it; without one, unresolved referent ownership
-			// remains incomplete and cannot create a blocking candidate.
-			if !resultHasEligibleBlockingCandidate(best, thresholds) {
-				return c.profiledProofUnavailableResult(mode, thresholds, policy)
-			}
+			// Scope identity alone cannot prove that an independent winner covers the
+			// exact field/occurrence whose referent ownership was lost.
+			pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
 			currentReferents = nil
 		}
 		for _, currentReferent := range currentReferents {
@@ -854,17 +942,24 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			}
 		}
 	}
-	if !resultHasEligibleBlockingCandidate(best, thresholds) {
-		if pendingClassifierIncomplete != CoverageReasonNone {
-			return c.profiledProofUnavailableResult(
-				mode, thresholds, policy, pendingClassifierIncomplete,
-			)
-		}
-		if carrierProofUnavailable {
-			return c.profiledProofUnavailableResult(mode, thresholds, policy)
+	// Recovery is deliberately ranked after ordinary, direct-carrier, and
+	// referent candidates. It still wins when it is strictly better or when those
+	// paths found no eligible candidate, but an equal full-field winner retains
+	// its more precise occurrence and eligibility proof.
+	for _, candidate := range activationCandidates {
+		if roleResultBetter(candidate, best) {
+			best = candidate
 		}
 	}
-
+	if carrierProofUnavailable {
+		pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
+	}
+	if pendingClassifierIncomplete.reason != CoverageReasonNone &&
+		!pendingClassifierIncomplete.resolvedBy(best, thresholds) {
+		return c.profiledProofUnavailableResult(
+			mode, thresholds, policy, pendingClassifierIncomplete.reason,
+		)
+	}
 	best.Truncated = best.Truncated || truncated
 	enforceResultCandidateEligibility(&best, mode, thresholds)
 	ensureResultDecisionExplanation(&best)
@@ -896,6 +991,39 @@ func profiledHistoricalUserSharesToolResultConversation(
 	return false
 }
 
+func profiledMultiFieldGroupWithRecoveryRangesMasked(
+	group profiledSegmentGroup,
+	proofs map[int]profiledIndependentWindowRecoveryProof,
+) profiledSegmentGroup {
+	if len(group.refs) <= 1 || len(proofs) == 0 || len(group.parts) != len(group.refs) {
+		return group
+	}
+	masked := false
+	for partIndex, ref := range group.refs {
+		proof, ok := proofs[ref.index]
+		if !ok || proof.startByte < 0 ||
+			proof.endByte <= proof.startByte || proof.endByte > len(group.parts[partIndex]) {
+			continue
+		}
+		if !masked {
+			group.parts = append([]string(nil), group.parts...)
+			masked = true
+		}
+		physical := []byte(group.parts[partIndex])
+		for index := proof.startByte; index < proof.endByte; index++ {
+			physical[index] = ' '
+		}
+		if !utf8.Valid(physical) {
+			// Retain the original field when exact raw-byte masking cannot be
+			// proven safe; conservative blocking is preferable to deleting an
+			// unrelated Unicode occurrence.
+			continue
+		}
+		group.parts[partIndex] = string(physical)
+	}
+	return group
+}
+
 // bestProfiledCurrentNaturalLanguageCandidate preserves candidate boundaries
 // inside one current trusted-user scope. The ordinary grouped classifier still
 // evaluates bounded cross-field composition, but it only retains the final raw
@@ -913,9 +1041,11 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
-) (Result, bool, CoverageReason) {
+	activationProofs *map[int]profiledIndependentWindowRecoveryProof,
+	activationCandidates *[]Result,
+) (Result, bool, profiledIncompleteCorrelation) {
 	if c == nil || len(groups) == 0 {
-		return Result{}, false, CoverageReasonNone
+		return Result{}, false, profiledIncompleteCorrelation{}
 	}
 
 	signals := takeClassifierSignalBuffer(c.signalCount)
@@ -933,13 +1063,12 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 
 	best := Result{}
 	found := false
-	pendingClassifierIncomplete := CoverageReasonNone
-	consider := func(candidate Result) {
+	var pendingClassifierIncomplete profiledIncompleteCorrelation
+	consider := func(ref profiledSegmentRef, candidate Result) {
 		if resultIsNeutralClassifierIncomplete(candidate) {
 			reason := classifierIncompleteReason(candidate)
-			if pendingClassifierIncomplete == CoverageReasonNone &&
-				classifierIncompleteCoverageReason(reason) {
-				pendingClassifierIncomplete = reason
+			if classifierIncompleteCoverageReason(reason) {
+				pendingClassifierIncomplete.rememberField(reason, ref)
 			}
 			return
 		}
@@ -955,6 +1084,13 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 	for _, group := range groups {
 		preserveIndependentField := len(group.refs) > 1
 		var seenIndependentFieldText map[string]struct{}
+		var deferredFieldCandidates []profiledDeferredFieldCandidate
+		var groupRecoveryProofs map[int]profiledIndependentWindowRecoveryProof
+		var activeRecoveredFields map[int]struct{}
+		var recoveredActivation Result
+		var recoveredActivationRef profiledSegmentRef
+		hasRecoveredActivation := false
+		recoveredActivationAt := -1
 		if preserveIndependentField {
 			// Exact duplicate natural-language fields in one profiled group have
 			// identical actor, turn, scope, content kind, and classification input.
@@ -972,11 +1108,73 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 				strings.TrimSpace(segment.Text) == "" {
 				continue
 			}
+			duplicateIndependentField := false
 			if preserveIndependentField {
-				if _, duplicate := seenIndependentFieldText[segment.Text]; duplicate {
-					continue
-				}
+				_, duplicateIndependentField = seenIndependentFieldText[segment.Text]
 				seenIndependentFieldText[segment.Text] = struct{}{}
+			}
+			recoveredThisField := false
+			fieldRecoveryProofComplete := true
+			if profiledLongActivationRecoveryCandidate(segment) {
+				candidate, recovered, complete, proof := c.profiledLongActivationBatchCandidate(
+					ref, mode, thresholds, policy,
+				)
+				if groupRecoveryProofs == nil {
+					groupRecoveryProofs = make(map[int]profiledIndependentWindowRecoveryProof)
+				}
+				groupRecoveryProofs[ref.index] = proof
+				if activationProofs != nil && (recovered || proof.inertCount != 0) {
+					if *activationProofs == nil {
+						*activationProofs = make(map[int]profiledIndependentWindowRecoveryProof)
+					}
+					(*activationProofs)[ref.index] = proof
+				}
+				if !complete {
+					fieldRecoveryProofComplete = false
+					pendingClassifierIncomplete.rememberField(CoverageReasonClassifierWindow, ref)
+				} else if recovered {
+					recoveredThisField = true
+					if !hasRecoveredActivation || roleResultBetter(candidate, recoveredActivation) {
+						recoveredActivation = candidate
+						recoveredActivationRef = ref
+					}
+					hasRecoveredActivation = true
+					if activeRecoveredFields == nil {
+						activeRecoveredFields = make(map[int]struct{})
+					}
+					activeRecoveredFields[ref.index] = struct{}{}
+					if ref.index > recoveredActivationAt {
+						recoveredActivationAt = ref.index
+					}
+				}
+				// Recovery is an additive bounded candidate search. The ordinary
+				// field classifier below must still inspect and rank its own evidence:
+				// a rejected, over-budget, or differently-owned activation cannot
+				// erase an otherwise complete malicious occurrence in this field.
+			}
+			if !recoveredThisField && fieldRecoveryProofComplete && hasRecoveredActivation &&
+				ref.index > recoveredActivationAt &&
+				profiledEmbeddedMaterialCancellation(c, strings.ToLower(segment.Text)) {
+				for cancelledField := range activeRecoveredFields {
+					proof := groupRecoveryProofs[cancelledField]
+					proof.cancelled = true
+					groupRecoveryProofs[cancelledField] = proof
+					if activationProofs != nil && *activationProofs != nil {
+						(*activationProofs)[cancelledField] = proof
+					}
+				}
+				clear(activeRecoveredFields)
+				recoveredActivation = Result{}
+				recoveredActivationRef = profiledSegmentRef{}
+				hasRecoveredActivation = false
+				recoveredActivationAt = -1
+			}
+			if duplicateIndependentField {
+				// Classification is byte-identical, but recovery/cancellation is
+				// sequence-sensitive. Apply the state transition above before skipping
+				// the redundant ordinary classifier pass so cancellation followed by an
+				// identical reactivation cannot disappear only in batch mode.
+				continue
 			}
 			mayContainLocalSubcandidate := profiledNaturalLanguageMayContainLocalSubcandidate(segment.Text)
 			if !preserveIndependentField && !mayContainLocalSubcandidate {
@@ -1022,7 +1220,10 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 					&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
 				)
 				if resultIsNeutralClassifierIncomplete(candidate) || ordinaryCandidateCore {
-					consider(candidate)
+					deferredFieldCandidates = append(
+						deferredFieldCandidates,
+						profiledDeferredFieldCandidate{ref: ref, candidate: candidate},
+					)
 				}
 			}
 			if !mayContainLocalSubcandidate {
@@ -1058,7 +1259,10 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 					candidate.DecisionExplanation.ReferentLinkUsed = true
 					candidate.DecisionExplanation.EvidenceSegmentCount = 1
 				}
-				consider(candidate)
+				deferredFieldCandidates = append(
+					deferredFieldCandidates,
+					profiledDeferredFieldCandidate{ref: ref, candidate: candidate},
+				)
 			}
 
 			if tail, ok := independentMaliciousExecutionTail(normalized); ok {
@@ -1070,11 +1274,59 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 					&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
 				)
 				retainCandidateAuthorizationConflict(&candidate, segment.Text)
-				consider(candidate)
+				deferredFieldCandidates = append(
+					deferredFieldCandidates,
+					profiledDeferredFieldCandidate{ref: ref, candidate: candidate},
+				)
+			}
+		}
+		for _, deferred := range deferredFieldCandidates {
+			proof, recovered := groupRecoveryProofs[deferred.ref.index]
+			if recovered && (proof.cancelled || len(group.refs) > 1) &&
+				c.profiledOrdinaryWinnerWithinIndependentWindow(
+					deferred.candidate, thresholds, policy, deferred.ref.segment.Text, proof,
+				) {
+				continue
+			}
+			consider(deferred.ref, deferred.candidate)
+		}
+		if hasRecoveredActivation {
+			if activationCandidates != nil {
+				*activationCandidates = append(*activationCandidates, recoveredActivation)
+			} else {
+				consider(recoveredActivationRef, recoveredActivation)
 			}
 		}
 	}
 	return best, found, pendingClassifierIncomplete
+}
+
+func (c *Classifier) profiledLongActivationBatchCandidate(
+	ref profiledSegmentRef,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (Result, bool, bool, profiledIndependentWindowRecoveryProof) {
+	if c == nil || !profiledLongActivationRecoveryCandidate(ref.segment) {
+		return Result{}, false, true, profiledIndependentWindowRecoveryProof{}
+	}
+	session, err := c.NewProfiledScanSession(mode, thresholds, policy, DefaultScanLimits())
+	if err != nil {
+		return Result{}, false, false, profiledIndependentWindowRecoveryProof{
+			failureState: CoverageUnavailable, failureReason: CoverageReasonClassifierWindow,
+		}
+	}
+	var proof profiledIndependentWindowRecoveryProof
+	candidate, _, recovered, complete :=
+		session.recoverProfiledIndependentWindowCandidateWithProof(ref.segment, &proof)
+	if !complete || !recovered {
+		return Result{}, false, complete, proof
+	}
+	candidate = withRoleAwareFindingOrigin(
+		candidate, FindingOriginUserContent, mode, thresholds,
+	)
+	c.annotateProfiledResult(&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds)
+	return candidate, resultHasEligibleMaliciousWinner(candidate, thresholds), true, proof
 }
 
 type profiledRequestLocalSystemReactivationProof struct {
@@ -1345,6 +1597,38 @@ func (c *Classifier) profiledProofUnavailableResult(
 	result.FindingConfidence = FindingNone
 	result.FindingOrigin = FindingOriginNone
 	return result
+}
+
+func (c *Classifier) profiledCoverageFailureResult(
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	state CoverageState,
+	reason CoverageReason,
+) Result {
+	result := c.classifyWithPolicy(nil, mode, thresholds, policy, false)
+	result.Coverage = Coverage{State: state, Reason: reason}
+	result.Truncated = true
+	result.FindingConfidence = FindingNone
+	result.FindingOrigin = FindingOriginNone
+	return result
+}
+
+func profiledBatchInputCoverageFailure(
+	segments []extract.Segment,
+) (CoverageState, CoverageReason) {
+	remaining := int64(DefaultScanTotalTextBytes)
+	for _, segment := range segments {
+		bytes := int64(len(segment.Text))
+		if bytes > remaining {
+			return CoverageBudgetExhausted, CoverageReasonTotalTextLimit
+		}
+		remaining -= bytes
+		if !utf8.ValidString(segment.Text) {
+			return CoverageUnavailable, CoverageReasonInvalidUTF8
+		}
+	}
+	return CoverageComplete, CoverageReasonNone
 }
 
 func buildProfiledSegmentGroups(segments []extract.Segment, historicalTrustedUsers bool) []profiledSegmentGroup {
@@ -3213,6 +3497,9 @@ func affirmativeProfiledPartIndexes(c *Classifier, parts []string) ([]int, bool)
 	for index := len(parts) - 1; index >= 0; index-- {
 		decisions, complete := profiledPartContinuationDecisions(c, parts[index], allIntents)
 		if !complete {
+			if profiledOverflowNeutralDirective(c, parts[index]) {
+				continue
+			}
 			return nil, false
 		}
 		activePart := false
@@ -3252,7 +3539,9 @@ func profiledPartContinuationDecisions(
 	text string,
 	allIntents []string,
 ) ([]quotedReviewContinuationDecision, bool) {
-	return profiledPartIntentDecisions(c, text, c.implementationStarts, allIntents, true)
+	return profiledPartIntentDecisionsBounded(
+		c, text, c.implementationStarts, allIntents, true, true,
+	)
 }
 
 func profiledPartIntentDecisions(
@@ -3261,6 +3550,19 @@ func profiledPartIntentDecisions(
 	explicitIntents []string,
 	allIntents []string,
 	allowInertClauseOverflow bool,
+) ([]quotedReviewContinuationDecision, bool) {
+	return profiledPartIntentDecisionsBounded(
+		c, text, explicitIntents, allIntents, allowInertClauseOverflow, false,
+	)
+}
+
+func profiledPartIntentDecisionsBounded(
+	c *Classifier,
+	text string,
+	explicitIntents []string,
+	allIntents []string,
+	allowInertClauseOverflow bool,
+	completeNeutralOverflow bool,
 ) ([]quotedReviewContinuationDecision, bool) {
 	if c == nil || strings.TrimSpace(text) == "" {
 		return nil, true
@@ -3368,7 +3670,7 @@ func profiledPartIntentDecisions(
 	if !complete {
 		return nil, false
 	}
-	if physicalClauses > 32 && len(chronological) == 0 {
+	if physicalClauses > 32 && len(chronological) == 0 && !completeNeutralOverflow {
 		// Preserve the established incomplete boundary for an oversized field
 		// whose relation to a carrier is wholly unrecognized. The narrow
 		// exception above is only for a physically located affirmative or
@@ -3380,6 +3682,83 @@ func profiledPartIntentDecisions(
 		chronological[left], chronological[right] = chronological[right], chronological[left]
 	}
 	return chronological, true
+}
+
+// profiledOverflowNeutralDirective proves only the absence of an effective
+// referent or direct-rule speech act in one fully retained logical piece. It is
+// deliberately narrower than making the piece generally "complete": callers
+// may use the content-free result only while evicting an adjacent carrier pair.
+// Physical clause count does not consume the proof budget; actionable intent
+// occurrences remain bounded by profiledPartIntentDecisionsBounded.
+func profiledOverflowNeutralDirective(c *Classifier, text string) bool {
+	if c == nil || strings.TrimSpace(text) == "" {
+		return false
+	}
+	affirmativeIntents := make([]string, 0,
+		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(c.implementationStarts))
+	affirmativeIntents = append(affirmativeIntents, quotedReviewSpecificContinuationIntents...)
+	affirmativeIntents = append(affirmativeIntents, quotedReviewTerseContinuationIntents...)
+	affirmativeIntents = append(affirmativeIntents, c.implementationStarts...)
+	affirmative, complete := profiledPartIntentDecisionsBounded(
+		c, text, c.implementationStarts, affirmativeIntents, true, true,
+	)
+	if !complete || profiledEffectiveIntentDecisionExists(affirmative, nil) {
+		return false
+	}
+
+	directIntents := profiledRuleDirectiveIntents(c)
+	if len(directIntents) == 0 {
+		return true
+	}
+	directSet := make(map[string]struct{}, len(directIntents))
+	for _, intent := range directIntents {
+		directSet[intent] = struct{}{}
+	}
+	allDirectIntents := make([]string, 0,
+		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(directIntents))
+	allDirectIntents = append(allDirectIntents, quotedReviewSpecificContinuationIntents...)
+	allDirectIntents = append(allDirectIntents, quotedReviewTerseContinuationIntents...)
+	allDirectIntents = append(allDirectIntents, directIntents...)
+	direct, complete := profiledPartIntentDecisionsBounded(
+		c, text, directIntents, allDirectIntents, true, true,
+	)
+	return complete && !profiledEffectiveIntentDecisionExists(direct, directSet)
+}
+
+// profiledEffectiveIntentDecisionExists consumes newest-to-oldest decisions,
+// matching affirmativeProfiledPartIndexes. A newer explicit cancellation can
+// neutralize only the equivalent older intent; unrelated cancellations and
+// alternatives never provide a general safe summary.
+func profiledEffectiveIntentDecisionExists(
+	decisions []quotedReviewContinuationDecision,
+	allowed map[string]struct{},
+) bool {
+	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
+	for _, decision := range decisions {
+		if allowed != nil {
+			if _, ok := allowed[decision.intent]; !ok {
+				continue
+			}
+		}
+		switch decision.disposition {
+		case quotedReviewContinuationCancelled:
+			if !decision.alternative {
+				cancellations = append(cancellations, decision)
+			}
+		case quotedReviewContinuationActive:
+			cancelled := false
+			for _, cancellation := range cancellations {
+				if quotedReviewContinuationIntentsEquivalent(decision.intent, cancellation.intent) {
+					cancelled = true
+					break
+				}
+			}
+			if !cancelled {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // directProfiledPartIndexes returns every physical natural-language segment
@@ -3407,7 +3786,9 @@ func directProfiledPartIndexes(c *Classifier, parts []string) ([]int, bool) {
 	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
 	indexes := make([]int, 0, len(parts))
 	for index := len(parts) - 1; index >= 0; index-- {
-		decisions, complete := profiledPartIntentDecisions(c, parts[index], directIntents, allIntents, false)
+		decisions, complete := profiledPartIntentDecisionsBounded(
+			c, parts[index], directIntents, allIntents, true, true,
+		)
 		if !complete {
 			return nil, false
 		}
@@ -3465,7 +3846,9 @@ func profiledPartDirectRuleDecisions(
 	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
 	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
 	allIntents = append(allIntents, directIntents...)
-	decisions, complete := profiledPartIntentDecisions(c, text, directIntents, allIntents, false)
+	decisions, complete := profiledPartIntentDecisionsBounded(
+		c, text, directIntents, allIntents, true, true,
+	)
 	if !complete {
 		return nil, false
 	}

@@ -290,8 +290,11 @@ func migrateDatabase(db *sql.DB, cfg Config, databasePath string) error {
 		if _, err := locked.Exec(`INSERT OR IGNORE INTO migration_history(version, applied_at_ns, description) VALUES(1, ?, ?)`, nowNS, "v0.1.1 audit_events baseline"); err != nil {
 			return fmt.Errorf("audit: record baseline migration: %w", err)
 		}
-		if _, err := locked.Exec(`INSERT INTO schema_version(singleton, version, updated_at_ns) VALUES(1, ?, ?)
-ON CONFLICT(singleton) DO UPDATE SET version=excluded.version, updated_at_ns=excluded.updated_at_ns`, version, nowNS); err != nil {
+		// A current schema is an inspection, not a migration. Preserve the
+		// original migration timestamp and logical database identity across a
+		// normal process restart; only initialize metadata for a legacy v1
+		// database that did not yet have the singleton row.
+		if _, err := locked.Exec(`INSERT OR IGNORE INTO schema_version(singleton, version, updated_at_ns) VALUES(1, ?, ?)`, version, nowNS); err != nil {
 			return fmt.Errorf("audit: initialize schema version: %w", err)
 		}
 	}

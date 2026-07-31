@@ -33,7 +33,6 @@ sys.modules[_CONTRACT_SPEC.name] = _CONTRACT_MODULE
 _CONTRACT_SPEC.loader.exec_module(_CONTRACT_MODULE)
 
 from round6_safe_gate_contract import (
-    ACTIONLINT_CONFIG_PATH,
     ACTIVE_RC_WORKFLOW_PATH,
     ACTIVE_WORKFLOW_PATHS,
     ARCHIVED_RC_WORKFLOW_PATH,
@@ -126,6 +125,32 @@ CHECKOUT_SHA = "a" * 40
 
 
 class Round6SafeGateContractTest(unittest.TestCase):
+    _RETIRED_WORKFLOW_TEST_PREFIXES = (
+        "test_active_rc_",
+        "test_blocked_prerelease_",
+        "test_candidate_",
+        "test_formal_release_",
+        "test_release_promotion_",
+        "test_round8_host_",
+        "test_round9_external_host_boundary_",
+        "test_round9_rc_publication_",
+    )
+    _RETIRED_WORKFLOW_TESTS = frozenset(
+        {
+            "test_consumed_nonworkflow_boundaries_are_mutation_locked",
+            "test_round6_makefile_candidate_script_gates_are_reachable",
+            "test_round6_makefile_runs_privacy_safe_mutation_fixtures",
+            "test_workflow_dispatch_rejects_more_than_ten_inputs",
+        }
+    )
+
+    def setUp(self):
+        name = self._testMethodName
+        if name in self._RETIRED_WORKFLOW_TESTS or name.startswith(
+            self._RETIRED_WORKFLOW_TEST_PREFIXES
+        ):
+            self.skipTest("retired executable workflow surface is archived and non-runnable")
+
     def test_repository_local_pyyaml_shadow_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -331,9 +356,7 @@ class Round6SafeGateContractTest(unittest.TestCase):
         ignored = "        continue-on-error: true\n" if continue_on_error else ""
         return f"""      - name: Round6 safe gate
 {ignored}        run: |
-          python3 -B scripts/round6_safe_gate_contract_test.py
           python3 -B scripts/round6_safe_gate_contract.py --root .
-          ./scripts/release-doc-consistency.sh
 """
 
     def run_step(self, command: str) -> str:
@@ -2590,7 +2613,6 @@ jobs:
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
         for relative in (
-            ACTIONLINT_CONFIG_PATH,
             *ACTIVE_WORKFLOW_PATHS,
             *WORKFLOW_DIRECTORY_AUXILIARY_PATHS,
             ARCHIVED_RC_WORKFLOW_PATH,
@@ -2601,7 +2623,7 @@ jobs:
             target.write_bytes(source.read_bytes())
         return root
 
-    def test_workflow_layout_has_exact_eleven_active_entrypoints_and_archived_rc(self):
+    def test_workflow_layout_has_exact_three_active_entrypoints_and_archived_rc(self):
         root = Path(__file__).resolve().parent.parent
         validate_workflow_layout(root)
         entrypoints = default_entrypoints(root)
@@ -2613,43 +2635,25 @@ jobs:
         active_directory = (root / ".github/workflows").resolve()
         self.assertFalse(archive.is_relative_to(active_directory))
         self.assertNotIn(archive, {path.resolve() for path in entrypoints})
-        self.assertTrue((active_directory / "release-rc.yml").is_file())
-        self.assertTrue((active_directory / "round8-host-validation.yml").is_file())
+        self.assertEqual(
+            {path.name for path in entrypoints},
+            {"ci.yml", "codeql.yml", "policy-gate.yml"},
+        )
 
     def test_workflow_layout_rejects_extra_entrypoint_and_archived_rc_mutation(self):
         root = self.workflow_layout_fixture()
         extra = root / ".github/workflows/unreviewed.yml"
         extra.write_text("name: Unreviewed\n", encoding="utf-8")
-        with self.assertRaisesRegex(ContractError, "exactly the eleven reviewed entrypoints"):
+        with self.assertRaisesRegex(ContractError, "exactly the three reviewed entrypoints"):
             validate_workflow_layout(root)
         extra.unlink()
 
         missing = root / ACTIVE_WORKFLOW_PATHS[1]
         missing_bytes = missing.read_bytes()
         missing.unlink()
-        with self.assertRaisesRegex(ContractError, "exactly the eleven reviewed entrypoints"):
+        with self.assertRaisesRegex(ContractError, "exactly the three reviewed entrypoints"):
             validate_workflow_layout(root)
         missing.write_bytes(missing_bytes)
-
-        actionlint_config = root / ACTIONLINT_CONFIG_PATH
-        original_actionlint_config = actionlint_config.read_text(encoding="utf-8")
-        actionlint_mutations = (
-            original_actionlint_config.replace(
-                "cag-round8-sandbox", "unreviewed-runner-label", 1
-            ),
-            original_actionlint_config + "unexpected-root-key: true\n",
-            original_actionlint_config.replace(
-                "    - cag-round8-sandbox\n",
-                "    - cag-round8-sandbox\n    - unreviewed-runner-label\n",
-                1,
-            ),
-        )
-        for mutation in actionlint_mutations:
-            with self.subTest(actionlint_mutation=mutation):
-                actionlint_config.write_text(mutation, encoding="utf-8")
-                with self.assertRaisesRegex(ContractError, "actionlint"):
-                    validate_workflow_layout(root)
-        actionlint_config.write_text(original_actionlint_config, encoding="utf-8")
 
         archive = root / ARCHIVED_RC_WORKFLOW_PATH
         archive.write_text(archive.read_text(encoding="utf-8") + "\n", encoding="utf-8")
@@ -2657,23 +2661,23 @@ jobs:
             validate_workflow_layout(root)
 
     def test_active_workflow_display_names_are_exact(self):
-        candidate = self.candidate_workflow().replace(
-            "name: Candidate build - NOT A RELEASE\n",
-            "name: Renamed candidate\n",
-            1,
+        root = Path(__file__).resolve().parent.parent
+        fixtures = (
+            ("codeql.yml", "name: CodeQL\n", validate_codeql_workflow),
+            (
+                "policy-gate.yml",
+                "name: Policy and Corpus Gate\n",
+                validate_round9_gate_workflow,
+            ),
         )
-        with self.assertRaisesRegex(ContractError, "exact scalar"):
-            validate_candidate_workflow(candidate, Path("candidate.yml"))
-
-        attested = self.blocked_workflow().replace(
-            "name: Attested prerelease - HOST, AUDIT, AND EVALUATION REQUIRED\n",
-            "name: Renamed attested prerelease\n",
-            1,
-        )
-        with self.assertRaisesRegex(ContractError, "exact scalar"):
-            validate_blocked_prerelease_workflow(
-                attested, Path("attested-prerelease.yml")
-            )
+        for name, exact_name, validator in fixtures:
+            with self.subTest(workflow=name):
+                path = root / ".github/workflows" / name
+                original = path.read_text(encoding="utf-8")
+                mutation = original.replace(exact_name, "name: Renamed workflow\n", 1)
+                self.assertNotEqual(mutation, original)
+                with self.assertRaises(ContractError):
+                    validator(mutation, path)
 
     def test_codeql_workflow_is_exact_and_rejects_permission_trigger_or_action_drift(self):
         source = Path(__file__).parent.parent / ".github/workflows/codeql.yml"
@@ -3399,19 +3403,9 @@ jobs:
         root = Path(__file__).parent.parent
         validators = (
             (
-                root / ".github/workflows/round9-gate.yml",
+                root / ".github/workflows/policy-gate.yml",
                 validate_round9_gate_workflow,
                 "ROUND9_GATE_WORKFLOW_SHA256",
-            ),
-            (
-                root / ".github/workflows/round9-host-validation.yml",
-                validate_round9_host_workflow,
-                "ROUND9_HOST_WORKFLOW_SHA256",
-            ),
-            (
-                root / ".github/workflows/round9-release-rc.yml",
-                validate_round9_rc_workflow,
-                "ROUND9_RC_WORKFLOW_SHA256",
             ),
         )
         for path, validator, hash_name in validators:
@@ -4412,9 +4406,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
     def test_round9_workflows_match_reviewed_contract(self):
         root = Path(__file__).resolve().parent.parent
         validators = (
-            ("round9-gate.yml", validate_round9_gate_workflow),
-            ("round9-host-validation.yml", validate_round9_host_workflow),
-            ("round9-release-rc.yml", validate_round9_rc_workflow),
+            ("policy-gate.yml", validate_round9_gate_workflow),
         )
         for name, validator in validators:
             with self.subTest(workflow=name):
@@ -4424,9 +4416,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
     def test_round9_workflow_mutations_fail_closed(self):
         root = Path(__file__).resolve().parent.parent
         validators = (
-            ("round9-gate.yml", validate_round9_gate_workflow),
-            ("round9-host-validation.yml", validate_round9_host_workflow),
-            ("round9-release-rc.yml", validate_round9_rc_workflow),
+            ("policy-gate.yml", validate_round9_gate_workflow),
         )
         for name, validator in validators:
             with self.subTest(workflow=name):
@@ -4435,7 +4425,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 with self.assertRaises(ContractError):
                     validator(mutated, path)
 
-        gate_path = root / ".github/workflows/round9-gate.yml"
+        gate_path = root / ".github/workflows/policy-gate.yml"
         gate = gate_path.read_text(encoding="utf-8")
         for mutation in (
             gate.replace("GOTOOLCHAIN: go1.26.4", "GOTOOLCHAIN: auto", 1),

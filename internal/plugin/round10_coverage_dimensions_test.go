@@ -102,6 +102,7 @@ func TestRound10CoverageLogicalFieldIDNamespaceInvariant(t *testing.T) {
 
 	const (
 		parent                  = uint64(extract.HardMaxTextParts)
+		contentPieceHighParent  = uint64(1<<14) + 1
 		allNamespaceFlags       = coverageDerivedFieldIDFlag | coverageContentPieceFieldIDFlag
 		maxDerivedOrdinal       = uint64(1<<coverageDerivedFieldOrdinalBits) - 2
 		maxContentPieceOrdinal  = uint64(1<<coverageContentPieceOrdinalBits) - 2
@@ -169,14 +170,17 @@ func TestRound10CoverageLogicalFieldIDNamespaceInvariant(t *testing.T) {
 			wantID:    parent,
 			wantFlags: coverageContentPieceFieldIDFlag,
 		},
+		{
+			name:      "content piece parent bit fourteen is payload",
+			fieldID:   coverageContentPieceFieldIDFlag | contentPieceHighParent<<coverageContentPieceOrdinalBits | 1,
+			wantID:    contentPieceHighParent,
+			wantFlags: allNamespaceFlags,
+		},
 	}
 	for _, testCase := range tests {
 		t.Run(testCase.name, func(t *testing.T) {
 			if got := testCase.fieldID & allNamespaceFlags; got != testCase.wantFlags {
 				t.Fatalf("namespace flags=%#x, want %#x", got, testCase.wantFlags)
-			}
-			if testCase.fieldID&allNamespaceFlags == allNamespaceFlags {
-				t.Fatalf("valid extractor field ID unexpectedly combined both namespace flags: %#x", testCase.fieldID)
 			}
 			gotID, gotDerived := coverageLogicalFieldID(testCase.fieldID)
 			if gotID != testCase.wantID || gotDerived != testCase.derived {
@@ -186,17 +190,8 @@ func TestRound10CoverageLogicalFieldIDNamespaceInvariant(t *testing.T) {
 		})
 	}
 
-	// This shape is deliberately synthetic: neither extractor constructor can
-	// produce it from the bounded base IDs and ordinals above. Keeping it explicit
-	// makes any future decision to compose the namespaces a reviewed contract
-	// change instead of silently invalidating coverageLogicalFieldID's precedence.
-	combinedInvalid := allNamespaceFlags | parent<<coverageContentPieceOrdinalBits | 1
-	if got := combinedInvalid & allNamespaceFlags; got != allNamespaceFlags {
-		t.Fatalf("combined-invalid sentinel flags=%#x, want %#x", got, allNamespaceFlags)
-	}
-	if logicalID, derived := coverageLogicalFieldID(combinedInvalid); logicalID != parent || derived {
-		t.Fatalf("combined-invalid sentinel decoded to logical ID %d derived=%v, want content-piece precedence (%d,false)",
-			logicalID, derived, parent)
+	if contentPieceHighParent > uint64(extract.HardMaxJSONNodes+extract.HardMaxTextParts) {
+		t.Fatalf("high-parent regression fixture=%d exceeds extractor parent bound", contentPieceHighParent)
 	}
 }
 
@@ -204,7 +199,7 @@ func TestRound10CoverageLogicalPartsDoNotSplitAcrossContentPieceOrdinals(t *test
 	t.Parallel()
 
 	const (
-		parent                 = uint64(17)
+		parent                 = uint64(1<<14) + 17
 		maxContentPieceOrdinal = uint64(1<<coverageContentPieceOrdinalBits) - 2
 		maxDerivedOrdinal      = uint64(1<<coverageDerivedFieldOrdinalBits) - 2
 	)

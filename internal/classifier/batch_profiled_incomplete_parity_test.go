@@ -64,7 +64,7 @@ func TestProfiledSameScopeIndependentFieldIncompleteBatchStreamingParity(t *test
 		}
 	})
 
-	t.Run("independent_complete_block_wins", func(t *testing.T) {
+	t.Run("independent_complete_block_does_not_erase_incomplete", func(t *testing.T) {
 		carrierRun := profiledProofBudgetCarrierRun()
 		block := profiledSameScopeDirective(profiledIncompleteExplicitCore, "independent-block")
 		block.ScopeID++
@@ -83,14 +83,20 @@ func TestProfiledSameScopeIndependentFieldIncompleteBatchStreamingParity(t *test
 				},
 			} {
 				t.Run(string(mode)+"/"+order.name, func(t *testing.T) {
-					result := guard.ClassifySegmentsWithPolicy(
-						order.segments, mode, DefaultThresholds(), DefaultPolicy(),
+					batch, stream := profiledIncompleteParityResults(
+						t, guard, mode, order.segments, ScanLimits{},
 					)
-					if result.Truncated || result.Coverage.State == CoverageUnavailable ||
-						result.Action != ActionBlock ||
-						!resultHasEligibleMaliciousWinner(result, DefaultThresholds()) {
-						t.Fatalf("independent complete block lost to pending incomplete: %+v", result)
-					}
+					// A complete winner from another field cannot prove that the
+					// oversized carrier field was inspected completely. Preserve the
+					// request-wide fail-closed result instead of letting same-request or
+					// same-scope coincidence erase the missing proof.
+					assertNeutralClassifierIncomplete(
+						t, "batch", batch, CoverageReasonClassifierProofBudget,
+					)
+					assertNeutralClassifierIncomplete(
+						t, "stream", stream, CoverageReasonClassifierWindow,
+					)
+					assertIncompleteDispositionParity(t, batch, stream)
 				})
 			}
 		}

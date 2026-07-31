@@ -1014,17 +1014,25 @@ func TestRound6StreamingRestoresBoundedEncodedTextViews(t *testing.T) {
 }
 
 func TestRound6DerivedFieldIDsStaySignedAndNamespaceDisjoint(t *testing.T) {
+	if maxDerivedFieldIDParent >= derivedFieldIDFlag>>derivedFieldIDOrdinalBits {
+		t.Fatalf("maximum parent FieldID=%d overlaps derived namespace after shift", maxDerivedFieldIDParent)
+	}
+	const maxSigned32 = uint64(1<<31 - 1)
+	parents := []uint64{1, DefaultMaxTextParts, HardMaxTextParts, maxDerivedFieldIDParent}
 	seen := make(map[uint64]string)
-	for _, parent := range []uint64{1, DefaultMaxTextParts, HardMaxTextParts} {
+	for _, parent := range parents {
 		seen[parent] = fmt.Sprintf("base parent %d", parent)
 		for ordinal := 0; ordinal < 4; ordinal++ {
 			pieceID := contentPieceFieldID(parent, ordinal)
 			seen[pieceID] = fmt.Sprintf("content piece parent=%d ordinal=%d", parent, ordinal)
 		}
 	}
-	for _, parent := range []uint64{1, DefaultMaxTextParts, HardMaxTextParts} {
-		for ordinal := 0; ordinal < 4; ordinal++ {
+	for _, parent := range parents {
+		for _, ordinal := range []int{0, maxDecodedVariants - 1} {
 			fieldID := derivedFieldID(parent, ordinal)
+			if fieldID > maxSigned32 {
+				t.Fatalf("derived FieldID=%d exceeds signed 32-bit range", fieldID)
+			}
 			if converted := int(fieldID); converted < 0 || uint64(converted) != fieldID {
 				t.Fatalf("derived FieldID=%d does not round-trip through public int FieldID", fieldID)
 			}

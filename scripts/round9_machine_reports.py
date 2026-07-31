@@ -384,7 +384,7 @@ def candidate_identity(root: Path, commit: str, tree: str) -> dict[str, str]:
         len(versions) != 1
         or len(hashes) != 1
         or hashes[0] == "0" * 64
-        or versions[0] != "classifier-policy-v9"
+        or versions[0] != "classifier-policy-v10"
     ):
         fail("classifier policy identity is not the reviewed Round 9 identity")
     rules_text = regular_bytes(root / "rules/manifest.yaml", 65536).decode("utf-8")

@@ -37,6 +37,13 @@ The implementation is driven by the bounded Linux sandbox report produced on
 | Codex-all p95 | about 569-572 ms | remain at or below 600 ms |
 | active audit database | container tmpfs | move to an explicitly verified persistent location |
 
+The public-v13 `20 / 100` rows above preserve the original Round 9 validator
+baseline. They are not the Round 10 oracle: the old total treated four system
+and four tool carriers as expected blocks. RT10-06 supersedes that accounting
+with 12 direct-user semantic blocks and 108 complete allows across quotation,
+historical-assistant, system, tool, and defensive direct-user routes when no
+current trusted-user activation exists.
+
 The report is evidence about a synthetic, isolated CPA/counting-Mock run. It is
 not evidence about real Provider behavior, production traffic, production
 capacity, or unrestricted third-party code execution.
@@ -235,14 +242,15 @@ Acceptance:
 
 ### RT10-06: Public direct-case and false-positive regressions
 
-Freeze the current direct-user public miss as a non-removable regression. Keep
-separate allow oracles for the same inert text when it appears under system,
-assistant, or tool context without current-user activation.
+Freeze all 12 direct-user malicious public cases as non-removable regressions.
+Keep separate allow oracles for the same inert text when it appears under
+quotation, system, assistant, or tool context without current trusted-user
+activation. Defensive review and explicit cancellation remain allow or audit.
 
 Acceptance:
 
-- public block cases: 20 / 20 complete semantic blocks;
-- public allow cases: 100 / 100 complete allows;
+- public direct block cases: 12 / 12 complete semantic blocks;
+- public allow cases: 108 / 108 complete allows;
 - no public case is accepted only because inspection was incomplete;
 - public case labels document context and ownership, not only payload bytes.
 
@@ -355,7 +363,7 @@ The task is complete only when all applicable rows pass:
 |---|---|
 | ordinary safety | 0 / 1,200 semantic false positives |
 | paired malicious | 120 / 120 complete semantic blocks |
-| public allow/block | 100 / 100 complete allows and 20 / 20 complete blocks |
+| public allow/block | 108 / 108 complete allows and 12 / 12 complete direct-user blocks |
 | disclosed activation | >=95% overall semantic recall |
 | role/position/family | >=90% in every reported bucket |
 | tool activation | >=90%, no isolated-tool regression |
@@ -387,54 +395,102 @@ Update this section as work is completed; do not rewrite the original baseline.
   reconciliation pass locally.
 - [ ] RT10-05 first/middle/last scheduling, direct compaction, and bounded
   historical-tool summaries are implemented and locally regression-tested; the
-  complete 4,424-case external matrix remains pending.
+  complete 4,424-case external matrix remains `NOT_PROVIDED`.
+  - The current repository-owned ordinary corpus passed with 0 / 1,200
+    semantic false-positive blocks and 0 / 7,200 route blocks. The paired
+    malicious corpus passed with 120 / 120 semantic blocks and 960 / 960
+    passing routes. These are local deterministic corpus results, not the
+    protected 4,424-request external matrix.
 - [x] RT10-06 repository-owned public direct-block and inert-context allow
-  regressions pass with complete inspection.
-- [ ] RT10-07 CPA v7.2.109 source/API/SDK/schema-2 contracts pass; exact `.so`
-  loading, counted-Mock routing, lifecycle, and container checks remain pending
-  on the isolated CPA Host.
+  regressions pass with complete inspection: 12 / 12 direct semantic blocks and
+  108 / 108 complete allows. System/tool inert payloads are not expected blocks
+  without a current trusted-user activation relation.
+- [ ] RT10-07 pinned CPA
+  `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` local
+  source, C ABI, and RPC schema-2 contracts pass. Remote latest-release and tag
+  checks were skipped by the pinned profile and are not a PASS. Exact `.so`
+  loading, counted-Mock routing, lifecycle, and container checks remain
+  `NOT_PROVIDED` on the isolated CPA Host.
 - [ ] RT10-08 Linux performance/concurrency gates pass.
-  - 2026-07-31: added the Linux amd64 / Go 1.26.4-only
+  - 2026-08-01: after the final source fixes, the Linux amd64 / Go 1.26.4
+    repository-local policy-v10 surrogate run recorded ordinary p95
+    `2.589708 ms`, five-repository surrogate p95 `112.310521 ms`, Codex-all
+    surrogate p95 `49.690010 ms`, public synthetic p95/p99
+    `9.306253/9.847559 ms`, and SQLite c=16 p95 `1.169612 ms`. All 2,304
+    bounded operations completed with zero failures and zero recovered panics;
+    the maximum sampled SQLite queue depth was 28 / 256. Its JSON is
+    `/tmp/cyber-abuse-guard-round10-performance.json`. These local synthetic
+    absolute gates pass, but the fixed-workload p99 regression baseline and CPA
+    Host/container evidence remain `NOT_PROVIDED`; RT10-08 stays open.
+  - 2026-07-31 predecessor evidence, retained without rebinding to policy-v10:
+    added the Linux amd64 / Go 1.26.4-only
     `make round10-performance` public-synthetic request-path and separate
     SQLite `Enqueue` + `Flush` matrix, plus a bounded independent CI step and
     machine-readable JSON artifact. One dirty-tree WSL run passed every
     measured absolute threshold with zero failures/panics. The exact-fixture
     p99 baseline regression and CPA Host/container restart evidence remain
     `NOT_PROVIDED`, so RT10-08 stays open; see `docs/reports/PERFORMANCE.md`.
-  - 2026-07-31: clean post-review commit `4425fe6` passed the absolute matrix:
+  - 2026-07-31: clean predecessor commit `4425fe6` passed the absolute matrix:
     ordinary c=16 p95 `0.887389 ms`, five-repository surrogate c=16 p95
     `114.071418 ms`, Codex-all surrogate c=16 p95 `50.441207 ms`, public c=16
     p95/p99 `9.669526/10.342969 ms`, and SQLite c=16 p95 `1.206374 ms`.
     All gates with locally measurable inputs passed with zero failures and zero
     recovered panics; fixed-workload historical p99 and container restart remain
     explicitly `NOT_PROVIDED` until the final Host run.
-- [ ] RT10-09 local Linux evidence is complete, but exact-commit GitHub and
-  isolated CPA Host evidence remain pending.
-  - Go 1.26.4 Linux amd64: safe boundary `round10_entries=56`, safe suite, full
+- [ ] RT10-09 current policy-v10 local Linux source evidence listed below passes;
+  exact-commit GitHub, protected 4,424-request evaluation, and isolated CPA Host
+  evidence remain pending.
+  - Current evidence identity: `classifier-policy-v10` /
+    `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
+  - Current package tests passed in classifier `139.693s` and plugin `130.048s`.
+    Full race runs passed in plugin `587.147s` and classifier `391.498s`, with no
+    data race reported.
+  - Module verification, vet, format, diff, script, and fuzz-smoke gates passed.
+    The current safe-gate mutation suite has 207 cases: 116 active contract
+    cases execute and 91 retired release/Host workflow cases are explicitly
+    archived as skips. Its current closed inventory is
+    `classifier_entries=568` / `round10_entries=104`. Bounded real fuzz
+    completed classifier `3,161`, request extraction `19,498`, and audit `14`
+    executions without a reported failure. The Round 5 and complete Round 6
+    regression gates, Management proxy 413 fixture, Round 6 benchmark recipe,
+    and Round 10 Linux performance gate passed.
+  - 2026-08-01 WSL Ubuntu 26.04 / Go 1.26.0 Linux amd64: the complete
+    `make round6-regression` recipe passed across extract, classifier, plugin,
+    management, and configuration packages. The independent historical
+    `make round8-counted-mock-historical-regression` target also passed.
+  - After installing the same Nginx dependency declared by CI,
+    `make management-proxy-413-test` passed: the oversized Management request
+    returned 413 before the counted upstream stub, while the small control
+    request reached that stub. These are local fixtures, not CPA Host evidence.
+  - Predecessor local Linux evidence, retained without rebinding to policy-v10:
+    Go 1.26.4 Linux amd64 safe boundary `round10_entries=56`, safe suite, full
     `go test -tags=sqlite_omit_load_extension ./...`, module/format/diff/vet,
     scripts, secret scan, public/development corpora, fuzz smoke, and bounded
     real fuzz all passed.
-  - Complete race passed: plugin `553.353s`, classifier `366.950s`, with no data
-    race. The isolated `make round6-benchmark` recipe and the post-review
+  - In that predecessor evidence, complete race passed: plugin `553.353s`,
+    classifier `366.950s`, with no data race. The isolated
+    `make round6-benchmark` recipe and the post-review
     `make round10-performance` absolute gates passed.
-  - The exact `4425fe6` plugin race passed in `582.921s`. A later bounded audit
-    fuzz run found and froze an empty-slice JSON round-trip regression; v1/v2
-    decoding and event cloning now canonicalize empty score/evidence collections
-    to `nil`, with the persisted schema and `omitempty` output unchanged.
-  - The post-review dirty-tree Round 10 c=16 observations were ordinary p95
+  - The predecessor exact `4425fe6` plugin race passed in `582.921s`. A later
+    bounded audit fuzz run found and froze an empty-slice JSON round-trip
+    regression; v1/v2 decoding and event cloning now canonicalize empty
+    score/evidence collections to `nil`, with the persisted schema and
+    `omitempty` output unchanged.
+  - A predecessor post-review dirty-tree Round 10 c=16 run observed ordinary p95
     `0.719216 ms`, five-repository surrogate p95 `104.455691 ms`, Codex-all
     surrogate p95 `46.145925 ms`, public p95/p99 `8.484287/9.107864 ms`, and
     SQLite p95 `1.005217 ms`; all 2,304 operations completed with zero failures
     and zero recovered panics.
-  - Three iterative CodeRabbit reviews reduced the tracked-diff issues from
+  - Historical review chronology: three iterative CodeRabbit reviews reduced
+    the tracked-diff issues from
     eight to two to zero. The first committed-diff review then raised eleven
     additional issues hidden by the earlier untracked-file scope; valid storage,
     mount, coverage, cancellation, fixture, and report findings were fixed. The
     Go 1.26.x relaxation and a value-type short-circuit rewrite were rejected
     with contract and language evidence. Final GitHub PR review remains pending.
-  - Strict script/archive review also repaired the stale SHA-256 binding for the
-    CPA-v7.2.109-updated external-evaluation verifier; `make script-test` passes
-    again on the committed tree.
+  - Historical strict script/archive review also repaired the stale SHA-256
+    binding for the CPA-v7.2.109-updated external-evaluation verifier;
+    `make script-test` passed on that committed tree.
   - No local CPA process or container was started. Host execution remains bound
     to the authorized Tencent Cloud #2 isolated sandbox.
 - [ ] RT10-10 PR merged into remote `main`.

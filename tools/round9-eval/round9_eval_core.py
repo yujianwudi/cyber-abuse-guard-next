@@ -1232,8 +1232,8 @@ def validate_candidate(value: Any) -> dict[str, Any]:
     policy = require_pattern(
         candidate["classifier_policy_version"], IDENTIFIER, "classifier policy version"
     )
-    if not policy.startswith("classifier-policy-v9"):
-        raise ContractError("candidate classifier policy is not a Round 9 v9 identity")
+    if policy != "classifier-policy-v10":
+        raise ContractError("candidate classifier policy is not the exact Round 10 v10 identity")
     require_pattern(
         candidate["classifier_policy_sha256"], HEX64, "classifier policy sha256"
     )
@@ -1379,8 +1379,8 @@ def validate_development_evidence(
     classifier_version = require_pattern(
         classifier["version"], IDENTIFIER, "development classifier version"
     )
-    if not classifier_version.startswith("classifier-policy-v9"):
-        raise ContractError("development classifier is not the Round 9 v9 identity")
+    if classifier_version != "classifier-policy-v10":
+        raise ContractError("development classifier is not the exact Round 10 v10 identity")
     require_pattern(classifier["sha256"], HEX64, "development classifier sha256")
     ruleset = exact_object(
         candidate["ruleset"], {"version", "sha256"}, "development candidate ruleset"

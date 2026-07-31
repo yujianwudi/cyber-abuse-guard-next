@@ -32,9 +32,13 @@ const (
 	spanMarkerSuffix    = "~"
 	// Derived text views cross the extractor/classifier boundary as uint64
 	// SegmentChunk IDs, but the classifier publishes evidence FieldIDs as int.
-	// Keep the derived namespace below the signed bit on supported 64-bit Linux
-	// hosts. Bit 62 is already reserved for content-piece IDs.
-	derivedFieldIDFlag        = uint64(1) << 61
+	// Keep this namespace below the signed bit on both 32- and 64-bit hosts.
+	// Planner span IDs are bounded by HardMaxJSONNodes; owned text IDs begin after
+	// those spans and add at most HardMaxTextParts. Their conservative combined
+	// upper bound remains below 1<<22, so shifting by eight bits cannot overlap
+	// bit 30. Bit 62 is reserved for content pieces.
+	maxDerivedFieldIDParent   = uint64(HardMaxJSONNodes + HardMaxTextParts)
+	derivedFieldIDFlag        = uint64(1) << 30
 	derivedFieldIDOrdinalBits = 8
 	encodingSampleBytes       = 64 << 10
 	base64ProbeBlock          = 4 << 10
@@ -3652,7 +3656,7 @@ func (s *streamEmitter) emitSpan(raw []byte, span plannedText) error {
 	if !measurement.nonSpace {
 		return nil
 	}
-	variants, decodeIncomplete := measurement.decoder.finish(span.scalarCarrier)
+	views, decodeIncomplete := measurement.decoder.finishViews(span.scalarCarrier)
 	if decodeIncomplete {
 		reason := s.decodeFailureReason
 		if reason == "" {
@@ -3761,10 +3765,11 @@ func (s *streamEmitter) emitSpan(raw []byte, span plannedText) error {
 		return s.operational(errors.New("decoded content did not complete content-kind plan"))
 	}
 	s.result.TextBytesScanned += emitted
-	for index, variant := range variants {
+	for index, view := range views {
 		derived := span
 		derived.id = derivedFieldID(span.id, index)
-		derived.owned = variant
+		derived.owned = view.text
+		derived.contentKind = decodedViewContentKind(span.contentKind, view, pieces)
 		if err := s.emitOwned(derived); err != nil {
 			return err
 		}
@@ -3773,6 +3778,37 @@ func (s *streamEmitter) emitSpan(raw []byte, span plannedText) error {
 		}
 	}
 	return nil
+}
+
+func decodedViewContentKind(fallback ContentKind, view decodedTextView, pieces []contentKindPiece) ContentKind {
+	if view.sourceStart < 0 || view.sourceEnd <= view.sourceStart || len(pieces) == 0 {
+		return fallback
+	}
+	matched := false
+	kind := fallback
+	for _, piece := range pieces {
+		if view.sourceEnd <= piece.start || view.sourceStart >= piece.end {
+			continue
+		}
+		if view.sourceStart >= piece.start && view.sourceEnd <= piece.end {
+			return piece.kind
+		}
+		if !matched {
+			matched = true
+			kind = piece.kind
+			continue
+		}
+		if kind != piece.kind {
+			// A transformed whole field or boundary-crossing local view cannot be
+			// assigned to one fenced piece without fabricating offsets. Retain the
+			// structural field fallback; windows wholly owned by a piece inherit it.
+			return fallback
+		}
+	}
+	if matched {
+		return kind
+	}
+	return fallback
 }
 
 func (s *streamEmitter) emitDecoded(value []byte, span plannedText) error {
@@ -3976,6 +4012,15 @@ func (d *boundedStreamingDecoder) add(value []byte) {
 }
 
 func (d *boundedStreamingDecoder) finish(failClosedBareEncoding bool) (variants []string, incomplete bool) {
+	views, incomplete := d.finishViews(failClosedBareEncoding)
+	variants = make([]string, len(views))
+	for index, view := range views {
+		variants[index] = view.text
+	}
+	return variants, incomplete
+}
+
+func (d *boundedStreamingDecoder) finishViews(failClosedBareEncoding bool) (views []decodedTextView, incomplete bool) {
 	if d == nil {
 		return nil, false
 	}
@@ -3985,8 +4030,8 @@ func (d *boundedStreamingDecoder) finish(failClosedBareEncoding bool) (variants 
 		}
 		return nil, d.probe.potentiallyEncoded()
 	}
-	variants, encoded, decodeIncomplete := decodeStreamingBoundedText(string(d.value), failClosedBareEncoding)
-	return variants, encoded && decodeIncomplete
+	views, encoded, decodeIncomplete := decodeStreamingBoundedViews(string(d.value), failClosedBareEncoding)
+	return views, encoded && decodeIncomplete
 }
 
 type streamingEncodingProbe struct {
@@ -4408,6 +4453,15 @@ func printableBase64Sample(value string) bool {
 }
 
 func decodeStreamingBoundedText(value string, failClosedBareEncoding bool) ([]string, bool, bool) {
+	views, encoded, incomplete := decodeStreamingBoundedViews(value, failClosedBareEncoding)
+	variants := make([]string, len(views))
+	for index, view := range views {
+		variants[index] = view.text
+	}
+	return variants, encoded, incomplete
+}
+
+func decodeStreamingBoundedViews(value string, failClosedBareEncoding bool) ([]decodedTextView, bool, bool) {
 	if isData, textual := streamingDataURLKind(value); isData && !textual {
 		// A media-looking prefix in an ordinary, unproven text field remains
 		// classifier-visible. Only a structurally proven media transaction may
@@ -4419,8 +4473,8 @@ func decodeStreamingBoundedText(value string, failClosedBareEncoding bool) ([]st
 			return nil, false, false
 		}
 	}
-	variants, encoded, incomplete := decodeBoundedText(value)
-	if encoded && incomplete && len(variants) == 0 && !failClosedBareEncoding && !hasExplicitTextEncodingEnvelope(value) {
+	views, encoded, incomplete := decodeBoundedTextViews(value)
+	if encoded && incomplete && len(views) == 0 && !failClosedBareEncoding && !hasExplicitTextEncodingEnvelope(value) {
 		// Bare identifiers may be syntactically compatible with Base64 while
 		// decoding only to binary. Ordinary text fields scan the original bytes and
 		// do not turn such identifiers into request incompleteness. Ambiguous scalar
@@ -4428,7 +4482,7 @@ func decodeStreamingBoundedText(value string, failClosedBareEncoding bool) ([]st
 		// may otherwise cross a provider media boundary without inspection.
 		return nil, false, false
 	}
-	return variants, encoded, incomplete
+	return views, encoded, incomplete
 }
 
 func hasExplicitTextEncodingEnvelope(value string) bool {

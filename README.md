@@ -1,8 +1,8 @@
 # CPA Cyber Abuse Guard
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 > **Repository lineage:** this is the clean-history successor project. Legacy
@@ -31,7 +31,7 @@ current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9a
 > **PENDING**. Round 10 now adds bounded historical-tool activation, persistent
 > audit readiness, atomic coverage attribution, and direct-compaction boundary
 > fixes on the CPA v7.2.109 target. Those behavior changes bind
-> `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9` and
+> `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67` and
 > require their own exact-commit GitHub checks and isolated sandbox review.
 
 [![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
@@ -72,7 +72,7 @@ is not sent to a public classifier.
 | Audited committed baseline | `150c25e6352cb237cb3956bd66c83c3278c3fe33`; historical classifier digest `e0cbc975...`; CPA v7.2.104 |
 | Engineering CI | Runs `30482492205`, `30482486178`, and `30482486027` **PASS** for exact `main` commit `46f26f9f822683aebb14b2c812ced2246d680fc2`; this is engineering evidence only, not a production approval |
 | Safety audit | **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
-| Current remediation | Round 10 classifier `classifier-policy-v9` / `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`; historical-tool authority, direct-compaction, persistent audit readiness, and coverage accounting changed for CPA v7.2.109, with exact-commit GitHub and independent second-machine revalidation required |
+| Current remediation | Round 10 classifier `classifier-policy-v10` / `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`; historical-tool authority, direct-compaction, persistent audit readiness, long-text decoding, and coverage accounting changed for CPA v7.2.109, with exact-commit GitHub and independent second-machine revalidation required |
 | CPA source/compile target | Pinned target `v7.2.109` (`928478e4b91533cec05a763bfac3edad9c3e76cf`), C ABI 1 / RPC schema 2. Source, SDK/API, integration compile, and Linux Host `.so` load checks are authoritative only after the exact-commit GitHub lane passes; protected runtime testing remains pending |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
@@ -86,7 +86,7 @@ is not sent to a public classifier.
 | CPA Host matrix | CPA v7.2.109, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v9` / `755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`; Host and release binding remain pending |
+| Classifier policy | Current source snapshot: `classifier-policy-v10` / `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`; exact-commit GitHub and Host binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
 | Code review | Automated review is advisory; no independent approval is claimed |

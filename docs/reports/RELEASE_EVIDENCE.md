@@ -1,16 +1,17 @@
 # v0.16 Round 9 release evidence — current candidate contract plus frozen history
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
-Last updated: 2026-07-29 (Asia/Shanghai)
+Last updated: 2026-07-31 (Asia/Shanghai)
 
 ## Current Round 9 source-tree status — not a release PASS
 
-The active development target is Linux amd64 `v0.16-rc.4`,
-classifier-policy-v9, ruleset 1.0.10, audit schema v6, and CPA
+The active development target is Linux amd64 source validation only; no
+candidate tag or executable publication workflow is active. The source uses
+classifier-policy-v10, ruleset 1.0.10, audit schema v6, and CPA
 `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` with RPC schema 2. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
 counted Mock.
@@ -24,27 +25,27 @@ safety or release PASS. The isolated safety audit returned `FAIL / BLOCKED`:
 returned HTTP 403, and 2 complete benign cases were false positives.
 
 The current source snapshot carries a remediation at
-`classifier-policy-v9` /
-`755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9`.
+`classifier-policy-v10` /
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
 It has no commit-bound CI or second-machine retest. Final remediation freeze,
-exact-main CI, reproducible release assets, protected
-Host execution, independent re-audit, tag, and GitHub prerelease remain pending.
+exact-main CI, protected Host execution, and independent re-audit remain
+pending. A tag, package, and GitHub Release are outside this source-only change.
 
 The immutable `v0.16-rc.3` Tag is a failed Phase 1 identity, not the current
 candidate. Run `30118817188` failed on the undeclared PyYAML import before any
 candidate, attestation, or Release asset was created. It is retained unchanged
-while the active namespace advances to `v0.16-rc.4`.
+and no longer defines an active candidate namespace.
 
 ```text
-candidate_tag: v0.16-rc.4 / NOT CREATED
-release_kind: prerelease
-latest: false
+candidate_tag: NOT PLANNED BY CURRENT SOURCE-ONLY CHANGE
+release_kind: NONE
+latest: NOT_APPLICABLE
 audited_head: 150c25e6352cb237cb3956bd66c83c3278c3fe33
 audited_classifier_policy_digest: e0cbc975... / historical exact value retained in TEST_REPORT.md
 engineering_ci: 30353591705 / PASS / ENGINEERING ONLY
 safety_audit: FAIL / BLOCKED
 safety_findings: complete_malicious_fail_open=287 / malicious_incomplete_http_403=36 / complete_benign_false_positive=2
-remediation_source_snapshot: classifier-policy-v9 / 755a95d350d4fb15bbc32361164ce683425b44c65d2f9ae764e54144ea9238e9 / SOURCE GATES ONLY
+remediation_source_snapshot: classifier-policy-v10 / b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67 / SOURCE GATES ONLY
 remediation_exact_commit_ci: PENDING
 second_machine_retest: PENDING
 counted_mock_host: NOT_PROVIDED
