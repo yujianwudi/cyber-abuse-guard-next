@@ -829,12 +829,31 @@ func cloneDecisionExplanation(source *DecisionExplanation) *DecisionExplanation 
 		return nil
 	}
 	cloned := *source
+	if len(source.ScoreBreakdown) == 0 {
+		cloned.ScoreBreakdown = nil
+		return &cloned
+	}
 	cloned.ScoreBreakdown = make([]ScoreComponent, len(source.ScoreBreakdown))
 	for index, component := range source.ScoreBreakdown {
 		cloned.ScoreBreakdown[index] = component
 		cloned.ScoreBreakdown[index].EvidenceIDs = append([]string(nil), component.EvidenceIDs...)
 	}
 	return &cloned
+}
+
+func normalizeDecisionExplanationCollections(explanation *DecisionExplanation) {
+	if explanation == nil {
+		return
+	}
+	if len(explanation.ScoreBreakdown) == 0 {
+		explanation.ScoreBreakdown = nil
+		return
+	}
+	for index := range explanation.ScoreBreakdown {
+		if len(explanation.ScoreBreakdown[index].EvidenceIDs) == 0 {
+			explanation.ScoreBreakdown[index].EvidenceIDs = nil
+		}
+	}
 }
 
 func validateDecisionExplanation(explanation *DecisionExplanation) error {

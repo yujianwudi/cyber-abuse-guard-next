@@ -496,6 +496,60 @@ func TestRound9DecisionExplanationV2RejectsUnknownAndCrossBranchFields(t *testin
 	}
 }
 
+func TestRound9DecisionExplanationV2CanonicalizesEmptyCollections(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name                string
+		encoded             string
+		wantScoreComponents int
+	}{
+		{
+			name:    "empty score breakdown",
+			encoded: `{"kind":"malicious","score_breakdown":[]}`,
+		},
+		{
+			name:                "empty evidence identifiers",
+			encoded:             `{"kind":"malicious","score_breakdown":[{"dimension":"final_score","points":0,"evidence_ids":[]}]}`,
+			wantScoreComponents: 1,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			decoded, err := decodeDecisionExplanationForSchema(test.encoded, DecisionExplanationSchemaV2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(decoded.ScoreBreakdown) != test.wantScoreComponents {
+				t.Fatalf("score components=%d, want %d", len(decoded.ScoreBreakdown), test.wantScoreComponents)
+			}
+			if test.wantScoreComponents == 0 && decoded.ScoreBreakdown != nil {
+				t.Fatalf("empty score breakdown was not normalized: %#v", decoded.ScoreBreakdown)
+			}
+			for _, component := range decoded.ScoreBreakdown {
+				if component.EvidenceIDs != nil {
+					t.Fatalf("empty evidence IDs were not normalized: %#v", component.EvidenceIDs)
+				}
+			}
+
+			canonical, err := marshalDecisionExplanationForSchema(decoded, DecisionExplanationSchemaV2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(canonical, `"score_breakdown":[]`) ||
+				strings.Contains(canonical, `"evidence_ids":[]`) {
+				t.Fatalf("canonical explanation retained an empty collection: %s", canonical)
+			}
+			roundTripped, err := decodeDecisionExplanationForSchema(canonical, DecisionExplanationSchemaV2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(roundTripped, decoded) {
+				t.Fatalf("canonical round trip=%#v, want %#v", roundTripped, decoded)
+			}
+		})
+	}
+}
+
 func TestRound9DecisionKindQueryStatsAndExports(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 23, 8, 30, 0, 0, time.UTC)

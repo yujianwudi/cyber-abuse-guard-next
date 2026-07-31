@@ -505,6 +505,7 @@ func decodeDecisionExplanationForSchema(encoded, schema string) (*DecisionExplan
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return nil, fmt.Errorf("decision explanation must contain exactly one JSON value")
 	}
+	normalizeDecisionExplanationCollections(explanation)
 	if err := validateDecisionExplanationForSchema(explanation, schema); err != nil {
 		return nil, err
 	}
