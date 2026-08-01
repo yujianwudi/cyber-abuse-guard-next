@@ -23,8 +23,8 @@ from typing import Any
 SCHEMA = "round9-host-evidence/v1"
 CONTRACT_SCHEMA = "round9-evaluation-contract/v1"
 TAG = "v0.16-rc.4"
-CPA_VERSION = "v7.2.109"
-CPA_COMMIT = "928478e4b91533cec05a763bfac3edad9c3e76cf"
+CPA_VERSION = "v7.2.113"
+CPA_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
 VALIDATION_SCOPE = "CPA_V7_2_109_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION"
 CPA_HOST_IP = "127.0.0.1"
 CPA_HOST_PORT = 18394
@@ -636,7 +636,7 @@ def validate_counted_mock_probe(value: dict[str, Any], commit: str, tree: str) -
         or primary["commit"] != CPA_COMMIT
         or primary["counted_mock_validation"] != "PASS"
     ):
-        fail("Round 9 counted-Mock probe did not use the fixed CPA v7.2.109 contract")
+        fail("Round 9 counted-Mock probe did not use the fixed CPA v7.2.113 contract")
     require_hex(primary["image_id"], "Round 9 probe CPA image ID", SHA256_DIGEST)
     safety = exact_keys(
         value["safety"],
@@ -1711,7 +1711,7 @@ def validate_evidence(value: dict[str, Any], args: argparse.Namespace) -> None:
         "Round 9 CPA primary",
     )
     if primary["version"] != CPA_VERSION or primary["commit"] != CPA_COMMIT or primary["counted_mock_validation"] != "PASS":
-        fail("Round 9 CPA v7.2.109 identity or counted-Mock result is invalid")
+        fail("Round 9 CPA v7.2.113 identity or counted-Mock result is invalid")
     require_hex(primary["image_id"], "Round 9 CPA image ID", SHA256_DIGEST)
     probe = exact_keys(value["counted_mock_probe"], {"contract", "evidence_sha256", "purpose"}, "counted_mock_probe")
     if probe["contract"] != "round9-counted-mock/v1" or probe["purpose"] != "bounded-linux-counted-mock-execution":

@@ -16,9 +16,9 @@ be overwritten, relabeled, repaired, or republished as current Round 9 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.109` at
-  `928478e4b91533cec05a763bfac3edad9c3e76cf`, module sum
-  `h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=`, and `go.mod` sum
+- CPA `v7.2.113` at
+  `bc71c77f5cc42f3fbe1bf040cf14d4f166894835`, module sum
+  `h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=`, and `go.mod` sum
   `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 
 The root module, `integration/cpalatestcontract`, and
@@ -68,7 +68,7 @@ audit-migration, and operator-owned rollback contracts are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Exact-main CI,
-counted-Mock Host validation on the sole pinned CPA v7.2.109 identity, and
+counted-Mock Host validation on the sole pinned CPA v7.2.113 identity, and
 independent audit remain mandatory; self-tests do not authorize production
 Balanced mode.
 
@@ -91,7 +91,7 @@ Its JSON RPC registration uses schema version 2 and declares:
   has no untrusted mutator that runs after Guard at the final interceptor stage;
 - `request_lifecycle_plugin`: remove the bounded, TTL-limited opaque RequestID
   and fingerprint entry for succeeded, failed, rejected, or canceled requests;
-- `model_router: true`: only the CPA v7.2.109 `codex-alpha-search` compatibility
+- `model_router: true`: only the CPA v7.2.113 `codex-alpha-search` compatibility
   entry is handled because those two HTTP routes do not invoke
   RequestInterceptor. Host-originated Router callbacks for every other format
   return `Handled:false` without classification; ordinary enforcement remains
@@ -113,7 +113,7 @@ executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
 before Codex auth or upstream because that handler currently accepts only a
 `provider=codex` target.
 
-CPA v7.2.109, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
+CPA v7.2.113, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
 global capability rather than a source-format-scoped capability. Once CAG
 registers it for Alpha Search, an
 ordinary routed request still incurs CPA's body clone, JSON/Base64
@@ -892,7 +892,7 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-Both v7.2.109 compatibility contract modules first prove that the named critical
+Both v7.2.113 compatibility contract modules first prove that the named critical
 upstream Host tests still exist and then each executes the complete upstream
 `internal/pluginhost` package for the current platform. Their CI coverage is
 intentionally overlapping; it is neither an exact-name-only run nor a pair of
@@ -901,7 +901,7 @@ non-duplicative contracts. The plugin-store module also calls the official
 real build artifact. These checks cover store naming, root-only library layout,
 checksum, installed path/bytes, repeat installation, tamper repair, priority
 ordering, and documented Host fallback. They remain source/installer
-compatibility evidence. Current admission requires the v7.2.109 counted-Mock
+compatibility evidence. Current admission requires the v7.2.113 counted-Mock
 Host run on the same candidate and independent verification.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,

@@ -39,9 +39,9 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.109",
-	Commit:    "928478e4b91533cec05a763bfac3edad9c3e76cf",
-	ModuleSum: "h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=",
+	Version:   "v7.2.113",
+	Commit:    "bc71c77f5cc42f3fbe1bf040cf14d4f166894835",
+	ModuleSum: "h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=",
 	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
@@ -215,7 +215,7 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		}
 	}
 
-	// CPA v7.2.109 keeps request normalization split out of the websocket transport
+	// CPA v7.2.113 keeps request normalization split out of the websocket transport
 	// file. Pin the semantic implementation file while the upstream behavior
 	// tests above continue to guard the public contract.
 	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")

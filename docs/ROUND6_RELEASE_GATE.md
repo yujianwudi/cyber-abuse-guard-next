@@ -10,7 +10,7 @@ current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86
 > v0.15 release gate, including any CPA v7.2.95 wording such as "current real
 > Host state"; those statements are historical only and are not the active
 > repository release identity. The current formal CPA identity is
-> `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` (RPC schema 2).
+> `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835` (RPC schema 2).
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**.
 

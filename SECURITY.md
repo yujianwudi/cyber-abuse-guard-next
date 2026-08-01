@@ -43,7 +43,7 @@ operator's normal incident process.
 
 The legacy `raw_preview` response field remains available for compatibility
 but is deprecated. `raw_preview_b64` is the canonical byte-stable transport
-field for the single pinned CPA v7.2.109 lane. Base64 is not encryption, access
+field for the single pinned CPA v7.2.113 lane. Base64 is not encryption, access
 control, or additional
 redaction; its decoded UTF-8 text remains sensitive request content. Review
 clients must insert decoded content into a plain-text node (for example,

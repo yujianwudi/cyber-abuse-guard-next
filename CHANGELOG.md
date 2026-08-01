@@ -5,9 +5,19 @@ current_classifier_policy_version: classifier-policy-v10
 current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
-Source-tree status updated: 2026-07-31 (Asia/Shanghai)
+Source-tree status updated: 2026-08-01 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
+
+- Advance the sole active CPA contract from official `v7.2.109` to official
+  `v7.2.113` (`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`) with module sum
+  `h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=` and the unchanged go.mod
+  sum. The reviewed v7.2.109-to-v7.2.113 range does not modify
+  `sdk/pluginabi` or `sdk/pluginapi`, and upstream `go.mod` is byte-identical.
+  Root, source-contract, Store-contract, Host-runner, external-evaluation, and
+  documentation identities now use only v7.2.113. Historical v7.2.109 CI and
+  second-machine results remain bound to v7.2.109 and are not relabeled as a
+  v7.2.113 Host, sandbox, performance, or production PASS.
 
 - Complete the Round 10 Linux/CPA v7.2.109 production-hardening source lane:
   add bounded historical tool-result activation for a uniquely associated

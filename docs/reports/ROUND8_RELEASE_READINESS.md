@@ -16,8 +16,8 @@ Last updated: 2026-07-22 (Asia/Shanghai)
 > The current formal CPA identity is:
 >
 > ```text
-> current_formal_cpa: v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf
-> current_module_sum: h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=
+> current_formal_cpa: v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835
+> current_module_sum: h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
 

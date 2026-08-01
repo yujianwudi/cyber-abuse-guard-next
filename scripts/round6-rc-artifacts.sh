@@ -16,8 +16,8 @@ case "$rc_release_lane" in
     ;;
   round9)
     canonical_repository='yujianwudi/cyber-abuse-guard-next'
-    cpa_version='v7.2.109'
-    cpa_commit='928478e4b91533cec05a763bfac3edad9c3e76cf'
+    cpa_version='v7.2.113'
+    cpa_commit='bc71c77f5cc42f3fbe1bf040cf14d4f166894835'
     ;;
   *) release_die "RC release assets require a reviewed lane identity" ;;
 esac
@@ -930,9 +930,9 @@ create_rc_source_archive() {
   local temporary listing restricted_listing verifier_sha verifier_test_sha
   local archive_prefix="cyber-abuse-guard-v${RELEASE_ARTIFACT_VERSION}/"
   local verifier_path='scripts/round9_external_evaluation_contract.py'
-  local verifier_sha256='36b377975b981d040df12c183a56f54fc9cee2beed597d00a53be7a17234f434'
+  local verifier_sha256='2df2fda06c8313d9c3264f5d57bf6025c72798d311a8e4c72011792e13ed1fc4'
   local verifier_test_path='scripts/round9_external_evaluation_contract_test.py'
-  local verifier_test_sha256='7f32dc75f6354777eadf8791cc3b56ba9f9ac8db37334b8a66c7d046ded7ba48'
+  local verifier_test_sha256='3ac6ee3f8c5c94d89241ad7cb575bc2cfce8933967509beb9245d45a224d85f0'
   local verifier_entry="${archive_prefix}${verifier_path}"
   local verifier_test_entry="${archive_prefix}${verifier_test_path}"
   local transient_path_pattern='(^|/)(classifier_(candidate|single)_[^/]*|[^/]*\.(cpu|mem|pprof|test\.exe|exe))($|/)'

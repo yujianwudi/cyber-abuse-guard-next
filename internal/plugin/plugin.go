@@ -1,4 +1,4 @@
-// Package plugin implements the CPA v7.2.109 schema-v2 RPC surface for the
+// Package plugin implements the CPA v7.2.113 schema-v2 RPC surface for the
 // cyber-abuse guard. The native C boundary in cmd/cyber-abuse-guard is kept
 // deliberately thin; policy state and lifecycle semantics live here so they
 // can be race-tested without loading a shared object.
@@ -58,7 +58,7 @@ var metadata = pluginapi.Metadata{
 		{Name: "hard_block_even_if_authorized", Type: pluginapi.ConfigFieldTypeObject, Description: "Categories whose operational abuse remains protected from authorization score reductions."},
 		{Name: "subject_control", Type: pluginapi.ConfigFieldTypeObject, Description: "Rolling subject-risk, cooldown, and manual-block settings."},
 		{Name: "audit", Type: pluginapi.ConfigFieldTypeObject, Description: "SQLite audit settings plus an explicit default-off, block-only, redacted and truncated operator request-preview capture."},
-		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.109."},
+		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.113."},
 		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v0.16 and rejected."},
 	},
 }
@@ -698,7 +698,7 @@ func (p *Plugin) reportABICapabilityLimits() {
 	if !p.abiLimitLogged.CompareAndSwap(false, true) {
 		return
 	}
-	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.109 plugin ABI", map[string]any{
+	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.113 plugin ABI", map[string]any{
 		"plugin": ID,
 		"code":   "cpa_abi_conflict_detection_unavailable",
 		"request_interceptor_enumeration_supported": false,
@@ -748,7 +748,7 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		return nil, fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
 	}
 	if cfg.TrustedProxy.Enabled {
-		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.109 request interception does not provide a verified direct peer address")
+		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.113 request interception does not provide a verified direct peer address")
 	}
 	if cfg.Audit.LogOriginalText {
 		return nil, fmt.Errorf("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
@@ -1004,7 +1004,7 @@ func currentRegistration() registration {
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata:      currentMetadata(),
 		Capabilities: registrationCapabilities{
-			// CPA v7.2.109 does not invoke RequestInterceptor for Alpha Search.
+			// CPA v7.2.113 does not invoke RequestInterceptor for Alpha Search.
 			// ModelRouter is registered only as that narrow compatibility entry;
 			// ordinary Host callbacks are rejected in callModelRouteRequest above.
 			ModelRouter:           true,
@@ -1072,7 +1072,7 @@ func (p *Plugin) Shutdown() {
 		p.lifecycleMu.Unlock()
 		return
 	}
-	// Publish one terminal enforcement policy before shutdown. CPA v7.2.109
+	// Publish one terminal enforcement policy before shutdown. CPA v7.2.113
 	// continues after interceptor RPC errors, so late callbacks must receive a
 	// successful direct response. An enforcing runtime remains fail-closed;
 	// observe/audit/off remains an intentional pass-through.

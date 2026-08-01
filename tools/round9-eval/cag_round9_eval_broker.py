@@ -81,8 +81,8 @@ CONFIG_PATH = Path("/etc/cag-round9-eval-broker/config.json")
 CONFIG_SCHEMA = "round9-eval-broker-config/v1"
 ADAPTER_CONFIG_SCHEMA = "round9-cpa-sandbox-adapter-config/v1"
 TAG = "v0.16-rc.4"
-CPA_VERSION = "v7.2.109"
-CPA_COMMIT = "928478e4b91533cec05a763bfac3edad9c3e76cf"
+CPA_VERSION = "v7.2.113"
+CPA_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
 HOST_WORKFLOW = ".github/workflows/round9-host-validation.yml"
 HOST_WORKFLOW_NAME = "Round 9 protected CPA Host validation"
@@ -1224,8 +1224,8 @@ def validate_phase1_release_manifest(
         "release manifest primary CPA",
     )
     if primary != {
-        "version": "v7.2.109",
-        "commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
+        "version": "v7.2.113",
+        "commit": "bc71c77f5cc42f3fbe1bf040cf14d4f166894835",
         "source_compatibility": "PASS",
         "counted_mock_validation": "NOT_RUN / EXTERNAL_EVALUATION_REQUIRED",
     }:
@@ -1362,8 +1362,8 @@ def validate_phase1_release_manifest(
         "release manifest Round 9 CPA contract",
     )
     if cpa_contract != {
-        "version": "v7.2.109",
-        "commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
+        "version": "v7.2.113",
+        "commit": "bc71c77f5cc42f3fbe1bf040cf14d4f166894835",
         "upstream_version_policy": "fixed-no-automatic-follow",
     }:
         fail("Phase 1 release manifest Round 9 CPA contract differs")

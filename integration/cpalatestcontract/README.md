@@ -1,11 +1,11 @@
-# CPA v7.2.109 schema-2 source and compatibility contract
+# CPA v7.2.113 schema-2 source and compatibility contract
 
 This isolated module is the source-contract half of the CPA compatibility gate.
 The active contract has one exact, reviewed target:
 
 | Profile | CPA | Commit | Module sum | `go.mod` sum |
 |---|---|---|---|---|
-| `primary` | `v7.2.109` | `928478e4b91533cec05a763bfac3edad9c3e76cf` | `h1:AM6nizpKiBkIr2ZSQ+XUwz1vkNTGoxSRlrTkt5hdLG8=` | `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=` |
+| `primary` | `v7.2.113` | `bc71c77f5cc42f3fbe1bf040cf14d4f166894835` | `h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=` | `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=` |
 
 The checked-in root, latest-contract, and plugin-store contract modules all use
 this same pin. `CPA_COMPAT_PROFILE` defaults to `primary`; every other value
@@ -27,14 +27,14 @@ fourth source-controlled Raw Capture
 management overlay is compiled from this test module. The Raw Capture contract
 resolves the selected CPA source through the same checked-in module identity as
 every other contract. `scripts/cpa-latest-compat.sh` compiles the Guard and
-integration packages against v7.2.109, explicitly tests schema-2
+integration packages against v7.2.113, explicitly tests schema-2
 `sdk/pluginabi` and `sdk/pluginapi`, and runs the real Guard registration and
 focused behavior tests. Official
 upstream test graphs use ephemeral modfiles; checked-in module
 files are never rewritten.
 With `CPA_COMPAT_VERIFY_REMOTE=1`, it verifies the exact Tag-to-Commit identity
 through the official Git origin, the official Go module `Origin`, and both Go
-sums. It needs no repository token. A PASS applies only to the fixed v7.2.109
+sums. It needs no repository token. A PASS applies only to the fixed v7.2.113
 identity. `CPA_COMPAT_REQUIRE_LATEST=1` is a separate, explicit upstream-drift
 monitor that also queries the official unauthenticated GitHub `releases/latest`
 endpoint; it is not part of the pinned compatibility claim.

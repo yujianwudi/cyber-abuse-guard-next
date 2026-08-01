@@ -77,7 +77,7 @@ type mockUpstreamRequest struct {
 }
 
 // countingProviderExecutor wraps CPA's real configured provider executor after
-// service readiness. CPA v7.2.109 replaces a Host-owned executor adapter with
+// service readiness. CPA v7.2.113 replaces a Host-owned executor adapter with
 // its native executor when OwnsExecutor reports true. The wrapper observes the
 // retained native execution path without changing the request, auth, response,
 // retry, translation, or upstream behavior.
@@ -819,7 +819,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 	work := t.TempDir()
 	pluginsDir := filepath.Join(work, "plugins")
 	pluginTarget := installPluginForHost(t, pluginsDir)
-	t.Logf("CPA v7.2.109 schema-v2 Host plugin path: %s", pluginTarget)
+	t.Logf("CPA v7.2.113 schema-v2 Host plugin path: %s", pluginTarget)
 
 	upstream := newMockUpstream(t)
 	port := freePort(t)
@@ -830,7 +830,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 		t.Fatalf("create isolated CPA auth directory: %v", err)
 	}
 	// A file-backed synthetic OAuth record makes CPA register its embedded
-	// v7.2.109 Codex model catalog for this client. The executor is replaced by
+	// v7.2.113 Codex model catalog for this client. The executor is replaced by
 	// the networkless probe before any Alpha Search request is sent, so no real
 	// credential or Provider endpoint is ever touched.
 	if err := os.WriteFile(
@@ -1298,7 +1298,7 @@ openai-compatibility:
 		{"openai-tool-name-payload", "/v1/chat/completions", fmt.Sprintf(`{"model":"%s","messages":[{"role":"assistant","tool_calls":[{"id":"call_2","type":"function","function":{"name":"execute","arguments":%q}}]},{"role":"user","content":%q}]}`, modelName, toolNameArguments, currentUserActivation), "cyber_abuse_guard_blocked"},
 		{"openai-negation-scope", "/v1/chat/completions", fmt.Sprintf(`{"model":"%s","messages":[{"role":"user","content":%q}]}`, modelName, negationScope), "cyber_abuse_guard_blocked"},
 		{"openai-responses", "/v1/responses", fmt.Sprintf(`{"model":"%s","input":%q}`, modelName, malicious), "cyber_abuse_guard_blocked"},
-		// CPA v7.2.109 normalizes direct interceptor terminations into Anthropic's native
+		// CPA v7.2.113 normalizes direct interceptor terminations into Anthropic's native
 		// error envelope and drops custom code/category fields.
 		{"anthropic", "/v1/messages", fmt.Sprintf(`{"model":"%s","max_tokens":64,"messages":[{"role":"user","content":%q}]}`, modelName, malicious), "policy_violation"},
 		{"anthropic-tool-use-input", "/v1/messages", fmt.Sprintf(`{"model":"%s","max_tokens":64,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"safe_wrapper","input":{"name":%q}}]},{"role":"user","content":%q}]}`, modelName, malicious, currentUserActivation), "policy_violation"},
@@ -1442,7 +1442,7 @@ openai-compatibility:
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
 		// This test-only adapter proves ProviderExecutor.HttpRequest error-to-HTTP
-		// normalization only. CPA v7.2.109 exposes no generic public HTTP route for
+		// normalization only. CPA v7.2.113 exposes no generic public HTTP route for
 		// this plugin executor method, so a final official-handler HTTP 405 is not
 		// available and is not claimed by this assertion.
 		assertGuardHTTPRequestAdapter405(t, guardExecutor)
@@ -2979,13 +2979,13 @@ func installPluginForHost(t *testing.T, pluginsDir string) string {
 			GOARCH:     "amd64",
 		})
 		if errInstall != nil {
-			t.Fatalf("CPA v7.2.109 Store install: %v", errInstall)
+			t.Fatalf("CPA v7.2.113 Store install: %v", errInstall)
 		}
 		expected := filepath.Join(pluginsDir, "linux", "amd64", "cyber-abuse-guard-v"+version+".so")
 		if result.ID != "cyber-abuse-guard" || result.Version != version || result.Path != expected || result.Overwritten || result.Skipped {
 			t.Fatalf("CPA Store install result = %#v, want first install at %s", result, expected)
 		}
-		t.Logf("CPA v7.2.109 Store installed real archive sha256=%x path=%s", checksum, result.Path)
+		t.Logf("CPA v7.2.113 Store installed real archive sha256=%x path=%s", checksum, result.Path)
 		return result.Path
 	}
 

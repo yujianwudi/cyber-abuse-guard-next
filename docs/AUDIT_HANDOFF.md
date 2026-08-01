@@ -27,7 +27,7 @@ CI `30353591705` 只证明上述精确 HEAD 的工程构建与测试门禁通过
 
 当前候选修复的源码身份是 `classifier-policy-v10` /
 `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`，固定 CPA
-`v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf`。这是从冻结的 CPA
+`v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835`。这是从冻结的 CPA
 v7.2.104 / `e7a00b02...` 身份进行的依赖重绑定，不是新的已审计候选：提交绑定 CI
 和二号机隔离重验均为 `PENDING`。在三类失败全部由绑定同一精确提交的新证据关闭前，
 当前结论保持：
@@ -35,7 +35,7 @@ v7.2.104 / `e7a00b02...` 身份进行的依赖重绑定，不是新的已审计�
 ```text
 ENGINEERING BASELINE PASS / SECURITY AUDIT FAIL /
 CURRENT POLICY IDENTITY RECORDED / LOCAL LINUX SOURCE GATES PASS /
-CPA V7.2.109 SOURCE_COMPILE CONTRACT REVALIDATION PENDING /
+CPA V7.2.113 LOCAL SOURCE_COMPILE CONTRACTS PASS /
 EXACT-COMMIT CI AND SECOND-MACHINE RETEST PENDING /
 BLOCKED
 ```
@@ -385,7 +385,7 @@ upstream Host 验收或独立源码/artifact 复核，更不能推翻唯一方�
 `CONSUMED / FAIL`。
 
 旧版 CPA 兼容性门禁、校验和与 CI 记录仅作为历史事实保留在 CHANGELOG 和归档报告中；
-它们不是当前 v7.2.109 准入证据，也不得替代本轮精确源码、Host 与独立审计门禁。
+它们不是当前 v7.2.113 准入证据，也不得替代本轮精确源码、Host 与独立审计门禁。
 
 第五轮审计必须单独确认以下宿主边界：
 

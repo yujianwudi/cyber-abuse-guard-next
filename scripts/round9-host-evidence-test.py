@@ -162,7 +162,7 @@ def valid_records(
     cpa_build_date: str = "2026-01-02T03:04:05Z",
 ) -> list[dict[str, object]]:
     if lane != "primary":
-        raise ValueError("tests only model the pinned CPA v7.2.109 primary lane")
+        raise ValueError("tests only model the pinned CPA v7.2.113 primary lane")
     records: list[dict[str, object]] = []
     version, commit = r8.PRIMARY_VERSION, r8.PRIMARY_COMMIT
     records.extend(

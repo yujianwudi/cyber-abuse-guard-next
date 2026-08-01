@@ -89,7 +89,7 @@ jobs:
         run: make round6-module-verify
       - name: Historical Round 8 counted-Mock regression
         run: make round8-counted-mock-historical-regression
-      - name: CPA v7.2.109 pinned source API and SDK contract
+      - name: CPA v7.2.113 pinned source API and SDK contract
         env:
           CPA_COMPAT_PROFILE: "primary"
           CPA_COMPAT_VERIFY_REMOTE: "1"
@@ -171,8 +171,8 @@ jobs:
             printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
             sha256sum "$artifact"
           done
-          echo 'integration_summary=CPA v7.2.109 source/fail-open, SDK ABI/API, and Linux Host .so load checks completed'
-          echo 'cpa_primary_identity=v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf'
+          echo 'integration_summary=CPA v7.2.113 source/fail-open, SDK ABI/API, and Linux Host .so load checks completed'
+          echo 'cpa_primary_identity=v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835'
       - name: clean-tree-check
         run: make clean-tree-check
       - name: Upload development verification artifacts

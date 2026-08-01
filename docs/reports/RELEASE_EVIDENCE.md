@@ -12,7 +12,7 @@ Last updated: 2026-07-31 (Asia/Shanghai)
 The active development target is Linux amd64 source validation only; no
 candidate tag or executable publication workflow is active. The source uses
 classifier-policy-v10, ruleset 1.0.10, audit schema v6, and CPA
-`v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` with RPC schema 2. The protected Host lane may
+`v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835` with RPC schema 2. The protected Host lane may
 bind CPA only as `127.0.0.1:18394 -> 8317/tcp` and may contact only the isolated
 counted Mock.
 

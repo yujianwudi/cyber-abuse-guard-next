@@ -1,10 +1,10 @@
 # Cyber-Abuse-Guard Next Round 10 production-hardening task book
 
 Status: **APPROVED FOR IMPLEMENTATION / NOT YET RELEASE-READY**
-Target branch: `agent/v109-production-hardening`
+Target branch: `agent/v113-compatibility`
 Merge target: `main`
 Platform scope: **Linux amd64 only**
-CPA compatibility target: **CLIProxyAPI v7.2.109**
+CPA compatibility target: **CLIProxyAPI v7.2.113**
 Publication scope: **source and tests only; no plugin Release is created by this task**
 
 ## 1. Authority and evidence baseline
@@ -17,6 +17,11 @@ repository: yujianwudi/cyber-abuse-guard-next
 baseline commit: 08bbc34c18f70f203b15e2a364d857e2c1fed376
 baseline subject: Pin CPA v7.2.109 (#7)
 ```
+
+The baseline identity above is immutable history. On 2026-08-01 the sole
+active compatibility target was deliberately advanced to
+`v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835`; no v7.2.109 result is
+relabelled as v7.2.113 evidence.
 
 The implementation is driven by the bounded Linux sandbox report produced on
 2026-07-30. The evidence baseline is:
@@ -71,7 +76,7 @@ Every implementation and test must preserve these invariants:
    persistent volume.
 7. No real Provider endpoint, production account pool, production database,
    production request body, or production user identity is used in this task.
-8. CPA v7.2.109 compatibility is validated without weakening CPA's read-only
+8. CPA v7.2.113 compatibility is validated without weakening CPA's read-only
    root filesystem or writing outside explicit configuration/data volumes.
 9. No release asset or GitHub Release is created. Successful completion means a
    reviewed commit merged into remote `main` with green required checks.
@@ -254,9 +259,9 @@ Acceptance:
 - no public case is accepted only because inspection was incomplete;
 - public case labels document context and ownership, not only payload bytes.
 
-### RT10-07: CPA v7.2.109 Host contract
+### RT10-07: CPA v7.2.113 Host contract
 
-Keep `github.com/router-for-me/CLIProxyAPI/v7 v7.2.109` pinned. Add Linux Host
+Keep `github.com/router-for-me/CLIProxyAPI/v7 v7.2.113` pinned. Add Linux Host
 contract coverage for:
 
 - plugin RPC schema and active control interface registration;
@@ -274,7 +279,7 @@ hide the Host error by claiming that the plugin applied a persistent update.
 
 Acceptance:
 
-- CPA v7.2.109 source/ABI contract tests pass;
+- CPA v7.2.113 source/ABI contract tests pass;
 - loopback-only CPA/counting-Mock test passes on Linux amd64;
 - config update is either durably successful or returns a stable explicit
   failure without corrupting the previous config;
@@ -319,7 +324,7 @@ Keep the active workflow set small and Linux-only. Required layers:
 
 1. fast PR unit/config/extract/classifier/audit tests;
 2. policy/corpus gate with frozen identities;
-3. CPA v7.2.109 source and loopback Host contract;
+3. CPA v7.2.113 source and loopback Host contract;
 4. bounded fuzz/race/performance gates;
 5. repository CodeRabbit review and GitHub security checks.
 
@@ -380,7 +385,7 @@ The task is complete only when all applicable rows pass:
 | tool activation | >=90%, no isolated-tool regression |
 | coverage | 0 incomplete in the fixed 4,424-case regression |
 | persistence | verified volume survives restart/recreate/upgrade/rollback |
-| CPA | exact v7.2.109 Host and RPC contract pass |
+| CPA | exact v7.2.113 Host and RPC contract pass |
 | performance | all RT10-08 limits pass |
 | privacy | raw capture default off; no ordinary plaintext persisted |
 | repository | exact PR head green and merged into remote `main` |
@@ -417,11 +422,11 @@ Update this section as work is completed; do not rewrite the original baseline.
   108 / 108 complete allows. System/tool inert payloads are not expected blocks
   without a current trusted-user activation relation.
 - [ ] RT10-07 pinned CPA
-  `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf` local
-  source, C ABI, and RPC schema-2 contracts pass. Remote latest-release and tag
-  checks were skipped by the pinned profile and are not a PASS. Exact `.so`
-  loading, counted-Mock routing, lifecycle, and container checks remain
-  `NOT_PROVIDED` on the isolated CPA Host.
+  `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835` local
+  source, C ABI, and RPC schema-2 contracts pass. The official lightweight tag,
+  module Origin/checksums, and `releases/latest == v7.2.113` checks also pass.
+  Exact candidate `.so` loading, counted-Mock routing, lifecycle, and container
+  checks remain `NOT_PROVIDED` on the isolated CPA Host.
 - [ ] RT10-08 Linux performance/concurrency gates pass.
   - 2026-08-01: exact-tree GitHub run `30662744941` exposed a v1 portability
     defect in the new CI lane. Its 4-CPU / `GOMAXPROCS=4` artifact passed race
@@ -515,7 +520,7 @@ Update this section as work is completed; do not rewrite the original baseline.
     Go 1.26.x relaxation and a value-type short-circuit rewrite were rejected
     with contract and language evidence. Final GitHub PR review remains pending.
   - Historical strict script/archive review also repaired the stale SHA-256
-    binding for the CPA-v7.2.109-updated external-evaluation verifier;
+    binding for the CPA-v7.2.113-updated external-evaluation verifier;
     `make script-test` passed on that committed tree.
   - No local CPA process or container was started. Host execution remains bound
     to the authorized Tencent Cloud #2 isolated sandbox.

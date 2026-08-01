@@ -9,7 +9,7 @@ The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. `v0.15` is the manually published
 [historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
 The current project target is source validation on `main`, pinned to CPA
-v7.2.109. GitHub Actions no longer builds or publishes an RC or Release. The
+v7.2.113. GitHub Actions no longer builds or publishes an RC or Release. The
 owner performs the independent server-side sandbox review separately;
 production approval has not been granted and no stable `v0.16` exists.
 
