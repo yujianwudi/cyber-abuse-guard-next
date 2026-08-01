@@ -182,6 +182,17 @@ grep -Fq '[Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RU
 grep -Fq '[Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
   <<<"$historical_index_section" ||
   fail "historical workflow section must contain the retired Round 9 independent-audit link"
+for retired_link_target in \
+  ROUND9_HOST_RUNNER.md \
+  ROUND9_INDEPENDENT_AUDIT_CONTRACT.md; do
+  retired_link_count="$(
+    grep -Fo -- "$retired_link_target" "$doc_root/docs/README.md" |
+      wc -l |
+      tr -d '[:space:]'
+  )"
+  [[ "$retired_link_count" == 1 ]] ||
+    fail "retired workflow link must appear exactly once and only in the historical workflow section: $retired_link_target"
+done
 workflow_directory="$doc_root/.github/workflows"
 verify_canonical_relative_path .github/workflows
 [[ -d "$workflow_directory" && ! -L "$workflow_directory" ]] ||

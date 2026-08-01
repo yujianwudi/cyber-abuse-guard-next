@@ -393,6 +393,13 @@ sed -i \
 must_fail retired-links-misplaced-current "$work/retired-links-misplaced-current" \
   'historical workflow section must contain the retired Round 9 Host runner link'
 
+cp -a "$work/pass" "$work/retired-links-duplicated-current"
+sed -i \
+  '/## Current v0.16 documents/a\- [Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)\n- [Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
+  "$work/retired-links-duplicated-current/docs/README.md"
+must_fail retired-links-duplicated-current "$work/retired-links-duplicated-current" \
+  'retired workflow link must appear exactly once and only in the historical workflow section: ROUND9_HOST_RUNNER.md'
+
 cp -a "$work/pass" "$work/retired-workflow-history-omitted"
 sed -i -E \
   '/^current_(gate|host|rc)_workflow:/d; /^current_round9_gate_admission:/d; /^current_historical_workflow_disable_requirement:/d' \
