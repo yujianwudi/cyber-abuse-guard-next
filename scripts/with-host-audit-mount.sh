@@ -19,7 +19,7 @@ for command_name in mount mountpoint stat umount; do
   }
 done
 
-privilege=()
+use_sudo=0
 if ((EUID != 0)); then
   command -v sudo >/dev/null 2>&1 || {
     printf 'sudo is required to create the isolated Host audit bind mount\n' >&2
@@ -29,7 +29,7 @@ if ((EUID != 0)); then
     printf 'passwordless sudo is required to create the isolated Host audit bind mount\n' >&2
     exit 1
   }
-  privilege=(sudo -n)
+  use_sudo=1
 fi
 
 fixture_root="${CYBER_ABUSE_GUARD_HOST_AUDIT_FIXTURE_ROOT:-/var/tmp}"
@@ -48,7 +48,14 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
   if ((mounted)); then
-    if "${privilege[@]}" umount -- "$mount_dir"; then
+    if ((use_sudo)); then
+      if sudo -n umount -- "$mount_dir"; then
+        mounted=0
+      else
+        printf 'failed to unmount isolated Host audit fixture: %s\n' "$mount_dir" >&2
+        status=1
+      fi
+    elif umount -- "$mount_dir"; then
       mounted=0
     else
       printf 'failed to unmount isolated Host audit fixture: %s\n' "$mount_dir" >&2
@@ -73,7 +80,11 @@ case "$filesystem_type" in
     ;;
 esac
 
-"${privilege[@]}" mount --bind "$source_dir" "$mount_dir"
+if ((use_sudo)); then
+  sudo -n mount --bind "$source_dir" "$mount_dir"
+else
+  mount --bind "$source_dir" "$mount_dir"
+fi
 mounted=1
 mountpoint -q -- "$mount_dir" || {
   printf 'isolated Host audit fixture is not a mount point: %s\n' "$mount_dir" >&2
