@@ -395,7 +395,7 @@ must_fail retired-links-misplaced-current "$work/retired-links-misplaced-current
 
 cp -a "$work/pass" "$work/retired-links-duplicated-current"
 sed -i \
-  '/## Current v0.16 documents/a\- [Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)\n- [Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
+  '/^## Current v0\.16 documents$/a\- [Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)\n- [Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
   "$work/retired-links-duplicated-current/docs/README.md"
 must_fail retired-links-duplicated-current "$work/retired-links-duplicated-current" \
   'retired workflow link must appear exactly once and only in the historical workflow section: ROUND9_HOST_RUNNER.md'

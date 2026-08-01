@@ -91,13 +91,14 @@ executed.
 
 ## Historical Phase 1 admission and no-checkout boundary
 
-The deleted `round9-release-rc.yml` design had no publication boolean and would
-have produced/attested only an exact 17-asset private candidate. Its admission
-also required a successful exact-main push run of `Round 9 policy gate` and
-required historical workflow IDs `315644586` and `318443961` to remain
-`disabled_manually`. The Host dispatch design had ten inputs: tag, tag object,
-commit, tree, Phase 1 run ID/attempt, artifact ID/digest, one canonical inline
-`candidate_identity` object, and a fresh lowercase 64-hex challenge.
+The deleted `round9-release-rc.yml` design had no path that could emit
+`publication_permitted=true` and would have produced/attested only an exact
+17-asset private candidate. Its admission also required a successful exact-main
+push run of `Round 9 policy gate` and required historical workflow IDs
+`315644586` and `318443961` to remain `disabled_manually`. The Host dispatch
+design had ten inputs: tag, tag object, commit, tree, Phase 1 run ID/attempt,
+artifact ID/digest, one canonical inline `candidate_identity` object, and a
+fresh lowercase 64-hex challenge.
 Duplicate keys, unknown fields, non-canonical JSON, malformed identities, or an
 oversized candidate object fail before ledger reservation.
 

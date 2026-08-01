@@ -186,7 +186,8 @@ for retired_link_target in \
   ROUND9_HOST_RUNNER.md \
   ROUND9_INDEPENDENT_AUDIT_CONTRACT.md; do
   retired_link_count="$(
-    grep -Fo -- "$retired_link_target" "$doc_root/docs/README.md" |
+    { LC_ALL=C grep -Fo -- "]($retired_link_target)" \
+        "$doc_root/docs/README.md" || true; } |
       wc -l |
       tr -d '[:space:]'
   )"
