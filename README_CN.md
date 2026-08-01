@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
+current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
 > **仓库沿革：** 这是采用全新 Git 历史的后续项目。旧 tag、分支、Release
@@ -27,7 +27,7 @@ current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86
 > 精确提交 GitHub 检查已经通过，二号机重验仍为 **PENDING**。第十轮在 CPA
 > v7.2.113 目标上新增了有界历史工具激活、持久审计 readiness、原子 coverage
 > 归因和 direct-compaction 边界修复；这些行为变更绑定为
-> `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`，
+> `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`，
 > 新身份仍须独立完成精确提交 GitHub 检查和隔离沙盒复核。
 
 [![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
@@ -60,7 +60,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 已审计提交基线 | `150c25e6352cb237cb3956bd66c83c3278c3fe33`；历史 classifier 摘要 `e0cbc975...`；CPA v7.2.104 |
 | 工程 CI | 精确 `main` 提交 `46f26f9f822683aebb14b2c812ced2246d680fc2` 的 `30482492205`、`30482486178`、`30482486027` 均 **PASS**；仅是工程证据，不是生产批准 |
 | 安全审计 | **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
-| 当前修复 | 第十轮 classifier `classifier-policy-v10` / `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`；历史工具权限、direct-compaction、长文本解码、持久审计 readiness 与 coverage 记账均发生行为变更，仍须精确提交 GitHub 与二号机独立重验 |
+| 当前修复 | 第十轮 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`；历史工具权限、direct-compaction、长文本解码、持久审计 readiness 与 coverage 记账均发生行为变更，仍须精确提交 GitHub 与二号机独立重验 |
 | CPA 源码/编译目标 | 固定 `v7.2.113`（`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`），C ABI 1 / RPC schema 2；源码、SDK/API、集成编译与 Linux Host `.so` 加载结论仅以精确提交 GitHub 门禁为准，独立受保护运行时验证仍待执行 |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
@@ -74,7 +74,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | CPA 固定目标 | 仅 v7.2.113；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
 | 外部 CPA 评估 / 当前源码独立审计 | 受保护发行评估仍为 `NOT_RUN`；现有隔离审计已判安全 `FAIL`，当前修复精确重审仍待执行，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v10` / `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`；精确提交 GitHub 与 Host 绑定仍待完成 |
+| Classifier policy | 当前源码快照为 `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`；精确提交 GitHub 与 Host 绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
 

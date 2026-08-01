@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
+current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
 Last updated: 2026-08-01 (Asia/Shanghai)
@@ -43,9 +43,9 @@ workload matrices fail closed. On a runner with at least 16 effective CPUs, all
 absolute gates still include c=16. This development runner remains explicitly
 non-equivalent to a production-capacity SLO.
 
-### Latest classifier-policy-v10 local source result
+### Frozen pre-v7.2.113 classifier-policy-v10 local source result
 
-The 2026-08-01 repository-local run is bound to
+The historical 2026-08-01 repository-local run is bound to
 `classifier-policy-v10` /
 `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
 It used Linux amd64 / Go 1.26.4 with 20 logical CPUs and `GOMAXPROCS=20`.
@@ -127,7 +127,7 @@ close the release-level RT10-08 gate.
 
 The Round 10 classifier/source snapshot is frozen pending an exact commit. The current
 source identity is `classifier-policy-v10` /
-`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`
+`db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
 The Round 10 working tree changes classifier behavior for bounded historical
@@ -135,7 +135,7 @@ tool-result activation, direct-current-user compaction, and long-text coverage;
 the CPA v7.2.113 dependency pin is therefore not the only identity input.
 Exact-commit performance, CPA Host resource measurements, and the Tencent
 Cloud #2 matrix remain **PENDING** for
-`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
+`db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`.
 The complete isolated benchmark results below remain frozen to the predecessor
 CPA v7.2.104 identity `e7a00b02...` and are not reattributed.
 

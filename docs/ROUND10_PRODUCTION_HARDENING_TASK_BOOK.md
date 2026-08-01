@@ -468,16 +468,20 @@ Update this section as work is completed; do not rewrite the original baseline.
     All gates with locally measurable inputs passed with zero failures and zero
     recovered panics; fixed-workload historical p99 and container restart remain
     explicitly `NOT_PROVIDED` until the final Host run.
-- [ ] RT10-09 current policy-v10 local Linux source evidence listed below passes;
-  exact-commit GitHub, protected 4,424-request evaluation, and isolated CPA Host
-  evidence remain pending.
-  - Current evidence identity: `classifier-policy-v10` /
+- [ ] RT10-09 current policy-v10 exact-source closure remains pending for
+  `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`;
+  exact-commit GitHub, full package/race revalidation, protected 4,424-request
+  evaluation, and isolated CPA Host evidence remain pending. The dependency
+  rebind does not inherit prior PASS results.
+  - Historical pre-v7.2.113 evidence identity: `classifier-policy-v10` /
     `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
-  - Current package tests passed in classifier `139.693s` and plugin `130.048s`.
+  - Under that historical identity, package tests passed in classifier
+    `139.693s` and plugin `130.048s`.
     Full race runs passed in plugin `587.147s` and classifier `391.498s`, with no
     data race reported.
-  - Module verification, vet, format, diff, script, and fuzz-smoke gates passed.
-    The current safe-gate mutation suite has 207 cases: 116 active contract
+  - Under the same historical identity, module verification, vet, format, diff,
+    script, and fuzz-smoke gates passed. The then-current safe-gate mutation
+    suite had 207 cases: 116 active contract
     cases execute and 91 retired release/Host workflow cases are explicitly
     archived as skips. Its current closed inventory is
     `classifier_entries=568` / `round10_entries=104`. Bounded real fuzz

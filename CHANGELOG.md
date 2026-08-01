@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
+current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
 Source-tree status updated: 2026-08-01 (Asia/Shanghai)
@@ -18,8 +18,14 @@ Source-tree status updated: 2026-08-01 (Asia/Shanghai)
   documentation identities now use only v7.2.113. Historical v7.2.109 CI and
   second-machine results remain bound to v7.2.109 and are not relabeled as a
   v7.2.113 Host, sandbox, performance, or production PASS.
+  Because the classifier identity binds root `go.mod` and `go.sum`, this
+  dependency update rebinds the current `classifier-policy-v10` source identity
+  from historical
+  `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67` to
+  `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`.
+  No prior classifier, performance, Host, or audit result is reattributed.
 
-- Complete the Round 10 Linux/CPA v7.2.109 production-hardening source lane:
+- Historical v7.2.109 Round 10 production-hardening source lane:
   add bounded historical tool-result activation for a uniquely associated
   current-user execution directive; verify persistent audit storage and live
   operational readiness; expose low-cardinality coverage dimensions and
@@ -27,7 +33,7 @@ Source-tree status updated: 2026-08-01 (Asia/Shanghai)
   identity handling; and preserve batch/stream parity across direct-compaction
   boundaries. A direct-compaction run that exceeds 8 KiB only through trailing
   ASCII padding now uses a bounded non-padding proof, while a real non-padding
-  proof overflow remains incomplete. These behavior changes bind
+  proof overflow remains incomplete. These historical behavior changes bind
   `classifier-policy-v10` to
   `b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
   This lane publishes source and tests only; it does not create a tag, plugin

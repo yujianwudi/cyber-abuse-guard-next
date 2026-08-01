@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
+current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
 Last updated: 2026-07-31 (Asia/Shanghai)
@@ -26,7 +26,7 @@ returned HTTP 403, and 2 complete benign cases were false positives.
 
 The current source snapshot carries a remediation at
 `classifier-policy-v10` /
-`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
+`db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`.
 It has no commit-bound CI or second-machine retest. Final remediation freeze,
 exact-main CI, protected Host execution, and independent re-audit remain
 pending. A tag, package, and GitHub Release are outside this source-only change.
@@ -45,7 +45,7 @@ audited_classifier_policy_digest: e0cbc975... / historical exact value retained 
 engineering_ci: 30353591705 / PASS / ENGINEERING ONLY
 safety_audit: FAIL / BLOCKED
 safety_findings: complete_malicious_fail_open=287 / malicious_incomplete_http_403=36 / complete_benign_false_positive=2
-remediation_source_snapshot: classifier-policy-v10 / b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67 / SOURCE GATES ONLY
+remediation_source_snapshot: classifier-policy-v10 / db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594 / SOURCE GATES ONLY
 remediation_exact_commit_ci: PENDING
 second_machine_retest: PENDING
 counted_mock_host: NOT_PROVIDED

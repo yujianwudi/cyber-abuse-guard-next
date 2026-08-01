@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
+current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
 ## Active compatibility target
@@ -42,7 +42,7 @@ cases, and 2 complete benign false positives.
 
 The current remediation source identifies as
 `classifier-policy-v10` /
-`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
+`db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`.
 No commit-bound CI or second-machine retest is available for that remediation.
 The active CPA integration and release state therefore remains
 `BLOCKED`; the engineering PASS for `150c25e6` cannot be relabeled as a safety,
