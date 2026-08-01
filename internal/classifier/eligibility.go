@@ -6,6 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 )
 
@@ -1017,6 +1018,8 @@ type explicitRelationPhysicalClause struct {
 	clauseID                     int
 	start                        int
 	end                          int
+	startByte                    int
+	endByte                      int
 	boundaryBefore               directiveBoundaryKind
 	potential                    explicitRelationClausePotential
 	potentialSet                 bool
@@ -5604,7 +5607,26 @@ func resultHasEligibleMaliciousWinner(result Result, thresholds Thresholds) bool
 		candidateEligibilityHasPositiveMaliceAxis(*result.BlockEligibility) &&
 		resultContainsRuleID(result, explanation.WinningRuleID) &&
 		explanation.WinningCategory == string(result.Category) &&
-		explanationEligibilityMatches(explanation, *result.BlockEligibility)
+		explanationEligibilityMatches(explanation, *result.BlockEligibility) &&
+		explanationRelationContractValid(explanation)
+}
+
+func explanationRelationContractValid(explanation *DecisionExplanation) bool {
+	if explanation == nil {
+		return false
+	}
+	if explanation.EnforcementScope == EnforcementScopeRequestLocalTool &&
+		explanation.CurrentTurnEvidence {
+		return explanation.RelationType == ExplanationRelationHistoricalToolActivation &&
+			explanation.EnforcementOwner == ExplanationEnforcementOwnerCurrentTrustedUser &&
+			explanation.WinningRole == extract.RoleTool &&
+			explanation.WinningProvenance == extract.ProvenanceContent &&
+			!explanation.EvidenceOwnedByCurrentUser && explanation.CurrentExecutionActProven &&
+			explanation.CrossSegmentComposition && explanation.ReferentLinkUsed &&
+			explanation.ReferentProofComplete && explanation.EvidenceSegmentCount >= 2
+	}
+	return explanation.RelationType == ExplanationRelationNone &&
+		explanation.EnforcementOwner == ExplanationEnforcementOwnerNone
 }
 
 func explanationEligibilityMatches(explanation *DecisionExplanation, eligibility CandidateBlockEligibility) bool {

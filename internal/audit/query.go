@@ -251,6 +251,9 @@ func (s *Store) Delete(ctx context.Context, query Query) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, ErrUnavailable
 	}
+	if err := s.checkStorageAccess(); err != nil {
+		return 0, err
+	}
 	if err := s.Flush(ctx); err != nil {
 		return 0, err
 	}
@@ -502,6 +505,7 @@ func decodeDecisionExplanationForSchema(encoded, schema string) (*DecisionExplan
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		return nil, fmt.Errorf("decision explanation must contain exactly one JSON value")
 	}
+	normalizeDecisionExplanationCollections(explanation)
 	if err := validateDecisionExplanationForSchema(explanation, schema); err != nil {
 		return nil, err
 	}

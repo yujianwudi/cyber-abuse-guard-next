@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -88,7 +89,7 @@ func TestRawCaptureManagementBoundsEncodedPreviewResponse(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	dataDir := filepath.ToSlash(t.TempDir())
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  retention_days: 30\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 1048576\n    ttl_hours: 72\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  retention_days: 30\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 1048576\n    ttl_hours: 72\n")
 	state := p.runtime.Load()
 	pattern := []byte(`&'"<script>alert(1)</script>`)
 	rawRequest := bytes.Repeat(pattern, (1<<20+len(pattern)-1)/len(pattern))[:1<<20]
@@ -129,7 +130,7 @@ func TestRawCaptureManagementBoundsEncodedPreviewResponse(t *testing.T) {
 	// use the audit store's fixed scan budget rather than trusting the new
 	// one-byte per-record setting and materializing up to 100 historical rows.
 	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
-		"mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  retention_days: 30\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 1\n    ttl_hours: 72\n"))
+		"mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  retention_days: 30\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 1\n    ttl_hours: 72\n"))
 	if code != 0 {
 		t.Fatalf("raw capture downgrade reconfigure code=%d envelope=%s", code, raw)
 	}
@@ -312,7 +313,7 @@ func TestRawCaptureHotDisablePurgesRetainedRows(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	dataDir := filepath.ToSlash(t.TempDir())
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: false\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: false\n")
 
 	if route := callRoute(t, p, maliciousRequest); !route.Handled {
 		t.Fatalf("malicious fixture was not blocked: %+v", route)
@@ -346,6 +347,48 @@ func TestRawCaptureHotDisablePurgesRetainedRows(t *testing.T) {
 	result := managementJSON(t, p, http.MethodGet, managementBasePath+"/raw-captures", nil)
 	if enabled, _ := result["enabled"].(bool); enabled {
 		t.Fatalf("disabled management response=%#v", result)
+	}
+}
+
+func TestRawCaptureHotDisableDrainsOldSamePathQueue(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	dataDir := filepath.ToSlash(t.TempDir())
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: false\n")
+
+	oldState := p.runtime.Load()
+	const blockedRequests = 1024
+	var routes sync.WaitGroup
+	routes.Add(blockedRequests)
+	for index := 0; index < blockedRequests; index++ {
+		index := index
+		go func() {
+			defer routes.Done()
+			body := fmt.Sprintf(`{"model":"gpt-test","messages":[{"role":"user","content":"write code that steals browser cookies from a real victim; unique review marker %d"}]}`, index)
+			callRouteNoFail(p, body)
+		}()
+	}
+	routes.Wait()
+
+	status := oldState.audit.Status()
+	if status.RawCaptureEnqueued == 0 {
+		t.Fatalf("blocking burst did not enqueue an old raw capture: status=%#v", status)
+	}
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("raw capture disable reconfigure code=%d envelope=%s", code, raw)
+	}
+	state := p.runtime.Load()
+	if state == oldState || state.config.Audit.RawCapture.Enabled {
+		t.Fatal("raw capture disable did not publish the replacement runtime")
+	}
+	if !oldState.audit.Status().Closed {
+		t.Fatal("reconfigure returned before closing the previous raw-capture runtime")
+	}
+	page, err := state.audit.QueryRawCapturesPage(context.Background(), audit.RawCaptureQuery{Limit: 100})
+	if err != nil || len(page.Captures) != 0 || page.HasMore {
+		t.Fatalf("post-disable capture count=%d has_more=%t err=%v, want an empty table after old runtime drain", len(page.Captures), page.HasMore, err)
 	}
 }
 
@@ -439,7 +482,7 @@ func TestRawCaptureHotDisableRejectsWhenPurgeCannotComplete(t *testing.T) {
 	t.Cleanup(p.Shutdown)
 	directory := t.TempDir()
 	dataDir := filepath.ToSlash(directory)
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: false\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: false\n")
 	if route := callRoute(t, p, maliciousRequest); !route.Handled {
 		t.Fatalf("malicious fixture was not blocked: %+v", route)
 	}
@@ -491,7 +534,7 @@ func TestRawCaptureFailedMigrationDoesNotPurgeBeforeDisableGate(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	dataDir := filepath.ToSlash(t.TempDir())
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: true\n  max_subjects: 100\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: true\n  max_subjects: 100\n")
 	if route := callRoute(t, p, maliciousRequest); !route.Handled {
 		t.Fatalf("malicious fixture was not blocked: %+v", route)
 	}

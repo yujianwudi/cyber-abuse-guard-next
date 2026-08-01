@@ -97,7 +97,7 @@ class BrokerIdentityContractTest(unittest.TestCase):
             phase1_artifact_id=202,
             phase1_artifact_digest="sha256:" + "4" * 64,
             so_sha256="5" * 64,
-            classifier_policy_version="classifier-policy-v9",
+            classifier_policy_version="classifier-policy-v10",
             classifier_policy_sha256="6" * 64,
             ruleset_version="1.0.10",
             ruleset_sha256="7" * 64,

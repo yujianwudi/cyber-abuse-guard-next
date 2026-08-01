@@ -63,6 +63,28 @@ const (
 	TermStrengthStrong TermStrength = "strong"
 )
 
+// ExplanationRelationType is the closed, content-free relationship that made
+// a winning carrier enforceable. Most decisions have no relation. The
+// historical-tool value is reserved for one uniquely associated tool result
+// explicitly activated by the current trusted user; it does not transfer
+// ownership of the tool text to that user.
+type ExplanationRelationType string
+
+const (
+	ExplanationRelationNone                     ExplanationRelationType = ""
+	ExplanationRelationHistoricalToolActivation ExplanationRelationType = "historical_tool_activation"
+)
+
+// ExplanationEnforcementOwner records the trusted actor that supplied the
+// execution speech act for a relation. It is intentionally distinct from the
+// role and ownership of the winning carrier evidence.
+type ExplanationEnforcementOwner string
+
+const (
+	ExplanationEnforcementOwnerNone               ExplanationEnforcementOwner = ""
+	ExplanationEnforcementOwnerCurrentTrustedUser ExplanationEnforcementOwner = "current_trusted_user"
+)
+
 // EvidenceOccurrence is the bounded ownership record for one winning
 // occurrence. Offsets refer to the normalized transient directive unit and are
 // never sufficient to reconstruct request text.
@@ -102,18 +124,20 @@ type ScoreBreakdown struct {
 // DecisionExplanation is safe for audit/status output. It intentionally
 // contains only stable identifiers, enums, counters, masks, and booleans.
 type DecisionExplanation struct {
-	WinningRuleID           string                    `json:"winning_rule_id,omitempty"`
-	WinningCategory         string                    `json:"winning_category,omitempty"`
-	ScoreBreakdown          ScoreBreakdown            `json:"score_breakdown"`
-	CorePredicateComplete   bool                      `json:"core_predicate_complete"`
-	EvidenceDimensionMask   uint16                    `json:"evidence_dimension_mask"`
-	EvidenceOccurrenceCount int                       `json:"evidence_occurrence_count"`
-	EvidenceSegmentCount    int                       `json:"evidence_segment_count"`
-	WinningRole             extract.Role              `json:"winning_role,omitempty"`
-	WinningProvenance       extract.SegmentProvenance `json:"winning_provenance,omitempty"`
-	CurrentTurnEvidence     bool                      `json:"current_turn_evidence"`
-	CrossSegmentComposition bool                      `json:"cross_segment_composition"`
-	ReferentLinkUsed        bool                      `json:"referent_link_used"`
+	WinningRuleID           string                      `json:"winning_rule_id,omitempty"`
+	WinningCategory         string                      `json:"winning_category,omitempty"`
+	ScoreBreakdown          ScoreBreakdown              `json:"score_breakdown"`
+	CorePredicateComplete   bool                        `json:"core_predicate_complete"`
+	EvidenceDimensionMask   uint16                      `json:"evidence_dimension_mask"`
+	EvidenceOccurrenceCount int                         `json:"evidence_occurrence_count"`
+	EvidenceSegmentCount    int                         `json:"evidence_segment_count"`
+	WinningRole             extract.Role                `json:"winning_role,omitempty"`
+	WinningProvenance       extract.SegmentProvenance   `json:"winning_provenance,omitempty"`
+	CurrentTurnEvidence     bool                        `json:"current_turn_evidence"`
+	CrossSegmentComposition bool                        `json:"cross_segment_composition"`
+	ReferentLinkUsed        bool                        `json:"referent_link_used"`
+	RelationType            ExplanationRelationType     `json:"relation_type,omitempty"`
+	EnforcementOwner        ExplanationEnforcementOwner `json:"enforcement_owner,omitempty"`
 	// QuotedOrInertSuppressed is request-level diagnostic metadata. It is true
 	// when any non-empty quoted, inert, or trusted carrier content was excluded
 	// from active evidence (or capped to audit) anywhere in the inspected

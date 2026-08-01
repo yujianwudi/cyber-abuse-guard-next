@@ -1,8 +1,8 @@
 # CPA Cyber Abuse Guard v0.16 Round 9 Design
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 ## Scope, release state, and invariants
@@ -507,7 +507,7 @@ These mechanisms remain stateless across independent API calls and do not
 attest to local instruction-file integrity.
 
 Ruleset `1.0.10` identifies the embedded YAML assets only. The complete
-code-level behavior is separately identified as `classifier-policy-v9`; its
+code-level behavior is separately identified as `classifier-policy-v10`; its
 exact SHA-256 is the canonical current identity in this document's prologue and
 `internal/classifier/policy_identity.go`.
 Its tested source list binds the classifier, matcher, normalizer, role logic,
@@ -624,7 +624,9 @@ capacity through `subject_control`: `subjects`, `max_subjects`,
 Persistence defaults to disabled. With `subject_control.persistence: false`,
 all risk, cooldown, and manual-block state is process-local and intentionally
 resets on CPA restart. Enabling persistence requires subject control, audit
-storage, a stable HMAC secret, and `max_subjects <= 10000`.
+storage, an explicit absolute `audit.data_dir`, explicit
+`audit.require_persistent_storage: true`, a stable HMAC secret, and
+`max_subjects <= 10000`.
 
 The persistent type can represent only an HMAC subject, score/hit timestamps,
 cooldown, and manual state. It cannot represent a plaintext credential. A
@@ -975,7 +977,7 @@ SSE stream with terminal frames; returning successful chunks would force HTTP
 ## Build identity and release reproducibility
 
 Builds link immutable version, full commit SHA, ruleset version/hash,
-`classifier-policy-v9` and its exact policy SHA-256, streaming-scanner identity,
+`classifier-policy-v10` and its exact policy SHA-256, streaming-scanner identity,
 and dirty state. Build metadata and the verifier bind
 these identities. Candidate mode requires a clean worktree, exact expected
 commit/tree, the commit timestamp, an absent stable `v0.16` tag, and forbids

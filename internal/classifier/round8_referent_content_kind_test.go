@@ -488,14 +488,14 @@ func TestRound8DirectCarrierProofOverflowIsUnavailable(t *testing.T) {
 		"stream": round8StreamingReferentUnchecked(t, guard, segments),
 	}
 	for path, result := range results {
-		if result.Coverage.State != CoverageUnavailable ||
-			result.Coverage.Reason != CoverageReasonClassifierWindow || !result.Truncated {
-			t.Fatalf("%s direct proof overflow coverage = %+v result=%+v", path, result.Coverage, result)
-		}
-		if result.Action == ActionBlock || result.Category != "" ||
-			resultContainsRuleID(result, "CRED-002") {
-			t.Fatalf("%s direct proof overflow retained a partial finding: %+v", path, result)
-		}
+		// The historical test name is retained because the safe-suite contract
+		// enumerates it. Physical clause count no longer consumes proof budget by
+		// itself: the fully retained trailing field is scanned and proven to contain
+		// no effective continuation or cancellation, so the complete malicious
+		// carrier remains enforceable.
+		eligibilityAssertCompleteBlockCategory(
+			t, path, result, rules.CategoryCredentialTheft,
+		)
 	}
 }
 
@@ -527,14 +527,12 @@ func TestRound8AffirmativeCarrierProofOverflowIsUnavailable(t *testing.T) {
 		"stream": round8StreamingReferentUnchecked(t, guard, segments),
 	}
 	for path, result := range results {
-		if result.Coverage.State != CoverageUnavailable ||
-			result.Coverage.Reason != CoverageReasonClassifierWindow || !result.Truncated {
-			t.Fatalf("%s affirmative proof overflow coverage = %+v result=%+v", path, result.Coverage, result)
-		}
-		if result.Action == ActionBlock || result.Category != "" ||
-			resultContainsRuleID(result, "CRED-002") {
-			t.Fatalf("%s affirmative proof overflow retained a partial finding: %+v", path, result)
-		}
+		// As above, the 33 ordinary clauses are fully scanned rather than treated as
+		// an automatic relation-proof overflow. They contain no effective reversal,
+		// so the earlier exact carrier/anchor activation remains complete.
+		eligibilityAssertCompleteBlockCategory(
+			t, path, result, rules.CategoryCredentialTheft,
+		)
 	}
 }
 

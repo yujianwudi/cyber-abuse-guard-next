@@ -36,6 +36,11 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
     increment_unknown_on_final = False
     probe_runtime_mode = "balanced"
     probe_ruleset_version = "1.0.7"
+    operational_ready = True
+    audit_contract = "valid"
+    audit_degraded = False
+    persistence_degraded = False
+    hmac_stable = True
 
     def log_message(self, _format, *_args):
         pass
@@ -67,22 +72,47 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
         mode = "balanced"
         if final_status and ManagementHandler.final_status_mode:
             mode = ManagementHandler.final_status_mode
-        self.send_json(200, {
+        audit_status = {
+            "enabled": True,
+            "persistence_expected": True,
+            "persistence_verified": True,
+            "persistence_reason": None,
+        }
+        if self.audit_contract == "disabled":
+            audit_status["enabled"] = False
+        elif self.audit_contract == "not_expected":
+            audit_status["persistence_expected"] = False
+        elif self.audit_contract == "unverified":
+            audit_status = {
+                "enabled": True,
+                "persistence_expected": True,
+                "persistence_verified": False,
+                "persistence_reason": "container_layer",
+            }
+        elif self.audit_contract == "malformed":
+            audit_status = {"persistence_expected": "yes"}
+
+        payload = {
             "loaded": True,
             "enforcement_ready": True,
+            "operational_ready": self.operational_ready,
+            "readiness_reasons": [] if self.operational_ready else ["audit_persistence_unverified"],
             "mode": mode,
             "priority": 300,
             "ruleset_version": "1.0.7",
             "last_reconfigure_error": "",
-            "audit_degraded": False,
-            "persistence_degraded": False,
-            "hmac_stable": True,
+            "audit_degraded": self.audit_degraded,
+            "persistence_degraded": self.persistence_degraded,
+            "hmac_stable": self.hmac_stable,
             "router_errors": self.router_errors,
             "panics_recovered": self.panics_recovered,
             "counters": {
                 "unknown_source_formats": self.unknown_source_formats,
             },
-        })
+        }
+        if self.audit_contract != "missing":
+            payload["audit"] = audit_status
+        self.send_json(200, payload)
 
     def do_POST(self):
         if not self.authorized():
@@ -183,7 +213,11 @@ try:
     ManagementHandler.router_errors = 1
     ManagementHandler.panics_recovered = 1
     ManagementHandler.unknown_source_formats = 3
-    historical = run_watchdog()
+    default_zero_budget = run_watchdog()
+    historical = run_watchdog({
+        "MAX_ROUTER_ERRORS": "1",
+        "MAX_PANICS_RECOVERED": "1",
+    })
 
     ManagementHandler.router_errors = 8
     ManagementHandler.panics_recovered = 9
@@ -214,6 +248,28 @@ try:
     unknown_delta_budget = run_watchdog({"MAX_NEW_UNKNOWN_SOURCE_FORMATS": "0"})
     ManagementHandler.increment_unknown_on_final = False
 
+    ManagementHandler.operational_ready = False
+    not_operational = run_watchdog({
+        "ALLOW_AUDIT_DEGRADED": "1",
+        "ALLOW_PERSISTENCE_DEGRADED": "1",
+        "ALLOW_UNSTABLE_HMAC": "1",
+    })
+    ManagementHandler.operational_ready = True
+
+    ManagementHandler.audit_degraded = True
+    legacy_degrade_allow = run_watchdog({"ALLOW_AUDIT_DEGRADED": "1"})
+    ManagementHandler.audit_degraded = False
+
+    rejected_audit_contracts = []
+    for contract in ("disabled", "not_expected", "unverified"):
+        ManagementHandler.audit_contract = contract
+        rejected_audit_contracts.append((contract, run_watchdog()))
+    ManagementHandler.audit_contract = "missing"
+    missing_audit_contract = run_watchdog()
+    ManagementHandler.audit_contract = "malformed"
+    malformed_audit_contract = run_watchdog()
+    ManagementHandler.audit_contract = "valid"
+
     ManagementHandler.router_errors = 1
     ManagementHandler.panics_recovered = 1
     strict_budget = run_watchdog({"MAX_ROUTER_ERRORS": "0", "MAX_PANICS_RECOVERED": "0"})
@@ -227,6 +283,8 @@ if completed.returncode != 0:
     sys.stderr.write(completed.stdout)
     sys.stderr.write(completed.stderr)
     raise SystemExit("watchdog failed its direct management request")
+if default_zero_budget.returncode == 0:
+    raise SystemExit("default zero router/panic budget was not enforced")
 if historical.returncode != 0:
     sys.stderr.write(historical.stdout)
     sys.stderr.write(historical.stderr)
@@ -243,6 +301,20 @@ if probe_identity_drift.returncode == 0:
     raise SystemExit("probe runtime identity drift was not rejected")
 if unknown_delta_budget.returncode == 0:
     raise SystemExit("probe-window unknown source delta budget was not enforced")
+if not_operational.returncode == 0:
+    raise SystemExit("operational readiness failure was not rejected")
+if legacy_degrade_allow.returncode == 0:
+    raise SystemExit("legacy ALLOW_AUDIT_DEGRADED bypassed the production gate")
+for name, result in tuple(rejected_audit_contracts) + (
+    ("missing", missing_audit_contract),
+    ("malformed", malformed_audit_contract),
+):
+    if result.returncode == 0:
+        raise SystemExit("%s audit persistence contract was not rejected" % name)
+    if "status requires enabled audit with verified persistent storage" not in result.stderr:
+        sys.stderr.write(result.stdout)
+        sys.stderr.write(result.stderr)
+        raise SystemExit("%s audit contract did not reach the audit-specific failure" % name)
 if strict_budget.returncode == 0:
     raise SystemExit("explicit zero cumulative error budget was not enforced")
 if proxy_connections != 0:
@@ -251,12 +323,18 @@ if management_key.encode("utf-8") in proxy_bytes:
     raise SystemExit("hostile proxy captured the management key")
 for index, result in enumerate((
     completed,
+    default_zero_budget,
     historical,
     leading_zero_budgets,
     leading_zero_budget_exceeded,
     final_status_drift,
     probe_identity_drift,
     unknown_delta_budget,
+    not_operational,
+    legacy_degrade_allow,
+    *(result for _, result in rejected_audit_contracts),
+    missing_audit_contract,
+    malformed_audit_contract,
     strict_budget,
 )):
     combined = (result.stdout + result.stderr).encode("utf-8", errors="replace")

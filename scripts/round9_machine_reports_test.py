@@ -64,7 +64,7 @@ class Round9MachineReportsTest(unittest.TestCase):
         ):
             directory.mkdir(parents=True)
         (root / "internal/classifier/policy_identity.go").write_text(
-            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v9"\n'
+            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v10"\n'
             f'const ClassifierPolicySHA256 = "{"3" * 64}"\n',
             encoding="utf-8",
         )
@@ -130,7 +130,7 @@ class Round9MachineReportsTest(unittest.TestCase):
         candidate = {
             "commit": commit,
             "tree": tree,
-            "policy_version": "classifier-policy-v9",
+            "policy_version": "classifier-policy-v10",
             "policy_sha256": "3" * 64,
             "ruleset": "1.0.10",
         }
@@ -145,7 +145,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "corpus_cases_bytes": self.identity(benign_cases)["bytes"],
             "corpus_cases_sha256": self.identity(benign_cases)["sha256"],
             "runtime_identity": {
-                "classifier_policy_version": "classifier-policy-v9",
+                "classifier_policy_version": "classifier-policy-v10",
                 "classifier_policy_sha256": "3" * 64,
                 "ruleset_version": "1.0.10",
             },
@@ -223,7 +223,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "benign_corpus_manifest": self.identity(benign_root / "manifest.json"),
             "benign_corpus_cases": self.identity(benign_cases),
             "candidate": {
-                "policy_version": "classifier-policy-v9",
+                "policy_version": "classifier-policy-v10",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             },
@@ -416,7 +416,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             "benign_corpus_manifest": identity(benign_root / "manifest.json"),
             "benign_corpus_cases": identity(benign_root / "cases.jsonl"),
             "candidate": {
-                "policy_version": "classifier-policy-v9",
+                "policy_version": "classifier-policy-v10",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             },
@@ -488,7 +488,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v9",
+                "policy_version": "classifier-policy-v10",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }
@@ -530,7 +530,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v9",
+                "policy_version": "classifier-policy-v10",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }
@@ -828,7 +828,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             (root / "internal/classifier").mkdir(parents=True)
             (root / "internal/classifier/policy_identity.go").write_text(
                 'package classifier\n\n'
-                'const ClassifierPolicyVersion = "classifier-policy-v9-lookalike"\n'
+                'const ClassifierPolicyVersion = "classifier-policy-v10-lookalike"\n'
                 f'const ClassifierPolicySHA256 = "{"3" * 64}"\n',
                 encoding="utf-8",
             )
@@ -1009,7 +1009,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v9",
+                "policy_version": "classifier-policy-v10",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }
@@ -1048,7 +1048,7 @@ class Round9MachineReportsTest(unittest.TestCase):
             candidate = {
                 "commit": "1" * 40,
                 "tree": "2" * 40,
-                "policy_version": "classifier-policy-v9",
+                "policy_version": "classifier-policy-v10",
                 "policy_sha256": "3" * 64,
                 "ruleset": "1.0.10",
             }

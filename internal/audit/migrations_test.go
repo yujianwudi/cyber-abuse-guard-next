@@ -378,6 +378,43 @@ func TestFreshDatabaseAppliesAllMigrations(t *testing.T) {
 	}
 }
 
+func TestCurrentSchemaReopenPreservesVersionMetadata(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "audit.db")
+	firstTime := time.Unix(1_700_000_000, 123).UTC()
+	store, err := Open(Config{Path: path, Now: func() time.Time { return firstTime }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var firstVersion int
+	var firstUpdatedAt int64
+	if err := store.db.QueryRow(`SELECT version, updated_at_ns FROM schema_version WHERE singleton = 1`).Scan(&firstVersion, &firstUpdatedAt); err != nil {
+		_ = store.Close()
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	secondTime := firstTime.Add(24 * time.Hour)
+	reopened, err := Open(Config{Path: path, Now: func() time.Time { return secondTime }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	var secondVersion int
+	var secondUpdatedAt int64
+	if err := reopened.db.QueryRow(`SELECT version, updated_at_ns FROM schema_version WHERE singleton = 1`).Scan(&secondVersion, &secondUpdatedAt); err != nil {
+		t.Fatal(err)
+	}
+	if secondVersion != firstVersion || secondUpdatedAt != firstUpdatedAt {
+		t.Fatalf(
+			"schema metadata changed on reopen: before=(%d,%d) after=(%d,%d)",
+			firstVersion, firstUpdatedAt, secondVersion, secondUpdatedAt,
+		)
+	}
+}
+
 func TestV3DatabaseMigratesThroughRawCaptureSchemaV5(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "audit.db")

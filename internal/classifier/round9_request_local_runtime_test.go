@@ -584,33 +584,58 @@ func TestRound9NonterminalSplitToolResultRemainsInert(t *testing.T) {
 		round6SyntheticIntent+" "+round6SyntheticOperational+" ",
 		" "+round6SyntheticObject+" "+round6SyntheticTarget,
 	)
-	session, err := guard.NewScanSession(
-		ModeBalanced, DefaultThresholds(), DefaultPolicy(), limits,
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	addProfiledRound9StreamingSegment(t, session, 1, extract.Segment{
+	tool := extract.Segment{
 		Role: extract.RoleTool, Provenance: extract.ProvenanceContent,
 		UserAttribution:   extract.UserAttributionUntrusted,
 		ToolAssociation:   extract.ToolResultAssociationUnique,
 		ConversationIndex: 0, TurnIndex: -1, ScopeID: 92_110,
 		ContentKind:   extract.ContentKindToolResult,
 		FieldPathHash: "round9-split-historical-tool", Text: input,
-	})
-	if session.coverage.State != CoverageComplete || !session.profiledPendingToolIncomplete {
-		t.Fatalf("provisional tool state coverage=%+v deferred=%t", session.coverage, session.profiledPendingToolIncomplete)
 	}
-	addProfiledRound9StreamingSegment(t, session, 2, extract.Segment{
+	later := extract.Segment{
 		Role: extract.RoleAssistant, Provenance: extract.ProvenanceContent,
 		UserAttribution:   extract.UserAttributionUntrusted,
 		ConversationIndex: 1, TurnIndex: 0, ScopeID: 92_111,
 		ContentKind:   extract.ContentKindNaturalLanguageDirective,
 		FieldPathHash: "round9-after-split-tool", Text: "ordinary football schedule summary",
-	})
-	result := session.Finish()
-	if result.Coverage.State != CoverageComplete || result.Truncated || result.Action == ActionBlock {
-		t.Fatalf("nonterminal tool result became active: %+v", result)
+	}
+	segments := []extract.Segment{tool, later}
+	for _, mode := range []Mode{ModeBalanced, ModeStrict} {
+		mode := mode
+		t.Run(string(mode), func(t *testing.T) {
+			t.Parallel()
+			batch := guard.ClassifySegmentsWithPolicy(
+				segments, mode, DefaultThresholds(), DefaultPolicy(),
+			)
+			if batch.Coverage.State != "" && batch.Coverage.State != CoverageComplete ||
+				batch.Truncated ||
+				batch.Action == ActionBlock ||
+				resultHasEligibleMaliciousWinner(batch, DefaultThresholds()) {
+				t.Fatalf("batch nonterminal tool result became active: %+v", batch)
+			}
+
+			session, err := guard.NewScanSession(
+				mode, DefaultThresholds(), DefaultPolicy(), limits,
+			)
+			if err != nil {
+				t.Fatal(err)
+			}
+			addProfiledRound9StreamingSegment(t, session, 1, tool)
+			if session.coverage.State != CoverageComplete || !session.profiledPendingToolIncomplete {
+				t.Fatalf("provisional tool state coverage=%+v deferred=%t",
+					session.coverage, session.profiledPendingToolIncomplete)
+			}
+			addProfiledRound9StreamingSegment(t, session, 2, later)
+			stream := session.Finish()
+			if stream.Coverage.State != CoverageComplete || stream.Truncated ||
+				stream.Action == ActionBlock ||
+				resultHasEligibleMaliciousWinner(stream, DefaultThresholds()) {
+				t.Fatalf("stream nonterminal tool result became active: %+v", stream)
+			}
+			if batch.Action != stream.Action || batch.Category != stream.Category {
+				t.Fatalf("batch/stream mismatch: batch=%+v stream=%+v", batch, stream)
+			}
+		})
 	}
 }
 
@@ -659,45 +684,57 @@ func TestRound9ProfiledGroupBoundaryBatchStreamingParity(t *testing.T) {
 	}
 	for _, actor := range actors {
 		actor := actor
-		for _, total := range []int{maxRoleClassifierSegments, maxRoleClassifierSegments + 1} {
-			total := total
-			t.Run(fmt.Sprintf("%s/%d fields", actor.name, total), func(t *testing.T) {
-				t.Parallel()
-				segments := round9RiskyProfiledGroupBoundarySegments(actor.segment, total)
-				batch := guard.ClassifySegmentsWithPolicy(
-					segments, ModeBalanced, DefaultThresholds(), DefaultPolicy(),
-				)
-				if batch.Action != ActionBlock || batch.BlockEligibility == nil ||
-					batch.BlockEligibility.EnforcementScope != actor.wantScope {
-					t.Fatalf("batch=%+v, want %s block", batch, actor.wantScope)
-				}
+		for _, mode := range []Mode{ModeBalanced, ModeStrict} {
+			mode := mode
+			for _, total := range []int{maxRoleClassifierSegments, maxRoleClassifierSegments + 1} {
+				total := total
+				t.Run(fmt.Sprintf("%s/%s/%d fields", actor.name, mode, total), func(t *testing.T) {
+					t.Parallel()
+					segments := round9RiskyProfiledGroupBoundarySegments(actor.segment, total)
+					batch := guard.ClassifySegmentsWithPolicy(
+						segments, mode, DefaultThresholds(), DefaultPolicy(),
+					)
+					if batch.Action != ActionBlock || batch.BlockEligibility == nil ||
+						batch.BlockEligibility.EnforcementScope != actor.wantScope {
+						t.Fatalf("batch=%+v, want %s block", batch, actor.wantScope)
+					}
 
-				session, err := guard.NewScanSession(
-					ModeBalanced, DefaultThresholds(), DefaultPolicy(), DefaultScanLimits(),
-				)
-				if err != nil {
-					t.Fatal(err)
-				}
-				for index, segment := range segments {
-					addProfiledRound9StreamingSegment(t, session, uint64(index+1), segment)
-				}
-				if total == maxRoleClassifierSegments+1 && actor.wantScope == EnforcementScopeRequestLocalTool {
-					if session.coverage.State != CoverageComplete || !session.profiledPendingToolIncomplete {
-						t.Fatalf("terminal-tool overflow was not deferred: coverage=%+v deferred=%t",
-							session.coverage, session.profiledPendingToolIncomplete)
+					session, err := guard.NewScanSession(
+						mode, DefaultThresholds(), DefaultPolicy(), DefaultScanLimits(),
+					)
+					if err != nil {
+						t.Fatal(err)
 					}
-				}
-				stream := session.Finish()
-				if total == maxRoleClassifierSegments || actor.wantScope == EnforcementScopeCurrentUser {
-					if stream.Coverage.State != CoverageComplete || stream.Action != ActionBlock ||
-						stream.Category != batch.Category || stream.BlockEligibility == nil ||
-						stream.BlockEligibility.EnforcementScope != actor.wantScope {
-						t.Fatalf("64-field batch/stream mismatch: batch=%+v stream=%+v", batch, stream)
+					for index, segment := range segments {
+						addProfiledRound9StreamingSegment(t, session, uint64(index+1), segment)
 					}
-					return
-				}
-				assertRound9NeutralClassifierWindowIncomplete(t, stream)
-			})
+					if total == maxRoleClassifierSegments+1 && actor.wantScope == EnforcementScopeRequestLocalTool {
+						if session.coverage.State != CoverageComplete || !session.profiledPendingToolIncomplete {
+							t.Fatalf("terminal-tool overflow was not deferred: coverage=%+v deferred=%t",
+								session.coverage, session.profiledPendingToolIncomplete)
+						}
+					}
+					stream := session.Finish()
+					if total == maxRoleClassifierSegments ||
+						actor.wantScope == EnforcementScopeCurrentUser ||
+						actor.wantScope == EnforcementScopeRequestLocalTool {
+						if stream.Coverage.State != CoverageComplete || stream.Action != ActionBlock ||
+							stream.Category != batch.Category || stream.BlockEligibility == nil ||
+							stream.BlockEligibility.EnforcementScope != actor.wantScope {
+							t.Fatalf("complete batch/stream mismatch: batch=%+v stream=%+v", batch, stream)
+						}
+						if total == maxRoleClassifierSegments+1 &&
+							actor.wantScope == EnforcementScopeRequestLocalTool &&
+							!resultHasCompleteBlockForProfiledField(
+								stream, DefaultThresholds(), actor.wantScope, actor.segment.ScopeID, 1,
+							) {
+							t.Fatalf("terminal-tool overflow was not resolved by its exact evicted field: %+v", stream)
+						}
+						return
+					}
+					assertRound9NeutralClassifierWindowIncomplete(t, stream)
+				})
+			}
 		}
 	}
 }

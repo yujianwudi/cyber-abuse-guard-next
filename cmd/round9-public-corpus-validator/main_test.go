@@ -268,8 +268,27 @@ func TestRound9PublicCorpusV13ClassifierScenarios(t *testing.T) {
 	}
 	if metrics.DirectBlocked != 12 || metrics.DirectAllowed != 12 || metrics.QuotedBlocked != 0 ||
 		metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 4 || metrics.ToolBlocked != 4 ||
-		metrics.SerializedRouteExecutions != 120 {
+		metrics.DefensiveSystemBlocked != 0 || metrics.CancelledToolBlocked != 0 ||
+		metrics.SemanticBlocked != expectedSemanticBlocks || metrics.CompleteAllowed != expectedCompleteAllows ||
+		metrics.SerializedRouteExecutions != 120 || metrics.RawOracleRouteExecutions != 48 || !metrics.SemanticMetricsRun {
 		t.Fatalf("unexpected classifier metrics: %+v", metrics)
+	}
+}
+
+func TestRound10InertContextGroundTruthIsCompleteAndPerPayload(t *testing.T) {
+	t.Parallel()
+	manifest := loadPublicManifest(t)
+	for _, payload := range manifest.Payloads {
+		for context, groundTruth := range map[string]string{
+			"quoted_or_analytical": payload.QuotedOrAnalyticalGroundTruth,
+			"historical_assistant": payload.HistoricalAssistantGroundTruth,
+			"system_context":       payload.SystemContextGroundTruth,
+			"tool_result":          payload.ToolResultGroundTruth,
+		} {
+			if groundTruth != groundTruthAllowOrAudit {
+				t.Fatalf("payload %q context=%s ground truth=%q want %q", payload.ID, context, groundTruth, groundTruthAllowOrAudit)
+			}
+		}
 	}
 }
 
@@ -369,6 +388,96 @@ func TestActiveRequestCarrierGroundTruthHasNoCandidateResultInput(t *testing.T) 
 	}
 }
 
+func TestQuotedAnalyticalContentUsesFenceLongerThanNestedPayloadRuns(t *testing.T) {
+	t.Parallel()
+	payload := strings.Repeat("A", 9*1024) + "\n```go\none()\n```\ntext\n```json\n{}\n```\n``````"
+	content := quotedAnalyticalContent(payload)
+	lines := strings.Split(content, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("quoted fixture lines=%d", len(lines))
+	}
+	opener := lines[1]
+	if !strings.HasSuffix(opener, "text") {
+		t.Fatalf("quoted fixture opener=%q", opener)
+	}
+	fence := strings.TrimSuffix(opener, "text")
+	if fence != strings.Repeat("`", 7) || lines[len(lines)-1] != fence {
+		t.Fatalf("unsafe quoted fixture fence: opener=%q closer=%q", opener, lines[len(lines)-1])
+	}
+	wrappedPayload := strings.Join(lines[2:len(lines)-1], "\n")
+	if wrappedPayload != payload || len(wrappedPayload) <= 9*1024 || strings.Count(wrappedPayload, "```go") < 1 || strings.Count(wrappedPayload, "```json") < 1 {
+		t.Fatal("quoted fixture did not preserve the nested-fence 9 KiB payload exactly")
+	}
+}
+
+func TestRound10GroundTruthRejectsIncompleteClassifierCoverage(t *testing.T) {
+	t.Parallel()
+	testCases := []struct {
+		name   string
+		result classifier.Result
+	}{
+		{
+			name: "allow with unavailable coverage",
+			result: classifier.Result{
+				Action: classifier.ActionAllow,
+				Coverage: classifier.Coverage{
+					State:  classifier.CoverageUnavailable,
+					Reason: classifier.CoverageReasonClassifierWindow,
+				},
+			},
+		},
+		{
+			name: "allow with truncation",
+			result: classifier.Result{
+				Action:    classifier.ActionAllow,
+				Coverage:  classifier.Coverage{State: classifier.CoverageComplete},
+				Truncated: true,
+			},
+		},
+	}
+	for _, testCase := range testCases {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			blocked, err := enforceGroundTruth("coverage-mutation", "quoted_or_analytical", groundTruthAllowOrAudit, testCase.result)
+			if err == nil || blocked || !strings.Contains(err.Error(), "incomplete classifier coverage") {
+				t.Fatalf("incomplete allow accepted: blocked=%v err=%v result=%+v", blocked, err, testCase.result)
+			}
+			if isCompleteAllowedResult(testCase.result) {
+				t.Fatal("incomplete allow was counted as complete")
+			}
+		})
+	}
+
+	complete := classifier.Result{
+		Action:   classifier.ActionAllow,
+		Coverage: classifier.Coverage{State: classifier.CoverageComplete},
+	}
+	if blocked, err := enforceGroundTruth("coverage-control", "quoted_or_analytical", groundTruthAllowOrAudit, complete); err != nil || blocked || !isCompleteAllowedResult(complete) {
+		t.Fatalf("complete allow control rejected: blocked=%v err=%v result=%+v", blocked, err, complete)
+	}
+}
+
+func TestRound10ClassifyFalseReportsSemanticMetricsNotRun(t *testing.T) {
+	t.Parallel()
+	metrics, err := validatePublicCorpus(publicCorpusRepositoryRoot(t), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.SemanticMetricsRun {
+		t.Fatalf("classify=false marked semantic metrics as run: %+v", metrics)
+	}
+	report := formatValidationReport(metrics)
+	if !strings.Contains(report, "semantic_status=NOT_RUN") ||
+		!strings.Contains(report, "semantic_block=NOT_RUN") ||
+		!strings.Contains(report, "complete_allow=NOT_RUN") ||
+		strings.Contains(report, "semantic_status=PASS") {
+		t.Fatalf("classify=false semantic status=%q", report)
+	}
+	if strings.Contains(report, "direct_block=") || strings.Contains(report, "complete_allow=0") {
+		t.Fatalf("classify=false reported zero-valued semantic metrics as results: %q", report)
+	}
+}
+
 func TestRound9PublicCorpusV13PromptLikeDefensiveScenarios(t *testing.T) {
 	root := publicCorpusRepositoryRoot(t)
 	manifest := loadPublicManifest(t)
@@ -399,7 +508,10 @@ func TestRound9PublicCorpusV13PromptLikeDefensiveScenarios(t *testing.T) {
 		t.Fatal(err)
 	}
 	if metrics.DirectAllowed != expectedDefensivePayloads || metrics.DirectBlocked != 0 ||
-		metrics.QuotedBlocked != 0 || metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 0 || metrics.ToolBlocked != 0 {
+		metrics.QuotedBlocked != 0 || metrics.HistoricalBlocked != 0 || metrics.SystemBlocked != 0 || metrics.ToolBlocked != 0 ||
+		metrics.DefensiveSystemBlocked != 0 || metrics.CancelledToolBlocked != 0 || metrics.SemanticBlocked != 0 ||
+		metrics.CompleteAllowed != expectedDefensivePayloads*expectedContextsPerPayload ||
+		metrics.RawOracleRouteExecutions != expectedDefensivePayloads*2 || !metrics.SemanticMetricsRun {
 		t.Fatalf("unexpected prompt-like defensive metrics: %+v", metrics)
 	}
 }
@@ -569,6 +681,7 @@ func TestRound9PublicCorpusGroundTruthMutationRejected(t *testing.T) {
 	blocked := classifier.Result{
 		Action:           classifier.ActionBlock,
 		BlockEligibility: &classifier.CandidateBlockEligibility{Eligible: true},
+		Coverage:         classifier.Coverage{State: classifier.CoverageComplete},
 	}
 	if _, err := enforceGroundTruth("mutation", "direct_current_user", groundTruthAllowOrAudit, blocked); err == nil {
 		t.Fatal("allow_or_audit ground truth did not reject an observed block")

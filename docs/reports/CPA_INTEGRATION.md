@@ -1,8 +1,8 @@
 # CPA v7.2.109 schema-2 integration contract and frozen v7.2.104/v7.2.103/v7.2.102 validation
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 ## Active compatibility target
@@ -41,8 +41,8 @@ not pass the safety gate: the isolated audit returned `FAIL / BLOCKED` with
 cases, and 2 complete benign false positives.
 
 The current remediation source identifies as
-`classifier-policy-v9` /
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
+`classifier-policy-v10` /
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
 No commit-bound CI or second-machine retest is available for that remediation.
 The active CPA integration and release state therefore remains
 `BLOCKED`; the engineering PASS for `150c25e6` cannot be relabeled as a safety,

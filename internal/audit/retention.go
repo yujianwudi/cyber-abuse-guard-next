@@ -22,6 +22,9 @@ func (s *Store) cleanup(ctx context.Context) error {
 	if s.db == nil {
 		return ErrUnavailable
 	}
+	if err := s.checkStorageAccess(); err != nil {
+		return err
+	}
 	cutoff := s.cfg.Now().UTC().Add(-s.cfg.Retention).UnixNano()
 	result, err := s.db.ExecContext(ctx, "DELETE FROM audit_events WHERE timestamp_ns < ?", cutoff)
 	if err != nil {
@@ -112,7 +115,7 @@ func (s *Store) cleanup(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum"); err != nil {
 		return fmt.Errorf("audit: incremental vacuum: %w", err)
 	}
-	if err := secureSQLiteFiles(s.cfg.Path); err != nil {
+	if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
 		return err
 	}
 	return nil

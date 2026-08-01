@@ -36,7 +36,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         self.so.write_bytes(b"round9-so")
         self.policy = self.root / "policy_identity.go"
         self.policy.write_text(
-            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v9"\n'
+            'package classifier\n\nconst ClassifierPolicyVersion = "classifier-policy-v10"\n'
             f'const ClassifierPolicySHA256 = "{H64}"\n',
             encoding="utf-8",
         )
@@ -105,7 +105,7 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         return {
             "commit": H40,
             "tree": TREE,
-            "policy_version": "classifier-policy-v9",
+            "policy_version": "classifier-policy-v10",
             "policy_sha256": H64,
             "ruleset": "1.0.10",
         }
@@ -562,6 +562,16 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         value["candidate"]["policy_sha256"] = "f" * 64
         self.rewrite(self.malicious, value)
         with self.assertRaisesRegex(contract.ContractError, "candidate identity"):
+            contract.assemble(self.assemble_args())
+
+    def test_candidate_policy_version_lookalike_is_rejected(self):
+        self.policy.write_text(
+            'package classifier\n\n'
+            'const ClassifierPolicyVersion = "classifier-policy-v10-lookalike"\n'
+            f'const ClassifierPolicySHA256 = "{H64}"\n',
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(contract.ContractError, "exact classifier-policy-v10"):
             contract.assemble(self.assemble_args())
 
     def test_paired_v2_identity_is_rejected(self):

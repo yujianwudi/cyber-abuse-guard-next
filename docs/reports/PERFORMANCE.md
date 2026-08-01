@@ -1,24 +1,141 @@
-# Performance Report — Round 9 status and historical development evidence
+# Performance Report — Round 10 source status and historical development evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
-Last updated: 2026-07-29 (Asia/Shanghai)
+Last updated: 2026-08-01 (Asia/Shanghai)
 
-## Round 9 current status
+## Round 10 bounded Linux concurrency runner
 
-The final Round 9 classifier/source snapshot has not been frozen. The current
-source identity is `classifier-policy-v9` /
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`
+`make round10-performance` is the dedicated Round 10 wall-clock lane. It
+refuses any platform other than Linux amd64 with Go 1.26.4 and runs separately
+from unit, race, and fuzz steps. The runner uses only repository-owned public
+synthetic fixtures: ordinary traffic, a 32 KiB five-profile surrogate with a
+historical-tool activation, a 64 KiB Codex-all long surrogate with a
+historical-tool activation, and a compact direct public synthetic case. It
+never executes code or fixture/artifact content from an untrusted third-party
+repository, archive, installer, hook, or binary. The runner does execute the
+project's pinned Go dependency code, including SQLite during the separate
+`Enqueue` plus `Flush` phase.
+
+Each request-path matrix performs eight unmeasured warmups followed by 128
+fixed requests at concurrency 1, 4, 8, and 16. Audit and subject control are
+disabled so the percentiles cover the in-process request-interceptor ABI,
+extraction, classifier, disposition, and response validation path without
+SQLite. A separate temporary SQLite phase performs 64 fixed `Enqueue` plus
+`Flush` operations at each concurrency and samples queue depth every 1 ms. The
+whole measured run has an eight-minute internal budget and the Go test has a
+ten-minute hard timeout. Its JSON contains every matrix's count, p50, p95,
+p99, max, throughput, failure count, panic count, fixture SHA-256, environment,
+gate status, and SQLite queue observations.
+
+Schema `round10-performance-v2` makes the CPU applicability contract explicit.
+It records `effective_parallelism=min(NumCPU,GOMAXPROCS)`, requires at least four
+effective CPUs, and evaluates the unchanged absolute latency limits only through
+the largest configured concurrency that does not exceed that value. Higher
+matrices still run and retain their raw percentiles and throughput, but are
+reported as saturation observations with
+`oversubscribed_saturation_profile=NOT_PROVIDED` until a fixture- and
+runner-profile-bound overload baseline exists. Missing, duplicate, or unexpected
+workload matrices fail closed. On a runner with at least 16 effective CPUs, all
+absolute gates still include c=16. This development runner remains explicitly
+non-equivalent to a production-capacity SLO.
+
+### Latest classifier-policy-v10 local source result
+
+The 2026-08-01 repository-local run is bound to
+`classifier-policy-v10` /
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
+It used Linux amd64 / Go 1.26.4 with 20 logical CPUs and `GOMAXPROCS=20`.
+The machine report records source commit
+`f036bcefaf179f777c25258723c88bd9cb7fb25a`, head tree
+`a0819500aa1f49ea2a585414b1dd64d7fb853727`, and an explicitly dirty
+worktree, so it is source-development evidence rather than exact-commit
+evidence. It wrote `/tmp/cyber-abuse-guard-round10-performance.json` and
+reported:
+
+| Repository-owned synthetic workload | Latest percentile | Absolute gate |
+|---|---:|---|
+| ordinary | p95 `2.589708 ms` | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `112.310521 ms` | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `49.690010 ms` | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `9.306253/9.847559 ms` | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` at c=16 | p95 `1.169612 ms`; sampled queue max `28/256` | failure/panic count 0: `PASS` |
+
+All 2,304 bounded operations completed with zero failures and zero recovered
+panics. These are
+repository-owned in-process surrogate measurements, not five live repositories,
+a CPA process, a container, a Provider path, or production traffic. The fixed
+workload p99 regression baseline, CPA Host/container measurements, and protected
+4,424-request external evaluation remain **`NOT_PROVIDED`**. Therefore the local
+absolute thresholds pass, but the release-level RT10-08 gate remains open.
+
+### Four-effective-CPU CI portability finding
+
+Exact-tree GitHub run `30662744941` used 4 CPUs and `GOMAXPROCS=4`. Its original
+v1 evaluator passed race and all earlier functional/performance steps, then
+failed only because it compared the over-subscribed five-repository c=16 raw
+p95 `572.674185 ms` with the unchanged `250 ms` absolute limit. The same
+workload measured c=1/4/8/16 p95
+`72.124095/108.795494/252.484294/572.674185 ms`; throughput plateaued at
+`37.569/37.832/37.983 req/s` from c=4 onward. This is evidence of 4-CPU
+saturation, not proof that the implementation regressed. The artifact still
+marks the fixture-bound p99 regression baseline as `NOT_PROVIDED`.
+
+The v2 contract was then reproduced under Linux amd64 / Go 1.26.4 on a dirty
+working tree with 20 visible CPUs and `GOMAXPROCS=4`. It applied the absolute
+gate through c=4, preserved raw c=8/c=16 results, and reported the saturation
+profile as `NOT_PROVIDED`; the measured source gates passed and the release gate
+remained `NOT_PROVIDED`. This is development validation only. Exact-commit
+GitHub revalidation is pending, and no 4-vCPU/c=16 production SLO is inferred.
+
+### Earlier Round 10 local development run
+
+The 2026-07-31 local WSL run used Linux amd64, Go 1.26.4, 20 logical CPUs,
+`GOMAXPROCS=20`, commit `08bbc34c18f70f203b15e2a364d857e2c1fed376`, and an
+explicitly recorded **dirty** Round 10 worktree. The command completed in
+17.506 seconds and wrote `/tmp/cag-round10-performance-final.json`. This run
+predates the current policy-v10 identity and is retained without rebinding.
+These values are development self-check evidence only:
+
+| Audit-disabled workload | p95 ms at c=1/4/8/16 | p99 ms at c=1/4/8/16 | throughput req/s at c=1/4/8/16 | Checked worst gate |
+|---|---|---|---|---|
+| ordinary | 0.576 / 0.863 / 0.960 / 1.906 | 0.982 / 1.141 / 1.434 / 2.797 | 2,223 / 7,737 / 13,078 / 16,569 | p95 1.906 ms <= 10 ms: `PASS` |
+| five-repository surrogate activation | 51.061 / 61.814 / 87.132 / 103.770 | 52.105 / 64.514 / 89.003 / 107.467 | 20.7 / 71.3 / 104.6 / 159.5 | p95 103.770 ms <= 250 ms: `PASS` |
+| Codex-all surrogate long | 21.371 / 23.812 / 35.351 / 44.714 | 22.261 / 25.256 / 40.888 / 47.687 | 51.9 / 183.8 / 283.2 / 397.1 | p95 44.714 ms <= 600 ms: `PASS` |
+| public synthetic | 4.464 / 4.717 / 6.453 / 8.908 | 5.048 / 5.095 / 6.935 / 10.485 | 266.7 / 941.3 / 1,626.0 / 2,215.3 | p95 8.908 ms <= 150 ms and p99 10.485 ms <= 300 ms: `PASS` |
+
+| SQLite `Enqueue` + `Flush` | c=1 | c=4 | c=8 | c=16 |
+|---|---:|---:|---:|---:|
+| p50 / p95 / p99 / max ms | 0.082 / 0.108 / 0.207 / 0.207 | 0.290 / 0.298 / 0.364 / 0.364 | 0.505 / 0.575 / 0.608 / 0.608 | 1.043 / 1.114 / 1.140 / 1.140 |
+| throughput operations/s | 11,998 | 14,700 | 16,024 | 15,110 |
+| queue depth before / sampled max / after (capacity 256) | 0 / 0 / 0 | 0 / 4 / 0 | 0 / 14 / 0 | 0 / 30 / 0 |
+
+All 2,304 measured operations completed with zero reported failures and zero
+recovered panics. The measured absolute gates are `PASS`. The fixed-workload
+p99 regression gate remains **`NOT_PROVIDED`** because there is no recorded
+Round 10 p99 baseline bound to these exact fixture hashes and source identity;
+historical p95 or microbenchmark values are not substituted. CPA Host/container
+restart, network/Provider latency, RSS, exact-clean-tree CI, and production
+capacity also remain **`NOT_PROVIDED`**. Race remains a separate CI gate and is
+not mixed into these wall-clock measurements. Therefore this result does not
+close the release-level RT10-08 gate.
+
+## Round 10 current status
+
+The Round 10 classifier/source snapshot is frozen pending an exact commit. The current
+source identity is `classifier-policy-v10` /
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.
-CPA v7.2.109 changes only the dependency lock inside the classifier identity;
-no classifier behavior or benchmark source changed. Exact-commit performance,
-CPA Host resource measurements, and the Tencent Cloud #2 matrix remain
-**PENDING** for
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`.
+The Round 10 working tree changes classifier behavior for bounded historical
+tool-result activation, direct-current-user compaction, and long-text coverage;
+the CPA v7.2.109 dependency pin is therefore not the only identity input.
+Exact-commit performance, CPA Host resource measurements, and the Tencent
+Cloud #2 matrix remain **PENDING** for
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`.
 The complete isolated benchmark results below remain frozen to the predecessor
 CPA v7.2.104 identity `e7a00b02...` and are not reattributed.
 
@@ -59,8 +176,9 @@ remained pending. No result here is final current commit/tree, CPA Host,
 reproducible Linux
 `.so`, release, or independent performance evidence.
 
-| Round 9 evidence | Current status |
+| Current and historical evidence | Status |
 |---|---|
+| Current policy-v10 repository-local performance | **LOCAL SOURCE/SURROGATE PASS; HOST AND EXTERNAL EVIDENCE NOT PROVIDED.** `make round6-benchmark` and the Go 1.26.4-only `make round10-performance` gate passed. The latest Round 10 runner recorded ordinary p95 `2.589708 ms`, five-repository surrogate p95 `112.310521 ms`, Codex-all surrogate p95 `49.690010 ms`, public p95/p99 `9.306253/9.847559 ms`, and SQLite c=16 p95 `1.169612 ms`, with zero failures and zero recovered panics. The JSON path is `/tmp/cyber-abuse-guard-round10-performance.json`. No CPA Host/container, fixed-workload p99 baseline, protected 4,424-request run, exact commit, or independent performance result is inferred. |
 | Frozen CPA v7.2.104 / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14` performance acceptance | **HISTORICAL LOCAL LINUX SOURCE-ONLY PASS.** Isolated `make round6-benchmark` passed under WSL Ubuntu 26.04 / Linux amd64 / Go 1.26.4. Classifier P50/P95/P99 were `328.852/412.093/558.688 us`; candidate-rich/near-budget were `35.943486/16.983200 ms/op`; long META was `113.071336 ms/op`; the 1,024-unique-prohibition boundary was `80.469498 ms/op`. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, below the external `<250 ms/op` target. No current v7.2.109, CPA Host, exact-commit CI, or independent performance PASS is inferred. |
 | Historical `150c25e6...` / `e0cbc975...` engineering and audit result | **ENGINEERING CI PASS / SECURITY AUDIT FAIL BLOCKED.** Exact-HEAD CI run `30353591705` passed, but the Tencent Cloud #2 isolated audit found 287 complete malicious fail-open cases, 36 malicious incomplete 403 cases, and 2 complete benign false positives. No performance acceptance is inferred for either that identity or the current tree. |
 | Historical `1a64639c...` / `f9529ada...` classifier gate | **HISTORICAL SOURCE-ONLY PASS.** The isolated classifier gate passed with P95 `1.5067 ms` against `<2 ms`, and the directive-overflow boundary reached at most `153.72 ms` against `<175 ms`. The complete `make round6-benchmark` recipe remained pending; this PASS is bound only to `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` and `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`. |
@@ -73,7 +191,7 @@ reproducible Linux
 | Pre-fix normalized multilingual long-frame signal pass (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS.** Three isolated Go 1.26.4 `BenchmarkStreamingDefensiveQuotedReviewFrameSignals` runs measured 0.355-0.363 ms/op at 16 KiB (45.15-46.21 MB/s, 810-813 B/op, 2 allocs/op) and 22.230-22.564 ms/op at 1 MiB (46.47-47.17 MB/s, 841-847 B/op, 2 allocs/op) for normalization plus one Aho-Corasick pass. The full profiled path measured 7.873-8.598 ms/op at 16 KiB (543,028-563,462 B/op, 108-110 allocs/op) and 250.230-259.302 ms/op at 1 MiB (16,886,254-17,299,688 B/op, 333-339 allocs/op). These are historical WSL source microbenchmarks, not current-identity or CPA Host evidence |
 | Pre-fix directive-clause overflow wall-clock boundary (`f37a25dd`) | **HISTORICAL DEVELOPMENT PASS WITH LIMITED CONCURRENT HEADROOM.** Three isolated Go 1.26.4 runs measured the 1,024-unique-prohibition case at 93.324-97.670 ms/op, and a later exact-commit isolated rerun measured 99.842 ms/op, 449,483 B/op, and 2,103 allocs/op against the `<175 ms/op` gate. The independent audit also observed 184-198 ms/op when unrelated package work ran concurrently. Keep the deterministic wall-clock gate isolated and treat Host concurrency, RSS, P95/P99, and near-8 MiB fields as a separate acceptance lane; no current-policy or CPA Host latency/throughput result is inferred |
 | Pre-fix diagnostic retained as history | The earlier working-tree snapshot recorded 14.948-16.418 s/op, approximately 397 MB/op, and about 1.077 million allocs/op. Its CPU profile (`6eb5ec36955f30df460a64111ebbeea5b9b9ed32e5394ee04b78e1b0f1834d69`) and memory profile (`fdc111fca573a32701fdee9abd206c680481f1247998a394578cbdd7fcd17eb6`) remain diagnostic chronology only and are not attributed to the current classifier identity |
-| Classifier latency and allocation acceptance on the current source identity | **REVALIDATION PENDING.** The isolated hard acceptance tests and complete benchmark recipe passed for predecessor `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`; they are not rebound to `6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`. Final commit/tree, exact candidate artifact, CPA Host, and independent binding are not provided. |
+| Classifier latency and allocation acceptance on the current source identity | **LOCAL HARD ACCEPTANCE AND BENCHMARK RECIPE PASS; FULL REVALIDATION PENDING.** Linux amd64 Go 1.26.4 passed the Round 5 long-prompt hard gate at 134.498 ms/op, 6,333,833 B/op, and 99 allocs/op after allocation preflight hardening, and the current Round 6 benchmark recipe passed. Final commit/tree, exact candidate artifact, CPA Host, fixed-workload p99 baseline, and independent binding are not provided. |
 | Standalone and CPA Host RSS on the exact candidate | `NOT_PROVIDED` |
 | CPA Host latency, throughput, concurrency, and first-byte behavior | `NOT_PROVIDED` |
 | Repository-local counted-Mock runtime performance | `NOT_PROVIDED` |

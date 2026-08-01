@@ -1,8 +1,8 @@
 # 独立审计交接说明 — CPA Cyber Abuse Guard v0.16 Round 9 候选
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 ## 2026-07-29 当前审计与修复门禁
@@ -25,8 +25,8 @@ CI `30353591705` 只证明上述精确 HEAD 的工程构建与测试门禁通过
 恶意 incomplete 样本返回 HTTP 403，以及 2 个 coverage complete 的正常样本误拦；
 因此该基线不得发布、部署或恢复生产 Balanced。
 
-当前候选修复的源码身份是 `classifier-policy-v9` /
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`，固定 CPA
+当前候选修复的源码身份是 `classifier-policy-v10` /
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`，固定 CPA
 `v7.2.109@928478e4b91533cec05a763bfac3edad9c3e76cf`。这是从冻结的 CPA
 v7.2.104 / `e7a00b02...` 身份进行的依赖重绑定，不是新的已审计候选：提交绑定 CI
 和二号机隔离重验均为 `PENDING`。在三类失败全部由绑定同一精确提交的新证据关闭前，
@@ -46,7 +46,7 @@ BLOCKED
 覆盖上方 2026-07-29 的隔离审计 `FAIL / BLOCKED`，也不能被重标为当前 PASS。
 
 当前源码版本为 `0.16`，开发目标为 Linux amd64 非 latest 预发行
-`v0.16-rc.4`、`classifier-policy-v9`、ruleset `1.0.10`、audit schema v6，
+`v0.16-rc.4`、`classifier-policy-v10`、ruleset `1.0.10`、audit schema v6，
 以及唯一 CPA 合同
 `v7.2.104@c9417c8ae9b16fabc0386ca35d36f13bf8b1d678`。受保护 Host 作业不做
 source checkout，只把候选与 Phase 1 的不可变身份交给预装的 root-owned broker；

@@ -104,6 +104,12 @@ type managementMigrationBackupStatus struct {
 	AutomaticRawCaptureDisableCleanup bool   `json:"automatic_raw_capture_disable_cleanup"`
 }
 
+type managementAuditStatus struct {
+	Enabled bool `json:"enabled"`
+	audit.Status
+	auditStorageVerification
+}
+
 type migrationBackupPurgeRequest struct {
 	DeleteConfirmation       string `json:"delete_confirmation"`
 	RollbackLossConfirmation string `json:"rollback_loss_confirmation"`
@@ -273,15 +279,36 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 	build := buildinfo.Current()
 	policyIdentity := classifier.CurrentPolicyIdentity()
 	loaded := state != nil && !p.shutdown.Load()
-	auditStatus := any(map[string]any{"enabled": false})
+	auditStorage := disabledAuditStorageVerification()
+	auditStatus := any(managementAuditStatus{
+		Enabled:                  false,
+		auditStorageVerification: auditStorage,
+	})
 	migrationBackups := audit.MigrationBackupStatus{}
 	auditDegraded := false
+	if state != nil && state.config.Audit.Enabled {
+		auditStorage = state.currentAuditStorageVerification()
+	}
 	if state != nil && state.config.Audit.Enabled && state.audit == nil {
 		auditDegraded = true
-		auditStatus = map[string]any{"enabled": true, "degraded": true, "healthy": false}
+		auditStatus = managementAuditStatus{
+			Enabled:                  true,
+			Status:                   audit.Status{Degraded: true},
+			auditStorageVerification: auditStorage,
+		}
 	} else if state != nil && state.audit != nil {
 		status := state.audit.Status()
 		migrationBackups = status.MigrationBackups
+		if auditStorage.blocksOperationalReadiness() {
+			// Storage verification is part of audit health, not merely a sibling
+			// deployment hint. This also makes live mount/permission/capacity
+			// failures visible as an audit degradation even while an already-open
+			// Store has not yet surfaced an SQLite error.
+			status.Degraded = true
+			if status.LastError == "" {
+				status.LastError = "audit persistence is unverified"
+			}
+		}
 		if status.LastError != "" {
 			// SQLite/OS diagnostics can contain operator-selected filesystem
 			// paths. Management exposes a stable readiness signal while detailed
@@ -292,10 +319,11 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 		// visible as cumulative forensic counters inside audit status, but a
 		// recovered historical event must not keep every future health check red.
 		auditDegraded = status.Degraded || status.Closed
-		auditStatus = struct {
-			Enabled bool `json:"enabled"`
-			audit.Status
-		}{Enabled: true, Status: status}
+		auditStatus = managementAuditStatus{
+			Enabled:                  true,
+			Status:                   status,
+			auditStorageVerification: auditStorage,
+		}
 	}
 	if state != nil && state.audit == nil {
 		p.migrationBackupMu.Lock()
@@ -329,6 +357,8 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 	persistenceStatus := subjectPersistenceStatus{}
 	persistenceDegraded := false
 	enforcementReady := false
+	operationalReady := false
+	readinessReasons := make([]string, 0, 4)
 	mode := config.Mode("")
 	rulesetVersion := ""
 	if state != nil {
@@ -346,6 +376,22 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 		persistenceDegraded = persistenceStatus.Degraded
 		enforcementReady = loaded && state.config.Enabled && state.config.Mode != config.ModeOff && state.classifier != nil && state.subject != nil && (!state.config.SubjectControl.Enabled || p.identifier != nil)
 	}
+	if !enforcementReady {
+		readinessReasons = append(readinessReasons, "enforcement_not_ready")
+	}
+	if auditDegraded {
+		readinessReasons = append(readinessReasons, "audit_runtime_degraded")
+	}
+	if auditStorage.blocksOperationalReadiness() {
+		readinessReasons = append(readinessReasons, "audit_persistence_unverified")
+	}
+	if persistenceDegraded {
+		readinessReasons = append(readinessReasons, "subject_persistence_degraded")
+	}
+	if state != nil && state.config.SubjectControl.Enabled && hmacDegraded {
+		readinessReasons = append(readinessReasons, "subject_identifier_unstable")
+	}
+	operationalReady = loaded && len(readinessReasons) == 0
 	body := map[string]any{
 		"id":                        ID,
 		"name":                      metadata.Name,
@@ -357,6 +403,8 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 		"loaded":                    loaded,
 		"initialized":               loaded,
 		"enforcement_ready":         enforcementReady,
+		"operational_ready":         operationalReady,
+		"readiness_reasons":         readinessReasons,
 		"mode":                      mode,
 		"ruleset_version":           rulesetVersion,
 		"build_ruleset_version":     build.RulesetVersion,
@@ -466,17 +514,19 @@ func (p *Plugin) managementPurgeMigrationBackups(state *runtimeState, raw []byte
 		result audit.MigrationBackupCleanupResult
 		err    error
 	)
-	if state.audit != nil {
-		result, err = state.audit.PurgeMigrationBackups(ctx)
+	if state.audit == nil {
+		err = audit.ErrUnavailable
 	} else {
-		databasePath, pathErr := auditDatabasePathLocation(state.config.Audit.DataDir)
-		if pathErr != nil {
-			err = pathErr
-		} else {
-			p.migrationBackupMu.Lock()
-			result, err = audit.PurgeMigrationBackupsAtPath(ctx, databasePath)
-			p.migrationBackupMu.Unlock()
-		}
+		result, err = state.audit.PurgeMigrationBackupsVerified(ctx, func(verifyCtx context.Context, _ string) error {
+			if err := verifyCtx.Err(); err != nil {
+				return err
+			}
+			storage := state.currentAuditStorageVerification()
+			if !storage.PersistenceVerified || storage.PersistenceReason != "" {
+				return audit.ErrStorageBlocked
+			}
+			return nil
+		})
 	}
 	if err != nil {
 		return managementError(http.StatusServiceUnavailable, "migration_backup_cleanup_failed", "migration backups could not be deleted")

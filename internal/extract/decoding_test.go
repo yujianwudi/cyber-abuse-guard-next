@@ -412,16 +412,84 @@ func TestDecodeDensePercentEscapesOverBudgetIsIncomplete(t *testing.T) {
 	}
 }
 
-func TestDecodeBinaryPercentEscapeIsIncomplete(t *testing.T) {
+func TestDecodeBinaryPercentEscapeUsesCanonicalSeparator(t *testing.T) {
 	t.Parallel()
 
-	text := "inspectable%00text%ZZ"
+	text := "inspectable%00text"
 	result, err := ExtractText([]byte(`{"input":`+mustJSONString(t, text)+`}`), Limits{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(result.Parts, []string{text}) || !result.Truncated {
-		t.Fatalf("result = %#v, want preserved source and incomplete binary decoded view", result)
+	if result.Truncated || !containsDecodedVariant(result.Parts, text) ||
+		!containsDecodedVariant(result.Parts, "inspectable text") ||
+		!containsDecodedVariant(result.Parts, "inspectabletext") {
+		t.Fatalf("result = %#v, want source plus separator and deletion interpretations", result)
+	}
+
+	ordinaryPercentSyntax := "de%00ploy if i%2 == 0 for %USER%"
+	variants, encoded, incomplete := decodeBoundedText(ordinaryPercentSyntax)
+	if !encoded || incomplete || !containsDecodedVariant(variants, "deploy if i%2 == 0 for %USER%") {
+		t.Fatalf("ordinary percent syntax variants=%#v encoded=%t incomplete=%t",
+			variants, encoded, incomplete)
+	}
+
+	malformed := "inspectable%00text%ZZ"
+	result, err = ExtractText([]byte(`{"input":`+mustJSONString(t, malformed)+`}`), Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Truncated || result.IsComplete() {
+		t.Fatalf("malformed percent result = %#v, want fail-closed inspection", result)
+	}
+}
+
+func TestDecodeAlternatingPercentAndHTMLConsumeSeparateLayers(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name       string
+		value      string
+		incomplete bool
+		forbidden  string
+	}{
+		{name: "two layers", value: "inspect%00&amp;", incomplete: false},
+		{name: "control recovery cannot clear third layer", value: "inspect%00&#37;26amp%3B", incomplete: true, forbidden: "inspect &"},
+		{name: "percent html percent", value: "%26%23%33%37%3B61", incomplete: true, forbidden: "a"},
+		{name: "html percent html", value: "&#37;26amp;", incomplete: true, forbidden: "&"},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			variants, encoded, incomplete := decodeBoundedText(testCase.value)
+			if !encoded || incomplete != testCase.incomplete {
+				t.Fatalf("decodeBoundedText(%q) = variants:%#v encoded:%t incomplete:%t",
+					testCase.value, variants, encoded, incomplete)
+			}
+			if testCase.incomplete {
+				for _, variant := range variants {
+					if variant == testCase.forbidden || testCase.forbidden == "inspect &" && variant == "inspect&" {
+						t.Fatalf("third codec layer was incorrectly covered: %#v", variants)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestDecodeDeduplicatesIdenticalFragmentsBeforeBudgets(t *testing.T) {
+	t.Parallel()
+
+	overlap := minInt(ClassificationOverlapReserveBytes, maxDecodedVariantBytes/2)
+	stride := maxDecodedVariantBytes - overlap
+	decoded := strings.Repeat("a ", (maxDecodedVariantBytes+stride)/2)
+	if len(decoded) != maxDecodedVariantBytes+stride {
+		t.Fatalf("decoded fixture bytes=%d", len(decoded))
+	}
+	value := "%61" + decoded[1:]
+	variants, encoded, incomplete := decodeBoundedTextExact(value)
+	if !encoded || incomplete || len(variants) != 1 || variants[0] != decoded[:maxDecodedVariantBytes] {
+		t.Fatalf("variants=%d bytes=%d encoded=%t incomplete=%t, want one unique charged fragment",
+			len(variants), decodedVariantBytes(variants), encoded, incomplete)
 	}
 }
 
@@ -648,10 +716,9 @@ func requirePercentDecodeBenchmarkResultValues(
 		t.Fatalf("fixture=%s encoded=false, want recognized percent syntax", fixture.name)
 	}
 	decodedBytes := (len(value)/len(fixture.unit))*fixture.decodedBytesPerUnit + len(value)%len(fixture.unit)
-	overBudget := decodedBytes > maxDecodedVariantBytes
 	wantVariants := 0
-	if fixture.decodedViewDiffers && !overBudget {
-		wantVariants = 1
+	if fixture.decodedViewDiffers {
+		wantVariants = len(splitDecodedView(strings.Repeat("x", decodedBytes)))
 	}
 	if len(variants) != wantVariants {
 		t.Fatalf(
@@ -659,17 +726,16 @@ func requirePercentDecodeBenchmarkResultValues(
 			fixture.name, len(value), len(variants), wantVariants,
 		)
 	}
-	if fixture.decodedViewDiffers && incomplete != overBudget {
-		t.Fatalf("fixture=%s bytes=%d incomplete=%v, want %v", fixture.name, len(value), incomplete, overBudget)
+	if fixture.decodedViewDiffers && incomplete {
+		t.Fatalf("fixture=%s bytes=%d incomplete=true for source-bounded fragmented view", fixture.name, len(value))
 	}
 	if !fixture.decodedViewDiffers && incomplete {
 		t.Fatalf("fixture=%s bytes=%d incomplete=true for unchanged placeholder-only source", fixture.name, len(value))
 	}
-	if wantVariants == 1 && len(variants[0]) != decodedBytes {
-		t.Fatalf("fixture=%s decoded bytes=%d, want %d", fixture.name, len(variants[0]), decodedBytes)
-	}
-	if total := decodedVariantBytes(variants); total > maxDecodedVariantBytes {
-		t.Fatalf("fixture=%s decoded bytes=%d, limit=%d", fixture.name, total, maxDecodedVariantBytes)
+	for index, variant := range variants {
+		if len(variant) > maxDecodedVariantBytes {
+			t.Fatalf("fixture=%s variant=%d decoded bytes=%d, limit=%d", fixture.name, index, len(variant), maxDecodedVariantBytes)
+		}
 	}
 }
 

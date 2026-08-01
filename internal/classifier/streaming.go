@@ -3,6 +3,7 @@ package classifier
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -94,10 +95,58 @@ func (s *ScanSession) deferClassifierIncomplete(result Result) bool {
 	if !classifierIncompleteCoverageReason(reason) {
 		return false
 	}
+	s.rememberPendingClassifierIncomplete(reason)
+	return true
+}
+
+func (s *ScanSession) rememberPendingClassifierIncomplete(reason CoverageReason) {
+	if s == nil || reason == CoverageReasonNone {
+		return
+	}
 	if s.pendingClassifierIncomplete == CoverageReasonNone {
 		s.pendingClassifierIncomplete = reason
 	}
-	return true
+	s.pendingClassifierIncompleteCorrelatable = false
+	s.pendingClassifierIncompleteScope = EnforcementScopeNone
+	s.pendingClassifierIncompleteScopeID = 0
+	s.pendingClassifierIncompleteFieldID = 0
+	s.pendingClassifierIncompleteFieldSet = false
+}
+
+func (s *ScanSession) rememberFieldScopedPendingClassifierIncomplete(
+	reason CoverageReason,
+	scope EnforcementScope,
+	scopeID uint64,
+	fieldID int,
+) {
+	if s == nil || reason == CoverageReasonNone {
+		return
+	}
+	if scope == EnforcementScopeNone || scopeID == 0 || fieldID < 0 {
+		s.rememberPendingClassifierIncomplete(reason)
+		return
+	}
+	if s.pendingClassifierIncomplete == CoverageReasonNone {
+		s.pendingClassifierIncomplete = reason
+		s.pendingClassifierIncompleteScope = scope
+		s.pendingClassifierIncompleteScopeID = scopeID
+		s.pendingClassifierIncompleteFieldID = fieldID
+		s.pendingClassifierIncompleteFieldSet = true
+		s.pendingClassifierIncompleteCorrelatable = true
+		return
+	}
+	if s.pendingClassifierIncomplete != reason ||
+		!s.pendingClassifierIncompleteCorrelatable ||
+		s.pendingClassifierIncompleteScope != scope ||
+		s.pendingClassifierIncompleteScopeID != scopeID ||
+		!s.pendingClassifierIncompleteFieldSet ||
+		s.pendingClassifierIncompleteFieldID != fieldID {
+		s.pendingClassifierIncompleteCorrelatable = false
+		s.pendingClassifierIncompleteScope = EnforcementScopeNone
+		s.pendingClassifierIncompleteScopeID = 0
+		s.pendingClassifierIncompleteFieldID = 0
+		s.pendingClassifierIncompleteFieldSet = false
+	}
 }
 
 func (s *ScanSession) deferClassifierIncompleteForSegment(
@@ -226,6 +275,9 @@ type streamingField struct {
 	head                            []byte
 	roleSummary                     []byte
 	roleComplete                    bool
+	directCompactionProof           []byte
+	directCompactionProofComplete   bool
+	directCompactionPendingSpace    int64
 	compactCarry                    []rune
 	pendingBoundary                 bool
 	safetyContext                   bool
@@ -245,6 +297,8 @@ type streamingField struct {
 	quotedFollowUp                  bool
 	profiledReferentProofIncomplete bool
 	profiledDefensiveQuoteSignals   inertQuotedSafetyReviewFrameSignals
+	independentActivation           Result
+	hasIndependentActivation        bool
 	quotedReviewCandidate           bool
 	quotedReviewDelimiter           string
 	quotedReviewSearchCarry         []byte
@@ -282,7 +336,12 @@ type streamingFieldSummary struct {
 	hasText                         bool
 	profiledReferentPotential       bool
 	profiledReferentProofIncomplete bool
+	profiledOverflowNeutral         bool
+	profiledCarrierResult           Result
+	profiledCarrierProofComplete    bool
 	profiledDefensiveQuoteSignals   inertQuotedSafetyReviewFrameSignals
+	independentActivation           Result
+	hasIndependentActivation        bool
 }
 
 type profiledCurrentReferentScopeKey struct {
@@ -302,7 +361,10 @@ type profiledCurrentReferentUnit struct {
 	precedingOwnerEvicted bool
 	affirmativePotential  bool
 	proofIncomplete       bool
+	overflowNeutral       bool
+	carrierProofComplete  bool
 	defensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
+	independentActivation bool
 }
 
 type profiledOverflowIntentKind uint8
@@ -335,13 +397,17 @@ type profiledDefensiveQuoteOverflowRun struct {
 // what prevents a referent from jumping across a nearer benign carrier or an
 // unrelated directive/schema/result barrier.
 type profiledCurrentReferentScope struct {
-	key                       profiledCurrentReferentScopeKey
-	set                       bool
-	overflow                  bool
-	overflowReferentRisk      bool
-	overflowIntents           []profiledOverflowIntent
-	defensiveQuoteOverflowRun profiledDefensiveQuoteOverflowRun
-	units                     []profiledCurrentReferentUnit
+	key                                         profiledCurrentReferentScopeKey
+	set                                         bool
+	overflow                                    bool
+	overflowReferentRisk                        bool
+	overflowIntents                             []profiledOverflowIntent
+	independentActivation                       Result
+	hasIndependentActivation                    bool
+	independentActivationAt                     int
+	independentActivationCancellationIncomplete bool
+	defensiveQuoteOverflowRun                   profiledDefensiveQuoteOverflowRun
+	units                                       []profiledCurrentReferentUnit
 }
 
 // streamingFieldRiskFacts contains only bounded classifier signal bits and
@@ -573,83 +639,101 @@ type ScanSession struct {
 	limits     ScanLimits
 	overlap    int
 
-	coverage                    Coverage
-	active                      *streamingField
-	previous                    *streamingFieldSummary
-	best                        Result
-	hasBest                     bool
-	pendingClassifierIncomplete CoverageReason
+	coverage                                Coverage
+	active                                  *streamingField
+	previous                                *streamingFieldSummary
+	best                                    Result
+	hasBest                                 bool
+	pendingClassifierIncomplete             CoverageReason
+	pendingClassifierIncompleteScope        EnforcementScope
+	pendingClassifierIncompleteScopeID      uint64
+	pendingClassifierIncompleteFieldID      int
+	pendingClassifierIncompleteFieldSet     bool
+	pendingClassifierIncompleteCorrelatable bool
 
-	previousUser                   string
-	hasPreviousUser                bool
-	previousUserTrusted            bool
-	recentUsers                    []string
-	recentUsersTrusted             []bool
-	linkedMetaUsers                []string
-	linkedMetaUsersTrusted         []bool
-	mappedToolControls             []string
-	untrustedParts                 []string
-	untrustedRiskFacts             streamingFieldRiskFacts
-	hasUntrustedRisk               bool
-	untrustedRiskIncomplete        bool
-	untrustedRiskDirty             bool
-	untrustedControlDirty          bool
-	untrustedExactBlocked          bool
-	lastMetaUser                   string
-	pendingNonUserControl          string
-	lastUserControl                string
-	isolatedUserRun                []rune
-	isolatedUserRunTrusted         bool
-	previousUserRisk               streamingFieldRiskFacts
-	hasPreviousUserRisk            bool
-	previousUserComplete           bool
-	profiledPreviousUserRisk       streamingFieldRiskFacts
-	profiledPreviousUserRiskScope  profiledCurrentReferentScopeKey
-	profiledHasPreviousUserRisk    bool
-	profiledPreviousUserComplete   bool
-	previousQuotedReferent         Result
-	hasPreviousQuotedReferent      bool
-	previousQuotedReferentTrusted  bool
-	refusedHistoryState            refusedHistoryClosureState
-	refusedHistoryBestBefore       Result
-	refusedHistoryHadBestBefore    bool
-	profiledActiveTurnIndex        int
-	profiledMaxTurnIndex           int
-	profiledMaxConversationIndex   int
-	profiledSawCurrentTurn         bool
-	profiledGroupKey               profiledSegmentGroupKey
-	profiledGroupSet               bool
-	profiledGroupPhysicalOrdinal   int
-	profiledGroupParts             []string
-	profiledGroupRefs              []profiledSegmentRef
-	profiledGroupRisk              []bool
-	profiledGroupComplete          []bool
-	profiledGroupProofTruncated    bool
-	profiledGroupActiveDirective   bool
-	profiledGroupStructuredTool    bool
-	profiledGroupAuthorityScope    EnforcementScope
-	profiledGroupAuthorityConv     int
-	profiledPendingSystemCarrier   Result
-	profiledPendingSystemHasResult bool
-	profiledHistoricalKey          profiledSegmentGroupKey
-	profiledHistoricalSet          bool
-	profiledHistoricalResult       Result
-	profiledHistoricalHasResult    bool
-	profiledHistoricalRefCount     int
-	profiledCurrentReferents       []profiledCurrentReferentScope
-	profiledCurrentUnitOrdinal     int
-	profiledLastCurrentUnit        profiledCurrentReferentUnit
-	profiledLastCurrentUnitSet     bool
-	profiledPendingToolResult      Result
-	profiledPendingToolHasResult   bool
-	profiledPendingToolTurnIndex   int
-	profiledPendingToolConvIndex   int
-	profiledPendingToolScope       EnforcementScope
-	profiledPendingToolIncomplete  bool
-	profiledPendingIncompleteTurn  int
-	profiledPendingIncompleteConv  int
-	profiledRequest                bool
-	quotedOrInertSuppressed        bool
+	previousUser                       string
+	hasPreviousUser                    bool
+	previousUserTrusted                bool
+	recentUsers                        []string
+	recentUsersTrusted                 []bool
+	linkedMetaUsers                    []string
+	linkedMetaUsersTrusted             []bool
+	mappedToolControls                 []string
+	untrustedParts                     []string
+	untrustedRiskFacts                 streamingFieldRiskFacts
+	hasUntrustedRisk                   bool
+	untrustedRiskIncomplete            bool
+	untrustedRiskDirty                 bool
+	untrustedControlDirty              bool
+	untrustedExactBlocked              bool
+	lastMetaUser                       string
+	pendingNonUserControl              string
+	lastUserControl                    string
+	isolatedUserRun                    []rune
+	isolatedUserRunTrusted             bool
+	previousUserRisk                   streamingFieldRiskFacts
+	hasPreviousUserRisk                bool
+	previousUserComplete               bool
+	profiledPreviousUserRisk           streamingFieldRiskFacts
+	profiledPreviousUserRiskScope      profiledCurrentReferentScopeKey
+	profiledHasPreviousUserRisk        bool
+	profiledPreviousUserComplete       bool
+	previousQuotedReferent             Result
+	hasPreviousQuotedReferent          bool
+	previousQuotedReferentTrusted      bool
+	refusedHistoryState                refusedHistoryClosureState
+	refusedHistoryBestBefore           Result
+	refusedHistoryHadBestBefore        bool
+	profiledActiveTurnIndex            int
+	profiledMaxTurnIndex               int
+	profiledMaxConversationIndex       int
+	profiledSawCurrentTurn             bool
+	profiledGroupKey                   profiledSegmentGroupKey
+	profiledGroupSet                   bool
+	profiledGroupPhysicalOrdinal       int
+	profiledGroupParts                 []string
+	profiledGroupRefs                  []profiledSegmentRef
+	profiledGroupRisk                  []bool
+	profiledGroupComplete              []bool
+	profiledGroupProofTruncated        bool
+	profiledGroupActiveDirective       bool
+	profiledGroupStructuredTool        bool
+	profiledGroupAuthorityScope        EnforcementScope
+	profiledGroupAuthorityConv         int
+	profiledPendingSystemCarrier       Result
+	profiledPendingSystemHasResult     bool
+	profiledHistoricalKey              profiledSegmentGroupKey
+	profiledHistoricalSet              bool
+	profiledHistoricalResult           Result
+	profiledHistoricalHasResult        bool
+	profiledHistoricalRefCount         int
+	profiledCurrentReferents           []profiledCurrentReferentScope
+	profiledCurrentUnitOrdinal         int
+	profiledLastCurrentUnit            profiledCurrentReferentUnit
+	profiledLastCurrentUnitSet         bool
+	profiledPendingToolResult          Result
+	profiledPendingToolHasResult       bool
+	profiledPendingToolTurnIndex       int
+	profiledPendingToolConvIndex       int
+	profiledPendingToolScope           EnforcementScope
+	profiledPendingToolIncomplete      bool
+	profiledPendingIncompleteTurn      int
+	profiledPendingIncompleteConv      int
+	profiledPendingIncompleteScopeID   uint64
+	profiledPendingIncompleteFieldID   int
+	profiledPendingIncompleteFieldSet  bool
+	profiledPendingIncompleteAmbiguous bool
+	profiledReferableToolResult        Result
+	profiledReferableToolHasResult     bool
+	profiledReferableToolSeen          bool
+	profiledReferableToolAmbiguous     bool
+	profiledReferableToolTurnIndex     int
+	profiledReferableToolConvIndex     int
+	profiledReferableToolScopeID       uint64
+	profiledReferableToolRefCount      int
+	profiledRequest                    bool
+	quotedOrInertSuppressed            bool
+	seenFieldIDs                       map[uint64]struct{}
 
 	aborted  bool
 	finished bool
@@ -681,21 +765,23 @@ func (c *Classifier) newScanSession(mode Mode, thresholds Thresholds, policy Pol
 		return nil, fmt.Errorf("%w: compiled overlap %d must be smaller than WindowBytes %d", ErrInvalidScanLimits, overlap, normalized.WindowBytes)
 	}
 	return &ScanSession{
-		classifier:                    c,
-		mode:                          mode,
-		thresholds:                    validThresholdsOrDefault(thresholds),
-		policy:                        policy,
-		limits:                        normalized,
-		overlap:                       overlap,
-		coverage:                      Coverage{State: CoverageComplete},
-		profiledActiveTurnIndex:       -1,
-		profiledMaxTurnIndex:          -1,
-		profiledMaxConversationIndex:  -1,
-		profiledPendingToolTurnIndex:  -1,
-		profiledPendingToolConvIndex:  -1,
-		profiledPendingIncompleteTurn: -1,
-		profiledPendingIncompleteConv: -1,
-		profiledRequest:               profiledRequest,
+		classifier:                     c,
+		mode:                           mode,
+		thresholds:                     validThresholdsOrDefault(thresholds),
+		policy:                         policy,
+		limits:                         normalized,
+		overlap:                        overlap,
+		coverage:                       Coverage{State: CoverageComplete},
+		profiledActiveTurnIndex:        -1,
+		profiledMaxTurnIndex:           -1,
+		profiledMaxConversationIndex:   -1,
+		profiledPendingToolTurnIndex:   -1,
+		profiledPendingToolConvIndex:   -1,
+		profiledPendingIncompleteTurn:  -1,
+		profiledPendingIncompleteConv:  -1,
+		profiledReferableToolTurnIndex: -1,
+		profiledReferableToolConvIndex: -1,
+		profiledRequest:                profiledRequest,
 	}, nil
 }
 
@@ -708,6 +794,22 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 	if chunk.Start {
 		if s.active != nil {
 			return ErrInvalidSegmentOrder
+		}
+		if s.coverage.State == CoverageComplete {
+			if _, reused := s.seenFieldIDs[chunk.FieldID]; reused {
+				return ErrInvalidSegmentOrder
+			}
+			if len(s.seenFieldIDs) >= MaxScanChunks {
+				// FieldID participates in exact incomplete-proof correlation. Stop
+				// accepting new identities once the bounded uniqueness set is full;
+				// an incomplete request cannot later use any FieldID exemption.
+				s.setCoverage(CoverageBudgetExhausted, CoverageReasonClassificationLimit)
+			} else {
+				if s.seenFieldIDs == nil {
+					s.seenFieldIDs = make(map[uint64]struct{}, 16)
+				}
+				s.seenFieldIDs[chunk.FieldID] = struct{}{}
+			}
 		}
 		if !s.profiledRequest && segmentChunkDeclaresProfiledMetadata(chunk) {
 			s.profiledRequest = true
@@ -773,7 +875,15 @@ func (s *ScanSession) AddSegment(chunk extract.SegmentChunk) error {
 	if field == nil || field.id != chunk.FieldID {
 		return ErrInvalidSegmentOrder
 	}
+	if chunk.Start && s.profiledRequest {
+		segment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, ""))
+		field.directCompactionProofComplete =
+			(profiledStreamingCurrentTrustedCarrier(segment) ||
+				profiledStreamingCurrentReferentDirective(segment)) &&
+				s.profiledDirectCompactionScopeActive(segment)
+	}
 	if !s.aborted && s.coverage.State == CoverageComplete {
+		field.captureDirectCompactionProof(chunk.Text)
 		s.consume(field, chunk.Text, chunk.End)
 	}
 	if chunk.End {
@@ -823,10 +933,19 @@ func (s *ScanSession) Finish() Result {
 			s.profiledMaxConversationIndex, s.profiledMaxTurnIndex,
 		) {
 		// Tool-result authority is provisional while the request is streaming. A
-		// later conversation item makes this carrier historical and inert; only a
-		// result that is still terminal at Finish may turn lost cross-window/group
-		// proof into request-level incomplete inspection.
-		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		// later conversation item makes this carrier historical and inert. When it
+		// remains terminal, defer the exact-field proof check until the provisional
+		// tool candidate below has joined final ranking.
+		if s.profiledPendingIncompleteFieldSet && !s.profiledPendingIncompleteAmbiguous {
+			s.rememberFieldScopedPendingClassifierIncomplete(
+				CoverageReasonClassifierWindow,
+				EnforcementScopeRequestLocalTool,
+				s.profiledPendingIncompleteScopeID,
+				s.profiledPendingIncompleteFieldID,
+			)
+		} else {
+			s.rememberPendingClassifierIncomplete(CoverageReasonClassifierWindow)
+		}
 	}
 	if s.coverage.State == CoverageComplete {
 		s.flushIsolatedUserRun(nil)
@@ -850,14 +969,20 @@ func (s *ScanSession) Finish() Result {
 			}
 		}
 	}
+	pendingClassifierResolved := s.pendingClassifierIncomplete != CoverageReasonNone &&
+		s.pendingClassifierIncompleteCorrelatable &&
+		s.pendingClassifierIncompleteFieldSet && s.hasBest &&
+		resultHasCompleteBlockForProfiledField(
+			s.best, s.thresholds,
+			s.pendingClassifierIncompleteScope,
+			s.pendingClassifierIncompleteScopeID,
+			s.pendingClassifierIncompleteFieldID,
+		)
 	if s.coverage.State == CoverageComplete &&
-		s.pendingClassifierIncomplete != CoverageReasonNone &&
-		(!s.hasBest || !resultHasEligibleBlockingCandidate(s.best, s.thresholds)) {
-		// A classifier-local proof can be unresolved in one field while another
-		// field independently proves a complete eligible block. Batch aggregation
-		// preserves that winner, so streaming defers the local incomplete result
-		// until every bounded field has been inspected and applies it only when no
-		// independent blocking proof exists.
+		s.pendingClassifierIncomplete != CoverageReasonNone && !pendingClassifierResolved {
+		// A semantic winner cannot repair proof that was lost in another field or
+		// scope. Keep the incomplete disposition separate even when enforcing mode
+		// will ultimately deny the request for an independently observed reason.
 		s.setCoverage(CoverageUnavailable, s.pendingClassifierIncomplete)
 	}
 	result := s.best
@@ -1065,7 +1190,7 @@ func (s *ScanSession) finishField(field *streamingField) {
 			(aggregatePotential.meta.controlPlaneBlock || persistentControlProofUnavailable)
 		if ordinaryIncomplete || controlPlaneIncomplete {
 			if deferredRequestLocalTool {
-				s.rememberProfiledPendingToolIncomplete(fieldSegment)
+				s.rememberProfiledPendingToolIncomplete(fieldSegment, int(field.id))
 			} else {
 				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 				return
@@ -1105,10 +1230,14 @@ func (s *ScanSession) finishField(field *streamingField) {
 			candidate := field.best
 			if pendingTool {
 				candidate = s.prepareProfiledCandidate(candidate, refs, true)
-				s.rememberProfiledPendingToolCandidate(
-					candidate, segment.ConversationIndex, segment.TurnIndex,
-					enforcementScopeForProfiledGroup(refs),
-				)
+				if profiledHistoricalToolResultCarrier(segment) {
+					s.rememberProfiledReferableToolCandidate(candidate, segment, len(refs))
+				} else {
+					s.rememberProfiledPendingToolCandidate(
+						candidate, segment.ConversationIndex, segment.TurnIndex,
+						enforcementScopeForProfiledGroup(refs),
+					)
+				}
 			} else if profiledHistoricalReferentEligible(segment) {
 				s.classifier.annotateProfiledResult(&candidate, refs, false, s.policy, s.mode, s.thresholds)
 			} else {
@@ -1171,8 +1300,82 @@ func (s *ScanSession) finishField(field *streamingField) {
 		profiledReferentProofIncomplete: field.profiledReferentProofIncomplete,
 		profiledDefensiveQuoteSignals:   field.profiledDefensiveQuoteSignals,
 	}
+	if field.hasIndependentActivation {
+		summary.independentActivation = cloneProfiledReferentResult(field.independentActivation)
+		summary.hasIndependentActivation = true
+	}
+	if profiledField && profiledStreamingCurrentTrustedCarrier(fieldSegment) &&
+		field.totalBytes == int64(len(field.buffer)) && field.hasBest && !field.best.Truncated {
+		// The ordinary window classifier has already inspected this complete
+		// carrier. Preserve only its bounded Result so unit-window eviction can
+		// distinguish a benign carrier from unresolved malicious content without
+		// retaining or reclassifying the prompt bytes.
+		summary.profiledCarrierResult = cloneProfiledReferentResult(field.best)
+		summary.profiledCarrierProofComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		profiledStreamingCurrentReferentDirective(fieldSegment) &&
+		field.totalBytes == int64(len(field.buffer)) &&
+		profiledOverflowNeutralDirective(s.classifier, string(field.buffer)) {
+		// A full bounded field with no effective referent/direct-rule intent can
+		// be summarized as a content-free neutral owner for unit-window eviction.
+		// It remains incomplete for every other composition path.
+		summary.profiledOverflowNeutral = true
+	}
 	if summary.sampleComplete {
 		summary.sample = append([]byte(nil), field.roleSummary...)
+	}
+	if profiledField && !summary.sampleComplete &&
+		profiledStreamingCurrentReferentDirective(fieldSegment) &&
+		field.totalBytes <= maxMetaOverrideDirectControlWindowBytes &&
+		field.totalBytes == int64(len(field.buffer)) &&
+		s.profiledDirectCompactionApplication(string(field.buffer)) {
+		// Preserve only the exact bounded current-user compaction speech act that
+		// can own a following same-field fenced carrier. Ordinary long directives
+		// keep the 512-byte role summary and therefore retain the established
+		// proof-loss behavior.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		profiledStreamingCurrentTrustedCarrier(fieldSegment) &&
+		s.profiledDefensiveQuoteScopeActive(fieldSegment, field.totalBytes) &&
+		field.totalBytes <= maxInertQuotedReviewReferentBytes &&
+		field.totalBytes == int64(len(field.buffer)) {
+		// Provider extraction may split one quoted-review JSON string into a
+		// natural-language frame, a fenced carrier, and a trailing frame. Once a
+		// complete same-field prefix has proved the bounded defensive-review frame
+		// attempt, retain this one carrier so finalization can validate the whole
+		// wrapper exactly. Invalid or activating wrappers are still classified as
+		// current-user text; arbitrary fenced fields never enter this path.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		field.directCompactionProofComplete &&
+		len(field.directCompactionProof) > 0 &&
+		s.profiledDirectCompactionRunRetainable(
+			fieldSegment, int64(len(field.directCompactionProof)),
+		) {
+		// The complete logical piece exceeded the physical classifier window only
+		// because of trailing ASCII whitespace. Retain the exact non-padding prefix
+		// under the same 8 KiB direct-compaction proof cap. Internal bytes and field
+		// ownership stay unchanged, so a real cross-window semantic composition still
+		// fails closed instead of borrowing this narrow exception.
+		summary.sample = append([]byte(nil), field.directCompactionProof...)
+		summary.sampleComplete = true
+	}
+	if profiledField && !summary.sampleComplete &&
+		(profiledStreamingCurrentTrustedCarrier(fieldSegment) ||
+			profiledStreamingCurrentReferentDirective(fieldSegment)) &&
+		s.profiledDirectCompactionRunRetainable(fieldSegment, field.totalBytes) &&
+		field.totalBytes == int64(len(field.buffer)) {
+		// A preceding piece proved an exact direct-compaction application in this
+		// same logical text field. Preserve following carrier/directive pieces only
+		// while the complete run remains inside the reviewed 8 KiB proof bound.
+		// Arbitrary quoted/code fields retain the 512-byte summary contract.
+		summary.sample = append([]byte(nil), field.buffer...)
+		summary.sampleComplete = true
 	}
 	if profiledField && !summary.sampleComplete &&
 		profiledRequestLocalSystemCarrier(fieldSegment) &&
@@ -1496,7 +1699,8 @@ func (s *ScanSession) profiledStreamingPendingFallbackTool(segment extract.Segme
 func profiledStreamingDeferredToolCarrier(segment extract.Segment) bool {
 	return segment.ContentKind == extract.ContentKindToolCallArguments ||
 		segment.Provenance == extract.ProvenanceToolPayload ||
-		profiledRequestLocalToolResultCarrier(segment)
+		profiledRequestLocalToolResultCarrier(segment) ||
+		profiledHistoricalToolResultCarrier(segment)
 }
 
 func (s *ScanSession) profiledStreamingPendingTool(segment extract.Segment) bool {
@@ -1536,17 +1740,101 @@ func (s *ScanSession) rememberProfiledPendingToolCandidate(
 	}
 }
 
-func (s *ScanSession) rememberProfiledPendingToolIncomplete(segment extract.Segment) {
+// rememberProfiledReferableToolCandidate retains one bounded, content-free
+// classifier result for a uniquely associated non-terminal tool result. It is
+// never ranked directly: only an immediately following terminal trusted-user
+// affirmative anchor may activate it. A second tool scope in the same provider
+// item makes the generic "preceding content" relation ambiguous.
+func (s *ScanSession) rememberProfiledReferableToolCandidate(
+	candidate Result,
+	segment extract.Segment,
+	refCount int,
+) {
+	if s == nil || !profiledHistoricalToolResultCarrier(segment) {
+		return
+	}
+	// Batch classification records every non-terminal tool result as inert
+	// unless the terminal user supplies a complete activation proof. Preserve
+	// that explanation state even when multiple referable results make the
+	// relation ambiguous and no candidate is ranked.
+	s.quotedOrInertSuppressed = true
+	if !s.profiledReferableToolSeen {
+		s.profiledReferableToolResult = Result{}
+		s.profiledReferableToolHasResult = false
+		s.profiledReferableToolSeen = true
+		s.profiledReferableToolAmbiguous = false
+		s.profiledReferableToolConvIndex = segment.ConversationIndex
+		s.profiledReferableToolTurnIndex = segment.TurnIndex
+		s.profiledReferableToolScopeID = segment.ScopeID
+		s.profiledReferableToolRefCount = refCount
+	} else if segment.ConversationIndex != s.profiledReferableToolConvIndex ||
+		segment.TurnIndex != s.profiledReferableToolTurnIndex ||
+		segment.ScopeID != s.profiledReferableToolScopeID {
+		// The extractor marks every result in the one nearest completed
+		// transaction ReferableUnique. Distinct result coordinates are therefore
+		// multiple possible payloads for a generic current-user referent, not a
+		// reason to discard the earlier candidate and choose the last result.
+		s.profiledReferableToolAmbiguous = true
+		s.profiledReferableToolResult = Result{}
+		s.profiledReferableToolHasResult = false
+		if segment.ConversationIndex > s.profiledReferableToolConvIndex ||
+			segment.ConversationIndex == s.profiledReferableToolConvIndex &&
+				segment.TurnIndex > s.profiledReferableToolTurnIndex {
+			s.profiledReferableToolConvIndex = segment.ConversationIndex
+			s.profiledReferableToolTurnIndex = segment.TurnIndex
+			s.profiledReferableToolScopeID = segment.ScopeID
+		}
+		return
+	} else if refCount > s.profiledReferableToolRefCount {
+		s.profiledReferableToolRefCount = refCount
+	}
+	if s.profiledReferableToolAmbiguous || candidate.Truncated ||
+		candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete ||
+		candidate.Category == "" || candidate.FindingConfidence == FindingNone ||
+		!candidate.CandidateIdentityBlockingProofComplete() {
+		return
+	}
+	candidate = withRoleAwareFindingOrigin(
+		candidate, FindingOriginNonUserOrUntrusted, s.mode, s.thresholds,
+	)
+	s.profiledReferableToolResult = candidate
+	s.profiledReferableToolHasResult = true
+	if refCount > 0 {
+		s.profiledReferableToolRefCount = refCount
+	}
+}
+
+func (s *ScanSession) profiledReferableToolOwnsAnchor(anchor extract.Segment) bool {
+	return s != nil && s.profiledReferableToolSeen &&
+		profiledHistoricalToolActivationAnchor(anchor) &&
+		s.profiledReferableToolConvIndex+1 == anchor.ConversationIndex
+}
+
+func (s *ScanSession) rememberProfiledPendingToolIncomplete(segment extract.Segment, fieldID int) {
 	if s == nil {
 		return
 	}
-	if !s.profiledPendingToolIncomplete ||
+	newer := !s.profiledPendingToolIncomplete ||
 		segment.ConversationIndex > s.profiledPendingIncompleteConv ||
 		segment.ConversationIndex == s.profiledPendingIncompleteConv &&
-			segment.TurnIndex > s.profiledPendingIncompleteTurn {
+			segment.TurnIndex > s.profiledPendingIncompleteTurn
+	if newer {
 		s.profiledPendingToolIncomplete = true
 		s.profiledPendingIncompleteConv = segment.ConversationIndex
 		s.profiledPendingIncompleteTurn = segment.TurnIndex
+		s.profiledPendingIncompleteScopeID = segment.ScopeID
+		s.profiledPendingIncompleteFieldID = fieldID
+		s.profiledPendingIncompleteFieldSet = segment.ScopeID != 0 && fieldID >= 0
+		s.profiledPendingIncompleteAmbiguous = false
+		return
+	}
+	if segment.ConversationIndex == s.profiledPendingIncompleteConv &&
+		segment.TurnIndex == s.profiledPendingIncompleteTurn &&
+		(!s.profiledPendingIncompleteFieldSet || segment.ScopeID == 0 || fieldID < 0 ||
+			s.profiledPendingIncompleteScopeID != segment.ScopeID ||
+			s.profiledPendingIncompleteFieldID != fieldID) {
+		s.profiledPendingIncompleteFieldSet = false
+		s.profiledPendingIncompleteAmbiguous = true
 	}
 }
 
@@ -1758,6 +2046,32 @@ func (field *streamingField) captureRoleSummary(text []byte) {
 		return
 	}
 	field.roleSummary = append(field.roleSummary, text...)
+}
+
+func (field *streamingField) captureDirectCompactionProof(text []byte) {
+	if field == nil || !field.directCompactionProofComplete || len(text) == 0 {
+		return
+	}
+	for _, value := range text {
+		if profiledDirectCompactionASCIISpace(value) {
+			field.directCompactionPendingSpace++
+			continue
+		}
+		required := int64(len(field.directCompactionProof)) +
+			field.directCompactionPendingSpace + 1
+		if required > maxMetaOverrideDirectControlWindowBytes {
+			clear(field.directCompactionProof)
+			field.directCompactionProof = nil
+			field.directCompactionProofComplete = false
+			field.directCompactionPendingSpace = 0
+			return
+		}
+		for field.directCompactionPendingSpace > 0 {
+			field.directCompactionProof = append(field.directCompactionProof, ' ')
+			field.directCompactionPendingSpace--
+		}
+		field.directCompactionProof = append(field.directCompactionProof, value)
+	}
 }
 
 func streamingBytesContainQuote(text []byte) bool {
@@ -2121,21 +2435,33 @@ func (s *ScanSession) trimProfiledStreamingGroup(segment extract.Segment) bool {
 	// attack or open directive that disqualifies the retained closed-looking tail.
 	s.profiledGroupProofTruncated = true
 	evictedRisk := len(s.profiledGroupRisk) != 0 && s.profiledGroupRisk[0]
-	independentBlock := s.hasBest && resultHasEligibleBlockingCandidate(s.best, s.thresholds)
-	if evictedRisk && !independentBlock {
+	evictedFieldID := -1
+	if len(s.profiledGroupRefs) != 0 {
+		evictedFieldID = s.profiledGroupRefs[0].index
+	}
+	groupScopeID, groupScopeComplete := profiledSingleScopeID(s.profiledGroupRefs)
+	if evictedRisk {
 		switch s.profiledGroupAuthorityScope {
 		case EnforcementScopeRequestLocalTool:
 			// A same-group tool result is not known to be terminal until the
 			// complete request has arrived. Retain only its coordinates and defer
 			// the incomplete disposition to Finish.
-			s.rememberProfiledPendingToolIncomplete(segment)
+			evicted := s.profiledGroupRefs[0].segment
+			s.rememberProfiledPendingToolIncomplete(evicted, evictedFieldID)
 		case EnforcementScopeRequestLocalSystem:
-			// Only request-local non-user authority needs this additional
-			// overflow guard. Current-user and unknown groups continue through
-			// the established Round 8 overflow ledger, which preserves benign
-			// owner and cancellation proofs without false incomplete results.
-			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
-			return false
+			// Keep scanning so a later semantic winner can still be reported by
+			// diagnostics, but do not let an unrelated winner erase the proof loss.
+			// Finish converts this deferred state to classifier_window_incomplete.
+			if groupScopeComplete && evictedFieldID >= 0 {
+				s.rememberFieldScopedPendingClassifierIncomplete(
+					CoverageReasonClassifierWindow,
+					s.profiledGroupAuthorityScope,
+					groupScopeID,
+					evictedFieldID,
+				)
+			} else {
+				s.rememberPendingClassifierIncomplete(CoverageReasonClassifierWindow)
+			}
 		}
 	}
 	copy(s.profiledGroupParts, s.profiledGroupParts[len(s.profiledGroupParts)-maxRoleClassifierSegments:])
@@ -2151,6 +2477,60 @@ func (s *ScanSession) trimProfiledStreamingGroup(segment extract.Segment) bool {
 	clear(s.profiledGroupComplete[maxRoleClassifierSegments:])
 	s.profiledGroupComplete = s.profiledGroupComplete[:maxRoleClassifierSegments]
 	return true
+}
+
+func profiledSingleScopeID(refs []profiledSegmentRef) (uint64, bool) {
+	var scopeID uint64
+	for _, ref := range refs {
+		current := ref.segment.ScopeID
+		if current == 0 {
+			return 0, false
+		}
+		if scopeID == 0 {
+			scopeID = current
+			continue
+		}
+		if current != scopeID {
+			return 0, false
+		}
+	}
+	return scopeID, scopeID != 0
+}
+
+func resultHasCompleteBlockForProfiledScope(
+	result Result,
+	thresholds Thresholds,
+	scope EnforcementScope,
+	scopeID uint64,
+) bool {
+	if scope == EnforcementScopeNone || scopeID == 0 ||
+		!resultHasEligibleMaliciousWinner(result, thresholds) ||
+		result.BlockEligibility == nil || !result.BlockEligibility.InspectionComplete ||
+		result.BlockEligibility.EnforcementScope != scope ||
+		!result.CandidateIdentityBlockingProofComplete() ||
+		len(result.candidateIdentity.ownershipScopeIDs) != 1 {
+		return false
+	}
+	return result.candidateIdentity.ownershipScopeIDs[0] == scopeID
+}
+
+func resultHasCompleteBlockForProfiledField(
+	result Result,
+	thresholds Thresholds,
+	scope EnforcementScope,
+	scopeID uint64,
+	fieldID int,
+) bool {
+	if fieldID < 0 ||
+		!resultHasCompleteBlockForProfiledScope(result, thresholds, scope, scopeID) {
+		return false
+	}
+	for _, occurrence := range result.EvidenceOccurrences {
+		if occurrence.FieldID == fieldID {
+			return true
+		}
+	}
+	return false
 }
 
 func profiledStreamingGenericGroupView(
@@ -2422,10 +2802,14 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		// candidate is provisional so the final explanation and occurrences can
 		// pass the same audit provenance contract as batch classification.
 		candidate = s.prepareProfiledCandidate(candidate, refs, true)
-		s.rememberProfiledPendingToolCandidate(
-			candidate, segment.ConversationIndex, segment.TurnIndex,
-			s.profiledGroupAuthorityScope,
-		)
+		if profiledHistoricalToolResultCarrier(segment) {
+			s.rememberProfiledReferableToolCandidate(candidate, segment, len(refs))
+		} else {
+			s.rememberProfiledPendingToolCandidate(
+				candidate, segment.ConversationIndex, segment.TurnIndex,
+				s.profiledGroupAuthorityScope,
+			)
+		}
 		if historicalReferent {
 			s.clearProfiledHistoricalCandidate()
 			s.rememberProfiledHistoricalCandidate(candidate, len(refs))
@@ -2588,16 +2972,27 @@ func (s *ScanSession) observeProfiledCurrentReferentScope(
 	current *streamingFieldSummary,
 	segment extract.Segment,
 ) {
-	if s == nil || current == nil || s.coverage.State != CoverageComplete || !segment.IsCurrentTurn {
+	if s == nil || current == nil || s.coverage.State != CoverageComplete {
 		return
 	}
-	unit, nonempty := profiledStreamingCurrentReferentUnit(
+	unit, nonempty := s.profiledStreamingCurrentReferentUnit(
 		current, segment, s.profiledCurrentUnitOrdinal,
 	)
 	if !nonempty {
 		return
 	}
 	s.profiledCurrentUnitOrdinal++
+	if !segment.IsCurrentTurn {
+		// Batch locality uses physical segment indexes, so every intervening
+		// non-current provider unit must terminate a current-scope run as well.
+		// Retain only a content-free barrier; raw historical text never enters the
+		// current referent state.
+		barrier := profiledCurrentReferentBarrier(unit)
+		for index := range s.profiledCurrentReferents {
+			s.appendProfiledCurrentReferentUnit(&s.profiledCurrentReferents[index], barrier)
+		}
+		return
+	}
 	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
 	if segment.ScopeID == 0 {
 		barrier := profiledCurrentReferentBarrier(unit)
@@ -2628,11 +3023,164 @@ func (s *ScanSession) observeProfiledCurrentReferentScope(
 	s.profiledLastCurrentUnitSet = true
 }
 
+func (s *ScanSession) profiledDirectCompactionApplication(text string) bool {
+	if s == nil || s.classifier == nil {
+		return false
+	}
+	return profiledDirectCompactionApplicationText(text)
+}
+
+func profiledDirectCompactionApplicationText(text string) bool {
+	if strings.TrimSpace(text) == "" {
+		return false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	return !views.truncated && metaOverrideDirectCompactionApplication(string(views.standardRunes))
+}
+
+func (s *ScanSession) profiledDirectCompactionScopeActive(segment extract.Segment) bool {
+	_, active := s.profiledDirectCompactionRunBytes(segment)
+	return active
+}
+
+func (s *ScanSession) profiledDirectCompactionRunRetainable(
+	segment extract.Segment,
+	incomingBytes int64,
+) bool {
+	if incomingBytes <= 0 || incomingBytes > maxMetaOverrideDirectControlWindowBytes {
+		return false
+	}
+	retainedBytes, active := s.profiledDirectCompactionRunBytes(segment)
+	return active && retainedBytes <= maxMetaOverrideDirectControlWindowBytes-int(incomingBytes)
+}
+
+func (s *ScanSession) profiledDirectCompactionRunBytes(segment extract.Segment) (int, bool) {
+	if s == nil || !segment.IsCurrentTurn || segment.ScopeID == 0 || segment.FieldPathHash == "" {
+		return 0, false
+	}
+	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
+	for index := range s.profiledCurrentReferents {
+		state := &s.profiledCurrentReferents[index]
+		if !state.set || state.key != key {
+			continue
+		}
+		// Activation belongs to one contiguous logical-field run, not merely to
+		// the surrounding turn/scope. A field/path change, a foreign-scope
+		// barrier, or eviction of the application unit closes the retention grant.
+		totalBytes := 0
+		application := false
+		leadingApplication := false
+		matched := false
+		for unitIndex := len(state.units) - 1; unitIndex >= 0; unitIndex-- {
+			unit := state.units[unitIndex]
+			if unit.barrier || !profiledSegmentsShareLogicalTextField(unit.ref.segment, segment) {
+				if !matched {
+					return 0, false
+				}
+				break
+			}
+			matched = true
+			if !unit.complete || len(unit.text) > maxMetaOverrideDirectControlWindowBytes-totalBytes {
+				return 0, false
+			}
+			totalBytes += len(unit.text)
+			isApplication := unit.directive && unit.complete &&
+				s.profiledDirectCompactionApplication(unit.text)
+			leadingApplication = isApplication
+			if isApplication {
+				application = true
+			}
+		}
+		return totalBytes, application && leadingApplication
+	}
+	return 0, false
+}
+
+func (s *ScanSession) profiledDefensiveQuoteScopeActive(segment extract.Segment, incomingBytes int64) bool {
+	if s == nil || s.classifier == nil || !profiledStreamingCurrentTrustedCarrier(segment) ||
+		!segment.IsCurrentTurn || segment.ScopeID == 0 || segment.FieldPathHash == "" || incomingBytes <= 0 {
+		return false
+	}
+	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	if incomingBytes > maxReconstructedBytes {
+		return false
+	}
+	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
+	for index := range s.profiledCurrentReferents {
+		state := &s.profiledCurrentReferents[index]
+		if !state.set || state.key != key || len(state.units) == 0 {
+			continue
+		}
+		end := len(state.units)
+		start := end
+		for start > 0 && profiledSegmentsShareLogicalTextField(
+			state.units[start-1].ref.segment, segment,
+		) {
+			start--
+		}
+		if start == end {
+			return false
+		}
+		totalBytes := int(incomingBytes)
+		frameBytes := 0
+		var frame strings.Builder
+		for unitIndex := start; unitIndex < end; unitIndex++ {
+			unit := state.units[unitIndex]
+			if !unit.complete || len(unit.text) > maxReconstructedBytes-totalBytes {
+				return false
+			}
+			totalBytes += len(unit.text)
+			if !unit.directive {
+				continue
+			}
+			if len(unit.text) > maxInertQuotedReviewFrameBytes-frameBytes {
+				return false
+			}
+			frameBytes += len(unit.text)
+			frame.WriteString(unit.text)
+		}
+		return frameBytes > 0 && s.profiledDefensiveQuoteRetentionFrame(frame.String())
+	}
+	return false
+}
+
+func (s *ScanSession) profiledDefensiveQuoteRetentionFrame(text string) bool {
+	if s == nil || s.classifier == nil || text == "" {
+		return false
+	}
+	signals, complete := s.classifier.rawInertQuotedSafetyReviewFrameSignals(text)
+	if !complete || !signals.attempted() {
+		return false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated {
+		return false
+	}
+	clauses, overflow := metaOverrideDirectiveClausesBoundedWithLimit(
+		string(views.standardRunes), maxInertQuotedReviewFrameClauses,
+	)
+	if overflow {
+		return false
+	}
+	for _, clause := range clauses {
+		if inertQuotedSafetyAnalysisGovernor(clause.text, true) {
+			return true
+		}
+	}
+	return false
+}
+
 func profiledCurrentReferentBarrier(unit profiledCurrentReferentUnit) profiledCurrentReferentUnit {
 	unit.result = Result{}
 	unit.hasResult = false
 	unit.carrier = false
 	unit.directive = false
+	unit.independentActivation = false
 	unit.affirmativePotential = false
 	unit.proofIncomplete = false
 	unit.defensiveQuoteSignals = 0
@@ -2682,6 +3230,10 @@ func (s *ScanSession) findOrAddProfiledCurrentReferentScope(
 		s.profiledCurrentReferents[evictIndex].units = nil
 		clear(s.profiledCurrentReferents[evictIndex].overflowIntents)
 		s.profiledCurrentReferents[evictIndex].overflowIntents = nil
+		s.profiledCurrentReferents[evictIndex].independentActivation = Result{}
+		s.profiledCurrentReferents[evictIndex].hasIndependentActivation = false
+		s.profiledCurrentReferents[evictIndex].independentActivationAt = 0
+		s.profiledCurrentReferents[evictIndex].independentActivationCancellationIncomplete = false
 		s.profiledCurrentReferents[evictIndex].defensiveQuoteOverflowRun =
 			profiledDefensiveQuoteOverflowRun{}
 		copy(s.profiledCurrentReferents[evictIndex:], s.profiledCurrentReferents[evictIndex+1:])
@@ -2875,6 +3427,9 @@ func (s *ScanSession) profiledCurrentReferentScopeNeedsRetention(
 	if s == nil || state == nil {
 		return false
 	}
+	if state.hasIndependentActivation || state.independentActivationCancellationIncomplete {
+		return true
+	}
 	if profiledCurrentReferentScopeHasPotential(s.classifier, state) {
 		return true
 	}
@@ -2939,7 +3494,7 @@ func profiledCurrentReferentScopeHasPotential(
 	return hasCarrier && (len(directParts) != 0 || hasIncompleteDirective)
 }
 
-func profiledStreamingCurrentReferentUnit(
+func (s *ScanSession) profiledStreamingCurrentReferentUnit(
 	current *streamingFieldSummary,
 	segment extract.Segment,
 	ordinal int,
@@ -2953,6 +3508,24 @@ func profiledStreamingCurrentReferentUnit(
 		// cancellation precedence, and local pair reconstruction.
 		ref: profiledSegmentRef{index: ordinal, segment: segment},
 	}
+	if current.hasIndependentActivation {
+		// The exact active-operation island has already passed quote,
+		// cancellation, ownership, and malicious-core proof. Retain only its
+		// bounded Result; the surrounding code carrier stays inert and no prompt
+		// bytes cross the field boundary.
+		unit.result = cloneProfiledReferentResult(current.independentActivation)
+		if s != nil && s.classifier != nil {
+			s.classifier.annotateProfiledResult(
+				&unit.result, []profiledSegmentRef{unit.ref}, false,
+				s.policy, s.mode, s.thresholds,
+			)
+		}
+		unit.hasResult = true
+		unit.complete = true
+		unit.independentActivation = true
+		unit.ref.segment.Text = ""
+		return unit, true
+	}
 	if current.hasInertQuotedReferent {
 		// The completed defensive wrapper has already been proven and its raw
 		// quotation bytes were deliberately cleared. Retain only the bounded,
@@ -2965,6 +3538,10 @@ func profiledStreamingCurrentReferentUnit(
 		unit.directive = false
 		unit.ref.segment.Text = ""
 		return unit, true
+	}
+	if current.profiledCarrierProofComplete {
+		unit.result = cloneProfiledReferentResult(current.profiledCarrierResult)
+		unit.carrierProofComplete = true
 	}
 	if current.sampleComplete {
 		unit.text = string(current.sample)
@@ -2989,6 +3566,7 @@ func profiledStreamingCurrentReferentUnit(
 	unit.directive = profiledStreamingCurrentReferentDirective(segment)
 	unit.affirmativePotential = current.profiledReferentPotential
 	unit.proofIncomplete = current.profiledReferentProofIncomplete
+	unit.overflowNeutral = current.profiledOverflowNeutral
 	unit.defensiveQuoteSignals = current.profiledDefensiveQuoteSignals
 	return unit, true
 }
@@ -3024,6 +3602,9 @@ func (s *ScanSession) profiledCurrentReferentCarrierCandidate(
 	batch *roleClassificationBatch,
 	carrier profiledCurrentReferentUnit,
 ) (Result, bool) {
+	if carrier.carrierProofComplete {
+		return cloneProfiledReferentResult(carrier.result), true
+	}
 	if carrier.hasResult {
 		return cloneProfiledReferentResult(carrier.result), true
 	}
@@ -3080,6 +3661,7 @@ func (s *ScanSession) appendProfiledCurrentReferentUnit(
 	if s == nil || state == nil {
 		return
 	}
+	s.observeProfiledIndependentActivation(state, unit)
 	if unit.barrier && len(state.units) != 0 {
 		last := state.units[len(state.units)-1]
 		if last.barrier {
@@ -3119,6 +3701,47 @@ func (s *ScanSession) appendProfiledCurrentReferentUnit(
 	}
 }
 
+func (s *ScanSession) observeProfiledIndependentActivation(
+	state *profiledCurrentReferentScope,
+	unit profiledCurrentReferentUnit,
+) {
+	if s == nil || state == nil {
+		return
+	}
+	if unit.independentActivation && unit.hasResult {
+		if !state.hasIndependentActivation ||
+			roleResultBetter(unit.result, state.independentActivation) {
+			state.independentActivation = cloneProfiledReferentResult(unit.result)
+		}
+		state.hasIndependentActivation = true
+		if unit.ref.index > state.independentActivationAt {
+			// Cancellation is ordered against the latest active field, while the
+			// retained result is the best candidate since the last cancellation.
+			// Conflating these axes makes a later weaker activation replace the
+			// deterministic batch winner.
+			state.independentActivationAt = unit.ref.index
+		}
+		state.independentActivationCancellationIncomplete = false
+		return
+	}
+	if !state.hasIndependentActivation || unit.ref.index <= state.independentActivationAt ||
+		!unit.directive {
+		return
+	}
+	if !unit.complete {
+		if unit.affirmativePotential || unit.proofIncomplete {
+			state.independentActivationCancellationIncomplete = true
+		}
+		return
+	}
+	if profiledEmbeddedMaterialCancellation(s.classifier, strings.ToLower(unit.text)) {
+		state.independentActivation = Result{}
+		state.hasIndependentActivation = false
+		state.independentActivationAt = 0
+		state.independentActivationCancellationIncomplete = false
+	}
+}
+
 func (s *ScanSession) recordProfiledOverflowPair(
 	state *profiledCurrentReferentScope,
 	first profiledCurrentReferentUnit,
@@ -3140,6 +3763,17 @@ func (s *ScanSession) recordProfiledOverflowPair(
 		return
 	}
 	if !carrier.complete || !anchor.complete {
+		if carrier.carrierProofComplete || carrier.complete {
+			candidate, ok := s.profiledCurrentReferentCarrierCandidate(
+				&roleClassificationBatch{session: s}, carrier,
+			)
+			if !ok || !profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+				return
+			}
+		}
+		if anchor.overflowNeutral {
+			return
+		}
 		if anchor.affirmativePotential || anchor.proofIncomplete ||
 			profiledStreamingUnitDirectRulePotential(s.classifier, anchor) {
 			state.overflowReferentRisk = true
@@ -3366,6 +4000,9 @@ func (s *ScanSession) flushProfiledCurrentReferentScope() {
 		for index := range states {
 			clear(states[index].overflowIntents)
 			states[index].overflowIntents = nil
+			states[index].independentActivation = Result{}
+			states[index].hasIndependentActivation = false
+			states[index].independentActivationCancellationIncomplete = false
 			states[index].defensiveQuoteOverflowRun = profiledDefensiveQuoteOverflowRun{}
 			clear(states[index].units)
 			states[index].units = nil
@@ -3387,6 +4024,13 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	if s.coverage.State != CoverageComplete || len(state.units) == 0 {
 		return
 	}
+	if state.hasIndependentActivation {
+		if state.independentActivationCancellationIncomplete {
+			s.rememberPendingClassifierIncomplete(CoverageReasonClassifierWindow)
+		} else {
+			s.consider(state.independentActivation, FindingOriginUserContent)
+		}
+	}
 	if state.overflow {
 		if s.profiledDefensiveQuoteOverflowHasRisk(state) {
 			state.overflowReferentRisk = true
@@ -3395,9 +4039,16 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 			s.applyProfiledOverflowCancellations(state, unit)
 		}
 		if state.overflowReferentRisk || len(state.overflowIntents) != 0 {
+			// Scope identity alone cannot reconstruct the evicted current-user
+			// carrier/anchor occurrence. Unlike the request-local system group, this
+			// state does not retain the exact lost FieldID, so no winner may close it.
 			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 			return
 		}
+	}
+	s.considerProfiledDirectCompactionApplications(state)
+	if s.coverage.State != CoverageComplete {
+		return
 	}
 	directiveParts := make([]string, 0, len(state.units))
 	directiveUnits := make([]int, 0, len(state.units))
@@ -3507,6 +4158,37 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 			continue
 		}
 
+		if s.profiledReferableToolOwnsAnchor(anchor.ref.segment) {
+			active, complete := s.classifier.profiledHistoricalToolActivationDirective(anchor.ref.segment.Text)
+			if !complete {
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return
+			}
+			if !active {
+				// The nearest referable tool result still owns the historical
+				// slot, but a bare implementation/continuation request cannot
+				// activate it or skip backward to older user history.
+				continue
+			}
+			if s.profiledReferableToolAmbiguous || !s.profiledReferableToolHasResult {
+				continue
+			}
+			referent := cloneProfiledReferentResult(s.profiledReferableToolResult)
+			ensureResultDecisionExplanation(&referent)
+			markResultRequestLocalReferentActivated(
+				&referent, EnforcementScopeRequestLocalTool, true, s.mode, s.thresholds,
+			)
+			bindResultCandidateReferentAnchor(&referent, anchor.ref, true, s.mode, s.thresholds)
+			markResultHistoricalToolActivationExplanation(
+				&referent, s.profiledReferableToolRefCount+1,
+			)
+			if !resultHasEligibleMaliciousWinner(referent, s.thresholds) {
+				continue
+			}
+			s.considerRanked(referent)
+			continue
+		}
+
 		if !s.profiledHistoricalHasResult {
 			continue
 		}
@@ -3525,6 +4207,93 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 				s.profiledHistoricalRefCount + 1
 		}
 		s.consider(referent, FindingOriginUserContent)
+	}
+}
+
+// considerProfiledDirectCompactionApplications restores batch/stream parity for
+// narrow current-user control-plane transactions. Provider extraction splits
+// a fenced block into separate content-kind units even though it remains one
+// JSON text field. When the preceding natural-language unit exactly proves that
+// the custom instructions below must be persisted into a model-visible compact
+// summary, classify the complete same-field units together under the existing
+// 8 KiB direct-control bound. Ordinary quoted review, historical content, and
+// unrelated code blocks stay on the inert carrier path. Every logical-field run
+// is inspected independently; a benign or weaker first run must not suppress a
+// later run or the ordinary defensive/self-contained/direct/referent pipelines.
+func (s *ScanSession) considerProfiledDirectCompactionApplications(
+	state *profiledCurrentReferentScope,
+) {
+	if s == nil || s.classifier == nil || state == nil {
+		return
+	}
+	for start := 0; start < len(state.units); {
+		first := state.units[start]
+		if first.barrier {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
+			end++
+		}
+		applicationIndex := -1
+		hasCarrierAfterApplication := false
+		complete := true
+		totalBytes := 0
+		parts := make([]string, 0, end-start)
+		refs := make([]profiledSegmentRef, 0, end-start)
+		for index := start; index < end; index++ {
+			unit := state.units[index]
+			complete = complete && unit.complete
+			if applicationIndex < 0 && unit.directive && unit.complete &&
+				s.profiledDirectCompactionApplication(unit.text) {
+				applicationIndex = index
+			} else if applicationIndex >= 0 && unit.carrier {
+				hasCarrierAfterApplication = true
+			}
+			if unit.text == "" {
+				continue
+			}
+			totalBytes += len(unit.text)
+			parts = append(parts, unit.text)
+			refs = append(refs, unit.ref)
+		}
+		if applicationIndex < 0 {
+			start = end
+			continue
+		}
+		if applicationIndex != start || !hasCarrierAfterApplication || !complete || totalBytes == 0 ||
+			totalBytes > maxMetaOverrideDirectControlWindowBytes {
+			// This proof loss is local to the one compaction run. Defer the
+			// request-level incomplete disposition until all independent fields and
+			// runs have had a chance to establish a complete eligible winner.
+			s.rememberPendingClassifierIncomplete(CoverageReasonClassifierWindow)
+			start = end
+			continue
+		}
+		// Each independent logical-field run spends its own classification unit.
+		// Reusing one charged batch across runs would under-account an adversarial
+		// scope containing many compaction applications.
+		batch := &roleClassificationBatch{session: s}
+		candidate, ok := batch.classify(parts, false)
+		if !ok {
+			if s.coverage.State != CoverageComplete {
+				return
+			}
+			start = end
+			continue
+		}
+		candidate = withRoleAwareFindingOrigin(
+			candidate, FindingOriginUserContent, s.mode, s.thresholds,
+		)
+		s.classifier.annotateProfiledResult(
+			&candidate, refs, false, s.policy, s.mode, s.thresholds,
+		)
+		if standaloneMetaControlResult(candidate) &&
+			resultHasEligibleBlockingCandidate(candidate, s.thresholds) {
+			s.consider(candidate, FindingOriginUserContent)
+		}
+		start = end
 	}
 }
 
@@ -4087,6 +4856,10 @@ func (s *ScanSession) clearProfiledCurrentReferentScope() {
 		state.set = false
 		state.overflow = false
 		state.overflowReferentRisk = false
+		state.independentActivation = Result{}
+		state.hasIndependentActivation = false
+		state.independentActivationAt = 0
+		state.independentActivationCancellationIncomplete = false
 		clear(state.overflowIntents)
 		state.overflowIntents = nil
 		clear(state.units)
@@ -4797,11 +5570,30 @@ func (s *ScanSession) clearRoleState() {
 	s.profiledPendingToolIncomplete = false
 	s.profiledPendingIncompleteConv = -1
 	s.profiledPendingIncompleteTurn = -1
+	s.profiledPendingIncompleteScopeID = 0
+	s.profiledPendingIncompleteFieldID = 0
+	s.profiledPendingIncompleteFieldSet = false
+	s.profiledPendingIncompleteAmbiguous = false
+	s.profiledReferableToolResult = Result{}
+	s.profiledReferableToolHasResult = false
+	s.profiledReferableToolSeen = false
+	s.profiledReferableToolAmbiguous = false
+	s.profiledReferableToolConvIndex = -1
+	s.profiledReferableToolTurnIndex = -1
+	s.profiledReferableToolScopeID = 0
+	s.profiledReferableToolRefCount = 0
 	s.profiledMaxTurnIndex = -1
 	s.profiledMaxConversationIndex = -1
 	s.profiledSawCurrentTurn = false
 	s.quotedOrInertSuppressed = false
 	s.pendingClassifierIncomplete = CoverageReasonNone
+	s.pendingClassifierIncompleteScope = EnforcementScopeNone
+	s.pendingClassifierIncompleteScopeID = 0
+	s.pendingClassifierIncompleteFieldID = 0
+	s.pendingClassifierIncompleteFieldSet = false
+	s.pendingClassifierIncompleteCorrelatable = false
+	clear(s.seenFieldIDs)
+	s.seenFieldIDs = nil
 	clear(s.isolatedUserRun)
 	s.isolatedUserRun = nil
 	s.isolatedUserRunTrusted = false
@@ -4896,6 +5688,13 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			return true
 		}
 		segment := s.profiledStreamingRequestSegment(streamingSegmentForField(field, windowText))
+		windowCancellation := !provisional && field.hasIndependentActivation &&
+			profiledTrustedCurrentUserNaturalLanguageDirective(segment) &&
+			profiledEmbeddedMaterialCancellation(s.classifier, strings.ToLower(physicalWindowText))
+		if windowCancellation {
+			field.independentActivation = Result{}
+			field.hasIndependentActivation = false
+		}
 		if !provisional && !s.profiledStreamingInspectable(segment) {
 			return true
 		}
@@ -4928,6 +5727,39 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			normalizedDefensiveQuoteSignalsOut,
 			normalizedQuotedFollowUpProofOut,
 		)
+		recoverySegment := segment
+		recoveryInputExact := compactPrefixBytes == 0
+		var recoveredActivation Result
+		hasRecoveredActivation := false
+		var recoveryProof profiledIndependentWindowRecoveryProof
+		recoveryIncomplete := false
+		longTrustedActivationCandidate := !provisional &&
+			profiledLongActivationRecoveryCandidate(
+				s.profiledStreamingRequestSegment(streamingSegmentForField(field, physicalWindowText)),
+			)
+		if longTrustedActivationCandidate && !recoveryInputExact {
+			// Compact carry is matcher state, not user-authored activation proof.
+			// Re-run the bounded recovery only against the exact physical window.
+			recoverySegment = s.profiledStreamingRequestSegment(
+				streamingSegmentForField(field, physicalWindowText),
+			)
+			recoveryInputExact = true
+		}
+		needsRecovery := longTrustedActivationCandidate || !resultIsEligibleBlockAction(result) &&
+			(!field.hasBest || !resultIsEligibleBlockAction(field.best)) &&
+			(!s.hasBest || !resultIsEligibleBlockAction(s.best))
+		if !provisional && recoveryInputExact && needsRecovery {
+			recovered, _, ok, complete :=
+				s.recoverProfiledIndependentWindowCandidateWithProof(recoverySegment, &recoveryProof)
+			if !complete {
+				recoveryIncomplete = true
+			}
+			if ok {
+				recoveredActivation = recovered
+				hasRecoveredActivation =
+					profiledTrustedCurrentUserNaturalLanguageDirective(recoverySegment)
+			}
+		}
 		if normalizedDefensiveQuoteSignalsOut != nil {
 			field.profiledDefensiveQuoteSignals |= normalizedDefensiveQuoteSignals
 			defensiveQuoteSignalsCaptured = true
@@ -4937,6 +5769,8 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			if !applyQuotedFollowUpProof(normalizedQuotedFollowUpProof) {
 				return false
 			}
+		}
+		if resultIsEligibleBlockAction(result) {
 		}
 		if result.Truncated {
 			if s.deferClassifierIncompleteForSegment(result, segment) {
@@ -5037,6 +5871,49 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 		rankedResult := withRoleAwareFindingOrigin(
 			result, findingOriginForSegment(segment), s.mode, s.thresholds,
 		)
+		if hasRecoveredActivation {
+			rankedActivation := withRoleAwareFindingOrigin(
+				recoveredActivation, findingOriginForSegment(recoverySegment), s.mode, s.thresholds,
+			)
+			if resultIsEligibleBlockAction(rankedActivation) &&
+				(!field.hasIndependentActivation ||
+					roleResultBetter(rankedActivation, field.independentActivation)) {
+				field.independentActivation = cloneProfiledReferentResult(rankedActivation)
+				field.hasIndependentActivation = true
+			}
+		}
+		ordinaryWinnerInInertRecovery := compactPrefixBytes == 0 &&
+			s.classifier.profiledOrdinaryWinnerWithinInertIndependentWindow(
+				rankedResult, s.thresholds, s.policy, physicalWindowText, recoveryProof,
+			)
+		if recoveryIncomplete &&
+			(!resultIsEligibleBlockAction(rankedResult) || ordinaryWinnerInInertRecovery) {
+			state, reason := recoveryProof.failureState, recoveryProof.failureReason
+			if state == CoverageComplete || reason == CoverageReasonNone {
+				state, reason = CoverageUnavailable, CoverageReasonClassifierWindow
+			}
+			s.setCoverage(state, reason)
+			return false
+		}
+		if ordinaryWinnerInInertRecovery {
+			// The cancellation parser located this winner wholly inside the exact
+			// bounded activation range that it made inert. No occurrence outside
+			// that range is discarded.
+			s.quotedOrInertSuppressed = true
+			return true
+		}
+		if hasRecoveredActivation {
+			if compactPrefixBytes == 0 &&
+				s.classifier.profiledOrdinaryWinnerWithinIndependentWindow(
+					rankedResult, s.thresholds, s.policy, physicalWindowText, recoveryProof,
+				) {
+				// Both candidates are the same bounded physical speech act. Keep the
+				// recovered copy provisional so a later exact cancellation may make
+				// that interval inert; any ordinary occurrence outside this interval
+				// continues through the normal ranking path below.
+				return true
+			}
+		}
 		if provisional {
 			field.safetyRiskFacts.mergeWindow(s.classifier, field.windowFacts, rankedResult)
 			if !field.hasSafetyBest || roleResultBetter(rankedResult, field.safetyBest) {
@@ -5072,6 +5949,761 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 		field.pendingBoundary = false
 	}
 	return true
+}
+
+const (
+	maxProfiledIndependentWindowBytes = 2 << 10
+	profiledIndependentWindowProbes   = 5
+)
+
+type profiledIndependentWindowRecoveryProof struct {
+	startByte     int
+	endByte       int
+	inertRanges   [profiledIndependentWindowProbes]profiledIndependentWindowRange
+	inertCount    int
+	cancelled     bool
+	failureState  CoverageState
+	failureReason CoverageReason
+}
+
+type profiledIndependentWindowRange struct {
+	startByte int
+	endByte   int
+}
+
+func (proof *profiledIndependentWindowRecoveryProof) fail(
+	state CoverageState,
+	reason CoverageReason,
+) {
+	if proof == nil || proof.failureReason != CoverageReasonNone {
+		return
+	}
+	proof.failureState = state
+	proof.failureReason = reason
+}
+
+func (proof *profiledIndependentWindowRecoveryProof) rememberInert(startByte, endByte int) {
+	if proof == nil || startByte < 0 || endByte <= startByte {
+		return
+	}
+	for index := 0; index < proof.inertCount; index++ {
+		if proof.inertRanges[index].startByte == startByte &&
+			proof.inertRanges[index].endByte == endByte {
+			return
+		}
+	}
+	if proof.inertCount == len(proof.inertRanges) {
+		return
+	}
+	proof.inertRanges[proof.inertCount] = profiledIndependentWindowRange{
+		startByte: startByte,
+		endByte:   endByte,
+	}
+	proof.inertCount++
+}
+
+// recoverProfiledIndependentWindowCandidate materializes a bounded, standalone
+// malicious speech act that would otherwise be diluted by hundreds of unrelated
+// clauses in the same physical classifier window. It operates only on the role-
+// scoped text selected by prepareStreamingRoleWindow, never on the raw window.
+// Each candidate must be one complete physical clause outside a structured quote
+// and after no soft analytical owner. The normal role/ownership pipeline still
+// decides whether a system or tool carrier is active. Every secondary classifier
+// call consumes the same MaxChunks budget as an ordinary window.
+func (s *ScanSession) recoverProfiledIndependentWindowCandidate(
+	segment extract.Segment,
+) (Result, classificationSignalFacts, bool, bool) {
+	var proof profiledIndependentWindowRecoveryProof
+	result, facts, recovered, complete :=
+		s.recoverProfiledIndependentWindowCandidateWithProof(segment, &proof)
+	if !complete && s != nil && s.coverage.State == CoverageComplete {
+		state, reason := proof.failureState, proof.failureReason
+		if state == CoverageComplete || reason == CoverageReasonNone {
+			state, reason = CoverageUnavailable, CoverageReasonClassifierWindow
+		}
+		s.setCoverage(state, reason)
+	}
+	return result, facts, recovered, complete
+}
+
+func (s *ScanSession) recoverProfiledIndependentWindowCandidateWithProof(
+	segment extract.Segment,
+	proof *profiledIndependentWindowRecoveryProof,
+) (Result, classificationSignalFacts, bool, bool) {
+	text := segment.Text
+	if s == nil || s.classifier == nil || !s.profiledRequest {
+		return Result{}, classificationSignalFacts{}, false, true
+	}
+	lower := strings.ToLower(text)
+	switch segment.ContentKind {
+	case extract.ContentKindNaturalLanguageDirective, extract.ContentKindToolResult:
+	default:
+		return Result{}, classificationSignalFacts{}, false, true
+	}
+	if !containsAnyLiteral(lower, profiledEmbeddedMaterialActivationTerms...) {
+		return Result{}, classificationSignalFacts{}, false, true
+	}
+	if len(text) <= maxProfiledIndependentWindowBytes &&
+		!strings.Contains(lower, "--- active operation ---") {
+		return Result{}, classificationSignalFacts{}, false, true
+	}
+	if !candidateExplicitMaliciousRelationWindowHasPotentialAction(lower) ||
+		!candidateExplicitMaliciousRelationOversizedRiskSignal(lower) {
+		return Result{}, classificationSignalFacts{}, false, true
+	}
+	runes := []rune(text)
+	structuredQuotes, structuredQuotesComplete := profiledStructuredQuoteSpans(text)
+	if !structuredQuotesComplete {
+		proof.fail(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return Result{}, classificationSignalFacts{}, false, false
+	}
+	type probe struct {
+		text     string
+		position int
+		end      int
+		distance int
+		set      bool
+	}
+	var probes [profiledIndependentWindowProbes]probe
+	var scratch compactRuleIntentClauseScratch
+	var window [maxSemanticDirectiveSpan]explicitRelationPhysicalClause
+	windowCount := 0
+	ownerSeen := false
+	lastCandidateClause := -1
+	activationBoundaryPending := false
+	clauseID := 0
+	runeByteCursor := 0
+	byteCursor := 0
+	s.classifier.walkDirectiveClausesWithBoundaryRange(runes, func(
+		clause []rune,
+		start, end int,
+		boundary directiveBoundaryKind,
+	) bool {
+		currentClauseID := clauseID
+		clauseID++
+		startByte, startByteOK := profiledAdvanceRuneByteOffset(
+			runes, start, &runeByteCursor, &byteCursor,
+		)
+		endByte, endByteOK := profiledAdvanceRuneByteOffset(
+			runes, end, &runeByteCursor, &byteCursor,
+		)
+		if !startByteOK || !endByteOK {
+			startByte, endByte = -1, -1
+		}
+		rawClauseText := string(clause)
+		clauseText := strings.TrimSpace(rawClauseText)
+		clauseLower := strings.ToLower(clauseText)
+		if profiledActiveOperationBoundaryLabel(clauseLower) {
+			windowCount = 0
+			lastCandidateClause = -1
+			activationBoundaryPending = true
+			return true
+		}
+		activationOffset, activationStartsSpeechAct :=
+			profiledEmbeddedMaterialActivationStart(rawClauseText)
+		activationHasPrefix := activationStartsSpeechAct &&
+			strings.TrimSpace(string(clause[:activationOffset])) != ""
+		activationBoundary := activationStartsSpeechAct &&
+			(activationBoundaryPending || activationHasPrefix)
+		activationBoundaryPending = false
+		effectiveBoundary := boundary
+		if activationBoundary {
+			effectiveBoundary = directiveBoundaryStrong
+		}
+		if effectiveBoundary == directiveBoundaryStrong {
+			windowCount = 0
+		}
+		if profiledEmbeddedCarrierBoundaryLabel(clauseLower) {
+			// The audit carrier delimiter starts a new inert payload scope. Text
+			// inside that carrier cannot retroactively cancel the complete active
+			// speech act that precedes the delimiter.
+			lastCandidateClause = -1
+		}
+		if windowCount == len(window) {
+			copy(window[:], window[1:])
+			windowCount--
+		}
+		preflightClause := clause
+		if activationStartsSpeechAct {
+			preflightClause = clause[activationOffset:]
+		}
+		potential, clearlyNonExecutable := candidateExplicitRelationClausePreflightRunes(preflightClause, &scratch)
+		window[windowCount] = explicitRelationPhysicalClause{
+			runes: clause, clauseID: currentClauseID, start: start, end: end,
+			startByte: startByte, endByte: endByte,
+			boundaryBefore:               effectiveBoundary,
+			potential:                    potential,
+			potentialSet:                 true,
+			clearlyNonExecutable:         clearlyNonExecutable,
+			requiresIndependentSpeechAct: ownerSeen && !activationBoundary,
+		}
+		windowCount++
+		if lastCandidateClause >= 0 &&
+			profiledEmbeddedMaterialCancellation(s.classifier, clauseLower) {
+			for _, candidateProbe := range probes {
+				if candidateProbe.set {
+					proof.rememberInert(candidateProbe.position, candidateProbe.end)
+				}
+			}
+			probes = [profiledIndependentWindowProbes]probe{}
+			lastCandidateClause = -1
+		}
+		for count := 1; count <= windowCount; count++ {
+			first := windowCount - count
+			if count > 1 {
+				boundaryBefore := window[first+1].boundaryBefore
+				if boundaryBefore != directiveBoundarySoft &&
+					boundaryBefore != directiveBoundaryContinuation {
+					break
+				}
+			}
+			physical := window[first:windowCount]
+			if physical[0].requiresIndependentSpeechAct &&
+				(physical[0].boundaryBefore == directiveBoundarySoft ||
+					physical[0].boundaryBefore == directiveBoundaryContinuation) {
+				continue
+			}
+			allClearlyNonExecutable := true
+			var combinedPotential explicitRelationClausePotential
+			for _, candidateClause := range physical {
+				allClearlyNonExecutable = allClearlyNonExecutable && candidateClause.clearlyNonExecutable
+				combinedPotential |= candidateClause.potential
+			}
+			if allClearlyNonExecutable ||
+				combinedPotential&explicitRelationPotentialAction == 0 {
+				continue
+			}
+			firstClauseText := string(physical[0].runes)
+			activationOffset, activationStartsSpeechAct :=
+				profiledEmbeddedMaterialActivationStart(firstClauseText)
+			if !activationStartsSpeechAct {
+				continue
+			}
+			activationPrefixBytes := profiledRuneUTF8Bytes(physical[0].runes[:activationOffset])
+			windowStart := physical[0].startByte + activationPrefixBytes
+			windowEnd := physical[len(physical)-1].endByte
+			if physical[0].startByte < 0 || windowStart < 0 || windowEnd <= windowStart ||
+				windowEnd > len(text) {
+				// This is a risk-shaped activation occurrence, but its exact bounded
+				// range cannot be inspected. It is not a proven clean rejection.
+				proof.fail(CoverageUnavailable, CoverageReasonClassifierWindow)
+				continue
+			}
+			if windowEnd-windowStart > maxProfiledIndependentWindowBytes {
+				if profiledRangeWithinStructuredQuoteSpans(
+					structuredQuotes, windowStart, windowEnd,
+				) {
+					// The whole oversized occurrence is nevertheless located inside one
+					// proven inert structured quotation. No classifier probe is needed.
+					continue
+				}
+				proof.fail(CoverageUnavailable, CoverageReasonClassifierWindow)
+				continue
+			}
+			windowText := strings.TrimSpace(text[windowStart:windowEnd])
+			if windowText == "" {
+				continue
+			}
+			windowLower := strings.ToLower(windowText)
+			firstLower := strings.ToLower(strings.TrimSpace(text[windowStart:physical[0].endByte]))
+			if !profiledEmbeddedMaterialActivation(firstLower) ||
+				!candidateCurrentExecutionAct(windowLower) ||
+				!candidateExplicitMaliciousRelationOversizedRiskSignal(windowLower) ||
+				!candidateExplicitRelationIndependentSpeechAct(windowLower) ||
+				!profiledRangeOutsideStructuredQuoteSpans(structuredQuotes, windowStart, windowEnd) ||
+				candidateInertLabeledCarrier(windowLower) ||
+				candidateQuotedOrAnalyticalScope(windowLower) ||
+				candidateTransformativeAnalyticalScope(windowLower) ||
+				candidateExplicitRelationWholeFieldDefensiveOwner(windowLower) ||
+				candidatePermissionOnlyScope(windowLower) ||
+				candidatePhishingDetectionArtifactScope(windowLower) {
+				continue
+			}
+			candidateProbe := probe{
+				text: windowText, position: windowStart,
+				end: windowEnd, set: true,
+			}
+			if !probes[0].set || candidateProbe.position < probes[0].position ||
+				(candidateProbe.position == probes[0].position && candidateProbe.end > probes[0].end) {
+				probes[0] = candidateProbe
+			}
+			lastSlot := len(probes) - 1
+			if !probes[lastSlot].set || candidateProbe.position > probes[lastSlot].position ||
+				(candidateProbe.position == probes[lastSlot].position && candidateProbe.end > probes[lastSlot].end) {
+				probes[lastSlot] = candidateProbe
+			}
+			for index, numerator := range [...]int{1, 2, 3} {
+				center := len(text) * numerator / 4
+				distance := candidateProbe.position - center
+				if distance < 0 {
+					distance = -distance
+				}
+				slot := index + 1
+				if !probes[slot].set || distance < probes[slot].distance ||
+					(distance == probes[slot].distance && candidateProbe.position == probes[slot].position &&
+						candidateProbe.end > probes[slot].end) {
+					candidateProbe.distance = distance
+					probes[slot] = candidateProbe
+				}
+			}
+			lastCandidateClause = currentClauseID
+		}
+		if candidateExplicitRelationClauseEstablishesOwner(clause) {
+			ownerSeen = true
+		}
+		return true
+	})
+
+	var best Result
+	var bestFacts classificationSignalFacts
+	hasBest := false
+	bestStart, bestEnd := 0, 0
+	var seenRanges [profiledIndependentWindowProbes]struct {
+		start int
+		end   int
+	}
+	seenCount := 0
+	for _, candidateProbe := range probes {
+		if !candidateProbe.set {
+			continue
+		}
+		duplicate := false
+		for index := 0; index < seenCount; index++ {
+			if seenRanges[index].start == candidateProbe.position &&
+				seenRanges[index].end == candidateProbe.end {
+				duplicate = true
+				break
+			}
+		}
+		if duplicate {
+			continue
+		}
+		seenRanges[seenCount] = struct {
+			start int
+			end   int
+		}{start: candidateProbe.position, end: candidateProbe.end}
+		seenCount++
+		if s.coverage.Windows >= s.limits.MaxChunks {
+			proof.fail(CoverageBudgetExhausted, CoverageReasonClassificationLimit)
+			return Result{}, classificationSignalFacts{}, false, false
+		}
+		s.coverage.Windows++
+		probeSegment := segment
+		probeSegment.Text = candidateProbe.text
+		var candidateFacts classificationSignalFacts
+		candidate := s.classifier.classifyWithPolicyCaptured(
+			[]string{candidateProbe.text}, s.mode, s.thresholds, s.policy,
+			segment.Provenance == extract.ProvenanceToolPayload ||
+				segment.ContentKind == extract.ContentKindToolCallArguments,
+			&candidateFacts,
+			profiledTrustedCurrentUserNaturalLanguageDirective(probeSegment),
+			nil,
+		)
+		if candidate.Truncated {
+			proof.fail(CoverageUnavailable, classifierIncompleteReason(candidate))
+			return Result{}, classificationSignalFacts{}, false, false
+		}
+		if !resultHasEligibleMaliciousWinner(candidate, s.thresholds) ||
+			candidate.BlockEligibility == nil || !candidate.BlockEligibility.CurrentExecutionActProven {
+			continue
+		}
+		profiledCarrierRunClearOccurrenceOffsets(&candidate)
+		if !hasBest || roleResultBetter(candidate, best) {
+			best = candidate
+			bestFacts = candidateFacts
+			bestStart = candidateProbe.position
+			bestEnd = candidateProbe.end
+			hasBest = true
+		}
+	}
+	if !hasBest && proof != nil && proof.failureReason != CoverageReasonNone {
+		return Result{}, classificationSignalFacts{}, false, false
+	}
+	if hasBest && proof != nil {
+		proof.startByte = bestStart
+		proof.endByte = bestEnd
+		proof.failureState = CoverageComplete
+		proof.failureReason = CoverageReasonNone
+	}
+	return best, bestFacts, hasBest, true
+}
+
+func (c *Classifier) profiledOrdinaryWinnerWithinIndependentWindow(
+	result Result,
+	thresholds Thresholds,
+	policy Policy,
+	physicalText string,
+	proof profiledIndependentWindowRecoveryProof,
+) bool {
+	return c.profiledOrdinaryWinnerWithinIndependentRange(
+		result, thresholds, policy, physicalText,
+		profiledIndependentWindowRange{startByte: proof.startByte, endByte: proof.endByte},
+	)
+}
+
+func (c *Classifier) profiledOrdinaryWinnerWithinInertIndependentWindow(
+	result Result,
+	thresholds Thresholds,
+	policy Policy,
+	physicalText string,
+	proof profiledIndependentWindowRecoveryProof,
+) bool {
+	for index := 0; index < proof.inertCount; index++ {
+		if c.profiledOrdinaryWinnerWithinIndependentRange(
+			result, thresholds, policy, physicalText, proof.inertRanges[index],
+		) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Classifier) profiledOrdinaryWinnerWithinIndependentRange(
+	result Result,
+	thresholds Thresholds,
+	policy Policy,
+	physicalText string,
+	window profiledIndependentWindowRange,
+) bool {
+	if c == nil || !resultHasEligibleMaliciousWinner(result, thresholds) ||
+		len(result.EvidenceOccurrences) == 0 || window.startByte < 0 ||
+		window.endByte <= window.startByte || window.endByte > len(physicalText) {
+		return false
+	}
+	// Evidence offsets are clause-relative normalized-rune coordinates. ASCII is
+	// invariant under NFKC and gives an exact raw byte/rune mapping; for any other
+	// input, retain the ordinary candidate instead of guessing that it belongs to
+	// the recovered interval.
+	for index := 0; index < len(physicalText); index++ {
+		if physicalText[index] >= utf8.RuneSelf {
+			return false
+		}
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{physicalText}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return false
+	}
+	analysis := c.analyzeDirectives(views.standardRunes, policy)
+	spans, ok := profiledClauseSpans(views.standardRunes, analysis.clauses)
+	if !ok {
+		return false
+	}
+	for _, occurrence := range result.EvidenceOccurrences {
+		span, found := profiledClauseSpanByID(spans, int32(occurrence.ClauseID))
+		if !found || occurrence.Start < 0 || occurrence.End <= occurrence.Start ||
+			occurrence.End > span.end-span.start || occurrence.Quoted || occurrence.Inert {
+			return false
+		}
+		absoluteStart := span.start + occurrence.Start
+		absoluteEnd := span.start + occurrence.End
+		if absoluteStart < window.startByte || absoluteEnd > window.endByte {
+			return false
+		}
+	}
+	return true
+}
+
+func profiledEmbeddedMaterialCancellation(classifier *Classifier, text string) bool {
+	if classifier == nil || strings.TrimSpace(text) == "" {
+		return false
+	}
+	disposition := quotedReviewFollowUpDisposition(
+		text, classifier.implementationStarts, classifier.implementationPatterns,
+	)
+	if disposition != quotedReviewContinuationCancelled &&
+		disposition != quotedReviewContinuationInert {
+		return false
+	}
+	return containsAnyLiteral(text,
+		"embedded material", "embedded content", "preceding material", "preceding content",
+		"execute it", "apply it", "use it", "follow it", "operationalize it",
+		"嵌入材料", "嵌入内容", "前述材料", "前述内容", "执行它", "应用它", "使用它", "遵循它",
+	)
+}
+
+func profiledEmbeddedCarrierBoundaryLabel(text string) bool {
+	text = strings.TrimSpace(strings.Trim(strings.TrimSpace(text), "-_*#>:[](){}|"))
+	return text == "embedded carrier" || text == "carrier continues"
+}
+
+func profiledActiveOperationBoundaryLabel(text string) bool {
+	text = strings.TrimSpace(strings.Trim(strings.TrimSpace(text), "-_*#>:[](){}|"))
+	return text == "active operation"
+}
+
+type profiledStructuredQuoteSpan struct {
+	start int
+	end   int
+}
+
+const maxProfiledStructuredQuoteSpans = 1024
+
+// profiledStructuredQuoteSpans indexes the field once. Candidate recovery then
+// checks each bounded range by binary search instead of rescanning the whole
+// prefix for every activation-shaped clause. An unmatched structured delimiter
+// owns the remaining tail; an unmatched ASCII apostrophe retains the classifier's
+// existing prose behavior and is not treated as a quotation.
+func profiledStructuredQuoteSpans(text string) ([]profiledStructuredQuoteSpan, bool) {
+	spans := make([]profiledStructuredQuoteSpan, 0, 8)
+	asciiSingleQuoteTailExhausted := false
+	for index := 0; index < len(text); {
+		spanStart := index
+		spanEnd := -1
+		if text[index] == '`' {
+			run := 1
+			for index+run < len(text) && text[index+run] == '`' {
+				run++
+			}
+			if run >= 3 {
+				delimiter := text[index : index+run]
+				if closeAt := strings.Index(text[index+run:], delimiter); closeAt >= 0 {
+					spanEnd = index + run + closeAt + run
+				} else {
+					spanEnd = len(text)
+				}
+			}
+		}
+		if spanEnd < 0 && strings.HasPrefix(text[index:], "<sample>") {
+			if closeAt := strings.Index(text[index+len("<sample>"):], "</sample>"); closeAt >= 0 {
+				spanEnd = index + len("<sample>") + closeAt + len("</sample>")
+			} else {
+				spanEnd = len(text)
+			}
+		}
+		if spanEnd < 0 && strings.HasPrefix(text[index:], "[sample]") {
+			if closeAt := strings.Index(text[index+len("[sample]"):], "[/sample]"); closeAt >= 0 {
+				spanEnd = index + len("[sample]") + closeAt + len("[/sample]")
+			} else {
+				spanEnd = len(text)
+			}
+		}
+		if spanEnd < 0 {
+			r, size := utf8.DecodeRuneInString(text[index:])
+			closeDelimiter := ""
+			switch r {
+			case '"':
+				closeDelimiter = "\""
+			case '\u201c':
+				closeDelimiter = "\u201d"
+			case '\u300c':
+				closeDelimiter = "\u300d"
+			case '\u300e':
+				closeDelimiter = "\u300f"
+			case '`':
+				closeDelimiter = "`"
+			case '\'':
+				if !asciiSingleQuoteTailExhausted && metaOverrideSingleQuoteOpens(text, index, size) {
+					closeDelimiter = "'"
+				}
+			case '\u2018':
+				closeDelimiter = "\u2019"
+			}
+			if closeDelimiter == "" {
+				index += size
+				continue
+			}
+			if closeAt := metaOverrideFindClosingDelimiter(text, index+size, closeDelimiter); closeAt >= 0 {
+				spanEnd = closeAt + len(closeDelimiter)
+			} else if r == '\'' {
+				// The first failed tail search proves there is no valid ASCII single-
+				// quote closer anywhere later in this field. Avoid rescanning that same
+				// suffix for every subsequent apostrophe while still indexing other
+				// structured delimiter families.
+				asciiSingleQuoteTailExhausted = true
+				index += size
+				continue
+			} else {
+				spanEnd = len(text)
+			}
+		}
+		if len(spans) >= maxProfiledStructuredQuoteSpans {
+			return nil, false
+		}
+		spans = append(spans, profiledStructuredQuoteSpan{start: spanStart, end: spanEnd})
+		index = spanEnd
+	}
+	return spans, true
+}
+
+func profiledRangeOutsideStructuredQuoteSpans(
+	spans []profiledStructuredQuoteSpan,
+	startByte int,
+	endByte int,
+) bool {
+	if startByte < 0 || endByte <= startByte {
+		return false
+	}
+	index := sort.Search(len(spans), func(index int) bool {
+		return spans[index].end > startByte
+	})
+	return index == len(spans) || spans[index].start >= endByte
+}
+
+func profiledRangeWithinStructuredQuoteSpans(
+	spans []profiledStructuredQuoteSpan,
+	startByte int,
+	endByte int,
+) bool {
+	if startByte < 0 || endByte <= startByte {
+		return false
+	}
+	index := sort.Search(len(spans), func(index int) bool {
+		return spans[index].end > startByte
+	})
+	return index < len(spans) && spans[index].start <= startByte && spans[index].end >= endByte
+}
+
+func profiledAdvanceRuneByteOffset(
+	runes []rune,
+	target int,
+	runeCursor *int,
+	byteCursor *int,
+) (int, bool) {
+	if runeCursor == nil || byteCursor == nil || target < *runeCursor || target > len(runes) {
+		return 0, false
+	}
+	for *runeCursor < target {
+		size := utf8.RuneLen(runes[*runeCursor])
+		if size < 1 {
+			size = 1
+		}
+		*byteCursor += size
+		*runeCursor++
+	}
+	return *byteCursor, true
+}
+
+func profiledRuneUTF8Bytes(runes []rune) int {
+	bytes := 0
+	for _, current := range runes {
+		size := utf8.RuneLen(current)
+		if size < 1 {
+			size = 1
+		}
+		bytes += size
+	}
+	return bytes
+}
+
+// Retained for focused parser tests and the temporary Round 10 diagnostic. The
+// production recovery path uses a single precomputed quote index above.
+func profiledRangeOutsideStructuredQuotes(text string, startRune, endRune int) bool {
+	runes := []rune(text)
+	runeCursor, byteCursor := 0, 0
+	startByte, startOK := profiledAdvanceRuneByteOffset(runes, startRune, &runeCursor, &byteCursor)
+	endByte, endOK := profiledAdvanceRuneByteOffset(runes, endRune, &runeCursor, &byteCursor)
+	spans, complete := profiledStructuredQuoteSpans(text)
+	return startOK && endOK && complete &&
+		profiledRangeOutsideStructuredQuoteSpans(spans, startByte, endByte)
+}
+
+func profiledEmbeddedMaterialActivation(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(text))
+	return containsAnyLiteral(text, profiledEmbeddedMaterialActivationTerms...)
+}
+
+var profiledEmbeddedMaterialActivationTerms = []string{
+	"use the embedded material", "use this embedded material", "use embedded material",
+	"apply the embedded material", "execute the embedded material",
+	"use the embedded content", "use this embedded content", "use embedded content",
+	"apply the embedded content", "execute the embedded content",
+	"treat the embedded material as active", "treat the embedded content as active",
+	"使用嵌入材料", "使用嵌入内容", "应用嵌入材料", "执行嵌入内容",
+}
+
+func profiledLongActivationRecoveryCandidate(segment extract.Segment) bool {
+	if !profiledTrustedCurrentUserNaturalLanguageDirective(segment) {
+		return false
+	}
+	if len(segment.Text) <= maxProfiledIndependentWindowBytes &&
+		!streamingContainsASCIIFold(segment.Text, "--- active operation ---") {
+		return false
+	}
+	// This preflight runs on every profiled current-user field, including the
+	// existing multi-megabyte performance fixtures. Do not lowercase the whole
+	// field merely to reject the overwhelmingly common no-activation case: the
+	// bounded recovery path performs its own exact normalization after a term is
+	// actually present.
+	if !profiledContainsASCIIFold(segment.Text, "embedded") &&
+		!strings.Contains(segment.Text, "嵌入") {
+		return false
+	}
+	lower := strings.ToLower(segment.Text)
+	return containsAnyLiteral(lower, profiledEmbeddedMaterialActivationTerms...)
+}
+
+func profiledContainsASCIIFold(text, lowerLiteral string) bool {
+	if lowerLiteral == "" {
+		return true
+	}
+	if len(text) < len(lowerLiteral) {
+		return false
+	}
+	if strings.Contains(text, lowerLiteral) {
+		return true
+	}
+	for start := 0; start+len(lowerLiteral) <= len(text); start++ {
+		matched := true
+		for offset := 0; offset < len(lowerLiteral); offset++ {
+			current := text[start+offset]
+			if current >= 'A' && current <= 'Z' {
+				current += 'a' - 'A'
+			}
+			if current != lowerLiteral[offset] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
+}
+
+func profiledEmbeddedMaterialActivationStart(clause string) (int, bool) {
+	lower := strings.ToLower(clause)
+	best := -1
+	for _, term := range profiledEmbeddedMaterialActivationTerms {
+		if index := strings.Index(lower, term); index >= 0 && (best < 0 || index < best) {
+			best = index
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	prefix := strings.TrimSpace(lower[:best])
+	if !profiledEmbeddedMaterialActivationPrefix(prefix) {
+		return 0, false
+	}
+	return utf8.RuneCountInString(lower[:best]), true
+}
+
+func profiledEmbeddedMaterialActivationPrefix(prefix string) bool {
+	// Keep this vocabulary intentionally closed. It admits only standalone
+	// politeness and sequencing markers that can precede the activation speech
+	// act; arbitrary prose before an embedded activation remains an ownership
+	// barrier and cannot be skipped by the recovery path.
+	prefix = strings.TrimSpace(prefix)
+	if newline := strings.LastIndexByte(prefix, '\n'); newline >= 0 {
+		label := strings.TrimSpace(prefix[:newline])
+		suffix := strings.TrimSpace(prefix[newline+1:])
+		if !profiledActiveOperationBoundaryLabel(strings.ToLower(label)) {
+			return false
+		}
+		prefix = suffix
+	}
+	prefix = strings.TrimSpace(strings.Trim(prefix, "-_*#>:[](){}|"))
+	switch prefix {
+	case "", "active operation",
+		"please", "now", "then", "next",
+		"please now", "now please", "please then", "please next":
+		return true
+	default:
+		return false
+	}
 }
 
 // streamingUniqueWindowStart returns the first byte not classified by an
@@ -5473,12 +7105,15 @@ func (s *ScanSession) clearActive() {
 	clear(s.active.buffer)
 	clear(s.active.head)
 	clear(s.active.roleSummary)
+	clear(s.active.directCompactionProof)
 	clear(s.active.compactCarry)
 	clear(s.active.adjacentTail)
 	clear(s.active.quotedReviewSearchCarry)
 	clear(s.active.quotedReviewSuffix)
 	s.active.riskFacts.reset()
 	s.active.safetyRiskFacts.reset()
+	s.active.independentActivation = Result{}
+	s.active.hasIndependentActivation = false
 	clear(s.active.windowFacts.signals)
 	clear(s.active.windowFacts.unnegatedRuleIntents)
 	clear(s.active.windowFacts.matchedSemanticIntents)
@@ -5498,6 +7133,8 @@ func (s *ScanSession) clearPrevious() {
 	clear(s.previous.sample)
 	s.previous.inertQuotedReferent = Result{}
 	s.previous.hasInertQuotedReferent = false
+	s.previous.independentActivation = Result{}
+	s.previous.hasIndependentActivation = false
 	s.previous = nil
 }
 

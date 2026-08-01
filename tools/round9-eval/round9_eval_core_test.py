@@ -237,7 +237,7 @@ class Round9EvalCoreTest(unittest.TestCase):
             "so_sha256": "4" * 64,
             "cpa_version": "v7.2.109",
             "cpa_commit": "928478e4b91533cec05a763bfac3edad9c3e76cf",
-            "classifier_policy_version": "classifier-policy-v9",
+            "classifier_policy_version": "classifier-policy-v10",
             "classifier_policy_sha256": "5" * 64,
             "ruleset_version": "1.0.10",
             "ruleset_sha256": "6" * 64,

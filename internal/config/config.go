@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/netip"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -133,19 +134,20 @@ type SubjectControl struct {
 }
 
 type Audit struct {
-	Enabled               bool       `yaml:"enabled"`
-	DataDir               string     `yaml:"data_dir"`
-	RetentionDays         int        `yaml:"retention_days"`
-	MaxDBMB               int        `yaml:"max_db_mb"`
-	LogRequestHash        bool       `yaml:"log_request_hash"`
-	LogSubjectHash        bool       `yaml:"log_subject_hash"`
-	LogRuleIDs            bool       `yaml:"log_rule_ids"`
-	LogCategory           bool       `yaml:"log_category"`
-	PersistWrapperOnly    bool       `yaml:"persist_wrapper_only"`
-	LogOriginalText       bool       `yaml:"log_original_text"`
-	RawCapture            RawCapture `yaml:"raw_capture"`
-	BackupBeforeMigration bool       `yaml:"backup_before_migration"`
-	MaxMigrationBackups   int        `yaml:"max_migration_backups"`
+	Enabled                  bool       `yaml:"enabled"`
+	DataDir                  string     `yaml:"data_dir"`
+	RequirePersistentStorage bool       `yaml:"require_persistent_storage"`
+	RetentionDays            int        `yaml:"retention_days"`
+	MaxDBMB                  int        `yaml:"max_db_mb"`
+	LogRequestHash           bool       `yaml:"log_request_hash"`
+	LogSubjectHash           bool       `yaml:"log_subject_hash"`
+	LogRuleIDs               bool       `yaml:"log_rule_ids"`
+	LogCategory              bool       `yaml:"log_category"`
+	PersistWrapperOnly       bool       `yaml:"persist_wrapper_only"`
+	LogOriginalText          bool       `yaml:"log_original_text"`
+	RawCapture               RawCapture `yaml:"raw_capture"`
+	BackupBeforeMigration    bool       `yaml:"backup_before_migration"`
+	MaxMigrationBackups      int        `yaml:"max_migration_backups"`
 }
 
 // RawCapture is an explicit, sensitive operator-review feature. It is kept
@@ -223,16 +225,17 @@ func Default() Config {
 			CooldownMinutes:  30,
 		},
 		Audit: Audit{
-			Enabled:            true,
-			DataDir:            "",
-			RetentionDays:      30,
-			MaxDBMB:            256,
-			LogRequestHash:     true,
-			LogSubjectHash:     true,
-			LogRuleIDs:         true,
-			LogCategory:        true,
-			PersistWrapperOnly: false,
-			LogOriginalText:    false,
+			Enabled:                  true,
+			DataDir:                  "",
+			RequirePersistentStorage: false,
+			RetentionDays:            30,
+			MaxDBMB:                  256,
+			LogRequestHash:           true,
+			LogSubjectHash:           true,
+			LogRuleIDs:               true,
+			LogCategory:              true,
+			PersistWrapperOnly:       false,
+			LogOriginalText:          false,
 			RawCapture: RawCapture{
 				Enabled:       false,
 				OnlyBlocked:   true,
@@ -357,6 +360,25 @@ func Validate(cfg Config) error {
 	if err := validateAudit(cfg.Audit); err != nil {
 		return err
 	}
+	if cfg.Audit.RequirePersistentStorage && !cfg.Audit.Enabled {
+		return invalidf("audit.require_persistent_storage requires audit.enabled")
+	}
+	if cfg.Audit.RawCapture.Enabled && !cfg.Audit.RequirePersistentStorage {
+		return invalidf("audit.raw_capture.enabled requires audit.require_persistent_storage=true")
+	}
+	if cfg.SubjectControl.Persistence && !cfg.Audit.RequirePersistentStorage {
+		return invalidf("subject_control.persistence requires audit.require_persistent_storage=true")
+	}
+	if cfg.AuditPersistenceSensitive() && !cfg.Audit.Enabled {
+		return invalidf("persistent audit features require audit.enabled")
+	}
+	if cfg.AuditPersistenceSensitive() && strings.TrimSpace(cfg.Audit.DataDir) == "" {
+		return invalidf("persistent audit features require an explicit audit.data_dir")
+	}
+	if cfg.AuditPersistenceSensitive() && !filepath.IsAbs(cfg.Audit.DataDir) &&
+		!strings.HasPrefix(filepath.ToSlash(cfg.Audit.DataDir), "/") {
+		return invalidf("persistent audit features require an absolute audit.data_dir")
+	}
 	if cfg.SubjectControl.Persistence && !cfg.SubjectControl.Enabled {
 		return invalidf("subject_control.persistence requires subject_control.enabled")
 	}
@@ -373,6 +395,15 @@ func Validate(cfg Config) error {
 		return err
 	}
 	return nil
+}
+
+// AuditPersistenceSensitive reports whether audit state carries an explicit
+// persistence requirement or contains review/state data that must not silently
+// live in a container tmpfs. Filesystem verification remains a Linux runtime
+// responsibility; this method performs no I/O.
+func (cfg Config) AuditPersistenceSensitive() bool {
+	return cfg.Audit.RequirePersistentStorage || cfg.Audit.RawCapture.Enabled ||
+		cfg.SubjectControl.Persistence
 }
 
 // EffectiveTextWindowBytes returns the bounded classifier window. The legacy

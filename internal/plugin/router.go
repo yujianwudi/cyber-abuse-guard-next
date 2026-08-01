@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
@@ -167,7 +168,11 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 			p.counters.blocked.Add(1)
 			p.counters.incompleteInspections.Add(1)
 			p.counters.incompleteBlocked.Add(1)
-			p.counters.coverageIncomplete.Add(1)
+			p.recordUnscannedCoverageFailure(
+				coverageIncompleteUnknownSourceFormat,
+				nil,
+				finalRouteDispositionIncompleteFailClosed,
+			)
 			p.recordUnknownSourceBlock(state, hash, subjectHash, request.Stream, request.Body, time.Since(started))
 			p.pending.put(hash, "unknown_source_format")
 			return blockedRouteEnvelope("cyber_abuse_guard_unknown_source_format"), "unknown_source_format", nil
@@ -196,6 +201,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 	if sessionErr != nil {
 		return nil, "", &modelRouteFailure{code: "invalid_classifier_limits", reason: "cyber_abuse_guard_inspection_failure"}
 	}
+	coverageSink := newCoverageDimensionSink(session)
 	limits := extract.Limits{
 		// MaxScanBytes is now only the deprecated window alias. The streaming
 		// entry points below never slice the raw JSON body by this value.
@@ -211,9 +217,9 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 	var extracted extract.Result
 	var extractErr error
 	if unknownSourceFormat {
-		extracted, extractErr = extract.ScanUntrustedRequest(request.Body, request.Headers, limits, session)
+		extracted, extractErr = extract.ScanUntrustedRequest(request.Body, request.Headers, limits, coverageSink)
 	} else {
-		extracted, extractErr = extract.ScanProfiledRequest(request.Body, request.Headers, requestProfile, limits, session)
+		extracted, extractErr = extract.ScanProfiledRequest(request.Body, request.Headers, requestProfile, limits, coverageSink)
 	}
 	if extractErr != nil && len(extracted.IncompleteReasons) == 0 {
 		session.Abort()
@@ -223,34 +229,41 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		if errors.Is(extractErr, extract.ErrInvalidLimits) {
 			return nil, "", &modelRouteFailure{code: "invalid_extractor_limits", reason: "cyber_abuse_guard_inspection_failure"}
 		}
+		p.recordStreamingFailure(extracted, &coverageSink.observation, extractErr, state.config.EffectiveTextWindowBytes())
 		return nil, "", &modelRouteFailure{code: "inspection_failure", reason: "cyber_abuse_guard_inspection_failure"}
 	}
 	result := session.Finish()
 	incompleteReasons := append([]extract.IncompleteReason(nil), extracted.IncompleteReasons...)
+	coverageReasons := extractorCoverageIncompleteReasons(incompleteReasons)
 	if !extracted.IsComplete() && len(incompleteReasons) == 0 {
 		// Defensive invariant fallback. The category remains bounded and no raw
 		// parser diagnostic is logged or persisted.
 		incompleteReasons = append(incompleteReasons, extract.IncompleteParseError)
+		coverageReasons.add(coverageIncompleteParseError)
 	}
 	if len(incompleteReasons) == 0 {
 		if reason := classifierCoverageReason(result.Coverage); reason != "" {
+			coverageReasons.add(classifierCoverageIncompleteReason(result.Coverage))
 			incompleteReasons = appendIncompleteReason(incompleteReasons, reason)
 		}
 	}
-	if len(incompleteReasons) == 0 && result.Coverage.State == classifier.CoverageComplete &&
-		result.Coverage.Bytes != int64(extracted.TextBytesScanned) {
-		// A byte-accounting mismatch means full classifier coverage was not
-		// proven. Treat it as bounded classification exhaustion, never as a
-		// complete finding or an operational fail-open.
-		incompleteReasons = appendIncompleteReason(incompleteReasons, extract.IncompleteClassificationChunkLimit)
+	if len(incompleteReasons) == 0 {
+		accountingReason := byteAccountingCoverageIncompleteReason(extracted, result)
+		if accountingReason != coverageIncompleteNone {
+			// A byte-accounting mismatch means full classifier coverage was not
+			// proven. Treat it as bounded classification exhaustion, never as a
+			// complete finding or an operational fail-open.
+			coverageReasons.add(accountingReason)
+			incompleteReasons = appendIncompleteReason(incompleteReasons, extract.IncompleteClassificationChunkLimit)
+		}
 	}
+	coverageDisposition := streamingCoverageDisposition(extracted, result, incompleteReasons)
 	if len(incompleteReasons) != 0 {
 		// The first Round6 implementation intentionally does not enable the
 		// verified-hard-under-incomplete exception. Remove every partial score,
 		// category, rule and behavior before disposition or subject accounting.
 		result = incompleteClassificationResult(result, state.rulesVersion)
 	}
-	p.recordStreamingCounters(extracted, result, incompleteReasons, state.config.EffectiveTextWindowBytes())
 	if len(incompleteReasons) == 0 && result.Behavior != nil && result.Behavior.Wrapper {
 		// Control-plane observation is deliberately orthogonal to the winning
 		// cyber-abuse taxonomy and subject-risk state. The management surface
@@ -362,8 +375,22 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 	if persistDecision {
 		p.recordDecision(state, request, &requestHash, subjectHash, extracted.TextBytesScanned, result, decision, incompleteReasons, subjectReason, request.Body, time.Since(started))
 	}
+	recordFinalCoverage := func() {
+		p.recordStreamingCoverageWithFinalDisposition(
+			extracted,
+			result,
+			incompleteReasons,
+			coverageReasons,
+			state.config.EffectiveTextWindowBytes(),
+			&coverageSink.observation,
+			coverageDisposition,
+			finalRouteDispositionFor(coverageDisposition, decision),
+		)
+	}
 	if !decision.Block {
-		return okEnvelope(pluginapi.ModelRouteResponse{Handled: false}), "", nil
+		response := okEnvelope(pluginapi.ModelRouteResponse{Handled: false})
+		recordFinalCoverage()
+		return response, "", nil
 	}
 	category := decision.Category
 	if category == "" {
@@ -378,7 +405,9 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		result.Score >= state.config.Thresholds.HardBlock {
 		reason = "cyber_abuse_guard_hard_policy"
 	}
-	return blockedRouteEnvelope(reason), category, nil
+	response := blockedRouteEnvelope(reason)
+	recordFinalCoverage()
+	return response, category, nil
 }
 
 func (p *Plugin) auditSubjectHash(state *runtimeState, request pluginapi.ModelRouteRequest) string {
@@ -563,6 +592,81 @@ func classifierCoverageReason(coverage classifier.Coverage) extract.IncompleteRe
 	}
 }
 
+func classifierCoverageIncompleteReason(coverage classifier.Coverage) coverageIncompleteReason {
+	if coverage.State == classifier.CoverageComplete {
+		return coverageIncompleteNone
+	}
+	switch coverage.Reason {
+	case classifier.CoverageReasonTotalTextLimit:
+		return coverageIncompleteTotalTextLimit
+	case classifier.CoverageReasonClassificationLimit:
+		return coverageIncompleteClassificationChunkLimit
+	case classifier.CoverageReasonAborted:
+		return coverageIncompleteClassifierAborted
+	case classifier.CoverageReasonInvalidUTF8:
+		return coverageIncompleteInvalidUTF8
+	case classifier.CoverageReasonNormalizationCarry:
+		return coverageIncompleteNormalizationCarry
+	case classifier.CoverageReasonClassifierWindow:
+		return coverageIncompleteClassifierWindow
+	case classifier.CoverageReasonClassifierProofBudget:
+		return coverageIncompleteClassifierProofBudget
+	default:
+		return coverageIncompleteOther
+	}
+}
+
+func extractorErrorCoverageIncompleteReason(err error) coverageIncompleteReason {
+	if err == nil {
+		return coverageIncompleteNone
+	}
+	if errors.Is(err, context.DeadlineExceeded) || strings.Contains(err.Error(), context.DeadlineExceeded.Error()) {
+		return coverageIncompleteTimeout
+	}
+	return coverageIncompleteExtractorSink
+}
+
+func byteAccountingCoverageIncompleteReason(extracted extract.Result, result classifier.Result) coverageIncompleteReason {
+	if result.Coverage.State == classifier.CoverageComplete &&
+		result.Coverage.Bytes != int64(extracted.TextBytesScanned) {
+		return coverageIncompleteByteAccountingMismatch
+	}
+	return coverageIncompleteNone
+}
+
+func extractorCoverageIncompleteReasons(reasons []extract.IncompleteReason) (set coverageIncompleteReasonSet) {
+	for _, reason := range reasons {
+		switch reason {
+		case extract.IncompleteClassificationChunkLimit:
+			set.add(coverageIncompleteClassificationChunkLimit)
+		case extract.IncompleteClassifierProofBudget:
+			set.add(coverageIncompleteClassifierProofBudget)
+		case extract.IncompleteTextPartLimit,
+			extract.IncompleteTextPartByteLimit,
+			extract.IncompleteMultipartPartLimit,
+			extract.IncompleteMultipartTextLimit,
+			extract.IncompleteDeferredTextCandidateLimit:
+			set.add(coverageIncompleteTextPartLimit)
+		case extract.IncompleteTotalTextLimit:
+			set.add(coverageIncompleteTotalTextLimit)
+		case extract.IncompleteScanByteLimit,
+			extract.IncompleteJSONTokenLimit,
+			extract.IncompleteJSONNodeLimit,
+			extract.IncompleteRawBodyLimit:
+			set.add(coverageIncompleteRawScanLimit)
+		case extract.IncompleteRPCBodyLimit:
+			set.add(coverageIncompleteRPCBodyLimit)
+		case extract.IncompleteJSONDepthLimit:
+			set.add(coverageIncompleteJSONDepth)
+		case extract.IncompleteParseError:
+			set.add(coverageIncompleteParseError)
+		default:
+			set.add(coverageIncompleteOther)
+		}
+	}
+	return set
+}
+
 func appendIncompleteReason(reasons []extract.IncompleteReason, reason extract.IncompleteReason) []extract.IncompleteReason {
 	if reason == "" {
 		return reasons
@@ -588,10 +692,125 @@ func incompleteClassificationResult(result classifier.Result, rulesVersion strin
 	}
 }
 
-func (p *Plugin) recordStreamingCounters(extracted extract.Result, result classifier.Result, reasons []extract.IncompleteReason, windowBytes int) {
+func streamingCoverageDisposition(extracted extract.Result, result classifier.Result, reasons []extract.IncompleteReason) coverageDisposition {
+	if len(reasons) != 0 || extracted.TextCoverage != extract.TextCoverageComplete || result.Coverage.State != classifier.CoverageComplete {
+		return coverageDispositionIncomplete
+	}
+	explanation := result.DecisionExplanation
+	if result.FindingConfidence == classifier.FindingCompleteRequest && explanation != nil &&
+		explanation.WinningRuleID != "" && explanation.WinningCategory != "" {
+		return coverageDispositionSemanticWinner
+	}
+	return coverageDispositionCompleteNoWinner
+}
+
+func (p *Plugin) recordStreamingCoverage(
+	extracted extract.Result,
+	result classifier.Result,
+	reasons []extract.IncompleteReason,
+	coverageReasons coverageIncompleteReasonSet,
+	windowBytes int,
+	observation *coverageDimensionObservation,
+	disposition coverageDisposition,
+) {
+	p.recordStreamingCoverageWithFinalDisposition(
+		extracted,
+		result,
+		reasons,
+		coverageReasons,
+		windowBytes,
+		observation,
+		disposition,
+		finalRouteDispositionNone,
+	)
+}
+
+func (p *Plugin) recordStreamingCoverageWithFinalDisposition(
+	extracted extract.Result,
+	result classifier.Result,
+	reasons []extract.IncompleteReason,
+	coverageReasons coverageIncompleteReasonSet,
+	windowBytes int,
+	observation *coverageDimensionObservation,
+	disposition coverageDisposition,
+	finalDisposition finalRouteDisposition,
+) {
+	if disposition == coverageDispositionIncomplete && coverageReasons == 0 {
+		coverageReasons.add(coverageIncompleteOther)
+	}
+	if finalDisposition <= finalRouteDispositionNone || finalDisposition >= finalRouteDispositionCount {
+		// A coverage-ledger commit without a classified route outcome is still a
+		// request disposition. Keep it in one fixed low-cardinality bucket so the
+		// request denominator and final dispositions cannot diverge.
+		finalDisposition = finalRouteDispositionUnclassified
+	}
+	p.counters.coverageMu.Lock()
+	defer p.counters.coverageMu.Unlock()
+	p.recordStreamingCountersLocked(extracted, result, reasons, coverageReasons, windowBytes)
+	p.counters.coverageDimensions.addWithReasons(observation, disposition, coverageReasons)
+	p.counters.coverageDimensions.addFinalRouteDisposition(finalDisposition)
+}
+
+func (p *Plugin) recordUnscannedCoverageFailure(
+	reason coverageIncompleteReason,
+	reasons []extract.IncompleteReason,
+	finalDisposition finalRouteDisposition,
+) {
+	var coverageReasons coverageIncompleteReasonSet
+	coverageReasons.add(reason)
+	p.recordStreamingCoverageWithFinalDisposition(
+		extract.Result{
+			TextCoverage:      extract.TextCoverageUnavailable,
+			IncompleteReasons: append([]extract.IncompleteReason(nil), reasons...),
+		},
+		classifier.Result{Coverage: classifier.Coverage{
+			State:  classifier.CoverageUnavailable,
+			Reason: classifier.CoverageReasonAborted,
+		}},
+		reasons,
+		coverageReasons,
+		0,
+		nil,
+		coverageDispositionIncomplete,
+		finalDisposition,
+	)
+}
+
+func (p *Plugin) recordStreamingFailure(
+	extracted extract.Result,
+	observation *coverageDimensionObservation,
+	err error,
+	windowBytes int,
+) {
+	var coverageReasons coverageIncompleteReasonSet
+	coverageReasons.add(extractorErrorCoverageIncompleteReason(err))
+	// Sink failures can return a zero or partially populated extractor Result.
+	// Charge exactly the chunks accepted by the real classifier sink so the
+	// request-level byte/chunk dimensions remain reconciled in every snapshot.
+	extracted.TextBytesScanned = int(observation.textBytes())
+	extracted.ClassificationChunks = int(observation.classificationChunkCount())
+	p.recordStreamingCoverage(
+		extracted,
+		classifier.Result{Coverage: classifier.Coverage{
+			State:  classifier.CoverageUnavailable,
+			Reason: classifier.CoverageReasonAborted,
+		}},
+		nil,
+		coverageReasons,
+		windowBytes,
+		observation,
+		coverageDispositionIncomplete,
+	)
+}
+
+func (p *Plugin) recordStreamingCountersLocked(extracted extract.Result, result classifier.Result, reasons []extract.IncompleteReason, coverageReasons coverageIncompleteReasonSet, windowBytes int) {
 	p.counters.streamingScanRequests.Add(1)
+	p.counters.coverageIncompleteReasons.add(coverageReasons)
 	if extracted.TextBytesScanned > 0 {
 		p.counters.textBytesScannedTotal.Add(uint64(extracted.TextBytesScanned))
+	}
+	if extracted.ClassificationChunks > 0 {
+		p.counters.classificationChunksTotal.Add(uint64(extracted.ClassificationChunks))
 	}
 	if result.Coverage.Windows > 0 {
 		p.counters.classificationWindowsTotal.Add(uint64(result.Coverage.Windows))
@@ -600,14 +819,18 @@ func (p *Plugin) recordStreamingCounters(extracted extract.Result, result classi
 		p.counters.windowBoundaryReconstructions.Add(uint64(result.Coverage.BoundaryReconstructions))
 	}
 	longText := extracted.TextBytesScanned > windowBytes
-	maxWindows := result.Coverage.Reason == classifier.CoverageReasonClassificationLimit
-	totalText := result.Coverage.Reason == classifier.CoverageReasonTotalTextLimit
+	// These two compatibility counters predate precise reason accounting. Keep
+	// their historical meanings: an actual extractor/classifier chunk budget and
+	// an actual total-text budget respectively. A classifier-window fallback or
+	// byte-accounting mismatch may still use classification_chunk_limit for the
+	// legacy disposition, but must not masquerade as MaxChunks exhaustion.
+	maxWindows := result.Coverage.Reason == classifier.CoverageReasonClassificationLimit ||
+		extracted.HasIncompleteReason(extract.IncompleteClassificationChunkLimit)
+	totalText := result.Coverage.Reason == classifier.CoverageReasonTotalTextLimit ||
+		extracted.HasIncompleteReason(extract.IncompleteTotalTextLimit)
 	for _, reason := range reasons {
 		switch reason {
-		case extract.IncompleteClassificationChunkLimit:
-			maxWindows = true
 		case extract.IncompleteTotalTextLimit:
-			totalText = true
 			longText = true
 		}
 	}

@@ -28,6 +28,46 @@ elif [[ "$fixture_mode" != 1 ]]; then
   fail "external release document roots are allowed only with RELEASE_DOC_FIXTURE_MODE=1"
 fi
 
+verify_canonical_relative_path() {
+  local relative="$1"
+  local component traversed="" candidate canonical="$doc_root" canonical_parent
+  local -a components=()
+
+  [[ -n "$relative" && "$relative" != /* ]] ||
+    fail "release document path must be a non-empty relative path: $relative"
+  IFS='/' read -r -a components <<<"$relative"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != "." && "$component" != ".." ]] ||
+      fail "release document path contains an unsafe component: $relative"
+  done
+  for component in "${components[@]}"; do
+    if [[ -n "$traversed" ]]; then
+      traversed="$traversed/$component"
+    else
+      traversed="$component"
+    fi
+    candidate="$canonical/$component"
+    [[ ! -L "$candidate" ]] ||
+      fail "release document path component must not be a symlink: $traversed"
+    [[ -e "$candidate" ]] || return 0
+    if [[ -d "$candidate" ]]; then
+      canonical="$(cd -- "$candidate" && pwd -P)" ||
+        fail "cannot canonicalize release document path: $traversed"
+    else
+      canonical_parent="$(cd -- "${candidate%/*}" && pwd -P)" ||
+        fail "cannot canonicalize release document path parent: $traversed"
+      canonical="$canonical_parent/${candidate##*/}"
+    fi
+    case "$canonical" in
+      "$doc_root" | "$doc_root"/*)
+        ;;
+      *)
+        fail "release document path escapes canonical document root: $traversed"
+        ;;
+    esac
+  done
+}
+
 current_ruleset_sha256="${CURRENT_RULESET_SHA256:-$(release_ruleset_hash)}"
 [[ "$current_ruleset_sha256" =~ ^[0-9a-f]{64}$ ]] || \
   fail "current ruleset SHA-256 is not a lowercase 64-character digest"
@@ -97,7 +137,46 @@ documents=(
 
 for relative in "${documents[@]}"; do
   document="$doc_root/$relative"
+  verify_canonical_relative_path "$relative"
   [[ -f "$document" && ! -L "$document" ]] || fail "required current release document must be a regular non-symlink file: $relative"
+done
+
+active_workflows=(
+  .github/workflows/ci.yml
+  .github/workflows/codeql.yml
+  .github/workflows/policy-gate.yml
+)
+workflow_directory="$doc_root/.github/workflows"
+verify_canonical_relative_path .github/workflows
+[[ -d "$workflow_directory" && ! -L "$workflow_directory" ]] ||
+  fail "active workflow directory must be a regular non-symlink directory: .github/workflows"
+for relative in "${active_workflows[@]}"; do
+  workflow="$doc_root/$relative"
+  verify_canonical_relative_path "$relative"
+  [[ -f "$workflow" && ! -L "$workflow" ]] ||
+    fail "required active workflow must be a regular non-symlink file: $relative"
+done
+for workflow in "$workflow_directory"/*.yml "$workflow_directory"/*.yaml; do
+  [[ -e "$workflow" || -L "$workflow" ]] || continue
+  relative=".github/workflows/${workflow##*/}"
+  case "$relative" in
+    .github/workflows/ci.yml | \
+      .github/workflows/codeql.yml | \
+      .github/workflows/policy-gate.yml)
+      ;;
+    *)
+      fail "workflow directory contains an unreviewed active workflow: $relative"
+      ;;
+  esac
+done
+workflow_index="$workflow_directory/README.md"
+verify_canonical_relative_path .github/workflows/README.md
+[[ -f "$workflow_index" && ! -L "$workflow_index" ]] ||
+  fail "workflow index must be a regular non-symlink file: .github/workflows/README.md"
+for relative in "${active_workflows[@]}"; do
+  workflow_name="${relative##*/}"
+  grep -Fq "| \`$workflow_name\` |" "$workflow_index" ||
+    fail "workflow index lost the active workflow: $relative"
 done
 
 if [[ "$doc_root" == "$root" ]]; then
@@ -119,53 +198,15 @@ if [[ "$doc_root" == "$root" ]]; then
   grep -Fq '[Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)' \
     "$root/docs/README.md" ||
     fail "documentation index lost the Round 9 execution-record link"
-  grep -Fq '| `round9-release-rc.yml` |' "$root/.github/workflows/README.md" ||
-    fail "workflow index lost the active Round 9 RC lane"
   grep -Fq '127.0.0.1:18394 -> 8317/tcp' "$root/docs/ROUND9_HOST_RUNNER.md" ||
     fail "Round 9 Host guide lost the fixed CPA listener contract"
-  round9_rc_workflow="$root/.github/workflows/round9-release-rc.yml"
-  [[ -f "$round9_rc_workflow" && ! -L "$round9_rc_workflow" ]] ||
-    fail "Round 9 RC workflow must be a regular non-symlink file"
-  grep -Fq 'ROUND9_NEW_PUBLIC_PRERELEASE_CREATION: BLOCKED_PENDING_EXACT_CANDIDATE_INDEPENDENT_AUDIT_GATE' \
-    "$round9_rc_workflow" ||
-    fail "Round 9 RC workflow lost the exact-candidate independent-audit publication block"
-  [[ "$(grep -Fxc '      publication_permitted: ${{ steps.admit.outputs.publication_permitted }}' "$round9_rc_workflow")" == 1 ]] &&
-    [[ "$(grep -Fxc "            printf 'publication_permitted=false\\n'" "$round9_rc_workflow")" == 1 ]] &&
-    [[ "$(grep -Fxc "    if: \${{ needs.admission.outputs.publication_permitted == 'true' }}" "$round9_rc_workflow")" == 3 ]] ||
-    fail "Round 9 publish, publication-blocker, and legacy verifier jobs must remain gated by the reviewed false admission output"
-  grep -Fq 'round9_gate_run:' "$round9_rc_workflow" ||
-    fail "Round 9 RC workflow lost the exact-main Round 9 gate-run input"
-  grep -Fq 'actions/workflows/315644586' "$round9_rc_workflow" &&
-    grep -Fq 'actions/workflows/318443961' "$round9_rc_workflow" &&
-    [[ "$(grep -Fc '.state == "disabled_manually"' "$round9_rc_workflow")" == 2 ]] ||
-    fail "Round 9 RC workflow must require both historical workflow IDs to remain disabled_manually"
-  grep -Fq '[.[][] | select(.tag_name == $tag)] | length == 0' \
-    "$round9_rc_workflow" ||
-    fail "Round 9 RC workflow must reject every existing candidate Release"
-  if grep -Fq 'already_public' "$round9_rc_workflow" ||
-    grep -Fq 'inputs.publish_rc_release' "$round9_rc_workflow"; then
-    fail "Round 9 RC workflow must not retain the retired public-recovery state or input"
-  fi
-  grep -Fq 'publication_blocked:' "$round9_rc_workflow" ||
-    fail "Round 9 RC workflow lost the fail-closed publication job"
-  grep -Fq 'Fail closed after retaining the private candidate artifact' \
-    "$round9_rc_workflow" ||
-    fail "Round 9 RC workflow lost the private-candidate fail-closed boundary"
-  grep -Fq 'verify_published:' "$round9_rc_workflow" ||
-    fail "Round 9 RC workflow lost the disabled legacy verifier contract"
-  if grep -Eq '^[[:space:]]*contents:[[:space:]]*write[[:space:]]*$' \
-    "$round9_rc_workflow"; then
-    fail "Round 9 RC workflow must not hold contents write permission while exact-candidate audit evidence is not provided"
-  fi
-  if grep -Eq '(^|[[:space:]])gh[[:space:]]+(release[[:space:]]+(create|upload|edit|delete)|api[[:space:]].*--method[[:space:]]+(POST|PATCH|PUT|DELETE))([[:space:]]|$)' \
-    "$round9_rc_workflow"; then
-    fail "Round 9 RC workflow must not contain a Release mutation path while exact-candidate audit is unimplemented"
-  fi
   grep -Fq 'HTTP `503` and the fixed `audit_unavailable` error' \
     "$root/docs/ROUND9_AUDIT_SCHEMA_V6.md" ||
     fail "Round 9 audit guide lost the enabled-but-unavailable management contract"
 fi
 
+# Historical RELEASE_POLICY and ROUND8_CALIBRATION snapshots remain required
+# above, but intentionally do not use the fixed current-document prologue.
 classifier_identity_documents=(
   README.md
   README_CN.md
@@ -176,7 +217,6 @@ classifier_identity_documents=(
   docs/INSTALL_DOCKER.md
   docs/LIMITATIONS.md
   docs/README.md
-  docs/RELEASE_POLICY.md
   docs/ROUND6_CONFIG_MIGRATION.md
   docs/ROUND6_DEVELOPMENT_HANDOFF.md
   docs/ROUND6_LIMITATIONS.md
@@ -195,7 +235,6 @@ classifier_identity_documents=(
   docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
   docs/reports/PROMPT_INJECTION_REVIEW.md
   docs/reports/RELEASE_EVIDENCE.md
-  docs/reports/ROUND8_CALIBRATION.md
   docs/reports/ROUND8_RELEASE_READINESS.md
   docs/reports/ROUND9_EXECUTION_RECORD.md
   docs/reports/TEST_REPORT.md
@@ -269,6 +308,11 @@ active_prose = re.compile(
 )
 policy_version = re.compile(r"\bclassifier-policy-v[0-9]+\b", re.IGNORECASE)
 sha256 = re.compile(r"(?<![0-9a-f])[0-9a-f]{64}(?![0-9a-f])")
+historical_same_version_claim = re.compile(
+    r"(?:\b(?:historical|previous|prior|former|superseded|last\s+CPA)\b|"
+    r"历史|上一份|先前|旧版)",
+    re.IGNORECASE,
+)
 policy_digest_value = (
     r"(?<![0-9A-Fa-f])"
     r"(?:[0-9A-Fa-f]{64}|[0-9A-Fa-f]{4,63}(?:\.\.\.|…)[0-9A-Fa-f]{0,63})"
@@ -364,6 +408,11 @@ for relative in documents:
     for line_number, line in enumerate(lines, start=1):
         if current_version not in line:
             continue
+        claim_context = "\n".join(
+            lines[max(0, line_number - 2) : min(len(lines), line_number + 2)]
+        )
+        if historical_same_version_claim.search(claim_context):
+            continue
         hashes = sha256.findall(line)
         if not hashes:
             hashes = sha256.findall("\n".join(lines[line_number : line_number + 2]))
@@ -383,12 +432,22 @@ then
 fi
 
 historical_corpus="$doc_root/docs/reports/CORPUS_REPORT.md"
+verify_canonical_relative_path docs/reports/CORPUS_REPORT.md
 [[ -f "$historical_corpus" ]] || \
   fail "required historical corpus report is missing: docs/reports/CORPUS_REPORT.md"
 grep -Eq '^# Historical .*v0\.1\.2 candidate[[:space:]]*$' "$historical_corpus" || \
   fail "docs/reports/CORPUS_REPORT.md must be explicitly labeled as historical v0.1.2 evidence"
 
 policy="$doc_root/docs/RELEASE_POLICY.md"
+required_active_workflow_policy_markers=(
+  'contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create'
+  'point-in-time audit record, not an executable or current publication plan.'
+  'historical snapshot; they do not describe the active workflow inventory.'
+)
+for marker in "${required_active_workflow_policy_markers[@]}"; do
+  grep -Fq "$marker" "$policy" ||
+    fail "docs/RELEASE_POLICY.md is missing the active workflow inventory boundary: $marker"
+done
 required_policy_lines=(
   "current_round: 9"
   "current_source_version: $current_release_version"
@@ -402,9 +461,6 @@ required_policy_lines=(
   "current_cpa_commit: 928478e4b91533cec05a763bfac3edad9c3e76cf"
   "historical_round8_host_matrix: v7.2.95"
   "historical_round8_host_matrix_commit: f71ec0eb6776854457892452cf28c47f0d658251"
-  "current_gate_workflow: .github/workflows/round9-gate.yml"
-  "current_host_workflow: .github/workflows/round9-host-validation.yml"
-  "current_rc_workflow: .github/workflows/round9-release-rc.yml"
   "current_host_environment: round9-host-validation"
   "current_host_runner_label: cag-round9-sandbox"
   "current_publication_environment: round9-rc-publication"
@@ -443,8 +499,6 @@ required_policy_lines=(
   "current_host_evaluation_publication_sufficiency: false"
   "current_release_title_publication_sufficiency: false"
   "current_publication_write_permission: absent"
-  "current_round9_gate_admission: workflow=Round 9 policy gate,path=.github/workflows/round9-gate.yml,event=push,branch=main,exact-commit,completed-success"
-  "current_historical_workflow_disable_requirement: 315644586:release-rc.yml=disabled_manually,318443961:round8-host-validation.yml=disabled_manually"
   "current_public_adversarial_corpus: round9-public-adversarial-v13"
   "current_public_adversarial_manifest_schema: round9-public-adversarial-corpus/v13"
   "current_public_adversarial_machine_report_schema: round9-public-adversarial-report/v13"

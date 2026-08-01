@@ -175,6 +175,11 @@ func (s *Store) RecordRawCapture(input RawCaptureInput) error {
 	if !s.cfg.RawCapture.Enabled {
 		return ErrRawCaptureDisabled
 	}
+	if err := s.checkStorageAccess(); err != nil {
+		s.rejected.Add(1)
+		s.rawRejected.Add(1)
+		return err
+	}
 	// Reserve bounded capacity before converting, redacting, hashing, or
 	// truncating the request body. A saturated writer therefore rejects a large
 	// blocked request in constant time instead of repeating full-body work that
@@ -218,6 +223,11 @@ func (s *Store) EnqueueEventWithRawCapture(event Event, input RawCaptureInput) (
 	}
 	if !s.cfg.RawCapture.Enabled {
 		return false, ErrRawCaptureDisabled
+	}
+	if err := s.checkStorageAccess(); err != nil {
+		s.rejected.Add(2)
+		s.rawRejected.Add(1)
+		return false, err
 	}
 	preparedEvent, err := prepareEvent(event, s.cfg.Now())
 	if err != nil {
@@ -419,6 +429,9 @@ func (s *Store) PurgeRawCaptures(ctx context.Context) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, ErrUnavailable
 	}
+	if err := s.checkStorageAccess(); err != nil {
+		return 0, err
+	}
 	if err := s.Flush(ctx); err != nil {
 		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: flush before raw capture purge: %w", err))
 	}
@@ -443,7 +456,7 @@ func (s *Store) purgeRawCaptures(ctx context.Context) (int64, error) {
 	if busy != 0 {
 		return deleted, s.rawCaptureMaintenanceFailure(errors.New("audit: raw request capture purge WAL checkpoint remained busy"))
 	}
-	if err := secureSQLiteFiles(s.cfg.Path); err != nil {
+	if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
 		return deleted, s.rawCaptureMaintenanceFailure(err)
 	}
 	if deleted > 0 {

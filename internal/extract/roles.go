@@ -47,17 +47,24 @@ const (
 	UserAttributionTrusted
 )
 
-// ToolResultAssociation records the bounded structural proof that makes a
-// provider-native tool result part of the request currently being answered.
-// The value is content-free: raw call IDs, function names, response IDs, and
-// tool payloads never leave the bounded extraction planner.
+// ToolResultAssociation records bounded structural proof for a provider-native
+// tool result. It distinguishes terminal request-local results from historical
+// results that only the immediately following current user may explicitly
+// reference. The value is content-free: raw call IDs, function names, response
+// IDs, and tool payloads never leave the bounded extraction planner.
 type ToolResultAssociation uint8
 
 const (
 	ToolResultAssociationNone ToolResultAssociation = iota
 	// ToolResultAssociationUnique links one result to one earlier provider call
-	// by an exact ID, or by Gemini's exact adjacent name-and-ordinal group.
+	// by an exact ID, or by Gemini's exact adjacent name-and-ordinal group, when
+	// the completed transaction is terminal in the current request.
 	ToolResultAssociationUnique
+	// ToolResultAssociationReferableUnique links one completed, exact provider
+	// transaction to the immediately following current trusted-user turn. It is
+	// not request-local authority by itself; only that later user may explicitly
+	// refer to the result.
+	ToolResultAssociationReferableUnique
 )
 
 // ContentKind is a closed, structural classification of model-visible text.

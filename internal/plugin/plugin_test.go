@@ -701,6 +701,13 @@ func lifecyclePayloadWithSchema(t testing.TB, schema uint32, yaml string) []byte
 
 func register(t testing.TB, p *Plugin, yaml string) {
 	t.Helper()
+	// Persistent-feature tests exercise SQLite semantics in an ordinary test
+	// temp directory, which is commonly an overlay/container layer. Explicit
+	// fail-closed tests install their own inspector before calling this helper;
+	// all other persistence tests use a deterministic verified-volume fixture.
+	if p.auditStorageInspect == nil && strings.Contains(yaml, "require_persistent_storage: true") {
+		p.auditStorageInspect = verifiedAuditStorageInspectorForTest
+	}
 	raw, code := p.Call(pluginabi.MethodPluginRegister, lifecyclePayload(t, yaml))
 	if code != 0 {
 		t.Fatalf("plugin.register code=%d envelope=%s", code, raw)

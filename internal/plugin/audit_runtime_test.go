@@ -36,9 +36,13 @@ func TestAuditPathFailureDegradesVisiblyWithoutDisablingEnforcement(t *testing.T
 	if route := callRoute(t, p, maliciousRequest); !route.Handled {
 		t.Fatalf("audit degradation disabled enforcement: %+v", route)
 	}
-	status := p.runtime.Load().audit.Status()
-	if !status.Degraded || !strings.Contains(status.LastError, "symlink") {
-		t.Fatalf("audit status = %#v, want visible symlink degradation", status)
+	runtime := p.runtime.Load()
+	status := runtime.audit.Status()
+	if !status.Degraded || runtime.auditStorage.PersistenceReason != "symlinked_directory" {
+		t.Fatalf("audit status = %#v storage=%#v, want visible symlink degradation", status, runtime.auditStorage)
+	}
+	if _, err := os.Lstat(filepath.Join(realDirectory, "events.db")); !os.IsNotExist(err) {
+		t.Fatalf("unsafe symlink target was opened by SQLite: %v", err)
 	}
 	logMu.Lock()
 	defer logMu.Unlock()

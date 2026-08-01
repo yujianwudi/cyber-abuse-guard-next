@@ -14,7 +14,7 @@ func TestRawCaptureRouterRecordsOnlyFinalBlocks(t *testing.T) {
 	t.Cleanup(p.Shutdown)
 	hashCalls := countRequestHashes(p)
 	dataDir := filepath.ToSlash(t.TempDir())
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  log_request_hash: false\n  log_subject_hash: false\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  log_request_hash: false\n  log_subject_hash: false\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
 
 	if route := callRoute(t, p, `{"messages":[{"role":"user","content":"Summarize this ordinary release note for a customer."}]}`); route.Handled {
 		t.Fatalf("ordinary request was blocked: %+v", route)
@@ -115,7 +115,7 @@ func TestRawCaptureRouterDoesNotCaptureAuditOrObserveDispositions(t *testing.T) 
 			p := New()
 			t.Cleanup(p.Shutdown)
 			dataDir := filepath.ToSlash(t.TempDir())
-			register(t, p, "mode: "+mode+"\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
+			register(t, p, "mode: "+mode+"\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
 
 			if route := callRoute(t, p, maliciousRequest); route.Handled {
 				t.Fatalf("%s mode enforced a block: %+v", mode, route)
@@ -131,7 +131,7 @@ func TestRawCaptureRouterCapturesStrictUnknownSourceBlock(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
 	dataDir := filepath.ToSlash(t.TempDir())
-	register(t, p, "mode: strict\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
+	register(t, p, "mode: strict\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
 
 	body := `{"messages":[{"role":"user","content":"ordinary request in a future provider shape"}]}`
 	if route := callRoleRoute(t, p, "future-provider", body); !route.Handled {
@@ -154,7 +154,7 @@ func TestRawCaptureRouterPreservesMaliciousWinnerWhenSubjectCooldownAlsoMatches(
 	p := New()
 	t.Cleanup(p.Shutdown)
 	dataDir := filepath.ToSlash(t.TempDir())
-	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: true\n")
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: true\n")
 
 	headers := http.Header{"Authorization": []string{"Bearer cooldown-review-subject"}}
 	bodies := []string{

@@ -110,24 +110,48 @@ type runtimeState struct {
 	classifier   *classifier.Classifier
 	rulesVersion string
 	audit        *audit.Store
-	subject      *subject.Controller
-	persistence  *subjectPersistenceRuntime
-	startedAt    time.Time
-	configuredAt time.Time
+	auditStorage auditStorageVerification
+	// auditStorageGate exists only for the explicit production persistence
+	// contract. It latches a live failure until this runtime is replaced.
+	auditStorageGate *auditStorageGate
+	// auditStorageProbe is immutable after publication. Management invokes it
+	// for every authenticated status read so readiness reflects current mount,
+	// identity, permission, writability, and capacity state rather than the
+	// startup snapshot.
+	auditStorageProbe func(auditStorageVerification) auditStorageVerification
+	subject           *subject.Controller
+	persistence       *subjectPersistenceRuntime
+	startedAt         time.Time
+	configuredAt      time.Time
 }
 
-func (state *runtimeState) close() {
+func (state *runtimeState) close() error {
 	if state == nil {
-		return
+		return nil
 	}
 	state.stopSubjectPersistence()
 	if state.audit == nil {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	state.audit.SetErrorHandler(nil)
-	_ = state.audit.CloseContext(ctx)
+	if state.auditStorageGate != nil && state.auditStorageGate.verification().blocksOperationalReadiness() {
+		return state.audit.DiscardContext(ctx)
+	}
+	return state.audit.CloseContext(ctx)
+}
+
+func (p *Plugin) closeRuntime(state *runtimeState) {
+	if err := state.close(); err != nil {
+		// SQLite diagnostics may contain operator-selected paths. Keep the Host
+		// log stable and content-free while ensuring checkpoint/close failures are
+		// not silently discarded.
+		p.log("error", "cyber-abuse-guard audit storage did not close cleanly", map[string]any{
+			"plugin": ID,
+			"code":   "audit_storage_close_failed",
+		})
+	}
 }
 
 // Plugin is safe for concurrent CPA callbacks. A validated runtime is built
@@ -147,6 +171,7 @@ type Plugin struct {
 	identifier                *subject.Identifier
 	identifierErr             error
 	loadRules                 func() (*rules.RuleSet, error)
+	auditStorageInspect       func(string, bool, bool, int64) auditStorageVerification
 	requestHasher             func([]byte) string
 	requestFingerprintKey     [32]byte
 	requestFingerprintEnabled bool
@@ -498,7 +523,11 @@ func (p *Plugin) routeOversized(state *runtimeState) []byte {
 	reasons := []extract.IncompleteReason{extract.IncompleteRPCBodyLimit}
 	decision := inspectionDisposition(state.config.Mode, inspectionOutcome{Incomplete: reasons}, state.config.EffectiveOpaqueMediaPolicy())
 	p.recordIncompleteCounters(reasons, decision)
-	p.counters.coverageIncomplete.Add(1)
+	p.recordUnscannedCoverageFailure(
+		coverageIncompleteRPCBodyLimit,
+		reasons,
+		finalRouteDispositionFor(coverageDispositionIncomplete, decision),
+	)
 	switch {
 	case decision.Block:
 		p.counters.blocked.Add(1)
@@ -581,7 +610,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	p.opMu.Lock()
 	if p.shutdown.Load() {
 		p.opMu.Unlock()
-		state.close()
+		p.closeRuntime(state)
 		return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, "")
 	}
 	current := p.runtime.Load()
@@ -591,7 +620,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	if reconfigure && current != nil && current.subject != nil && current.config.SubjectControl.Enabled && state.config.SubjectControl.Enabled {
 		if err := current.subject.Reconfigure(subjectRuntimeConfig(state.config)); err != nil {
 			p.opMu.Unlock()
-			state.close()
+			p.closeRuntime(state)
 			p.setLastConfigError(err)
 			p.setLastReconfigureError(err)
 			p.log("warn", "cyber-abuse-guard rejected a reconfiguration that could not preserve subject state", map[string]any{
@@ -609,7 +638,37 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		// WAL truncation therefore form the final hard privacy gate before Swap.
 		// If the gate cannot complete, retain the previous runtime instead of
 		// publishing a disabled configuration that merely hides sensitive rows.
-		for _, store := range []*audit.Store{current.audit, state.audit} {
+		samePath := current.audit != nil && state.audit != nil &&
+			sameAuditStoragePath(current.auditStorage.DatabasePath, state.auditStorage.DatabasePath)
+		if samePath {
+			// The replacement Store cannot flush work admitted by the current
+			// Store, even though both handles address the same SQLite file. Drain
+			// the current queue before the replacement deletes and checkpoints so
+			// close-time draining cannot reinsert a preview after the privacy gate.
+			// A latched storage gate remains safe here: the old writer rechecks it
+			// for every queued item and rejects those writes before this barrier.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			flushErr := current.audit.Flush(ctx)
+			cancel()
+			if flushErr != nil {
+				p.opMu.Unlock()
+				p.closeRuntime(state)
+				p.rejectReconfigure(
+					fmt.Errorf("drain prior raw-capture queue before same-path purge: %w", flushErr),
+					"raw_capture_drain_failed",
+				)
+				return okEnvelope(currentRegistration())
+			}
+		}
+		stores := []*audit.Store{state.audit}
+		// When both runtimes address the same SQLite path, the freshly verified
+		// Store is the only purge authority needed. The old Store may be latched
+		// after a storage fault and must not be reopened merely to recover; opMu
+		// already excludes old callbacks and its gate blocks queued writes.
+		if current.audit != nil && !samePath {
+			stores = append(stores, current.audit)
+		}
+		for _, store := range stores {
 			if store == nil {
 				continue
 			}
@@ -618,7 +677,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 			cancel()
 			if purgeErr != nil {
 				p.opMu.Unlock()
-				state.close()
+				p.closeRuntime(state)
 				p.rejectReconfigure(purgeErr, "raw_capture_purge_failed")
 				return okEnvelope(currentRegistration())
 			}
@@ -630,7 +689,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	p.setLastReconfigureError(nil)
 	p.opMu.Unlock()
 	p.reportABICapabilityLimits()
-	previous.close()
+	p.closeRuntime(previous)
 	state.startSubjectPersistence(p)
 	return okEnvelope(currentRegistration())
 }
@@ -730,54 +789,112 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		config:       cfg,
 		classifier:   compiled,
 		rulesVersion: set.Version,
+		auditStorage: disabledAuditStorageVerification(),
 		subject:      controller,
 		startedAt:    now,
 		configuredAt: now,
 	}
 	if cfg.Audit.Enabled {
-		path, pathErr := auditDatabasePath(cfg.Audit.DataDir)
+		persistenceExpected := auditPersistenceExpected(cfg)
+		path := ""
+		var pathErr error
+		if persistenceExpected {
+			// A required production volume is operator-owned infrastructure. Resolve
+			// its configured database location without creating a missing mount or
+			// directory; verification below must observe the volume as deployed.
+			path, pathErr = auditDatabasePathLocation(cfg.Audit.DataDir)
+		} else {
+			path, pathErr = auditDatabasePath(cfg.Audit.DataDir)
+		}
+		inspectStorage := inspectAuditStorage
+		if p.auditStorageInspect != nil {
+			inspectStorage = p.auditStorageInspect
+		}
+		state.auditStorage = inspectStorage(
+			path,
+			strings.TrimSpace(cfg.Audit.DataDir) != "",
+			persistenceExpected,
+			int64(cfg.Audit.MaxDBMB)<<20,
+		)
+		if persistenceExpected {
+			state.auditStorageGate = newAuditStorageGate(state.auditStorage, int64(cfg.Audit.MaxDBMB)<<20, inspectStorage)
+		} else {
+			state.auditStorageProbe = func(baseline auditStorageVerification) auditStorageVerification {
+				return recheckAuditStorageWithInspector(baseline, int64(cfg.Audit.MaxDBMB)<<20, false, inspectStorage)
+			}
+		}
 		if pathErr != nil {
 			p.log("error", "cyber-abuse-guard could not prepare its audit directory", map[string]any{
 				"plugin": ID,
 				"code":   "audit_directory_unavailable",
 			})
 		}
+		if state.auditStorage.blocksOperationalReadiness() {
+			p.log("error", "cyber-abuse-guard audit persistence could not be verified", map[string]any{
+				"plugin": ID,
+				"code":   "audit_persistence_unverified",
+				"reason": state.auditStorage.PersistenceReason,
+			})
+		}
+		storageOpenPrevented := state.auditStorage.preventsDatabaseOpen()
 		hadAuditArtifacts := false
-		if !cfg.Audit.RawCapture.Enabled {
+		if !cfg.Audit.RawCapture.Enabled && !storageOpenPrevented {
 			var inspectErr error
 			hadAuditArtifacts, inspectErr = auditDatabaseArtifactsPresent(path)
 			if inspectErr != nil {
 				return nil, fmt.Errorf("inspect disabled raw-capture audit files: %w", inspectErr)
 			}
 		}
-		store, openErr := audit.Open(audit.Config{
-			Path:                    path,
-			Retention:               time.Duration(cfg.Audit.RetentionDays) * 24 * time.Hour,
-			MaxBytes:                int64(cfg.Audit.MaxDBMB) << 20,
-			QueueSize:               1024,
-			BusyTimeout:             2 * time.Second,
-			CleanupInterval:         time.Hour,
-			BackupBeforeMigration:   cfg.Audit.BackupBeforeMigration,
-			MaxMigrationBackups:     cfg.Audit.MaxMigrationBackups,
-			SkipDisabledPurgeOnOpen: skipDisabledPurgeOnOpen,
-			RawCapture: audit.RawCaptureConfig{
-				Enabled:       cfg.Audit.RawCapture.Enabled,
-				OnlyBlocked:   cfg.Audit.RawCapture.OnlyBlocked,
-				MaxBytes:      cfg.Audit.RawCapture.MaxBytes,
-				TTL:           time.Duration(cfg.Audit.RawCapture.TTLHours) * time.Hour,
-				RedactSecrets: cfg.Audit.RawCapture.RedactSecrets,
-			},
-			OnError: func(error) {
-				p.log("error", "cyber-abuse-guard audit storage is degraded", map[string]any{
-					"plugin": ID,
-					"code":   "audit_storage_degraded",
-				})
-			},
-		})
-		if !cfg.Audit.RawCapture.Enabled && openErr != nil &&
+		openPath := path
+		if storageOpenPrevented {
+			openPath = ""
+		}
+		var store *audit.Store
+		var openErr error
+		if state.auditStorage.blocksOperationalReadiness() {
+			// Do not invoke the SQLite constructor at all when the explicit
+			// persistence contract is unverified. A nil audit runtime is the
+			// intentional fail-closed state exposed by management below.
+			p.log("error", "cyber-abuse-guard audit storage is degraded", map[string]any{
+				"plugin": ID,
+				"code":   "audit_storage_degraded",
+			})
+		} else {
+			var storageAccessGate func() error
+			if state.auditStorageGate != nil {
+				storageAccessGate = state.auditStorageGate.access
+			}
+			store, openErr = audit.Open(audit.Config{
+				Path:                     openPath,
+				Retention:                time.Duration(cfg.Audit.RetentionDays) * 24 * time.Hour,
+				MaxBytes:                 int64(cfg.Audit.MaxDBMB) << 20,
+				QueueSize:                1024,
+				BusyTimeout:              2 * time.Second,
+				CleanupInterval:          time.Hour,
+				BackupBeforeMigration:    cfg.Audit.BackupBeforeMigration,
+				MaxMigrationBackups:      cfg.Audit.MaxMigrationBackups,
+				RequirePersistentStorage: persistenceExpected,
+				StorageAccessGate:        storageAccessGate,
+				SkipDisabledPurgeOnOpen:  skipDisabledPurgeOnOpen,
+				RawCapture: audit.RawCaptureConfig{
+					Enabled:       cfg.Audit.RawCapture.Enabled,
+					OnlyBlocked:   cfg.Audit.RawCapture.OnlyBlocked,
+					MaxBytes:      cfg.Audit.RawCapture.MaxBytes,
+					TTL:           time.Duration(cfg.Audit.RawCapture.TTLHours) * time.Hour,
+					RedactSecrets: cfg.Audit.RawCapture.RedactSecrets,
+				},
+				OnError: func(error) {
+					p.log("error", "cyber-abuse-guard audit storage is degraded", map[string]any{
+						"plugin": ID,
+						"code":   "audit_storage_degraded",
+					})
+				},
+			})
+		}
+		if !cfg.Audit.RawCapture.Enabled && !storageOpenPrevented && openErr != nil &&
 			(hadAuditArtifacts || errors.Is(openErr, audit.ErrRawCapturePurge)) {
 			if store != nil {
-				_ = store.Close()
+				openErr = errors.Join(openErr, store.Discard())
 			}
 			return nil, fmt.Errorf("initialize disabled raw-capture privacy gate: %w", openErr)
 		}
@@ -785,11 +902,48 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		// failures, so enforcement remains available. A proven disabled-capture
 		// purge failure is the exception above: publishing that runtime would hide
 		// retained review text while claiming the feature was disabled.
+		if store != nil && openErr == nil {
+			// SQLite may create the DB/WAL/SHM set during Open. Recheck the
+			// pre-open directory and any pre-existing artifacts, allow only those
+			// expected creations, then retain the post-open identities for every
+			// subsequent management readiness probe.
+			preOpenStorage := state.auditStorage
+			state.auditStorage = recheckAuditStorageWithInspector(preOpenStorage, int64(cfg.Audit.MaxDBMB)<<20, true, inspectStorage)
+			if state.auditStorage.preventsDatabaseOpen() &&
+				(preOpenStorage.PersistenceVerified || preOpenStorage.PersistenceReason != state.auditStorage.PersistenceReason) {
+				p.log("error", "cyber-abuse-guard audit persistence changed while SQLite opened", map[string]any{
+					"plugin": ID,
+					"code":   "audit_persistence_identity_changed",
+					"reason": state.auditStorage.PersistenceReason,
+				})
+			}
+			if state.auditStorage.preventsDatabaseOpen() {
+				if state.auditStorageGate != nil {
+					state.auditStorageGate.latch(state.auditStorage)
+				}
+				// This Store has not been published and has accepted no caller work.
+				// Close it now so a post-open identity/permission/capacity failure
+				// cannot leave a writable handle reachable by the runtime.
+				openErr = errors.Join(openErr, store.Discard())
+				store = nil
+			} else if state.auditStorageGate != nil {
+				state.auditStorageGate.arm(state.auditStorage)
+			}
+		}
 		state.audit = store
 	}
 	if cfg.SubjectControl.Persistence {
 		state.persistence = newSubjectPersistenceRuntime(p.identifier.KeyID())
-		state.restoreSubjectPersistence(p)
+		if state.auditStorage.blocksOperationalReadiness() {
+			// Do not even attempt a subject-state read when the production storage
+			// contract failed. Blocking saves here also covers dirty, periodic,
+			// reconfigure, and shutdown persistence boundaries.
+			state.persistence.writesBlocked.Store(true)
+			state.persistence.setError(errors.New("subject persistence requires verified audit storage"))
+			p.logSubjectPersistenceError("subject_persistence_storage_unverified")
+		} else {
+			state.restoreSubjectPersistence(p)
+		}
 	}
 	return state, nil
 }
@@ -827,7 +981,7 @@ func auditDatabasePath(dataDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(filepath.Dir(databasePath), 0o700); err != nil {
+	if err := prepareAuditStorageDirectory(filepath.Dir(databasePath)); err != nil {
 		return databasePath, fmt.Errorf("create audit data directory: %w", err)
 	}
 	return databasePath, nil
@@ -932,7 +1086,7 @@ func (p *Plugin) Shutdown() {
 	p.requestLifecycle.clear()
 	p.opMu.Unlock()
 	p.lifecycleMu.Unlock()
-	state.close()
+	p.closeRuntime(state)
 }
 
 func okEnvelope(value any) []byte {
@@ -961,6 +1115,10 @@ func errorEnvelope(code, message string, status int, category string) []byte {
 }
 
 type counters struct {
+	// coverageMu makes one request's request/incomplete/reason/dimension/
+	// disposition charge visible atomically to management snapshots. The hot
+	// path takes it once per streamed request and retains fixed-size accounting.
+	coverageMu                       sync.RWMutex
 	total                            atomic.Uint64
 	allowed                          atomic.Uint64
 	observed                         atomic.Uint64
@@ -1004,6 +1162,7 @@ type counters struct {
 	longTextRequests                 atomic.Uint64
 	streamingScanRequests            atomic.Uint64
 	textBytesScannedTotal            atomic.Uint64
+	classificationChunksTotal        atomic.Uint64
 	classificationWindowsTotal       atomic.Uint64
 	coverageComplete                 atomic.Uint64
 	coverageIncomplete               atomic.Uint64
@@ -1011,10 +1170,14 @@ type counters struct {
 	totalTextLimitExhausted          atomic.Uint64
 	windowBoundaryReconstructions    atomic.Uint64
 	verifiedHardBlockUnderIncomplete atomic.Uint64
+	coverageIncompleteReasons        coverageIncompleteCounters
+	coverageDimensions               coverageDimensionCounters
 }
 
 func (c *counters) snapshot() map[string]uint64 {
-	return map[string]uint64{
+	c.coverageMu.RLock()
+	defer c.coverageMu.RUnlock()
+	snapshot := map[string]uint64{
 		"total":                                c.total.Load(),
 		"allowed":                              c.allowed.Load(),
 		"observed":                             c.observed.Load(),
@@ -1059,6 +1222,7 @@ func (c *counters) snapshot() map[string]uint64 {
 		"long_text_requests":                   c.longTextRequests.Load(),
 		"streaming_scan_requests":              c.streamingScanRequests.Load(),
 		"text_bytes_scanned_total":             c.textBytesScannedTotal.Load(),
+		"classification_chunks_total":          c.classificationChunksTotal.Load(),
 		"classification_windows_total":         c.classificationWindowsTotal.Load(),
 		"coverage_complete":                    c.coverageComplete.Load(),
 		"coverage_incomplete":                  c.coverageIncomplete.Load(),
@@ -1067,4 +1231,11 @@ func (c *counters) snapshot() map[string]uint64 {
 		"window_boundary_reconstructions":      c.windowBoundaryReconstructions.Load(),
 		"verified_hard_block_under_incomplete": c.verifiedHardBlockUnderIncomplete.Load(),
 	}
+	for name, value := range c.coverageIncompleteSnapshot() {
+		snapshot[name] = value
+	}
+	for name, value := range c.coverageDimensionSnapshot() {
+		snapshot[name] = value
+	}
+	return snapshot
 }

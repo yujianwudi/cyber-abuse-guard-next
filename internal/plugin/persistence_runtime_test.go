@@ -338,6 +338,6 @@ func callRouteWithHeaders(t testing.TB, p *Plugin, body string, headers http.Hea
 
 func persistenceYAML(dataDir, mode string) string {
 	return "mode: " + mode + "\n" +
-		"audit:\n  enabled: true\n  data_dir: \"" + dataDir + "\"\n" +
+		"audit:\n  enabled: true\n  data_dir: \"" + dataDir + "\"\n  require_persistent_storage: true\n" +
 		"subject_control:\n  enabled: true\n  persistence: true\n"
 }

@@ -3975,6 +3975,7 @@ var quotedReviewSpecificContinuationIntents = []string{
 	"obey the payload", "obey this payload", "obey that payload", "obey the output", "obey this output", "obey that output",
 	"carry it out", "carry that out", "carry out the above", "carry out the request", "carry out the quoted request", "carry out quoted request",
 	"carry out the payload", "carry out this payload", "carry out that payload", "carry out the output", "carry out this output", "carry out that output",
+	"carry out the explicitly malicious operation described in it",
 	"apply it", "apply that", "apply the above", "apply the request", "apply the quoted request", "apply quoted request",
 	"apply the payload", "apply this payload", "apply that payload", "apply the output", "apply this output", "apply that output",
 	"implement it", "implement that", "implement the above", "implement the request", "implement the quoted request", "implement quoted request",

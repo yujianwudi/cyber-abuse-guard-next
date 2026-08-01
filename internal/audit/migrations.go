@@ -290,8 +290,11 @@ func migrateDatabase(db *sql.DB, cfg Config, databasePath string) error {
 		if _, err := locked.Exec(`INSERT OR IGNORE INTO migration_history(version, applied_at_ns, description) VALUES(1, ?, ?)`, nowNS, "v0.1.1 audit_events baseline"); err != nil {
 			return fmt.Errorf("audit: record baseline migration: %w", err)
 		}
-		if _, err := locked.Exec(`INSERT INTO schema_version(singleton, version, updated_at_ns) VALUES(1, ?, ?)
-ON CONFLICT(singleton) DO UPDATE SET version=excluded.version, updated_at_ns=excluded.updated_at_ns`, version, nowNS); err != nil {
+		// A current schema is an inspection, not a migration. Preserve the
+		// original migration timestamp and logical database identity across a
+		// normal process restart; only initialize metadata for a legacy v1
+		// database that did not yet have the singleton row.
+		if _, err := locked.Exec(`INSERT OR IGNORE INTO schema_version(singleton, version, updated_at_ns) VALUES(1, ?, ?)`, version, nowNS); err != nil {
 			return fmt.Errorf("audit: initialize schema version: %w", err)
 		}
 	}
@@ -980,10 +983,14 @@ func createMigrationBackupForVersion(db *sql.DB, cfg Config, databasePath string
 		return fmt.Errorf("create private migration-backup staging directory: %w", err)
 	}
 	defer os.RemoveAll(stagingDirectory)
-	if err := os.Chmod(stagingDirectory, 0o700); err != nil {
-		return fmt.Errorf("secure migration-backup staging directory: %w", err)
-	}
 	stagedPath := filepath.Join(stagingDirectory, "audit-backup.db")
+	stagedFile, err := os.OpenFile(stagedPath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("securely create staged migration backup: %w", err)
+	}
+	if err := stagedFile.Close(); err != nil {
+		return fmt.Errorf("close new staged migration backup: %w", err)
+	}
 	if err := copySQLiteDatabase(db, stagedPath, cfg.BusyTimeout); err != nil {
 		return fmt.Errorf("copy migration backup: %w", err)
 	}
@@ -1022,10 +1029,14 @@ func createMigrationBackupForVersion(db *sql.DB, cfg Config, databasePath string
 	if err := writeSyncedExclusiveFile(stagedManifestPath, manifestJSON, 0o400); err != nil {
 		return fmt.Errorf("write migration-backup manifest: %w", err)
 	}
-	if err := os.Chmod(stagedPath, 0o400); err != nil {
-		return err
+	// SQLite needs a writable staging database while the online backup runs.
+	// Create the immutable publication inode separately with its final 0400 mode
+	// instead of chmod-repairing the SQLite-created staging file afterward.
+	stagedPublishPath := filepath.Join(stagingDirectory, "audit-backup.publish.db")
+	if err := copySyncedExclusiveFile(stagedPath, stagedPublishPath, 0o400); err != nil {
+		return fmt.Errorf("prepare readonly migration backup publication: %w", err)
 	}
-	staged, err := os.Open(stagedPath)
+	staged, err := os.Open(stagedPublishPath)
 	if err != nil {
 		return fmt.Errorf("open staged migration backup for sync: %w", err)
 	}
@@ -1036,7 +1047,7 @@ func createMigrationBackupForVersion(db *sql.DB, cfg Config, databasePath string
 	if err := staged.Close(); err != nil {
 		return fmt.Errorf("close staged migration backup: %w", err)
 	}
-	if err := os.Link(stagedPath, backupPath); err != nil {
+	if err := os.Link(stagedPublishPath, backupPath); err != nil {
 		return fmt.Errorf("publish migration backup without overwrite: %w", err)
 	}
 	if err := os.Link(stagedManifestPath, manifestPath); err != nil {
@@ -1115,7 +1126,7 @@ func hashMigrationArtifact(path string) (string, error) {
 }
 
 func writeSyncedExclusiveFile(path string, data []byte, mode os.FileMode) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
 	if err != nil {
 		return err
 	}
@@ -1128,13 +1139,39 @@ func writeSyncedExclusiveFile(path string, data []byte, mode os.FileMode) error 
 	if _, err := file.Write(data); err != nil {
 		return err
 	}
-	if err := file.Chmod(mode); err != nil {
-		return err
-	}
 	if err := file.Sync(); err != nil {
 		return err
 	}
 	if err := file.Close(); err != nil {
+		return err
+	}
+	closed = true
+	return nil
+}
+
+func copySyncedExclusiveFile(sourcePath, destinationPath string, mode os.FileMode) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	destination, err := os.OpenFile(destinationPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	closed := false
+	defer func() {
+		if !closed {
+			_ = destination.Close()
+		}
+	}()
+	if _, err := io.Copy(destination, source); err != nil {
+		return err
+	}
+	if err := destination.Sync(); err != nil {
+		return err
+	}
+	if err := destination.Close(); err != nil {
 		return err
 	}
 	closed = true

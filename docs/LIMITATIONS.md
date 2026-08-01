@@ -1,8 +1,8 @@
 # Known Limitations — v0.16 Round 9 development candidate
 
 ```text
-current_classifier_policy_version: classifier-policy-v9
-current_classifier_policy_sha256: 6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87
+current_classifier_policy_version: classifier-policy-v10
+current_classifier_policy_sha256: b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67
 ```
 
 Last updated: 2026-07-27 (Asia/Shanghai)
@@ -351,9 +351,9 @@ corpus, or local dirty Host result can close those release boundaries.
 
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The working Round 9 identity is
-    `classifier-policy-v9` / SHA-256
-`6cd7296bee90b9352a9cf1745b7760c0ff1b18a265da4af498c5877d4b542f87`,
-    and remains `PENDING_FINAL_SOURCE_FREEZE` until bound to the final commit,
+    `classifier-policy-v10` / SHA-256
+`b2b7905ace913bef793271df9cd1f3f731bfb0c4254b86bc7127a876cb322d67`,
+    and remains pending until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
     round5.2 value was `classifier-policy-v2` /

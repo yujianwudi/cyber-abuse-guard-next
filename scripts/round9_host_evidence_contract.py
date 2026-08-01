@@ -185,8 +185,8 @@ def policy_identity(path: Path) -> dict[str, str]:
     digest = POLICY_SHA256.findall(text)
     if len(version) != 1 or len(digest) != 1:
         fail("classifier policy identity source is not exact")
-    if not version[0].startswith("classifier-policy-v9"):
-        fail("Round 9 requires classifier-policy-v9 or a reviewed v9 successor")
+    if version[0] != "classifier-policy-v10":
+        fail("Round 10 requires the exact classifier-policy-v10 identity")
     return {"version": version[0], "sha256": digest[0]}
 
 

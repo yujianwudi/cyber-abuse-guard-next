@@ -52,6 +52,8 @@ documents=(
   docs/reports/CORPUS_REPORT.md
 )
 
+# Historical RELEASE_POLICY and ROUND8_CALIBRATION snapshots remain required
+# above, but intentionally do not use the fixed current-document prologue.
 classifier_identity_documents=(
   README.md
   README_CN.md
@@ -62,7 +64,6 @@ classifier_identity_documents=(
   docs/INSTALL_DOCKER.md
   docs/LIMITATIONS.md
   docs/README.md
-  docs/RELEASE_POLICY.md
   docs/ROUND6_CONFIG_MIGRATION.md
   docs/ROUND6_DEVELOPMENT_HANDOFF.md
   docs/ROUND6_LIMITATIONS.md
@@ -81,7 +82,6 @@ classifier_identity_documents=(
   docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
   docs/reports/PROMPT_INJECTION_REVIEW.md
   docs/reports/RELEASE_EVIDENCE.md
-  docs/reports/ROUND8_CALIBRATION.md
   docs/reports/ROUND8_RELEASE_READINESS.md
   docs/reports/ROUND9_EXECUTION_RECORD.md
   docs/reports/TEST_REPORT.md
@@ -89,7 +89,19 @@ classifier_identity_documents=(
 
 make_fixture() {
   local fixture="$1" relative
-  mkdir -p "$fixture/docs/reports"
+  mkdir -p "$fixture/docs/reports" "$fixture/.github/workflows"
+  for relative in ci.yml codeql.yml policy-gate.yml; do
+    printf 'name: fixture\n' >"$fixture/.github/workflows/$relative"
+  done
+  printf '%s\n' \
+    '# GitHub Actions' \
+    '' \
+    '| File |' \
+    '|---|' \
+    '| `ci.yml` |' \
+    '| `codeql.yml` |' \
+    '| `policy-gate.yml` |' \
+    >"$fixture/.github/workflows/README.md"
   for relative in "${documents[@]}"; do
     mkdir -p "$(dirname "$fixture/$relative")"
     if [[ "$relative" == docs/RELEASE_POLICY.md ]]; then
@@ -184,6 +196,9 @@ make_fixture() {
         'Release title/body text such as `independent audit required` is also not evidence.' \
         'Before any public writer may be restored, an independent authority must provide the exact-candidate audit bindings.' \
         'The verifier does not create, sign, repair, or infer any of those external records.' \
+        'The default branch now contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create or modify a GitHub Release.' \
+        'The remainder of this document is a point-in-time audit record, not an executable or current publication plan.' \
+        'Field names beginning with `current_` are preserved from that historical snapshot; they do not describe the active workflow inventory.' \
         'historical_round8_rc_artifact_version: 0.16-rc.2' \
         'historical_round8_rc_manifest_schema: 4' \
         'historical_round8_rc_publish_host_evidence: round8-host-evidence.json' \
@@ -271,6 +286,53 @@ must_fail() {
 
 make_fixture "$work/pass"
 run_gate "$work/pass"
+
+cp -a "$work/pass" "$work/symlinked-github-parent"
+mv -- "$work/symlinked-github-parent/.github" "$work/escaped-github-parent"
+ln -s "$work/escaped-github-parent" "$work/symlinked-github-parent/.github"
+must_fail symlinked-github-parent "$work/symlinked-github-parent" \
+  'release document path component must not be a symlink: .github'
+
+cp -a "$work/pass" "$work/symlinked-workflow-directory"
+mv -- \
+  "$work/symlinked-workflow-directory/.github/workflows" \
+  "$work/escaped-workflow-directory"
+ln -s \
+  "$work/escaped-workflow-directory" \
+  "$work/symlinked-workflow-directory/.github/workflows"
+must_fail symlinked-workflow-directory "$work/symlinked-workflow-directory" \
+  'release document path component must not be a symlink: .github/workflows'
+
+cp -a "$work/pass" "$work/symlinked-workflow-file"
+mv -- \
+  "$work/symlinked-workflow-file/.github/workflows/ci.yml" \
+  "$work/escaped-workflow-file.yml"
+ln -s \
+  "$work/escaped-workflow-file.yml" \
+  "$work/symlinked-workflow-file/.github/workflows/ci.yml"
+must_fail symlinked-workflow-file "$work/symlinked-workflow-file" \
+  'release document path component must not be a symlink: .github/workflows/ci.yml'
+
+for workflow in ci.yml codeql.yml policy-gate.yml; do
+  fixture_name="missing-${workflow%.yml}-workflow"
+  cp -a "$work/pass" "$work/$fixture_name"
+  rm -- "$work/$fixture_name/.github/workflows/$workflow"
+  must_fail "$fixture_name" "$work/$fixture_name" \
+    "required active workflow must be a regular non-symlink file: .github/workflows/$workflow"
+done
+
+cp -a "$work/pass" "$work/unreviewed-release-workflow"
+printf 'name: retired release fixture\n' \
+  >"$work/unreviewed-release-workflow/.github/workflows/release.yml"
+must_fail unreviewed-release-workflow "$work/unreviewed-release-workflow" \
+  'workflow directory contains an unreviewed active workflow: .github/workflows/release.yml'
+
+cp -a "$work/pass" "$work/retired-workflow-history-omitted"
+sed -i -E \
+  '/^current_(gate|host|rc)_workflow:/d; /^current_round9_gate_admission:/d; /^current_historical_workflow_disable_requirement:/d' \
+  "$work/retired-workflow-history-omitted/docs/RELEASE_POLICY.md"
+run_gate "$work/retired-workflow-history-omitted"
+printf 'release document consistency did not require retired workflow history\n'
 
 if CURRENT_CLASSIFIER_POLICY_VERSION="$old_classifier_policy_version" "$gate" \
   >"$work/source-classifier-override.log" 2>&1; then
@@ -377,6 +439,20 @@ printf '\nHistorical evidence retained a pre-current `%s` policy identity as chr
 run_gate "$work/historical-abbreviated-classifier-prose"
 printf 'release document consistency allowed clearly historical abbreviated identity evidence\n'
 
+cp -a "$work/pass" "$work/historical-same-version-classifier-prose"
+printf '\nThe last CPA remediation identity was `%s` / `%s`.\n' \
+  "$classifier_policy_version" "$old_classifier_policy_sha256" \
+  >>"$work/historical-same-version-classifier-prose/docs/reports/PERFORMANCE.md"
+run_gate "$work/historical-same-version-classifier-prose"
+printf 'release document consistency allowed clearly historical same-version identity evidence\n'
+
+cp -a "$work/pass" "$work/historical-prior-line-classifier-prose"
+printf '\nHistorical evidence from the superseded candidate follows.\n`%s` / `%s`\n' \
+  "$classifier_policy_version" "$old_classifier_policy_sha256" \
+  >>"$work/historical-prior-line-classifier-prose/docs/reports/PERFORMANCE.md"
+run_gate "$work/historical-prior-line-classifier-prose"
+printf 'release document consistency recognized a historical annotation on the preceding line\n'
+
 cp -a "$work/pass" "$work/stale-active-target-classifier-prose"
 printf '\nThe active development target is Linux amd64, %s.\n' \
   "$stale_round9_policy_version" \
@@ -479,9 +555,6 @@ policy_keys=(
   current_platform
   current_go_contract
   current_cpa_commit
-  current_gate_workflow
-  current_host_workflow
-  current_rc_workflow
   current_host_runner_label
   current_rc_manifest_schema
   current_audit_schema
@@ -507,8 +580,6 @@ policy_keys=(
   current_host_evaluation_publication_sufficiency
   current_release_title_publication_sufficiency
   current_publication_write_permission
-  current_round9_gate_admission
-  current_historical_workflow_disable_requirement
   current_development_paired_recall_requirement
   current_independent_malicious_recall_requirement
   current_release_kind
@@ -531,9 +602,6 @@ policy_values=(
   linux-amd64
   1.26.4
   928478e4b91533cec05a763bfac3edad9c3e76cf
-  .github/workflows/round9-gate.yml
-  .github/workflows/round9-host-validation.yml
-  .github/workflows/round9-release-rc.yml
   cag-round9-sandbox
   6
   6
@@ -559,8 +627,6 @@ policy_values=(
   false
   false
   absent
-  'workflow=Round 9 policy gate,path=.github/workflows/round9-gate.yml,event=push,branch=main,exact-commit,completed-success'
-  '315644586:release-rc.yml=disabled_manually,318443961:round8-host-validation.yml=disabled_manually'
   aggregate-and-each-category-exactly-10000-basis-points
   aggregate-and-each-category-at-least-9500-basis-points
   private-candidate-only-public-prerelease-blocked
@@ -583,9 +649,6 @@ policy_bad_values=(
   windows-amd64
   latest
   0000000000000000000000000000000000000000
-  .github/workflows/ci.yml
-  .github/workflows/round8-host-validation.yml
-  .github/workflows/release-rc.yml
   cag-round8-sandbox
   5
   5
@@ -611,8 +674,6 @@ policy_bad_values=(
   true
   true
   write
-  'workflow=Round 8 policy gate,path=.github/workflows/round8-gate.yml,event=workflow_dispatch,branch=feature,any-commit,completed-success'
-  '315644586:release-rc.yml=active,318443961:round8-host-validation.yml=active'
   aggregate-and-each-category-at-least-9500-basis-points
   aggregate-only-at-least-9500-basis-points
   immutable-prerelease
