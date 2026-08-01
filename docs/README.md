@@ -13,6 +13,11 @@ v7.2.113. GitHub Actions no longer builds or publishes an RC or Release. The
 owner performs the independent server-side sandbox review separately;
 production approval has not been granted and no stable `v0.16` exists.
 
+Commit `aaa71d9924bef935196790976c838968408dcdeb` is the confirmed green
+engineering baseline. The current feature branch still requires its own PR
+checks. Engineering CI validates source and development artifacts only; it does
+not establish a Host PASS, independent-audit PASS, or production PASS.
+
 This cleanup adds navigation without relocating frozen evaluation or Holdout
 evidence. Those files keep their existing paths so historical hashes and
 references remain stable.
@@ -26,9 +31,8 @@ Use these files for the current implementation and evidence state:
 - [Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)
 - [Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md)
 - [Round 9 Linux old-SO rollback gate](ROUND9_OLD_SO_ROLLBACK_GATE.md)
-- [Round 9 exact-candidate independent-audit verifier contract](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)
-- [Round 9 Linux Host runner and counted-Mock contract](ROUND9_HOST_RUNNER.md)
 - [Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)
+- [Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)
 - [Current test status and exact-main CI failures](reports/TEST_REPORT.md)
 - [Local-package and publication evidence](reports/RELEASE_EVIDENCE.md)
 - [Historical performance evidence and v0.16 acceptance table](reports/PERFORMANCE.md)
@@ -46,6 +50,16 @@ The local package manifest and checksums are delivery artifacts under the
 ignored local `dist/` path, not tracked documentation and not GitHub release
 evidence.
 
+## Historical, non-executable Round 9 workflow designs
+
+These documents preserve contracts for the deleted
+`round9-host-validation.yml` and `round9-release-rc.yml` workflows. They are
+historical design records, not current Actions entry points, gates, runbooks, or
+evidence that Host or independent-audit execution occurred:
+
+- [Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)
+- [Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)
+
 ## Architecture and security model
 
 - [Design](DESIGN.md)
@@ -57,7 +71,6 @@ evidence.
 
 - [Docker installation, rollout, rollback, and cleanup](INSTALL_DOCKER.md)
 - [Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)
-- [Round 9 isolated counted-Mock Host runner](ROUND9_HOST_RUNNER.md)
 - [Blocked-request review capture](RAW_CAPTURE.md)
 - [General known limitations](LIMITATIONS.md)
 - [Round 6 configuration migration](ROUND6_CONFIG_MIGRATION.md)

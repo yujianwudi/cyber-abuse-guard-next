@@ -19,32 +19,83 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/htmlsanitize"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
+
+func cyberAbuseGuardRawCaptureBody(t *testing.T, previews []string) []byte {
+	t.Helper()
+	captures := make([]map[string]any, 0, len(previews))
+	previewBytes := 0
+	for index, preview := range previews {
+		previewBytes += len(preview)
+		captures = append(captures, map[string]any{
+			"id":                     "capture-" + string(rune('a'+index)),
+			"event_id":               "01234567-89ab-4def-8123-456789abcde" + string(rune('0'+index)),
+			"timestamp":              "2026-07-21T00:00:00Z",
+			"request_hash":           "sha256:" + strings.Repeat("a", 64),
+			"subject_hash":           "hmac-sha256:" + strings.Repeat("b", 64),
+			"action":                 "block",
+			"decision":               "block_malicious_text",
+			"decision_kind":          "block_malicious_text",
+			"explanation_schema":     "decision-explanation-v2",
+			"truncated":              false,
+			"redacted":               true,
+			"preview_truncated":      false,
+			"redaction_applied":      true,
+			"redaction_pattern_hits": 1,
+			"redaction_version":      "raw-redactor-v2",
+			"raw_preview":            preview,
+			"raw_preview_b64":        base64.StdEncoding.EncodeToString([]byte(preview)),
+			"raw_sha256":             "sha256:" + strings.Repeat("c", 64),
+		})
+	}
+	response := map[string]any{
+		"enabled":                             true,
+		"audit_schema_version":                 6,
+		"decision_kind_semantics":              "canonical-mutually-exclusive-v1",
+		"explanation_schema_semantics":          "decision-explanation-v2",
+		"captures":                            captures,
+		"requested_limit":                      100,
+		"returned_count":                      len(captures),
+		"response_truncated":                   false,
+		"preview_bytes":                       previewBytes,
+		"encoded_preview_bytes":               0,
+		"cpa_host_encoded_preview_bytes":       0,
+		"response_preview_budget_bytes":        8 << 20,
+		"cpa_host_response_budget_bytes":        8 << 20,
+		"cpa_host_response_bytes":               0,
+		"raw_preview_transport":                "cpa-json-html-escaped-utf8",
+		"raw_preview_b64_encoding":             "base64-standard-utf8",
+		"raw_preview_rendering":                 "text-only-never-html",
+		"raw_preview_deprecated":                true,
+		"encoded_preview_bytes_deprecated":      true,
+		"preferred_preview_field":               "raw_preview_b64",
+		"raw_capture_response_schema_version":   4,
+	}
+	for attempt := 0; attempt < 8; attempt++ {
+		body, err := json.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hostBody, ok := htmlsanitize.JSONBody(body)
+		if !ok {
+			t.Fatal("CPA Host sanitizer rejected schema-4 Raw Capture fixture")
+		}
+		hostBytes := len(hostBody)
+		if response["cpa_host_response_bytes"] == hostBytes {
+			return body
+		}
+		response["cpa_host_response_bytes"] = hostBytes
+	}
+	t.Fatal("schema-4 Raw Capture Host response size did not converge")
+	return nil
+}
 
 func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 	preview := strings.Repeat("&'\"<>", ((1<<20)+4)/5)[:1<<20]
 	previewB64 := base64.StdEncoding.EncodeToString([]byte(preview))
-	body, err := json.Marshal(map[string]any{
-		"enabled": true,
-		"captures": []map[string]any{{
-			"id": "capture-id",
-			"event_id": "01234567-89ab-4def-8123-456789abcdef",
-			"raw_preview": preview,
-			"raw_preview_b64": previewB64,
-		}},
-		"raw_preview_transport": "cpa-json-html-escaped-utf8",
-		"raw_preview_b64_encoding": "base64-standard-utf8",
-		"raw_preview_rendering": "text-only-never-html",
-		"raw_preview_deprecated": true,
-		"encoded_preview_bytes_deprecated": true,
-		"preferred_preview_field": "raw_preview_b64",
-		"raw_capture_response_schema_version": 2,
-		"cpa_host_response_budget_bytes": 8 << 20,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	body := cyberAbuseGuardRawCaptureBody(t, []string{preview})
 
 	host := newHostWithRecords(capabilityRecord{
 		id: "cyber-abuse-guard",
@@ -113,24 +164,23 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 		response["raw_preview_deprecated"] != true ||
 		response["encoded_preview_bytes_deprecated"] != true ||
 		response["preferred_preview_field"] != "raw_preview_b64" ||
-		response["raw_capture_response_schema_version"] != float64(2) {
+		response["raw_capture_response_schema_version"] != float64(4) ||
+		response["audit_schema_version"] != float64(6) ||
+		response["decision_kind_semantics"] != "canonical-mutually-exclusive-v1" ||
+		response["explanation_schema_semantics"] != "decision-explanation-v2" ||
+		response["cpa_host_response_bytes"] != float64(rec.Body.Len()) {
 		t.Fatalf("transport metadata=%+v", response)
 	}
-
-	body, err = json.Marshal(map[string]any{
-		"enabled": true,
-		"captures": []map[string]any{
-			{"id": "capture-one", "event_id": "event-one", "raw_preview": preview, "raw_preview_b64": previewB64},
-			{"id": "capture-two", "event_id": "event-two", "raw_preview": preview, "raw_preview_b64": previewB64},
-		},
-		"raw_preview_transport": "cpa-json-html-escaped-utf8",
-		"raw_preview_b64_encoding": "base64-standard-utf8",
-		"raw_preview_rendering": "text-only-never-html",
-		"cpa_host_response_budget_bytes": 8 << 20,
-	})
-	if err != nil {
-		t.Fatal(err)
+	if capture["decision_kind"] != "block_malicious_text" ||
+		capture["explanation_schema"] != "decision-explanation-v2" ||
+		capture["preview_truncated"] != false || capture["truncated"] != false ||
+		capture["redaction_applied"] != true || capture["redacted"] != true ||
+		capture["redaction_pattern_hits"] != float64(1) ||
+		capture["redaction_version"] != "raw-redactor-v2" {
+		t.Fatalf("schema-4 capture metadata=%+v", capture)
 	}
+
+	body = cyberAbuseGuardRawCaptureBody(t, []string{preview, preview})
 	rec = httptest.NewRecorder()
 	if !host.ServeManagementHTTP(rec, req) {
 		t.Fatal("ServeManagementHTTP(two previews) = false, want true")

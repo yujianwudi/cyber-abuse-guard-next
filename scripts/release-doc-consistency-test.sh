@@ -25,6 +25,7 @@ documents=(
   docs/LIMITATIONS.md
   docs/INSTALL_DOCKER.md
   docs/README.md
+  docs/REPOSITORY_GOVERNANCE.md
   docs/RELEASE_POLICY.md
   docs/ROUND6_CONFIG_MIGRATION.md
   docs/ROUND6_DEVELOPMENT_HANDOFF.md
@@ -36,6 +37,7 @@ documents=(
   docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
+  docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -73,6 +75,7 @@ classifier_identity_documents=(
   docs/ROUND9_AUDIT_SCHEMA_V6.md
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
+  docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -209,6 +212,39 @@ make_fixture() {
         'historical_round8_evaluation_v10_policy: immutable-consumed-fail-not-formal-input' \
         'historical_round8_formal_bundle_content_policy: exclude-evaluation-holdout-consumed-private-blind-retired' \
         >"$fixture/$relative"
+    elif [[ "$relative" == docs/ROUND9_HOST_RUNNER.md ]]; then
+      printf '%s\n' \
+        '# Historical Round 9 Linux Host runner and counted-Mock design' \
+        '' \
+        '> [!CAUTION]' \
+        '> **HISTORICAL / NON-EXECUTABLE DESIGN.**' \
+        '> The retired workflows were deleted from the executable workflow directory.' \
+        '' \
+        '127.0.0.1:18394 -> 8317/tcp' \
+        >"$fixture/$relative"
+    elif [[ "$relative" == docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md ]]; then
+      printf '%s\n' \
+        '# Historical Round 9 exact-candidate independent-audit design' \
+        '' \
+        '> [!CAUTION]' \
+        '> **HISTORICAL / NON-EXECUTABLE DESIGN.**' \
+        '> The retired workflows were deleted from the executable workflow directory.' \
+        >"$fixture/$relative"
+    elif [[ "$relative" == docs/README.md ]]; then
+      printf '%s\n' \
+        '# Documentation index' \
+        '' \
+        '## Current v0.16 documents' \
+        '' \
+        '- Current source-only documents.' \
+        '' \
+        '## Historical, non-executable Round 9 workflow designs' \
+        '' \
+        '- [Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)' \
+        '- [Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
+        '' \
+        '## Architecture and security model' \
+        >"$fixture/$relative"
     elif [[ "$relative" == CHANGELOG.md ]]; then
       printf '# Changelog\n\n## 0.16 - 2026-07-21\n\nround6-prerelease-attestation.json\nformal-release-attestation.json\n' >"$fixture/$relative"
     elif [[ "$relative" == docs/reports/CORPUS_REPORT.md ]]; then
@@ -326,6 +362,36 @@ printf 'name: retired release fixture\n' \
   >"$work/unreviewed-release-workflow/.github/workflows/release.yml"
 must_fail unreviewed-release-workflow "$work/unreviewed-release-workflow" \
   'workflow directory contains an unreviewed active workflow: .github/workflows/release.yml'
+
+cp -a "$work/pass" "$work/retired-host-design-marked-current"
+sed -i \
+  's/# Historical Round 9 Linux Host runner and counted-Mock design/# Current Round 9 Linux Host runner and counted-Mock contract/' \
+  "$work/retired-host-design-marked-current/docs/ROUND9_HOST_RUNNER.md"
+must_fail retired-host-design-marked-current "$work/retired-host-design-marked-current" \
+  'docs/ROUND9_HOST_RUNNER.md must remain explicitly titled as a historical non-executable design'
+
+cp -a "$work/pass" "$work/retired-independent-warning-removed"
+sed -i '/HISTORICAL \/ NON-EXECUTABLE DESIGN/d' \
+  "$work/retired-independent-warning-removed/docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md"
+must_fail retired-independent-warning-removed "$work/retired-independent-warning-removed" \
+  'docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md must retain the historical non-executable warning'
+
+cp -a "$work/pass" "$work/retired-index-marked-current"
+sed -i \
+  's/## Historical, non-executable Round 9 workflow designs/## Current Round 9 workflow entry points/' \
+  "$work/retired-index-marked-current/docs/README.md"
+must_fail retired-index-marked-current "$work/retired-index-marked-current" \
+  'documentation index must separate retired Round 9 workflow designs from current entry points'
+
+cp -a "$work/pass" "$work/retired-links-misplaced-current"
+sed -i \
+  '/Historical, non-executable Round 9 Host runner design/d; /Historical, non-executable Round 9 independent-audit design/d' \
+  "$work/retired-links-misplaced-current/docs/README.md"
+sed -i \
+  '/## Current v0.16 documents/a\- [Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)\n- [Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
+  "$work/retired-links-misplaced-current/docs/README.md"
+must_fail retired-links-misplaced-current "$work/retired-links-misplaced-current" \
+  'historical workflow section must contain the retired Round 9 Host runner link'
 
 cp -a "$work/pass" "$work/retired-workflow-history-omitted"
 sed -i -E \

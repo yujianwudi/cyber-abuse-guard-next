@@ -16,6 +16,11 @@ current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca0673098
 > an RC or Release. Independent server-side sandbox review remains owner-run.
 > Production approval has not been granted, and production Balanced must remain
 > gated.
+>
+> Round 11 starts from exact `main` commit
+> `aaa71d9924bef935196790976c838968408dcdeb`, whose CI, CodeQL, and policy/corpus
+> runs succeeded. Every later change still needs its own exact-commit checks.
+> Engineering CI is not a Host, independent-audit, sandbox, or production PASS.
 
 > [!CAUTION]
 > The exact committed baseline `150c25e6352cb237cb3956bd66c83c3278c3fe33`
@@ -28,11 +33,14 @@ current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca0673098
 > last CPA v7.2.104 remediation identity was `classifier-policy-v9` /
 > `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14`;
 > exact-commit GitHub checks passed, while the second-machine retest remained
-> **PENDING**. Round 10 now adds bounded historical-tool activation, persistent
+> **PENDING**. Round 10 added bounded historical-tool activation, persistent
 > audit readiness, atomic coverage attribution, and direct-compaction boundary
 > fixes on the CPA v7.2.113 target. Those behavior changes bind
 > `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594` and
-> require their own exact-commit GitHub checks and isolated sandbox review.
+> exact `main` commit `aaa71d9924bef935196790976c838968408dcdeb`; engineering
+> runs `30697468074`, `30697468078`, and `30697468079` succeeded. Isolated
+> sandbox revalidation remains **PENDING**, and subsequent Round 11 runtime-
+> assurance changes require their own exact-commit checks.
 
 [![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
 [![Policy Gate](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml)
@@ -70,9 +78,9 @@ is not sent to a public classifier.
 | Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
 | GitHub publication | Historical tags and Releases are retained unchanged. Current Actions validate source and development artifacts only; they cannot create or modify a Release |
 | Audited committed baseline | `150c25e6352cb237cb3956bd66c83c3278c3fe33`; historical classifier digest `e0cbc975...`; CPA v7.2.104 |
-| Engineering CI | Runs `30482492205`, `30482486178`, and `30482486027` **PASS** for exact `main` commit `46f26f9f822683aebb14b2c812ced2246d680fc2`; this is engineering evidence only, not a production approval |
+| Engineering CI | CI `30697468074`, CodeQL `30697468078`, and Policy and Corpus Gate `30697468079` **PASS** for exact starting `main` commit `aaa71d9924bef935196790976c838968408dcdeb`; later commits require their own checks, and this is not production approval |
 | Safety audit | **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
-| Current remediation | Round 10 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`; historical-tool authority, direct-compaction, persistent audit readiness, long-text decoding, and coverage accounting changed for CPA v7.2.113, with exact-commit GitHub and independent second-machine revalidation required |
+| Current remediation | Round 10 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594` is bound to green starting baseline `aaa71d9`; Round 11 hardens Host evidence, Raw Capture Host lifecycle coverage, and workflow/document truth without changing classifier policy. Round 11 still needs its own exact-commit GitHub checks; independent second-machine revalidation remains owner-run |
 | CPA source/compile target | Pinned target `v7.2.113` (`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`), C ABI 1 / RPC schema 2. Source, SDK/API, integration compile, and Linux Host `.so` load checks are authoritative only after the exact-commit GitHub lane passes; protected runtime testing remains pending |
 | Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
@@ -83,7 +91,7 @@ is not sent to a public classifier.
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
 | Validation platform | Linux amd64 only; emitted numeric GLIBC ABI versions must be `<= 2.34` |
 | Out of scope | Windows, macOS, musl/Alpine, real Provider traffic, production deployment/validation |
-| CPA Host matrix | CPA v7.2.113, Linux amd64, isolated counted Mock upstream only; Audit→Balanced→Strict, runtime database/restart/panic/usage/Raw Capture checks, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
+| CPA Host matrix | CPA v7.2.113, Linux amd64, isolated counted Mock upstream only. Round 11 adds a real candidate `.so` Raw Capture schema-4 lifecycle test with a dedicated bind-mounted audit carrier; exact-commit GitHub binding remains pending. Full protected-server Audit→Balanced→Strict, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
 | Classifier policy | Current source snapshot: `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`; exact-commit GitHub and Host binding remain pending |

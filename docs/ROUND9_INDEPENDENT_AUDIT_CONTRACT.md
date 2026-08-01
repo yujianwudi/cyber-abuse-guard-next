@@ -1,8 +1,22 @@
-# Round 9 exact-candidate independent-audit verification contract
+# Historical Round 9 exact-candidate independent-audit design
+
+> [!CAUTION]
+> **HISTORICAL / NON-EXECUTABLE DESIGN.** The workflow files
+> `.github/workflows/round9-host-validation.yml` and
+> `.github/workflows/round9-release-rc.yml` were deleted from the executable
+> workflow directory. This document and its command examples are preserved as a
+> point-in-time contract, not a current Actions entry point or gate. Only
+> `ci.yml`, `codeql.yml`, and `policy-gate.yml` are active; none performs this
+> independent audit or grants publication or production approval.
 
 This document describes a verifier, not an audit result. No independent-audit
 evidence package is stored in this repository, and the current candidate remains
 `NOT_PROVIDED / REQUIRES INDEPENDENT AUDIT`.
+
+Commit `aaa71d9924bef935196790976c838968408dcdeb` is a confirmed green
+engineering baseline, while the current feature branch still requires its own
+PR checks. Engineering CI is not a Host PASS, independent-audit PASS, or
+production PASS.
 
 ## Trust boundary
 
@@ -98,15 +112,16 @@ Exit status `1` means supplied evidence was invalid. Exit status `3` means the
 evidence package or trust anchor was not provided. The verifier does not create,
 sign, repair, or infer evidence.
 
-## Current workflow state
+## Historical workflow integration state
 
-`.github/workflows/round9-release-rc.yml` runs the verifier tests in both build
-contexts and wires the remote verifier behind protected configuration. The
-current repository supplies no independent-audit artifact or trust configuration,
-so the step reports `NOT_PROVIDED`. Admission still emits
-`publication_permitted=false`; the workflow has no `contents: write` and no
-Release create/edit/upload/delete command. Implementing the verifier therefore
-does not authorize publication or production Balanced mode.
+When it existed, `.github/workflows/round9-release-rc.yml` ran the verifier tests
+in both build contexts and wired the remote verifier behind protected
+configuration. That workflow has been deleted, and none of the three active
+workflows invokes this verifier. The repository also supplies no
+independent-audit artifact or trust configuration. The historical admission
+design emitted `publication_permitted=false`, had no `contents: write`, and had
+no Release create/edit/upload/delete command. Preserving the verifier source and
+this design record does not authorize publication or production Balanced mode.
 
 The only valid current conclusion remains:
 

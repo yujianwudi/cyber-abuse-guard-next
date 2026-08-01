@@ -5,7 +5,7 @@ current_classifier_policy_version: classifier-policy-v10
 current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
-状态：**已批准实施 / 尚未完成**  
+状态：**实现已完成 / 本地与 GitHub 收口中**
 工作分支：`codex/round11-runtime-assurance`  
 合并目标：`main`  
 平台范围：**仅 Linux amd64**  
@@ -172,11 +172,14 @@ Round 10 也已有 system/tool/assistant 历史载体、request-local authority�
 3. 正常请求不生成 capture；
 4. 含合成 secret 的恶意请求在 Provider、Usage、Mock upstream 前 403；
 5. 认证查询返回 schema 4、audit schema 6、`no-store`、规范 Base64；
-6. preview 已脱敏且不包含合成 secret；
+6. 完整 management HTTP body、schema 4 字段与兼容别名、decision/explanation、
+   redaction metadata、持久化 capture 行和配对 audit 行均不包含合成 secret；preview
+   已脱敏；
 7. 相同请求重复阻断时 audit 事件保留、preview 在 TTL 内去重；
-8. live reconfigure 关闭 capture 后，管理页为 disabled/empty；
-9. 临时 `events.db` 执行 `PRAGMA quick_check` 为 `ok`，schema 为 6，WAL checkpoint
-   无 busy frame；
+8. live reconfigure 关闭 capture 后，管理页为 disabled/empty；直接查询临时
+   `events.db` 证明 preview 行为 0，而本轮两个 block audit 事件仍保留；
+9. 临时 `events.db` 执行 `PRAGMA quick_check` 为 `ok`，schema 为 6，并在 CPA 仍持有
+   数据库时以非独占方式确认 WAL journal 可读；
 10. 全程 upstream/provider/usage 计数保持现有不变量。
 
 验收：`make integration-test` 在 Linux amd64 加载本轮候选 `.so` 并通过；测试退出后
@@ -234,7 +237,7 @@ Round 10 也已有 system/tool/assistant 历史载体、request-local authority�
 | Host evidence | schema 2 only；schema 1/无 execution 负例失败 |
 | CPA source | v7.2.113 exact tag/commit/module sum/source/API/SDK contract 通过 |
 | CPA Host | 真实候选 `.so` 加载、注册、阻断、Raw Capture schema 4 生命周期通过 |
-| 审计存储 | schema 6、`quick_check=ok`、WAL checkpoint、disable purge 通过 |
+| 审计存储 | schema 6、`quick_check=ok`、WAL journal 可读、disable purge 通过 |
 | 正常语料 | 1,200 semantic 与 7,200 routes 零阻断 |
 | 恶意开发语料 | 120 semantic 与 960 routes 全通过固定预期 |
 | 性能 | Round 10 与 Raw Capture 固定门限不回退 |
@@ -259,10 +262,39 @@ Round 10 也已有 system/tool/assistant 历史载体、request-local authority�
 | 工作包 | 状态 | 证据 |
 |---|---|---|
 | RT11-01 | DONE | 本任务书已创建于功能分支 |
-| RT11-02 | TODO | 待实现 |
-| RT11-03 | TODO | 待实现 |
-| RT11-04 | TODO | 待实现 |
-| RT11-05 | TODO | 待实现 |
-| RT11-06 | TODO | 待运行 |
-| RT11-07 | TODO | 待审查、推送与合并 |
+| RT11-02 | LOCAL PASSED / FINAL PENDING | final validator 仅接受 schema 2 与完整 `execution` binding，且 binding execution ID 必须匹配 runner lane；公开 `assemble` CLI 已删除；本地 validate/run 输出不再声称 Host PASS 或已完成 attestation，最终接受仍绑定 PR head 与外部证明 |
+| RT11-03 | LOCAL PASSED / FINAL PENDING | CPA v7.2.113 Raw Capture source overlay 已升级到 schema 4 / audit schema 6，并使用 CPA `htmlsanitize.JSONBody` 校验字段语义、Base64 与 8 MiB Host 可见预算；最终接受仍绑定 PR head 与必需检查 |
+| RT11-04 | PRE-REVIEW LOCAL PASSED / POST-REVIEW INTERRUPTED / FINAL PENDING | 审查前 Linux amd64 真实候选 `.so` 完成完整生命周期；CodeRabbit 修复后重跑在完整矩阵中途被 WSL 终止，未产生终态，不能继承为当前 PASS。最终接受绑定 PR head 的 `quality-and-artifacts` Host 黑盒 |
+| RT11-05 | LOCAL PASSED / FINAL PENDING | 已删除 workflow 的文档被明确降为历史不可执行设计；当前工作流限为三项；历史链接必须位于历史段，正例与降级/错位负例均通过；最终接受仍绑定 PR head 与必需检查 |
+| RT11-06 | LOCAL PARTIAL PASS / FINAL PENDING | 完整正常 runner 为 0/1,200 semantic、0/7,200 routes；paired runner 为 120/120 semantic blocks、960/960 routes，均无 failure，Raw Capture 与 Round 10 性能门限通过。精确最终工作树的完整 core/race/fuzz 未取得终态，由 PR 必需检查完成最终接受 |
+| RT11-07 | LOCAL REVIEW FIXES APPLIED / GITHUB PENDING | 本地 CodeRabbit 共返回 7、2、2 项 issues，均已验证并修复；后续清零复审受本地额度限制，转由 GitHub PR CodeRabbit、五项必需检查及受保护合并完成；不创建 Release/tag |
 
+### 当前本地证据边界
+
+- `aaa71d9924bef935196790976c838968408dcdeb` 是本轮起始 `main` 基线；其 CI
+  `30697468074`、CodeQL `30697468078`、Policy and Corpus Gate
+  `30697468079` 成功，但不替代本轮候选检查。
+- 审查前工作树的真实 CPA v7.2.113 `.so` Host Raw Capture 生命周期通过；CodeRabbit
+  修复后的精确工作树重跑在完整 Host 矩阵中途被 WSL 终止且没有终态文件，因此当前
+  只记 **INTERRUPTED / NOT PASS**，由 PR head 的 `quality-and-artifacts` 重跑。
+- 当前工作树的 Host evidence 57 项合同、文档一致性正/负例、repository secret scan
+  与 Bash 语法通过。此前相关 Python 合同、integration Linux compile、`govulncheck`
+  （可达漏洞 0）与补充 actionlint v1.7.7 结果均早于最后一轮审查修复，不冒充最终
+  PR-head 结果。
+- 固定 Go 1.26.4、Linux amd64、离线 module 模式下，完整正常开发 runner 实测
+  1,200 semantic / 7,200 routes 且阻断均为 0；完整 paired-malicious runner 实测
+  120/120 semantic blocks、960/960 routes、failure 为 0。两份临时机器报告分别为
+  2,516 bytes / SHA-256 `18198d0009dc6267170edac68c6465f64080666586ab4577819a211ec7517abb`
+  与 7,151 bytes / SHA-256
+  `b54578f24300d3b0e8ba27b333e334b27c52fd71e42eb1cc81ea0974bdd0e82c`；它们是本地
+  dirty-worktree 开发证据，不是独立语料或发布证明。
+- 完整 `scripts/cpa-latest-compat.sh` 本地为 **BLOCKED**：固定 CPA module 的可信
+  `Origin` 不在 warm cache，且 WSL 在 60 秒内无法从 Go proxy/GitHub 刷新。没有降低
+  `Origin` 校验；该项必须由 GitHub Linux lane 重新执行。
+- 固定 actionlint v1.7.12 与 ShellCheck 本地未完成，分别记为 **NOT RUN**；由 GitHub
+  Linux CI 执行。补充的 actionlint v1.7.7 结果不冒充固定版本门禁。
+- 本地 CodeRabbit 三轮有效审查依次返回 7、2、2 项 issues，均已机械修复并运行相关
+  回归；后续清零复审被服务以 `rate_limit` 拒绝，并提示约 17 分钟等待或需分配
+  seat/API key。因此不声称本地 0 issues，继续使用 GitHub PR 侧 CodeRabbit。
+- 本地测试只使用临时数据、loopback 与 counted/mock provider；未连接二号机、真实
+  Provider 或生产环境，也未执行第三方破限仓库代码。

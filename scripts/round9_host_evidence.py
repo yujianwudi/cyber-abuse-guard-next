@@ -1587,7 +1587,7 @@ def verify_artifact_and_assemble(
     output: Path,
     commit: str,
     tree: str,
-    execution: dict[str, Any] | None = None,
+    execution: dict[str, Any],
 ) -> str:
     _, so_sha, fixtures = verify_artifacts(artifacts, commit, tree)
     families = [item["family"] for item in fixtures]
@@ -1601,8 +1601,11 @@ def verify_artifact_and_assemble(
         tree,
         families,
     )
+    validate_execution_binding(execution, commit)
+    if primary["runner"]["execution_id"] != execution["execution_id"]:
+        fail("Host execution binding does not match the primary runner lane")
     evidence = {
-        "schema_version": 2 if execution is not None else 1,
+        "schema_version": 2,
         "validation_scope": "CPA_HOST_COUNTED_MOCK_ONLY",
         "candidate": {
             "tag": TAG,
@@ -1624,10 +1627,8 @@ def verify_artifact_and_assemble(
         },
         "mock": primary["mock"],
         "safety": primary["safety"],
+        "execution": execution,
     }
-    if execution is not None:
-        validate_execution_binding(execution, commit)
-        evidence["execution"] = execution
     if output.exists() and (not output.is_dir() or output.is_symlink()):
         fail("Host evidence output must be a real directory")
     output.mkdir(parents=True, exist_ok=True)
@@ -3407,6 +3408,10 @@ def positive_int(value: Any) -> bool:
 
 
 def validate_execution_binding(execution: Any, commit: str) -> None:
+    # This is a closed-schema and identity-consistency check. The retained
+    # historical trust token is not a signature and cannot prove that GitHub
+    # or a protected runner emitted the document. External attestation and
+    # reviewer verification remain mandatory before treating it as Host PASS.
     if not isinstance(execution, dict) or set(execution) != {
         "trust",
         "challenge",
@@ -3648,10 +3653,10 @@ def expected_final_evidence(
     so_sha: str,
     mock_identity: dict[str, str],
     primary_identity: dict[str, str],
-    execution: dict[str, Any] | None = None,
+    execution: dict[str, Any],
 ) -> dict[str, Any]:
     evidence = {
-        "schema_version": 2 if execution is not None else 1,
+        "schema_version": 2,
         "validation_scope": "CPA_HOST_COUNTED_MOCK_ONLY",
         "candidate": {
             "tag": TAG,
@@ -3681,10 +3686,9 @@ def expected_final_evidence(
             "fatal_count": 0,
             "plugin_error_count": 0,
         },
+        "execution": execution,
     }
-    if execution is not None:
-        validate_execution_binding(execution, commit)
-        evidence["execution"] = execution
+    validate_execution_binding(execution, commit)
     return evidence
 
 
@@ -3702,6 +3706,8 @@ def validate_final_evidence(
         fail("Host evidence is not an object")
     if raw != canonical_bytes(evidence):
         fail("Host evidence must be canonical UTF-8 JSON without trailing bytes")
+    if evidence.get("schema_version") != 2:
+        fail("Host evidence schema 2 with an execution binding is required")
     mock = evidence.get("mock")
     expected_mock = closed_mock_identity(
         mock.get("image_id") if isinstance(mock, dict) else "", commit, tree
@@ -3734,9 +3740,8 @@ def validate_final_evidence(
             "image_id": entry["image_id"],
             "build_date": entry["build_date"],
         }
-    execution = evidence.get("execution") if evidence.get("schema_version") == 2 else None
-    if execution is not None:
-        validate_execution_binding(execution, commit)
+    execution = evidence.get("execution")
+    validate_execution_binding(execution, commit)
     expected = expected_final_evidence(
         commit,
         tree,
@@ -3782,15 +3787,6 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--phase1-artifact-digest", required=True)
     run.add_argument("--runner-name", required=True)
 
-    assemble = commands.add_parser(
-        "assemble", help="assemble closed evidence from the primary runner lane result"
-    )
-    assemble.add_argument("--artifacts", required=True)
-    assemble.add_argument("--primary-result", required=True)
-    assemble.add_argument("--output", required=True)
-    assemble.add_argument("--commit", required=True)
-    assemble.add_argument("--tree", required=True)
-
     validate = commands.add_parser("validate", help="validate final closed evidence")
     validate.add_argument("--artifacts", required=True)
     validate.add_argument("--evidence", required=True)
@@ -3811,15 +3807,6 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "run":
             digest = run_primary_lane(args)
-        elif args.command == "assemble":
-            validate_commit_tree(args.commit, args.tree)
-            digest = verify_artifact_and_assemble(
-                Path(os.path.abspath(args.artifacts)),
-                Path(os.path.abspath(args.primary_result)),
-                Path(os.path.abspath(args.output)),
-                args.commit,
-                args.tree,
-            )
         elif args.command == "validate":
             digest = validate_final_evidence(
                 Path(os.path.abspath(args.evidence)),
@@ -3837,7 +3824,12 @@ def main(argv: list[str] | None = None) -> int:
     except RunnerError as exc:
         print(f"round9-host-evidence: FAIL: {exc}", file=sys.stderr)
         return 1
-    print(f"round9-host-evidence: PASS sha256={digest}")
+    result_labels = {
+        "run": "HOST_EXECUTION_COMPLETE_ATTESTATION_EXTERNAL",
+        "validate": "SCHEMA_VALID_ATTESTATION_EXTERNAL",
+        "validate-base-bundle": "BASE_BUNDLE_VALID",
+    }
+    print(f"round9-host-evidence: {result_labels[args.command]} sha256={digest}")
     return 0
 
 

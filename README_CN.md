@@ -14,6 +14,11 @@ current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca0673098
 > `v7.2.113`，并仅使用 RPC schema 2。GitHub Actions 只执行 CI、CodeQL
 > 和策略/语料验证，不创建 RC 或 Release；独立服务器沙盒审计由所有者自行执行。
 > 尚未获得生产批准，也不得据此自动重新开启生产 Balanced。
+>
+> 第十一轮从精确 `main` 提交
+> `aaa71d9924bef935196790976c838968408dcdeb` 开始；该提交的 CI、CodeQL
+> 与策略/语料运行均已成功。任何后续变更仍须取得自身的精确提交检查；工程 CI
+> 不等于 Host、独立审计、沙盒或生产 PASS。
 
 > [!CAUTION]
 > 精确已提交基线 `150c25e6352cb237cb3956bd66c83c3278c3fe33` 使用
@@ -28,7 +33,9 @@ current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca0673098
 > v7.2.113 目标上新增了有界历史工具激活、持久审计 readiness、原子 coverage
 > 归因和 direct-compaction 边界修复；这些行为变更绑定为
 > `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`，
-> 新身份仍须独立完成精确提交 GitHub 检查和隔离沙盒复核。
+> 并已绑定精确 `main` 提交 `aaa71d9924bef935196790976c838968408dcdeb`；
+> 工程运行 `30697468074`、`30697468078`、`30697468079` 均成功。隔离沙盒
+> 复核仍为 **PENDING**，第十一轮运行时可信度变更还须完成自身的精确提交检查。
 
 [![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
 [![Policy Gate](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml)
@@ -58,9 +65,9 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
 | GitHub 发布 | 历史 Tag 与 Release 保持不变；当前 Actions 只验证源码和开发产物，不能创建或修改 Release |
 | 已审计提交基线 | `150c25e6352cb237cb3956bd66c83c3278c3fe33`；历史 classifier 摘要 `e0cbc975...`；CPA v7.2.104 |
-| 工程 CI | 精确 `main` 提交 `46f26f9f822683aebb14b2c812ced2246d680fc2` 的 `30482492205`、`30482486178`、`30482486027` 均 **PASS**；仅是工程证据，不是生产批准 |
+| 工程 CI | 精确起始 `main` 提交 `aaa71d9924bef935196790976c838968408dcdeb` 的 CI `30697468074`、CodeQL `30697468078`、Policy and Corpus Gate `30697468079` 均 **PASS**；后续提交仍须各自检查，且这不是生产批准 |
 | 安全审计 | **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
-| 当前修复 | 第十轮 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`；历史工具权限、direct-compaction、长文本解码、持久审计 readiness 与 coverage 记账均发生行为变更，仍须精确提交 GitHub 与二号机独立重验 |
+| 当前修复 | 第十轮 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594` 已绑定绿色起始基线 `aaa71d9`；第十一轮在不改变 classifier policy 的前提下加固 Host evidence、Raw Capture Host 生命周期覆盖及 workflow/文档真实性。第十一轮仍须完成自身的精确提交 GitHub 检查，二号机独立重验仍由所有者执行 |
 | CPA 源码/编译目标 | 固定 `v7.2.113`（`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`），C ABI 1 / RPC schema 2；源码、SDK/API、集成编译与 Linux Host `.so` 加载结论仅以精确提交 GitHub 门禁为准，独立受保护运行时验证仍待执行 |
 | 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
@@ -71,7 +78,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 静态分析治理 | `.github/workflows/codeql.yml` 在经过审查的稀疏源码边界内，以最小权限在 Ubuntu 上分析 Go；CodeQL 结果不能授权发布 |
 | 验证平台 | 仅 Linux amd64；产物引用的数字型 GLIBC ABI 版本必须 `<= 2.34` |
 | 不在范围 | Windows、macOS、musl/Alpine、真实 Provider、生产部署/验证 |
-| CPA 固定目标 | 仅 v7.2.113；仅 Linux amd64 counted Mock；Audit→Balanced→Strict 与数据库/重启/panic/usage/Raw Capture 运行时检查尚未执行 |
+| CPA 固定目标 | 仅 v7.2.113、Linux amd64、隔离 counted Mock。第十一轮加入真实候选 `.so` 的 Raw Capture schema-4 生命周期及独立 bind mount 审计载体测试，尚待精确提交 GitHub 绑定；完整受保护服务器 Audit→Balanced→Strict、签名外部评测与账本证明仍为 **NOT RUN / PENDING** |
 | 外部 CPA 评估 / 当前源码独立审计 | 受保护发行评估仍为 `NOT_RUN`；现有隔离审计已判安全 `FAIL`，当前修复精确重审仍待执行，生产批准未授予 |
 | Scanner identity | `streaming-scanner-v1` |
 | Classifier policy | 当前源码快照为 `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`；精确提交 GitHub 与 Host 绑定仍待完成 |

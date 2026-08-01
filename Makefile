@@ -241,6 +241,7 @@ script-test: repository-secret-scan
 	make shellcheck-lint
 	bash -n ./scripts/go-safe-development-test.sh
 	bash -n ./scripts/cpa-latest-compat.sh
+	bash -n ./scripts/with-host-audit-mount.sh
 	bash -n ./scripts/round6-candidate-artifacts.sh
 	bash -n ./scripts/round6-rc-artifacts.sh
 	bash -n ./scripts/round8-build-host-images.sh
@@ -727,14 +728,16 @@ cpa-host-blackbox: build-linux-amd64
 	PLUGIN_BINARY="$(SO)" STORE_ARCHIVE="$$archive" SOURCE_DATE_EPOCH="$$epoch" \
 		./scripts/create-store-archive.sh; \
 	echo 'Host blackbox: InstallManifest archive and Host load use the exact standalone $(SO) identity'; \
-	CYBER_ABUSE_GUARD_PLUGIN="$(SO)" \
-	CYBER_ABUSE_GUARD_STORE_ARCHIVE="$$archive" \
-	CYBER_ABUSE_GUARD_BUILD_METADATA="$(DIST_DIR)/build-metadata.json" \
-	CYBER_ABUSE_GUARD_VERSION="$(ARTIFACT_VERSION)" \
-	CYBER_ABUSE_GUARD_REQUIRE_STORE_INSTALL=1 \
-	CYBER_ABUSE_GUARD_REQUIRE_HOST_INTEGRATION=1 \
-	CGO_ENABLED=1 $(GO) test -tags=integration,$(TEST_TAGS) -v -count=1 \
-		-run='^TestCPAPluginHostBlocksBeforeUpstream$$' ./integration
+	env -u CYBER_ABUSE_GUARD_HOST_AUDIT_DATA_DIR \
+		bash ./scripts/with-host-audit-mount.sh env \
+		CYBER_ABUSE_GUARD_PLUGIN="$(SO)" \
+		CYBER_ABUSE_GUARD_STORE_ARCHIVE="$$archive" \
+		CYBER_ABUSE_GUARD_BUILD_METADATA="$(DIST_DIR)/build-metadata.json" \
+		CYBER_ABUSE_GUARD_VERSION="$(ARTIFACT_VERSION)" \
+		CYBER_ABUSE_GUARD_REQUIRE_STORE_INSTALL=1 \
+		CYBER_ABUSE_GUARD_REQUIRE_HOST_INTEGRATION=1 \
+		CGO_ENABLED=1 $(GO) test -tags=integration,$(TEST_TAGS) -v -count=1 \
+			-run='^TestCPAPluginHostBlocksBeforeUpstream$$' ./integration
 
 cpa-router-fixture-blackbox: build-linux-amd64
 	@listed="$$($(GO) test -tags=integration,$(TEST_TAGS) -list='^TestCPAPluginHostRouterFixtureMatrix$$' ./integration)" || exit $$?; \
