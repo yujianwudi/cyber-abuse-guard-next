@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -254,6 +255,8 @@ func TestBalancedAuditOnWrapperOnlyAllocationAcceptance(t *testing.T) {
 	if pluginRaceEnabled {
 		t.Skip("allocation acceptance is not meaningful under the race detector")
 	}
+	previousProcs := runtime.GOMAXPROCS(1)
+	defer runtime.GOMAXPROCS(previousProcs)
 	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
 	wrapper := repositoryNeutralSizedText(t, 17166, fourRepoSurrogateProfiles[2].core)
 	body, _ := fourRepoMarshalAndCheckBytes(t, fourRepoAdditionalNamespace, wrapper, fourRepoBenignUser)
@@ -321,7 +324,7 @@ func TestBalancedAuditOnWrapperOnlyAllocationAcceptance(t *testing.T) {
 		})
 	}
 
-	const allocationSampleCount = 5
+	const allocationSampleCount = 3
 	byteDeltas := make([]int64, 0, allocationSampleCount)
 	allocationDeltas := make([]int64, 0, allocationSampleCount)
 	for sample := 0; sample < allocationSampleCount; sample++ {
@@ -357,11 +360,11 @@ func TestBalancedAuditOnWrapperOnlyAllocationAcceptance(t *testing.T) {
 	medianAllocationDelta := allocationDeltas[len(allocationDeltas)/2]
 	t.Logf("wrapper audit allocation median delta=%d B/op %d allocs/op sorted-byte-deltas=%v sorted-allocation-deltas=%v",
 		medianByteDelta, medianAllocationDelta, byteDeltas, allocationDeltas)
-	// testing.Benchmark derives B/op from process-wide allocation counters, and
-	// the audit-on runtime owns an asynchronous writer. A single independent pair
-	// can therefore include unrelated worker/ticker activity. The median of five
-	// alternating pairs rejects that noise while retaining the exact 4 KiB product
-	// budget and the per-sample absolute gates above.
+	// testing.Benchmark derives B/op from process-wide MemStats and independently
+	// calibrates N for each arm. GC and per-P sync.Pool state can therefore dominate
+	// a single difference. One P follows testing.AllocsPerRun's stabilization model;
+	// the median of three alternating pairs rejects residual noise while retaining
+	// the exact 4 KiB product budget and the per-sample absolute gates above.
 	if medianByteDelta > 4<<10 {
 		t.Fatalf("median audit-on counter-only overhead=%d B/op, want <=4KiB over audit-off across %d alternating paired samples", medianByteDelta, allocationSampleCount)
 	}
