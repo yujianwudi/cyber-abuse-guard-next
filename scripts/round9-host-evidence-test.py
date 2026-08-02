@@ -321,6 +321,45 @@ def make_lane_result(root: Path, artifacts: Path, execution_id: str) -> Path:
     return path
 
 
+def make_execution_binding(execution_id: str) -> dict[str, object]:
+    return {
+        "trust": "GITHUB_ATTESTED_ROUND9_HOST_WORKFLOW",
+        "challenge": "d" * 64,
+        "execution_id": execution_id,
+        "started_at": "2026-07-23T00:00:00Z",
+        "completed_at": "2026-07-23T00:01:00Z",
+        "workflow": {
+            "repository": r8.WORKFLOW_REPOSITORY,
+            "path": r8.HOST_WORKFLOW_PATH,
+            "ref": f"refs/tags/{r8.TAG}",
+            "sha": COMMIT,
+            "run_id": 10,
+            "run_attempt": 1,
+        },
+        "phase1": {
+            "workflow_path": r8.RELEASE_WORKFLOW_PATH,
+            "run_id": 11,
+            "run_attempt": 1,
+            "artifact_id": 12,
+            "artifact_digest": "sha256:" + "e" * 64,
+        },
+        "runner": {
+            "name": "round9-test-runner",
+            "environment": "self-hosted",
+            "os": "Linux",
+            "arch": "X64",
+        },
+        "sandbox": {
+            "sandbox_id": "round9-sandbox",
+            "daemon_id": "round9-daemon",
+            "daemon_label": "io.cyber-abuse-guard.round9-sandbox=round9-sandbox",
+            "production_label": "io.cyber-abuse-guard.production=false",
+            "probe_image_id": "sha256:" + "7" * 64,
+            "locality_challenge": "PASS",
+        },
+    }
+
+
 class Round9HostEvidenceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -330,6 +369,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
         make_artifacts(self.artifacts)
         execution_id = str(uuid.uuid4())
         self.primary = make_lane_result(self.root, self.artifacts, execution_id)
+        self.execution = make_execution_binding(execution_id)
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -399,6 +439,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
             output,
             COMMIT,
             TREE,
+            self.execution,
         )
         return output / "round9-host-evidence.json"
 
@@ -408,6 +449,69 @@ class Round9HostEvidenceTest(unittest.TestCase):
         encoded = evidence.with_name("round9-host-evidence.json.b64").read_bytes()
         self.assertFalse(encoded.endswith(b"\n"))
         self.assertEqual(r8.validate_final_evidence(evidence, self.artifacts, COMMIT, TREE), digest(evidence))
+
+    def test_final_validator_rejects_schema1_even_with_execution(self) -> None:
+        evidence = self.assemble()
+        payload = json.loads(evidence.read_text(encoding="utf-8"))
+        payload["schema_version"] = 1
+        evidence.write_bytes(r8.canonical_bytes(payload))
+        with self.assertRaisesRegex(r8.RunnerError, "schema 2 with an execution binding"):
+            r8.validate_final_evidence(evidence, self.artifacts, COMMIT, TREE)
+
+    def test_final_validator_rejects_schema2_without_execution(self) -> None:
+        evidence = self.assemble()
+        payload = json.loads(evidence.read_text(encoding="utf-8"))
+        del payload["execution"]
+        evidence.write_bytes(r8.canonical_bytes(payload))
+        with self.assertRaisesRegex(r8.RunnerError, "execution binding schema"):
+            r8.validate_final_evidence(evidence, self.artifacts, COMMIT, TREE)
+
+    def test_assembler_rejects_execution_id_different_from_runner_lane(self) -> None:
+        execution = json.loads(json.dumps(self.execution))
+        execution["execution_id"] = str(uuid.uuid4())
+        with self.assertRaisesRegex(
+            r8.RunnerError,
+            "execution binding does not match the primary runner lane",
+        ):
+            r8.verify_artifact_and_assemble(
+                self.artifacts,
+                self.primary,
+                self.root / "mismatched-execution-output",
+                COMMIT,
+                TREE,
+                execution,
+            )
+
+    def test_parser_does_not_expose_unattested_assemble_command(self) -> None:
+        subparsers = next(
+            action
+            for action in r8.parser()._actions
+            if isinstance(action, argparse._SubParsersAction)
+        )
+        self.assertNotIn("assemble", subparsers.choices)
+
+    def test_validate_cli_does_not_claim_host_pass_or_attestation(self) -> None:
+        evidence = self.assemble()
+        output = io.StringIO()
+        with mock.patch("sys.stdout", output):
+            status = r8.main(
+                [
+                    "validate",
+                    "--artifacts",
+                    str(self.artifacts),
+                    "--evidence",
+                    str(evidence),
+                    "--commit",
+                    COMMIT,
+                    "--tree",
+                    TREE,
+                ]
+            )
+        rendered = output.getvalue()
+        self.assertEqual(status, 0)
+        self.assertIn("SCHEMA_VALID_ATTESTATION_EXTERNAL", rendered)
+        self.assertNotIn("PASS", rendered)
+        self.assertNotIn("ATTESTED", rendered)
 
     def test_exact_phase1_artifact_set_needs_no_store_sidecar(self) -> None:
         self.assertFalse((self.artifacts / f"{r8.STORE_NAME}.sha256").exists())
@@ -480,7 +584,9 @@ class Round9HostEvidenceTest(unittest.TestCase):
     def test_so_hash_mismatch_is_rejected(self) -> None:
         (self.artifacts / r8.SO_NAME).write_bytes(b"changed")
         with self.assertRaises(r8.RunnerError):
-            r8.verify_artifact_and_assemble(self.artifacts, self.primary, self.root / "out", COMMIT, TREE)
+            r8.verify_artifact_and_assemble(
+                self.artifacts, self.primary, self.root / "out", COMMIT, TREE, self.execution
+            )
 
     def test_store_so_mismatch_is_rejected_even_with_refreshed_archive_hashes(self) -> None:
         store = self.artifacts / r8.STORE_NAME
@@ -494,7 +600,9 @@ class Round9HostEvidenceTest(unittest.TestCase):
         payload = json.loads(self.primary.read_text(encoding="utf-8"))
         Path(payload["transcript"]["path"]).write_bytes(b"{}\n")
         with self.assertRaises(r8.RunnerError):
-            r8.verify_artifact_and_assemble(self.artifacts, self.primary, self.root / "out", COMMIT, TREE)
+            r8.verify_artifact_and_assemble(
+                self.artifacts, self.primary, self.root / "out", COMMIT, TREE, self.execution
+            )
 
     def test_hand_filled_pass_without_machine_transcript_is_rejected(self) -> None:
         payload = json.loads(self.primary.read_text(encoding="utf-8"))
@@ -505,7 +613,9 @@ class Round9HostEvidenceTest(unittest.TestCase):
         }
         self.primary.write_bytes(r8.canonical_bytes(payload))
         with self.assertRaises(r8.RunnerError):
-            r8.verify_artifact_and_assemble(self.artifacts, self.primary, self.root / "out", COMMIT, TREE)
+            r8.verify_artifact_and_assemble(
+                self.artifacts, self.primary, self.root / "out", COMMIT, TREE, self.execution
+            )
 
     def test_deriver_requires_malicious_stream_and_nonstream_for_both_apis(self) -> None:
         records = valid_records("primary")
@@ -593,6 +703,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
                 self.root / "out",
                 COMMIT,
                 TREE,
+                self.execution,
             )
 
     def test_transcript_loader_rejects_noncanonical_json_line(self) -> None:
@@ -1345,7 +1456,9 @@ class Round9HostEvidenceTest(unittest.TestCase):
         output.mkdir()
         (output / "round9-host-evidence.json").write_text("stale", encoding="utf-8")
         with self.assertRaises(r8.RunnerError):
-            r8.verify_artifact_and_assemble(self.artifacts, self.primary, output, COMMIT, TREE)
+            r8.verify_artifact_and_assemble(
+                self.artifacts, self.primary, output, COMMIT, TREE, self.execution
+            )
 
     def test_assembler_concurrent_placeholder_is_never_overwritten(self) -> None:
         output = self.root / "concurrent-placeholder"
@@ -1368,6 +1481,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
                     output,
                     COMMIT,
                     TREE,
+                    self.execution,
                 )
 
         self.assertTrue(injected)
@@ -1400,6 +1514,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
                     output,
                     COMMIT,
                     TREE,
+                    self.execution,
                 )
 
         self.assertEqual(calls, 2)

@@ -1349,11 +1349,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "99cf052f14e51fc0460c8005b13e764da47d80566c727c63b03cabf44f585862"
+    "3f64e7ab088466b41f345c79e382d4901e8db5b17c8f8c23ee65d12902e91172"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "8aa0b5494e37da0fd7d2d90cd318e46f7a3076c627c38ab1fab43e776e1cd9ed",
-    "scripts/release-doc-consistency.sh": "722eba2d55106b9bbe1b94d2b0b9c7cae30c9fca9c5c5c78fcc6c93876bdbd90",
+    "scripts/release-doc-consistency-test.sh": "41d0597a121f29e648b0f5b48c22494140edcce5f3b222c72f22f8a01d028dca",
+    "scripts/release-doc-consistency.sh": "96b0db3012ea4be59fa29287f4a6341dfe79d346b81b5e526c1cce49ebaf01f3",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1457,7 +1457,7 @@ ROUND9_EVAL_INSTALL_SCRIPT_SHA256 = (
 )
 ROUND9_HOST_EVIDENCE_TEST_SCRIPT = "scripts/round9-host-evidence-test.py"
 ROUND9_HOST_EVIDENCE_TEST_SCRIPT_SHA256 = (
-    "4f4db4e7e12fd8dddc936d996b23f66eb24ccee9dc6b521d972e98f6eb425ea8"
+    "d89b2ffc1b2ae495776cd22f8a382ddd4fc57785d3207d99a0fdf788bfd3b0c3"
 )
 ROUND9_HOST_EVIDENCE_TEST_SUBPROCESS_CONTRACT = (
     1,
@@ -1465,7 +1465,7 @@ ROUND9_HOST_EVIDENCE_TEST_SUBPROCESS_CONTRACT = (
 )
 ROUND9_HOST_EVIDENCE_SCRIPT = "scripts/round9_host_evidence.py"
 ROUND9_HOST_EVIDENCE_SCRIPT_SHA256 = (
-    "6f5a45042bb7de5755c9a7c5c639446675d11bb9dc2ad9646d3b1bc60f4bd4e9"
+    "45c771cd71356e1f758089f6a7cf9da09d30a0ca53ca233db76bfefb0ed740ea"
 )
 ROUND9_HOST_EVIDENCE_COMMAND_FUNCTION_CONTRACT = (
     1,

@@ -109,6 +109,7 @@ documents=(
   docs/LIMITATIONS.md
   docs/INSTALL_DOCKER.md
   docs/README.md
+  docs/REPOSITORY_GOVERNANCE.md
   docs/RELEASE_POLICY.md
   docs/ROUND6_CONFIG_MIGRATION.md
   docs/ROUND6_DEVELOPMENT_HANDOFF.md
@@ -120,6 +121,7 @@ documents=(
   docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
+  docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -146,6 +148,52 @@ active_workflows=(
   .github/workflows/codeql.yml
   .github/workflows/policy-gate.yml
 )
+declare -A active_workflow_allowlist=()
+for relative in "${active_workflows[@]}"; do
+  [[ -z "${active_workflow_allowlist[$relative]+x}" ]] ||
+    fail "active workflow allowlist contains a duplicate: $relative"
+  active_workflow_allowlist["$relative"]=1
+done
+
+declare -A retired_workflow_document_titles=(
+  [docs/ROUND9_HOST_RUNNER.md]='# Historical Round 9 Linux Host runner and counted-Mock design'
+  [docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md]='# Historical Round 9 exact-candidate independent-audit design'
+)
+for relative in "${!retired_workflow_document_titles[@]}"; do
+  document="$doc_root/$relative"
+  [[ "$(sed -n '1p' "$document")" == "${retired_workflow_document_titles[$relative]}" ]] ||
+    fail "$relative must remain explicitly titled as a historical non-executable design"
+  grep -Fq '**HISTORICAL / NON-EXECUTABLE DESIGN.**' "$document" ||
+    fail "$relative must retain the historical non-executable warning"
+  grep -Fq 'were deleted from the executable' "$document" ||
+    fail "$relative must state that its retired workflows were deleted"
+done
+
+grep -Fq '## Historical, non-executable Round 9 workflow designs' "$doc_root/docs/README.md" ||
+  fail "documentation index must separate retired Round 9 workflow designs from current entry points"
+historical_index_section="$(awk '
+  $0 == "## Historical, non-executable Round 9 workflow designs" { inside = 1; next }
+  inside && /^## / { exit }
+  inside { print }
+' "$doc_root/docs/README.md")"
+grep -Fq '[Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)' \
+  <<<"$historical_index_section" ||
+  fail "historical workflow section must contain the retired Round 9 Host runner link"
+grep -Fq '[Historical, non-executable Round 9 independent-audit design](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
+  <<<"$historical_index_section" ||
+  fail "historical workflow section must contain the retired Round 9 independent-audit link"
+for retired_link_target in \
+  ROUND9_HOST_RUNNER.md \
+  ROUND9_INDEPENDENT_AUDIT_CONTRACT.md; do
+  retired_link_count="$(
+    { LC_ALL=C grep -Fo -- "]($retired_link_target)" \
+        "$doc_root/docs/README.md" || true; } |
+      wc -l |
+      tr -d '[:space:]'
+  )"
+  [[ "$retired_link_count" == 1 ]] ||
+    fail "retired workflow link must appear exactly once and only in the historical workflow section: $retired_link_target"
+done
 workflow_directory="$doc_root/.github/workflows"
 verify_canonical_relative_path .github/workflows
 [[ -d "$workflow_directory" && ! -L "$workflow_directory" ]] ||
@@ -159,15 +207,8 @@ done
 for workflow in "$workflow_directory"/*.yml "$workflow_directory"/*.yaml; do
   [[ -e "$workflow" || -L "$workflow" ]] || continue
   relative=".github/workflows/${workflow##*/}"
-  case "$relative" in
-    .github/workflows/ci.yml | \
-      .github/workflows/codeql.yml | \
-      .github/workflows/policy-gate.yml)
-      ;;
-    *)
-      fail "workflow directory contains an unreviewed active workflow: $relative"
-      ;;
-  esac
+  [[ -n "${active_workflow_allowlist[$relative]+x}" ]] ||
+    fail "workflow directory contains an unreviewed active workflow: $relative"
 done
 workflow_index="$workflow_directory/README.md"
 verify_canonical_relative_path .github/workflows/README.md
@@ -180,18 +221,15 @@ for relative in "${active_workflows[@]}"; do
 done
 
 if [[ "$doc_root" == "$root" ]]; then
-  grep -Fq '[Round 9 Linux Host runner and counted-Mock contract](ROUND9_HOST_RUNNER.md)' \
-    "$root/docs/README.md" ||
-    fail "documentation index lost the Round 9 Host runner link"
   grep -Fq '`docs/ROUND9_HOST_RUNNER.md`' \
     "$root/integration/round9countedmock/README.md" ||
     fail "Round 9 counted-Mock README lost its Host contract link"
   grep -Fq '[Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md)' \
     "$root/docs/README.md" ||
     fail "documentation index lost the Round 9 audit-schema link"
-  grep -Fq '[Round 9 exact-candidate independent-audit verifier contract](ROUND9_INDEPENDENT_AUDIT_CONTRACT.md)' \
+  grep -Fq '[Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)' \
     "$root/docs/README.md" ||
-    fail "documentation index lost the Round 9 independent-audit verifier link"
+    fail "documentation index lost the Round 11 task-book link"
   grep -Fq '[Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)' \
     "$root/docs/README.md" ||
     fail "documentation index lost the Round 9 operator-runbook link"
@@ -226,6 +264,7 @@ classifier_identity_documents=(
   docs/ROUND9_AUDIT_SCHEMA_V6.md
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
+  docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md

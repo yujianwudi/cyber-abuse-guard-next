@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -253,6 +255,8 @@ func TestBalancedAuditOnWrapperOnlyAllocationAcceptance(t *testing.T) {
 	if pluginRaceEnabled {
 		t.Skip("allocation acceptance is not meaningful under the race detector")
 	}
+	previousProcs := runtime.GOMAXPROCS(1)
+	defer runtime.GOMAXPROCS(previousProcs)
 	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
 	wrapper := repositoryNeutralSizedText(t, 17166, fourRepoSurrogateProfiles[2].core)
 	body, _ := fourRepoMarshalAndCheckBytes(t, fourRepoAdditionalNamespace, wrapper, fourRepoBenignUser)
@@ -320,29 +324,52 @@ func TestBalancedAuditOnWrapperOnlyAllocationAcceptance(t *testing.T) {
 		})
 	}
 
-	off := run(false)
-	on := run(true)
-	t.Logf("wrapper audit allocation off=%d B/op %d allocs/op on=%d B/op %d allocs/op",
-		off.AllocedBytesPerOp(), off.AllocsPerOp(), on.AllocedBytesPerOp(), on.AllocsPerOp())
-	if bytesPerOp := on.AllocedBytesPerOp(); bytesPerOp >= 1536<<10 {
-		t.Fatalf("audit-on counter-only allocation=%d B/op, want <1.5MiB", bytesPerOp)
+	const allocationSampleCount = 3
+	byteDeltas := make([]int64, 0, allocationSampleCount)
+	allocationDeltas := make([]int64, 0, allocationSampleCount)
+	for sample := 0; sample < allocationSampleCount; sample++ {
+		var off, on testing.BenchmarkResult
+		// Alternate order so process-wide allocator drift cannot consistently
+		// favor either configuration across the paired samples.
+		if sample%2 == 0 {
+			off = run(false)
+			on = run(true)
+		} else {
+			on = run(true)
+			off = run(false)
+		}
+		byteDelta := on.AllocedBytesPerOp() - off.AllocedBytesPerOp()
+		allocationDelta := on.AllocsPerOp() - off.AllocsPerOp()
+		byteDeltas = append(byteDeltas, byteDelta)
+		allocationDeltas = append(allocationDeltas, allocationDelta)
+		t.Logf("wrapper audit allocation sample=%d/%d off=%d B/op %d allocs/op N=%d on=%d B/op %d allocs/op N=%d delta=%d B/op %d allocs/op",
+			sample+1, allocationSampleCount,
+			off.AllocedBytesPerOp(), off.AllocsPerOp(), off.N,
+			on.AllocedBytesPerOp(), on.AllocsPerOp(), on.N,
+			byteDelta, allocationDelta)
+		if bytesPerOp := on.AllocedBytesPerOp(); bytesPerOp >= 1536<<10 {
+			t.Fatalf("audit-on counter-only allocation=%d B/op, want <1.5MiB", bytesPerOp)
+		}
+		if allocations := on.AllocsPerOp(); allocations >= 3000 {
+			t.Fatalf("audit-on counter-only allocations=%d/op, want <3000", allocations)
+		}
 	}
-	if allocations := on.AllocsPerOp(); allocations >= 3000 {
-		t.Fatalf("audit-on counter-only allocations=%d/op, want <3000", allocations)
+	slices.Sort(byteDeltas)
+	slices.Sort(allocationDeltas)
+	medianByteDelta := byteDeltas[len(byteDeltas)/2]
+	medianAllocationDelta := allocationDeltas[len(allocationDeltas)/2]
+	t.Logf("wrapper audit allocation median delta=%d B/op %d allocs/op sorted-byte-deltas=%v sorted-allocation-deltas=%v",
+		medianByteDelta, medianAllocationDelta, byteDeltas, allocationDeltas)
+	// testing.Benchmark derives B/op from process-wide MemStats and independently
+	// calibrates N for each arm. GC and per-P sync.Pool state can therefore dominate
+	// a single difference. One P follows testing.AllocsPerRun's stabilization model;
+	// the median of three alternating pairs rejects residual noise while retaining
+	// the exact 4 KiB product budget and the per-sample absolute gates above.
+	if medianByteDelta > 4<<10 {
+		t.Fatalf("median audit-on counter-only overhead=%d B/op, want <=4KiB over audit-off across %d alternating paired samples", medianByteDelta, allocationSampleCount)
 	}
-	const (
-		auditOverheadBudgetBytes      = 4 << 10
-		benchmarkAllocationSlackBytes = 1 << 10
-	)
-	// testing.Benchmark derives B/op from process-wide allocation counters, so
-	// otherwise equivalent GitHub runners can differ by a few rounded bytes.
-	// Keep the 4 KiB product budget explicit while allowing a narrow measurement
-	// margin; the absolute byte and allocation-count gates above remain unchanged.
-	if delta := on.AllocedBytesPerOp() - off.AllocedBytesPerOp(); delta > auditOverheadBudgetBytes+benchmarkAllocationSlackBytes {
-		t.Fatalf("audit-on counter-only overhead=%d B/op, want <=5KiB over audit-off (4KiB budget + 1KiB benchmark slack)", delta)
-	}
-	if delta := on.AllocsPerOp() - off.AllocsPerOp(); delta > 24 {
-		t.Fatalf("audit-on counter-only overhead=%d allocs/op, want <=24 over audit-off", delta)
+	if medianAllocationDelta > 24 {
+		t.Fatalf("median audit-on counter-only overhead=%d allocs/op, want <=24 over audit-off across %d alternating paired samples", medianAllocationDelta, allocationSampleCount)
 	}
 }
 

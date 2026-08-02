@@ -1,15 +1,38 @@
-# Round 9 Linux Host runner and counted-Mock contract
+# Historical Round 9 Linux Host runner and counted-Mock design
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
 current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
-`.github/workflows/round9-host-validation.yml` is the only admissible Round 9
-Host evaluation path for `v0.16-rc.4`, but it is not publication authorization
-by itself. The job deliberately performs no source checkout. It passes only
-immutable candidate, Phase 1, workflow, challenge, dispatch ref/SHA, and
-workflow ref/SHA identities to the separately reviewed command:
+> [!CAUTION]
+> **HISTORICAL / NON-EXECUTABLE DESIGN.** The workflow files
+> `.github/workflows/round9-host-validation.yml` and
+> `.github/workflows/round9-release-rc.yml` were deleted from the executable
+> workflow directory. Neither can be dispatched from the current repository or
+> used as a current gate. Only `ci.yml`, `codeql.yml`, and `policy-gate.yml` are
+> active, and none performs Host validation, independent audit, publication, or
+> production approval. Present-tense contract language below is preserved as a
+> point-in-time design record only.
+
+Commit `aaa71d9924bef935196790976c838968408dcdeb` is a confirmed green
+engineering baseline, while the current feature branch still requires its own
+PR checks. Neither fact is a Host PASS, independent-audit PASS, or production
+PASS.
+
+The retained schema-2 `trust` token is a historical closed-enum declaration,
+not a cryptographic signature or a live GitHub lookup. The local validator now
+reports only `SCHEMA_VALID_ATTESTATION_EXTERNAL`; the execution path reports
+`HOST_EXECUTION_COMPLETE_ATTESTATION_EXTERNAL`. Neither message is Host PASS.
+Only separately verified external attestation could elevate such a document,
+and no active workflow currently performs that step.
+
+When it existed, `.github/workflows/round9-host-validation.yml` was designed as
+the only admissible Round 9 Host evaluation path for `v0.16-rc.4`, but even a
+successful run would not have been publication authorization by itself. The
+job was designed to perform no source checkout and to pass only immutable
+candidate, Phase 1, workflow, challenge, dispatch ref/SHA, and workflow ref/SHA
+identities to the separately reviewed command:
 
 ```text
 sudo -n /usr/local/libexec/cag-round9-eval-broker evaluate
@@ -34,7 +57,7 @@ and a public RC do not authorize production Balanced mode.
 | Candidate | annotated exact-main `v0.16-rc.4` |
 | Platform | Linux amd64 only |
 | CPA | `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835` |
-| Host workflow | `.github/workflows/round9-host-validation.yml` |
+| Retired Host workflow | `.github/workflows/round9-host-validation.yml` |
 | Dispatch ref | exact `refs/tags/v0.16-rc.4` |
 | Dispatch SHA | exact candidate commit |
 | Workflow ref | `OWNER/REPO/.github/workflows/round9-host-validation.yml@refs/tags/v0.16-rc.4` |
@@ -66,15 +89,16 @@ the encrypted independent corpus. No code, workflow, installer, hook,
 dependency, application, or binary from a public adversarial repository is
 executed.
 
-## Phase 1 admission and no-checkout boundary
+## Historical Phase 1 admission and no-checkout boundary
 
-`round9-release-rc.yml` has no publication boolean and produces/attests only an
-exact 17-asset private candidate. Its admission also requires a successful
-exact-main push run of `Round 9 policy gate` and requires historical workflow
-IDs `315644586` and `318443961` to remain `disabled_manually`. The Host dispatch
-has ten inputs: tag, tag object, commit, tree, Phase 1 run ID/attempt, artifact
-ID/digest, one canonical inline `candidate_identity` object, and a fresh
-lowercase 64-hex challenge.
+The deleted `round9-release-rc.yml` design had no path that could emit
+`publication_permitted=true` and would have produced/attested only an exact
+17-asset private candidate. Its admission also required a successful exact-main
+push run of `Round 9 policy gate` and required historical workflow IDs
+`315644586` and `318443961` to remain `disabled_manually`. The Host dispatch
+design had ten inputs: tag, tag object, commit, tree, Phase 1 run ID/attempt,
+artifact ID/digest, one canonical inline `candidate_identity` object, and a
+fresh lowercase 64-hex challenge.
 Duplicate keys, unknown fields, non-canonical JSON, malformed identities, or an
 oversized candidate object fail before ledger reservation.
 
@@ -214,21 +238,23 @@ partial or completed state is reusable only when every signed candidate,
 corpus, execution, evaluator, and ledger identity still matches. These checks
 remain necessary but are not sufficient for public publication.
 
-## Attestation and current publication block
+## Historical attestation design and current publication block
 
-The Host workflow attests and uploads exactly:
+The retired Host workflow was designed to attest and upload exactly:
 
 - `round9-external-evaluation.json`;
 - `round9-external-ledger-proof.json`.
 
-`round9-release-rc.yml` keeps the 17-asset Phase 1 candidate build enabled and
-private. The former Host-only 19-asset publication assembly is statically
-unreachable and has no contents-write permission or Release mutation API. The
-publish, publication-blocker, and legacy existing-Release verifier jobs are all
-gated on `needs.admission.outputs.publication_permitted == 'true'`, while the
-admission job emits exactly one hard-coded `publication_permitted=false` and no
-workflow path can emit `true`. Host run identity, artifact digest, challenge, a
-counted-Mock `PASS`, or Release title/body text cannot enable any of them.
+The deleted `round9-release-rc.yml` was designed to keep the 17-asset Phase 1
+candidate build private. Its former Host-only 19-asset publication assembly was
+statically unreachable and had no contents-write permission or Release
+mutation API. The publish, publication-blocker, and legacy existing-Release
+verifier jobs were all gated on
+`needs.admission.outputs.publication_permitted == 'true'`, while the admission
+job emitted exactly one hard-coded `publication_permitted=false` and no path
+could emit `true`. Those jobs no longer exist in the active workflow directory.
+Host run identity, artifact digest, challenge, a counted-Mock `PASS`, or Release
+title/body text cannot enable publication.
 
 The missing gate must review the exact prospective 19-asset candidate, not a
 source snapshot, Phase 1 approximation, or Host result alone. Its evidence and

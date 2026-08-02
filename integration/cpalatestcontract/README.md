@@ -23,7 +23,7 @@ checksum-pinned fixture overlays only to ephemeral copies of the selected
 official CPA module: schema-2 fail-open request interception/lifecycle plus the
 narrow Alpha Search ModelRouter capability, Interactions handler/translator,
 and Interactions request-lifecycle format. A
-fourth source-controlled Raw Capture
+fourth source-controlled Raw Capture schema-4 transport and response-budget
 management overlay is compiled from this test module. The Raw Capture contract
 resolves the selected CPA source through the same checked-in module identity as
 every other contract. `scripts/cpa-latest-compat.sh` compiles the Guard and
