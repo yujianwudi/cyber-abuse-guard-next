@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
 Last updated: 2026-08-01 (Asia/Shanghai)
@@ -123,10 +123,10 @@ capacity also remain **`NOT_PROVIDED`**. Race remains a separate CI gate and is
 not mixed into these wall-clock measurements. Therefore this result does not
 close the release-level RT10-08 gate.
 
-## Round 10 current status
+## Historical Round 10 status
 
-The Round 10 classifier/source snapshot is frozen pending an exact commit. The current
-source identity is `classifier-policy-v10` /
+The Round 10 classifier/source snapshot is frozen pending an exact commit. Its
+historical source identity is `classifier-policy-v10` /
 `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`
 and ruleset `1.0.10` /
 `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`.

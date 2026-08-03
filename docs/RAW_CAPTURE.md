@@ -194,7 +194,7 @@ size of that complete CPA Host-visible body:
 }
 ```
 
-CPA v7.2.113 HTML-escapes every JSON string after the plugin returns. The legacy
+CPA v7.2.116 HTML-escapes every JSON string after the plugin returns. The legacy
 `raw_preview` field is therefore retained for existing clients but is explicitly
 deprecated by `raw_preview_deprecated: true`; it may not be byte-identical to
 the stored redacted preview. `raw_preview_b64` is the canonical
@@ -222,7 +222,7 @@ query limit and the current `max_bytes` setting. This remains safe after a
 configuration downgrade when the database still contains older 1 MiB rows: a
 `limit=100` query cannot first materialize roughly 100 MiB of previews. The
 management encoder separately enforces an 8 MiB budget over the complete
-CPA-v7.2.113 Host-visible JSON body, including both preview fields and response
+CPA-v7.2.116 Host-visible JSON body, including both preview fields and response
 metadata. The maximum single 1 MiB preview fits this budget even for the
 reviewed worst-case HTML-escaping fixture.
 

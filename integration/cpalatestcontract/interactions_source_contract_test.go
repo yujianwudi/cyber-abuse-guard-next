@@ -15,6 +15,7 @@ const (
 	cpaLatestHandlersPackage           = cpaLatestModulePath + "/sdk/api/handlers"
 	cpaLatestGeminiHandlersPackage     = cpaLatestHandlersPackage + "/gemini"
 	cpaLatestInternalAPIPackage        = cpaLatestModulePath + "/internal/api"
+	cpaLatestCliproxyAuthPackage       = cpaLatestModulePath + "/sdk/cliproxy/auth"
 	cpaLatestGeminiInteractionsPackage = cpaLatestModulePath + "/internal/translator/gemini/interactions"
 	cpaLatestGeminiGeminiPackage       = cpaLatestModulePath + "/internal/translator/gemini/gemini"
 	cpaLatestOpenAIGeminiPackage       = cpaLatestModulePath + "/internal/translator/openai/gemini"
@@ -23,6 +24,8 @@ const (
 	cpaLatestInteractionsHandlerFixtureSHA256 = "424501cfa8e07e138abd5acbc3c9b5b8470868f46c83232906484719cabd68b5"
 	cpaLatestInteractionsHostFixture          = "latest_interactions_pluginhost_overlay_test.go.txt"
 	cpaLatestInteractionsHostFixtureSHA256    = "37c0c7502cbacc2f18e2fbd39fa62aeccde9373a047a5589f1da8f68a12ed58f"
+	cpaLatestHomeOAuthRetryFixture            = "latest_home_oauth_retry_overlay_test.go.txt"
+	cpaLatestHomeOAuthRetryFixtureSHA256      = "216e40962593363e269e8a3b30f7686137aca4654773168aa2025b0b16fa07cc"
 )
 
 var latestOfficialInteractionsTests = []struct {
@@ -33,6 +36,20 @@ var latestOfficialInteractionsTests = []struct {
 		packagePath: cpaLatestInternalAPIPackage,
 		testNames: []string{
 			"TestInteractionsRouteRegistered",
+		},
+	},
+	{
+		packagePath: cpaLatestCliproxyAuthPackage,
+		testNames: []string{
+			"TestHomeUnauthorizedRefreshesSameSelectionBeforeRedispatch",
+			"TestHomeUnauthorizedRefreshUpdatesRetainedSelection",
+			"TestRefreshHomeSelectionReusesConcurrentNewerToken",
+			"TestHomeUnauthorizedRefreshIsAttemptedAtMostOnce",
+			"TestHomeNoCandidateAfterRefreshFailurePreservesRefreshError",
+			"TestHomeUnauthorizedTransientRefreshFailureIsReturned",
+			"TestHomeUnauthorizedStreamRefreshesAtMostOnceAcrossRedispatch",
+			"TestHomeUnauthorizedStartedStreamDoesNotReplay",
+			"TestHomeUnauthorizedStreamRefreshesBeforeRedispatch",
 		},
 	},
 	{
@@ -84,6 +101,7 @@ var latestPrimaryCodexAlphaSearchTests = []string{
 	"TestCodexAlphaSearchFallsBackWhenPluginDoesNotHandleRoute",
 	"TestCodexAlphaSearchRejectsUnsupportedPluginRouteTarget",
 	"TestCodexAlphaSearchUsesPluginProviderTargetModel",
+	"TestHomeCodexAlphaSearchRefreshesUnauthorizedSelectionOnce",
 }
 
 func TestLatestCPAOfficialInteractionsSourceContract(t *testing.T) {
@@ -122,6 +140,18 @@ func TestLatestCPAInteractionsSchema2RequestLifecycleOverlayContract(t *testing.
 		packagePath:   "./internal/pluginhost",
 		testNames: []string{
 			"TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract",
+		},
+	})
+}
+
+func TestLatestCPAHomeOAuthUnauthorizedRetryOverlayContract(t *testing.T) {
+	runLatestCPAOverlayFixture(t, latestCPAOverlayFixture{
+		fixtureName:   cpaLatestHomeOAuthRetryFixture,
+		fixtureSHA256: cpaLatestHomeOAuthRetryFixtureSHA256,
+		targetPath:    filepath.Join("sdk", "api", "handlers", "cyber_abuse_guard_home_oauth_retry_contract_test.go"),
+		packagePath:   "./sdk/api/handlers",
+		testNames: []string{
+			"TestCyberAbuseGuardHomeOAuthUnauthorizedRetrySingleLogicalLifecycle",
 		},
 	})
 }

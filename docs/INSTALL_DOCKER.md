@@ -2,18 +2,18 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
 ## Current source status
 
-This checkout is the source-only Round 9 development candidate. No current
+This checkout is the source-only `main` development line. No current
 plugin release, production approval, or Balanced-mode admission is implied.
 Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
 reuse or relabel them as a build of the current source.
 
-Linux amd64 and CPA v7.2.113
-(`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`) are the only compatibility target.
+Linux amd64 and CPA v7.2.116
+(`a88197f845c979132c8978ea223c6af05cc81536`) are the only compatibility target.
 Runtime validation must use an isolated counted-Mock upstream with no real
 Provider or account pool. A sandbox PASS is engineering evidence only and does
 not replace independent source review or the external admission policy.
@@ -22,10 +22,12 @@ Development artifacts containing `-dirty` are test-only. Do not place them in
 any production plugin directory. Do not enable Raw Capture merely to validate
 the candidate, and never include a capture database in CI or release assets.
 
-See [RELEASE_POLICY.md](RELEASE_POLICY.md),
-[ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md), and
-[ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md) for the current
-status. Later v0.15/Round 8 command sequences are historical operations
+See [RELEASE_POLICY.md](RELEASE_POLICY.md) for the frozen release-policy
+snapshot. [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md) and
+[ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md) are historical
+CPA v7.2.113 references, not the v7.2.116 execution protocol. Any v7.2.116 Host
+run must create a newly versioned evidence lane rather than rewriting those
+records. Later v0.15/Round 8 command sequences are also historical operations
 references unless a future release-specific document explicitly supersedes
 them.
 
@@ -51,7 +53,7 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
 
 ## Preconditions
 
-- Run the candidate bytes against CPA v7.2.113 built with `CGO_ENABLED=1`.
+- Run the candidate bytes against CPA v7.2.116 built with `CGO_ENABLED=1`.
   Assets labelled `_no-plugin`
   cannot load native plugins. Source/compile compatibility does not substitute
   for loading the candidate `.so`. Earlier CPA checks are historical
@@ -335,7 +337,7 @@ plugins:
 
 `log_original_text: true` is always rejected. There is no debug override.
 
-For CPA v7.2.113, `request-log: false` by itself is not a raw-body logging
+For CPA v7.2.116, `request-log: false` by itself is not a raw-body logging
 boundary: an installed request-logging middleware still captures request bodies
 and can retain an HTTP error-only log, including a Guard block on a normal model
 route. `commercial-mode: true` is the startup control that prevents that
@@ -429,7 +431,7 @@ EXPECTED_MODE=observe \
 directory visible from the watchdog. For the admitted production contract, CPA
 must start with `WRITABLE_PATH` set to an absolute, dedicated directory and
 `CPA_LOG_DIR` must name the host-visible side of that exact
-`WRITABLE_PATH/logs` bind mount. Do not rely on CPA v7.2.113's relative `./logs`
+`WRITABLE_PATH/logs` bind mount. Do not rely on CPA v7.2.116's relative `./logs`
 fallback: the request logger resolves a relative path against the configuration
 directory while the management inventory resolves it against the process
 working directory. Those roots can differ. No path component may be a symlink.
@@ -451,7 +453,7 @@ active resource proof deliberately marks its challenge header hop-by-hop; a
 conforming intermediary removes that header, so a proxied path fails closed
 instead of being mistaken for direct evidence.
 
-CPA v7.2.113's plugin ABI cannot cryptographically identify the owning listener
+CPA v7.2.116's plugin ABI cannot cryptographically identify the owning listener
 or detect a non-conforming same-host proxy that deliberately preserves the
 hop-by-hop challenge header while normalizing lowercase `get` to uppercase
 `GET`. Do not place such an intermediary on `CPA_DIRECT_BASE_URL`. The operator
@@ -506,10 +508,10 @@ and priority, build/ruleset identity, degradation, router/panic counters, and
 two built-in local probes. The malicious probe never enters a provider route,
 auth selector, usage queue, or upstream.
 
-The malicious built-in probe is a `/v0/management` 403. CPA v7.2.113 explicitly
+The malicious built-in probe is a `/v0/management` 403. CPA v7.2.116 explicitly
 skips management paths in its request-logging middleware, so that 403 is not a
 startup proof. Immediately afterward the watchdog verifies the exact runtime
-headers for CPA `7.2.113` at commit `bc71c77` and uses the authenticated CAG
+headers for CPA `7.2.116` at commit `a88197f8` and uses the authenticated CAG
 management route on `CPA_BASE_URL` to issue two independent 256-bit challenges.
 The initial status, both built-in classifier probes, each challenge response,
 each ResourceRoute body, each confirmation, and the final status must carry one
@@ -558,7 +560,7 @@ Verify New API → CPA using an ordinary harmless request, confirm other plugins
 still behave normally, and compare the current CPA auth-file list with the saved
 inventory. Installation must not create, delete, or modify auth files.
 
-The CPA v7.2.113 Host matrix must cover OpenAI Chat, OpenAI Responses,
+Any newly versioned CPA v7.2.116 Host matrix must cover OpenAI Chat, OpenAI Responses,
 Claude, and Gemini allow/refusal paths, including streaming pre-SSE 403,
 Anthropic/Gemini token-count 403, and zero Auth Selector, Provider, Usage, and
 Mock Upstream counters for blocked requests. Ordinary CI does not execute that
@@ -577,10 +579,11 @@ and remains an explicit `BLOCKED FOR HANDOFF` item.
 
 ## Future Observe → Audit → Balanced rollout
 
-**Do not execute this rollout for v0.16-rc.2.** Dual CPA counted-Mock Host
-evidence, independent audit, external admission, and production approval are
-pending. These stages document a possible future process only after all of
-those gates bind the exact unchanged candidate.
+**Do not execute this historical rollout for the current source line.** Dual
+CPA counted-Mock Host evidence, independent audit, external admission, and
+production approval are pending. These stages document a possible future
+process only after a new versioned rollout contract binds all gates to the
+exact unchanged candidate.
 
 ### Stage 1: Observe (24–48 hours)
 

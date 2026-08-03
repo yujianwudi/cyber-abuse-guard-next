@@ -2,12 +2,32 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
-Source-tree status updated: 2026-08-03 (Asia/Shanghai)
+Source-tree status updated: 2026-08-04 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
+
+- Advance the sole active CPA contract from official `v7.2.113` to official
+  `v7.2.116` (`a88197f845c979132c8978ea223c6af05cc81536`) with module sum
+  `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=` and the unchanged go.mod
+  sum. The reviewed v7.2.113-to-v7.2.116 range retains C ABI 1, RPC schema 2,
+  and all 235 scoped plugin blobs byte-identically. Its relevant runtime changes
+  are outside that plugin boundary: a Home OAuth 401 may refresh the selected
+  credential and retry at most once within the same logical request, while
+  Claude's final upstream wire headers are generated only after request
+  interceptors have run. CAG does not register `UsagePlugin`, so Home's
+  result-only usage reporting does not add a CAG usage callback. The standard
+  upstream Linux amd64 asset
+  `CLIProxyAPI_7.2.116_linux_amd64.tar.gz` is identified by SHA-256
+  `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`;
+  recording that upstream hash is not a download, execution, CAG artifact, or
+  Host PASS. Frozen v7.2.113 results remain bound to their original commit and
+  bytes; all v7.2.116 exact-commit CI, Host, watchdog, sandbox, and production
+  conclusions remain pending. The final tree must rebind the classifier source
+  identity because root `go.mod` and `go.sum` changed; no prior result is
+  reattributed.
 
 - Harden the retained CPA v7.2.113 Linux Host and external sandbox contracts:
   use a Docker 29-compatible internal-only bridge with no published Host ports;

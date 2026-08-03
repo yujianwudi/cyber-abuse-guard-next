@@ -379,10 +379,12 @@ CLEAN_EXECUTION_ENV_PATHS = {
 CPA_MODULE_PATH = "github.com/router-for-me/CLIProxyAPI/v7"
 CPA_ROUND8_VERSION = "v7.2.95"
 CPA_ROUND8_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
-CPA_CURRENT_VERSION = "v7.2.113"
-CPA_CURRENT_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
-CPA_CURRENT_MODULE_SUM = "h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA="
-CPA_CURRENT_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
+CPA_ACTIVE_VERSION = "v7.2.116"
+CPA_ACTIVE_COMMIT = "a88197f845c979132c8978ea223c6af05cc81536"
+CPA_ACTIVE_MODULE_SUM = "h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU="
+CPA_ACTIVE_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
+CPA_ROUND9_VERSION = "v7.2.113"
+CPA_ROUND9_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
 BLOCKED_TOP_LEVEL_KEYS = (
     "name",
     "on",
@@ -1377,7 +1379,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "905e64ee8b1c128cba215b5a7ef1e26126f292718371bb576b00bf448ddf7a23"
+    "b68dbac2c99efe94ea591ddcc2d1a93101c8fc818c59969c81874ad7dde949bb"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then
@@ -1490,7 +1492,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "19670004d7c3dc8e210c43fb4f64758cc8f737d213b988dc87aaa0c53298553e"
+ROUND6_SAFE_GATE_TEST_SHA256 = "0ecbdec7f1acb3150d00debc2b4f5d1fe86ca5cbff4b76feda01f0a9d9b9d4d8"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -3235,9 +3237,9 @@ def validate_round6_privacy_fixture_script(text: str, source: Path) -> None:
 def validate_cpa_module_pins(root: Path) -> None:
     identities = {
         "primary": (
-            CPA_CURRENT_VERSION,
-            CPA_CURRENT_MODULE_SUM,
-            CPA_CURRENT_GO_MOD_SUM,
+            CPA_ACTIVE_VERSION,
+            CPA_ACTIVE_MODULE_SUM,
+            CPA_ACTIVE_GO_MOD_SUM,
         ),
     }
     for mod_relative, sum_relative, profile in CPA_PINNED_MODULE_FILES:
@@ -3310,10 +3312,10 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         "CPA_COMPAT_REQUIRE_LATEST must be 0 or 1",
         "CPA_COMPAT_REQUIRE_LATEST=1 requires CPA_COMPAT_VERIFY_REMOTE=1",
         "profiles=(primary)",
-        f"cpa_version='{CPA_CURRENT_VERSION}'",
-        f"cpa_commit='{CPA_CURRENT_COMMIT}'",
-        f"cpa_module_sum='{CPA_CURRENT_MODULE_SUM}'",
-        f"cpa_go_mod_sum='{CPA_CURRENT_GO_MOD_SUM}'",
+        f"cpa_version='{CPA_ACTIVE_VERSION}'",
+        f"cpa_commit='{CPA_ACTIVE_COMMIT}'",
+        f"cpa_module_sum='{CPA_ACTIVE_MODULE_SUM}'",
+        f"cpa_go_mod_sum='{CPA_ACTIVE_GO_MOD_SUM}'",
         "root_mod_flags=()",
         "contract_mod_flags=()",
         "contract_modfile='go.mod'",
@@ -3339,6 +3341,7 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         '"$download_origin_ref" == "refs/tags/$cpa_version"',
         '"$cpa_module/sdk/pluginabi"',
         '"$cpa_module/sdk/pluginapi"',
+        "-run='^(TestRegistrationMatchesTargetCPAContract|TestRegistrationDoesNotAdvertiseUsagePlugin|TestRouterUsesRoleAwareConversationClassification)$'",
     ):
         if required not in text:
             raise ContractError(
@@ -3388,7 +3391,7 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
     )
     if any(marker not in text for marker in latest_control_flow):
         raise ContractError(
-            f"CPA optional latest verification must bind {CPA_CURRENT_VERSION} to the official latest Release when explicitly requested: {source}"
+            f"CPA optional latest verification must bind {CPA_ACTIVE_VERSION} to the official latest Release when explicitly requested: {source}"
         )
     if (
         text.count(CPA_COMPAT_FINAL_OUTPUT_CONTRACT) != 1
@@ -3430,12 +3433,12 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         step_path = f"jobs.quality-and-artifacts.steps[{index}]"
         step = yaml_mapping(step_node, source, step_path)
         if "name" in step and yaml_scalar(step["name"], source, f"{step_path}.name") == (
-            f"CPA {CPA_CURRENT_VERSION} pinned source API and SDK contract"
+            f"CPA {CPA_ACTIVE_VERSION} pinned source API and SDK contract"
         ):
             matches.append((index, step_node, step))
     if len(matches) != 1:
         raise ContractError(
-            f"CI must contain exactly one reviewed CPA {CPA_CURRENT_VERSION} pinned source API and SDK step"
+            f"CI must contain exactly one reviewed CPA {CPA_ACTIVE_VERSION} pinned source API and SDK step"
         )
 
     historical_matches: list[tuple[int, Node, dict[str, Node]]] = []
@@ -3470,7 +3473,7 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         ("CPA_COMPAT_REQUIRE_LATEST", "0"),
     ):
         raise ContractError(
-            f"CI CPA step must keep the {CPA_CURRENT_VERSION} primary profile, exact remote verification, and pinned-lane latest opt-out"
+            f"CI CPA step must keep the {CPA_ACTIVE_VERSION} primary profile, exact remote verification, and pinned-lane latest opt-out"
         )
     require_yaml_scalar(
         cpa_step["run"],
@@ -3479,8 +3482,8 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         f"{cpa_path}.run",
     )
     current_identity_markers = (
-        f"integration_summary=CPA {CPA_CURRENT_VERSION} source/fail-open, SDK ABI/API, and Linux Host .so load checks completed",
-        f"cpa_primary_identity={CPA_CURRENT_VERSION}@{CPA_CURRENT_COMMIT}",
+        f"integration_summary=CPA {CPA_ACTIVE_VERSION} source/fail-open, SDK ABI/API, and Linux Host .so load checks completed",
+        f"cpa_primary_identity={CPA_ACTIVE_VERSION}@{CPA_ACTIVE_COMMIT}",
     )
     if any(text.count(marker) != 1 for marker in current_identity_markers):
         raise ContractError("CI must report the exact current CPA source and commit identity")
@@ -3810,8 +3813,8 @@ def validate_rc_reproducible_release_asset_contract(text: str, source: Path) -> 
         (
             "round9)\n"
             "    canonical_repository='yujianwudi/cyber-abuse-guard-next'\n"
-            f"    cpa_version='{CPA_CURRENT_VERSION}'\n"
-            f"    cpa_commit='{CPA_CURRENT_COMMIT}'\n"
+            f"    cpa_version='{CPA_ROUND9_VERSION}'\n"
+            f"    cpa_commit='{CPA_ROUND9_COMMIT}'\n"
             "    ;;"
         ),
         'cpa_gate_key="rc_gate.cpa_${cpa_version}_primary_source_compatibility=PASS"',
@@ -3859,7 +3862,7 @@ def validate_rc_reproducible_release_asset_contract(text: str, source: Path) -> 
             )
     for literal_gate in (
         f"rc_gate.cpa_{CPA_ROUND8_VERSION}_primary_source_compatibility=PASS",
-        f"rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS",
+        f"rc_gate.cpa_{CPA_ROUND9_VERSION}_primary_source_compatibility=PASS",
     ):
         if literal_gate in text:
             raise ContractError(
@@ -7306,8 +7309,13 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         raise ContractError("active RC workflow may not emit formal evidence assets")
     if "release-evidence-final.md" in text or "FORMAL_GATES_PASS" in text:
         raise ContractError("active RC workflow may not claim formal release evidence")
-    for current_identity in (CPA_CURRENT_VERSION, CPA_CURRENT_COMMIT):
-        if current_identity in text:
+    for later_identity in (
+        CPA_ROUND9_VERSION,
+        CPA_ROUND9_COMMIT,
+        CPA_ACTIVE_VERSION,
+        CPA_ACTIVE_COMMIT,
+    ):
+        if later_identity in text:
             raise ContractError(
                 "active RC workflow must retain the immutable Round 8 CPA identity"
             )
@@ -8260,10 +8268,10 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
         '[[ "$TAG" == v0.16-rc.4 ]]',
         "make unit-test race round6-vet fuzz-smoke round9-fuzz round6-script-test",
         "RC_RELEASE_LANE: round9",
-        f"rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS",
-        f'.cpa.primary.version == "{CPA_CURRENT_VERSION}"',
-        f'.cpa.primary.commit == "{CPA_CURRENT_COMMIT}"',
-        f'.round9.external_evaluation.candidate.cpa_version == "{CPA_CURRENT_VERSION}"',
+        f"rc_gate.cpa_{CPA_ROUND9_VERSION}_primary_source_compatibility=PASS",
+        f'.cpa.primary.version == "{CPA_ROUND9_VERSION}"',
+        f'.cpa.primary.commit == "{CPA_ROUND9_COMMIT}"',
+        f'.round9.external_evaluation.candidate.cpa_version == "{CPA_ROUND9_VERSION}"',
         ".schema_version == 6",
         ".artifact_count == 17",
         ".artifact_count == 19",
@@ -8308,16 +8316,16 @@ def validate_round9_rc_workflow(text: str, source: Path) -> None:
             "Round 9 RC workflow must run independent-audit verifier tests in build and publish"
         )
 
-    current_cpa_marker_counts = {
-        f"rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS": 2,
-        f'.cpa.primary.version == "{CPA_CURRENT_VERSION}"': 1,
-        f'.cpa.primary.commit == "{CPA_CURRENT_COMMIT}"': 1,
-        f'.round9.external_evaluation.candidate.cpa_version == "{CPA_CURRENT_VERSION}"': 1,
+    round9_cpa_marker_counts = {
+        f"rc_gate.cpa_{CPA_ROUND9_VERSION}_primary_source_compatibility=PASS": 2,
+        f'.cpa.primary.version == "{CPA_ROUND9_VERSION}"': 1,
+        f'.cpa.primary.commit == "{CPA_ROUND9_COMMIT}"': 1,
+        f'.round9.external_evaluation.candidate.cpa_version == "{CPA_ROUND9_VERSION}"': 1,
     }
-    for marker, expected_count in current_cpa_marker_counts.items():
+    for marker, expected_count in round9_cpa_marker_counts.items():
         if text.count(marker) != expected_count:
             raise ContractError(
-                f"Round 9 RC workflow must bind the current CPA identity exactly: {marker}"
+                f"Round 9 RC workflow must bind the frozen CPA identity exactly: {marker}"
             )
 
     public_v13_marker_counts = {
@@ -9114,8 +9122,10 @@ def validate_round8_host_workflow(text: str, source: Path) -> None:
         "COMPATIBILITY_IMAGE",
         "--compatibility-image",
         "v7.2.88",
-        CPA_CURRENT_VERSION,
-        CPA_CURRENT_COMMIT,
+        CPA_ROUND9_VERSION,
+        CPA_ROUND9_COMMIT,
+        CPA_ACTIVE_VERSION,
+        CPA_ACTIVE_COMMIT,
     )
     for marker in forbidden:
         if marker.lower() in text.lower():

@@ -6,7 +6,7 @@ its YAML file is present here.
 
 | File | Display name | Trigger | Responsibility |
 |---|---|---|---|
-| `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.113 compatibility, tests, fuzzing, candidate `.so` loading, development artifacts, and reproducibility |
+| `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.116 compatibility, tests, fuzzing, candidate `.so` loading, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
 

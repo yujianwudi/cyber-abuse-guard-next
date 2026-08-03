@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
 ## Scope, release state, and invariants
@@ -16,9 +16,9 @@ be overwritten, relabeled, repaired, or republished as current Round 9 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.113` at
-  `bc71c77f5cc42f3fbe1bf040cf14d4f166894835`, module sum
-  `h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=`, and `go.mod` sum
+- CPA `v7.2.116` at
+  `a88197f845c979132c8978ea223c6af05cc81536`, module sum
+  `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`, and `go.mod` sum
   `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 
 The root module, `integration/cpalatestcontract`, and
@@ -62,15 +62,16 @@ The implementation has seven non-negotiable invariants:
    prompt, never sends request content to an auxiliary classifier, and stores
    no original request text by default.
 
-Current traceability and known gaps are tracked in
-[ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md). The Host,
-audit-migration, and operator-owned rollback contracts are documented in
+The frozen Round 9 traceability and known gaps remain recorded in
+[ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md). Its Host,
+audit-migration, and operator-owned rollback designs are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
-[ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Exact-main CI,
-counted-Mock Host validation on the sole pinned CPA v7.2.113 identity, and
-independent audit remain mandatory; self-tests do not authorize production
-Balanced mode.
+[ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Those records remain
+bound to their historical CPA v7.2.113 lane and are not rebound to v7.2.116.
+The active v7.2.116 source line still requires its own exact-commit CI,
+counted-Mock Host validation, second-machine review, and independent audit;
+self-tests do not authorize production Balanced mode.
 
 ## CPA ABI path
 
@@ -91,7 +92,7 @@ Its JSON RPC registration uses schema version 2 and declares:
   has no untrusted mutator that runs after Guard at the final interceptor stage;
 - `request_lifecycle_plugin`: remove the bounded, TTL-limited opaque RequestID
   and fingerprint entry for succeeded, failed, rejected, or canceled requests;
-- `model_router: true`: only the CPA v7.2.113 `codex-alpha-search` compatibility
+- `model_router: true`: only the CPA v7.2.116 `codex-alpha-search` compatibility
   entry is handled because those two HTTP routes do not invoke
   RequestInterceptor. Host-originated Router callbacks for every other format
   return `Handled:false` without classification; ordinary enforcement remains
@@ -113,7 +114,7 @@ executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
 before Codex auth or upstream because that handler currently accepts only a
 `provider=codex` target.
 
-CPA v7.2.113, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
+CPA v7.2.116, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
 global capability rather than a source-format-scoped capability. Once CAG
 registers it for Alpha Search, an
 ordinary routed request still incurs CPA's body clone, JSON/Base64
@@ -863,7 +864,7 @@ The authenticated status exposes `loaded`, `enforcement_ready`,
 failures), `panics_recovered`, audit/HMAC/persistence degradation,
 reconfigure error, build/ruleset identity, and the classifier-policy
 version/hash. The loopback-only production watchdog checks those fields, runs
-built-in local probes, and actively proves the CPA v7.2.113 startup logging
+built-in local probes, and actively proves the CPA v7.2.116 startup logging
 boundary with one temporary root-bound marker plus two one-time, same-process
 CAG resource challenges over the direct CPA listener. The complete and partial
 lowercase-`get` probes are source-pinned to traverse CPA request logging without
@@ -897,7 +898,7 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-Both v7.2.113 compatibility contract modules first prove that the named critical
+Both v7.2.116 compatibility contract modules first prove that the named critical
 upstream Host tests still exist and then each executes the complete upstream
 `internal/pluginhost` package for the current platform. Their CI coverage is
 intentionally overlapping; it is neither an exact-name-only run nor a pair of
@@ -906,8 +907,9 @@ non-duplicative contracts. The plugin-store module also calls the official
 real build artifact. These checks cover store naming, root-only library layout,
 checksum, installed path/bytes, repeat installation, tamper repair, priority
 ordering, and documented Host fallback. They remain source/installer
-compatibility evidence. Current admission requires the v7.2.113 counted-Mock
-Host run on the same candidate and independent verification.
+compatibility evidence. Current admission requires a newly versioned v7.2.116
+counted-Mock Host run on the same candidate and independent verification; the
+frozen Round 9 v7.2.113 evidence protocol cannot be relabelled or reused.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,
 starts a local mock OpenAI-compatible upstream, and starts CPA with the plugin.
