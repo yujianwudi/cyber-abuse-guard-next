@@ -7,6 +7,7 @@ import argparse
 import errno
 import hashlib
 import http.server
+import ipaddress
 import importlib.util
 import io
 import json
@@ -207,8 +208,8 @@ def valid_records(
             lane,
             "network_binding",
             case="cpa_management_and_api",
-            host_ip=r8.CPA_HOST_IP,
-            host_port=r8.CPA_HOST_PORT,
+            host_ip=r8.CPA_NETWORK_MODE,
+            host_port=r8.CPA_NETWORK_HOST_PORT,
             container_port=r8.CPA_PORT,
             passed=True,
         )
@@ -682,13 +683,13 @@ class Round9HostEvidenceTest(unittest.TestCase):
                 with self.assertRaises(r8.RunnerError):
                     r8.derive_host_results(records, families, "primary")
 
-    def test_deriver_rejects_any_non_contract_cpa_host_port(self) -> None:
+    def test_deriver_rejects_any_non_contract_cpa_network_binding(self) -> None:
         families = [pair["family"] for pair in fixture_document()["pairs"]]  # type: ignore[index]
         records = valid_records("primary")
         binding = next(
             record for record in records if record.get("check") == "network_binding"
         )
-        binding["host_port"] = r8.CPA_HOST_PORT + 1
+        binding["host_port"] = 1
         with self.assertRaisesRegex(r8.RunnerError, "network binding observation"):
             r8.derive_host_results(records, families, "primary")
 
@@ -1106,61 +1107,280 @@ class Round9HostEvidenceTest(unittest.TestCase):
                     f"http://127.0.0.1:{port}", "GET", "/healthz"
                 )
                 self.assertEqual((status, raw), (200, b'{"ok":true}'))
+                query_status, query_raw = r8.http_request(
+                    f"http://127.0.0.1:{port}",
+                    "GET",
+                    "/v0/management/usage-queue",
+                    query=(("count", "100"),),
+                )
+                self.assertEqual((query_status, query_raw), (200, b'{"ok":true}'))
                 redirect_status, _ = r8.http_request(
                     f"http://127.0.0.1:{port}", "GET", "/redirect"
                 )
                 self.assertEqual(redirect_status, 302)
                 with self.assertRaises(r8.RunnerError):
                     r8.http_request(f"http://localhost:{port}", "GET", "/healthz")
+                for base in (
+                    "http://192.0.2.1:8317",
+                    "http://169.254.1.2:8317",
+                    "http://172.19.0.3:8443",
+                    "http://[::1]:8317",
+                    "http://172.19.0.3:not-a-port",
+                ):
+                    with self.subTest(base=base), self.assertRaises(r8.RunnerError):
+                        r8.http_request(base, "GET", "/healthz")
+                for unsafe_path in (
+                    "/v0/management/usage-queue?count=100",
+                    "/healthz#fragment",
+                    "//other",
+                    "http://example.invalid/leak",
+                    "/%2f%2fexample.invalid/leak",
+                ):
+                    with self.subTest(path=unsafe_path), self.assertRaises(r8.RunnerError):
+                        r8.http_request(
+                            f"http://127.0.0.1:{port}", "GET", unsafe_path
+                        )
+                unsafe_queries = (
+                    ("/healthz", (("count", "100"),)),
+                    ("/v0/management/usage-queue", None),
+                    (
+                        "/v0/management/usage-queue",
+                        (("count", "100"), ("count", "100")),
+                    ),
+                    ("/v0/management/usage-queue", (("unknown", "100"),)),
+                    ("/v0/management/usage-queue", (("%63ount", "100"),)),
+                    ("/v0/management/usage-queue", (("count", "%31%30%30"),)),
+                    ("/v0/management/usage-queue", (("count", "0100"),)),
+                    (
+                        r8.MANAGEMENT_PATH + "/raw-captures",
+                        (("limit", "100"), ("extra", "1")),
+                    ),
+                )
+                for query_path, query in unsafe_queries:
+                    with self.subTest(
+                        query_path=query_path, query=query
+                    ), self.assertRaises(r8.RunnerError):
+                        r8.http_request(
+                            f"http://127.0.0.1:{port}",
+                            "GET",
+                            query_path,
+                            query=query,
+                        )
+                with self.assertRaises(r8.RunnerError):
+                    r8.http_request(
+                        f"http://127.0.0.1:{port}",
+                        "POST",
+                        "/v0/management/usage-queue",
+                        query=(("count", "100"),),
+                    )
         finally:
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
 
-    def test_cpa_host_port_preflight_rejects_occupied_listener(self) -> None:
-        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        listener.bind((r8.CPA_HOST_IP, 0))
-        port = listener.getsockname()[1]
+    def test_real_usage_and_raw_capture_consumers_use_fixed_query_contracts(self) -> None:
+        requested: list[str] = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                requested.append(self.path)
+                if self.path == "/v0/management/usage-queue?count=100":
+                    payload = []
+                elif self.path == r8.MANAGEMENT_PATH + "/raw-captures?limit=100":
+                    payload = {"captures": [], "returned_count": 0}
+                else:
+                    self.send_error(404)
+                    return
+                raw = r8.canonical_bytes(payload)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
         try:
-            with mock.patch.object(r8, "CPA_HOST_PORT", port):
-                with self.assertRaisesRegex(r8.RunnerError, "occupied or unavailable"):
-                    r8.require_tcp_port_available(r8.CPA_HOST_IP, port)
+            lane = object.__new__(r8.Lane)
+            lane.cpa_url = f"http://127.0.0.1:{server.server_address[1]}"
+            lane.management_key = "test"
+            lane.drain_usage_queue()
+            self.assertEqual(
+                lane.query_raw_captures(), {"captures": [], "returned_count": 0}
+            )
+            self.assertEqual(
+                requested,
+                [
+                    "/v0/management/usage-queue?count=100",
+                    r8.MANAGEMENT_PATH + "/raw-captures?limit=100",
+                ],
+            )
         finally:
-            listener.close()
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
 
-    def test_cpa_host_port_preflight_accepts_available_listener(self) -> None:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        probe.bind((r8.CPA_HOST_IP, 0))
-        port = probe.getsockname()[1]
-        probe.close()
-        with mock.patch.object(r8, "CPA_HOST_PORT", port):
-            r8.require_tcp_port_available(r8.CPA_HOST_IP, port)
-
-    def test_container_port_binding_rejects_any_cpa_host_port_mutation(self) -> None:
-        key = f"{r8.CPA_PORT}/tcp"
-        binding = [{"HostIp": r8.CPA_HOST_IP, "HostPort": str(r8.CPA_HOST_PORT)}]
+    def test_container_private_ipv4_requires_exact_isolated_rfc1918_network(self) -> None:
+        network = "cag-r9-primary-test-net"
         info = {
-            "HostConfig": {"PortBindings": {key: [dict(binding[0])]}},
-            "NetworkSettings": {"Ports": {key: [dict(binding[0])]}},
+            "NetworkSettings": {
+                "Networks": {network: {"IPAddress": "172.19.0.3"}},
+                "Ports": {f"{r8.CPA_PORT}/tcp": None},
+            },
+            "HostConfig": {"PortBindings": {}, "PublishAllPorts": False},
         }
-        r8.verify_port_binding(
-            info,
-            role="cpa",
-            container_port=r8.CPA_PORT,
-            host_port=r8.CPA_HOST_PORT,
+        self.assertEqual(
+            r8.container_private_ipv4(info, network_name=network, role="cpa"),
+            "172.19.0.3",
         )
-        for section in ("HostConfig", "NetworkSettings"):
-            with self.subTest(section=section):
+        r8.verify_no_host_port_binding(info, role="cpa")
+        for address in ("127.0.0.1", "169.254.1.2", "192.0.2.1", "::1", "invalid"):
+            with self.subTest(address=address):
                 mutated = json.loads(json.dumps(info))
-                container = "PortBindings" if section == "HostConfig" else "Ports"
-                mutated[section][container][key][0]["HostPort"] = str(r8.CPA_HOST_PORT + 1)
-                with self.assertRaisesRegex(r8.RunnerError, "port binding is not exact"):
-                    r8.verify_port_binding(
-                        mutated,
-                        role="cpa",
-                        container_port=r8.CPA_PORT,
-                        host_port=r8.CPA_HOST_PORT,
+                mutated["NetworkSettings"]["Networks"][network]["IPAddress"] = address
+                with self.assertRaises(r8.RunnerError):
+                    r8.container_private_ipv4(
+                        mutated, network_name=network, role="cpa"
                     )
+        escaped = json.loads(json.dumps(info))
+        escaped["NetworkSettings"]["Networks"]["outside"] = {"IPAddress": "172.20.0.4"}
+        with self.assertRaisesRegex(r8.RunnerError, "not attached only"):
+            r8.container_private_ipv4(escaped, network_name=network, role="cpa")
+
+    def test_container_rejects_every_host_port_publication(self) -> None:
+        key = f"{r8.CPA_PORT}/tcp"
+        base = {
+            "HostConfig": {"PortBindings": {}, "PublishAllPorts": False},
+            "NetworkSettings": {"Ports": {key: None}},
+        }
+        r8.verify_no_host_port_binding(base, role="cpa")
+        publish_all = json.loads(json.dumps(base))
+        publish_all["HostConfig"]["PublishAllPorts"] = True
+        with self.assertRaisesRegex(r8.RunnerError, "enables Host port"):
+            r8.verify_no_host_port_binding(publish_all, role="cpa")
+        host_mutation = json.loads(json.dumps(base))
+        host_mutation["HostConfig"]["PortBindings"] = {
+            key: [{"HostIp": "127.0.0.1", "HostPort": "18394"}]
+        }
+        with self.assertRaisesRegex(r8.RunnerError, "HostConfig port"):
+            r8.verify_no_host_port_binding(host_mutation, role="cpa")
+        runtime_mutation = json.loads(json.dumps(base))
+        runtime_mutation["NetworkSettings"]["Ports"][key] = [
+            {"HostIp": "127.0.0.1", "HostPort": "18394"}
+        ]
+        with self.assertRaisesRegex(r8.RunnerError, "runtime Host port"):
+            r8.verify_no_host_port_binding(runtime_mutation, role="cpa")
+
+    def test_internal_network_contract_is_bridge_local_ipv4_and_identity_closed(self) -> None:
+        lane = object.__new__(r8.Lane)
+        lane.lane = "primary"
+        lane.execution_id = str(uuid.uuid4())
+        lane.network = "cag-r9-primary-test-net"
+        lane.mock_container = "cag-r9-primary-test-mock"
+        lane.cpa_container = "cag-r9-primary-test-cpa"
+        lane.mock_container_id = "1" * 64
+        lane.cpa_container_id = "2" * 64
+        network = {
+            "Driver": "bridge",
+            "Scope": "local",
+            "Internal": True,
+            "EnableIPv6": False,
+            "Attachable": False,
+            "Ingress": False,
+            "Labels": {
+                "cag.round9.execution": lane.execution_id,
+                "cag.round9.lane": lane.lane,
+            },
+            "IPAM": {"Config": [{"Subnet": "172.19.0.0/16", "Gateway": "172.19.0.1"}]},
+            "Containers": {
+                lane.mock_container_id: {
+                    "Name": lane.mock_container,
+                    "IPv4Address": "172.19.0.2/16",
+                    "IPv6Address": "",
+                },
+                lane.cpa_container_id: {
+                    "Name": lane.cpa_container,
+                    "IPv4Address": "172.19.0.3/16",
+                    "IPv6Address": "",
+                },
+            },
+        }
+
+        def check(value: dict[str, object]) -> None:
+            result = subprocess.CompletedProcess(
+                ["docker", "network", "inspect"],
+                0,
+                r8.canonical_bytes([value]),
+                b"",
+            )
+            with mock.patch.object(r8, "docker", return_value=result):
+                lane.verify_internal_network(
+                    {
+                        lane.mock_container: "172.19.0.2",
+                        lane.cpa_container: "172.19.0.3",
+                    }
+                )
+
+        check(network)
+        multicast_address = str(ipaddress.IPv4Address((224 << 24) | 1))
+        mutations = {
+            "driver": lambda value: value.update(Driver="overlay"),
+            "scope": lambda value: value.update(Scope="swarm"),
+            "internal": lambda value: value.update(Internal=False),
+            "ipv6": lambda value: value.update(EnableIPv6=True),
+            "attachable": lambda value: value.update(Attachable=True),
+            "label": lambda value: value["Labels"].update({"cag.round9.lane": "other"}),
+            "non-rfc1918-subnet": lambda value: value["IPAM"]["Config"][0].update(
+                Subnet="192.0.2.0/24"
+            ),
+            "missing-gateway": lambda value: value["IPAM"]["Config"][0].pop("Gateway"),
+            "non-rfc1918-gateway": lambda value: value["IPAM"]["Config"][0].update(
+                Gateway="192.0.2.1"
+            ),
+            "outside-subnet-gateway": lambda value: value["IPAM"]["Config"][0].update(
+                Gateway="172.20.0.1"
+            ),
+            "network-gateway": lambda value: value["IPAM"]["Config"][0].update(
+                Gateway="172.19.0.0"
+            ),
+            "broadcast-gateway": lambda value: value["IPAM"]["Config"][0].update(
+                Gateway="172.19.255.255"
+            ),
+            "unspecified-gateway": lambda value: value["IPAM"]["Config"][0].update(
+                Gateway="0.0.0.0"
+            ),
+            "multicast-gateway": lambda value: value["IPAM"]["Config"][0].update(
+                Gateway=multicast_address
+            ),
+            "identity": lambda value: value["Containers"].update(
+                {"3" * 64: value["Containers"].pop(lane.cpa_container_id)}
+            ),
+            "duplicate-ip": lambda value: value["Containers"][lane.cpa_container_id].update(
+                IPv4Address="172.19.0.2/16"
+            ),
+            "container-network": lambda value: value["Containers"][
+                lane.cpa_container_id
+            ].update(IPv4Address="172.19.0.0/16"),
+            "container-broadcast": lambda value: value["Containers"][
+                lane.cpa_container_id
+            ].update(IPv4Address="172.19.255.255/16"),
+            "container-unspecified": lambda value: value["Containers"][
+                lane.cpa_container_id
+            ].update(IPv4Address="0.0.0.0/16"),
+            "container-multicast": lambda value: value["Containers"][
+                lane.cpa_container_id
+            ].update(IPv4Address=multicast_address + "/16"),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                drift = json.loads(json.dumps(network))
+                mutate(drift)
+                with self.assertRaises(r8.RunnerError):
+                    check(drift)
 
     def test_stream_and_nonstream_response_contracts_require_termination_markers(self) -> None:
         chat = r8.canonical_bytes(
@@ -1200,11 +1420,94 @@ class Round9HostEvidenceTest(unittest.TestCase):
             b'data: {"object":"chat.completion.chunk","model":"round9-test-model","choices":[{"finish_reason":"stop"}]}\n\n'
             b"data: [DONE]\n\n"
         )
-        responses_stream = (
-            b"event: response.created\ndata: {}\n\n"
-            b'event: response.output_text.delta\ndata: {"type":"response.output_text.delta"}\n\n'
-            b"event: response.completed\ndata: " + responses + b"\n\n"
-        )
+        response_id = "resp_round9"
+        item_id = "msg_resp_round9_0"
+        in_progress_response = {
+            "id": response_id,
+            "object": "response",
+            "status": "in_progress",
+            "model": r8.MODEL_NAME,
+            "output": [],
+        }
+        completed_item = {
+            "id": item_id,
+            "type": "message",
+            "status": "completed",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "ok"}],
+        }
+        stream_payloads = [
+            {"response": in_progress_response},
+            {"response": dict(in_progress_response)},
+            {
+                "output_index": 0,
+                "item": {
+                    "id": item_id,
+                    "type": "message",
+                    "status": "in_progress",
+                    "role": "assistant",
+                    "content": [],
+                },
+            },
+            {
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "part": {"type": "output_text", "text": ""},
+            },
+            {
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "delta": "ok",
+            },
+            {
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "text": "ok",
+            },
+            {
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
+                "part": {"type": "output_text", "text": "ok"},
+            },
+            {"output_index": 0, "item": completed_item},
+            {
+                "response": {
+                    "id": response_id,
+                    "object": "response",
+                    "status": "completed",
+                    "model": r8.MODEL_NAME,
+                    "output": [completed_item],
+                }
+            },
+        ]
+        stream_events = [
+            "response.created",
+            "response.in_progress",
+            "response.output_item.added",
+            "response.content_part.added",
+            "response.output_text.delta",
+            "response.output_text.done",
+            "response.content_part.done",
+            "response.output_item.done",
+            "response.completed",
+        ]
+        responses_stream = b""
+        for sequence, (event, payload) in enumerate(
+            zip(stream_events, stream_payloads, strict=True), start=1
+        ):
+            payload = {"type": event, "sequence_number": sequence, **payload}
+            responses_stream += (
+                b"event: "
+                + event.encode("ascii")
+                + b"\ndata: "
+                + r8.canonical_bytes(payload)
+                + b"\n\n"
+            )
+        responses_stream += b"\n"
         self.assertEqual(r8.validate_upstream_response("chat", False, chat), (True, True))
         self.assertEqual(
             r8.validate_upstream_response("responses", False, responses), (True, True)
@@ -1218,6 +1521,35 @@ class Round9HostEvidenceTest(unittest.TestCase):
         )
         with self.assertRaises(r8.RunnerError):
             r8.validate_upstream_response("chat", True, chat_stream.replace(b"[DONE]", b"{}"))
+        for chat_drift in (chat_stream + b"\n", chat_stream + b"\n\n"):
+            with self.assertRaises(r8.RunnerError):
+                r8.validate_upstream_response("chat", True, chat_drift)
+        for label, drift in {
+            "responses-double-lf": responses_stream[:-1],
+            "responses-four-lf": responses_stream + b"\n",
+            "responses-id-field": responses_stream.replace(
+                b"event: response.created\n", b"event: response.created\nid: forbidden\n", 1
+            ),
+            "responses-retry-field": responses_stream.replace(
+                b"event: response.created\n", b"event: response.created\nretry: 1\n", 1
+            ),
+            "responses-comment": responses_stream.replace(
+                b"event: response.created\n", b"event: response.created\n: forbidden\n", 1
+            ),
+            "responses-sequence-string": responses_stream.replace(
+                b'"sequence_number":1', b'"sequence_number":"1"', 1
+            ),
+            "responses-event-order": responses_stream.replace(
+                b"event: response.created", b"event: response.in_progress", 1
+            ),
+            "responses-old-three-event": (
+                b"event: response.created\ndata: {}\n\n"
+                b'event: response.output_text.delta\ndata: {"type":"response.output_text.delta"}\n\n'
+                b"event: response.completed\ndata: {}\n\n\n"
+            ),
+        }.items():
+            with self.subTest(label=label), self.assertRaises(r8.RunnerError):
+                r8.validate_upstream_response("responses", True, drift)
 
     @unittest.skipUnless(hasattr(os, "getuid"), "requires POSIX uid/gid")
     def test_container_args_apply_cpu_memory_and_bounded_local_logs(self) -> None:
@@ -1315,6 +1647,8 @@ class Round9HostEvidenceTest(unittest.TestCase):
         lane.mock_total = lambda: 0
         lane.wait_plugin = lambda *args, **kwargs: None
         lane.verify_container_security = lambda *args, **kwargs: None
+        lane.verify_internal_network = lambda *args, **kwargs: None
+        lane.verify_request_logging_controls = lambda: None
 
         def record_docker(args: list[str], **_: object) -> subprocess.CompletedProcess[bytes]:
             if args[:2] == ["network", "create"]:
@@ -1323,12 +1657,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
             elif args and args[0] == "run":
                 name = args[args.index("--name") + 1]
                 self.assertIn(("register-container", name), events)
-                if name == lane.cpa_container:
-                    publish = args.index("--publish")
-                    self.assertEqual(
-                        args[publish + 1],
-                        f"{r8.CPA_HOST_IP}:{r8.CPA_HOST_PORT}:{r8.CPA_PORT}",
-                    )
+                self.assertNotIn("--publish", args)
                 events.append(("docker-run", name))
             return subprocess.CompletedProcess(args, 0, b"", b"")
 
@@ -1343,11 +1672,23 @@ class Round9HostEvidenceTest(unittest.TestCase):
                 return {"total": 0}
             raise AssertionError((method, path))
 
+        inspect_payloads = [
+            {
+                "Id": "1" * 64,
+                "NetworkSettings": {
+                    "Networks": {lane.network: {"IPAddress": "172.19.0.2"}}
+                }
+            },
+            {
+                "Id": "2" * 64,
+                "NetworkSettings": {
+                    "Networks": {lane.network: {"IPAddress": "172.19.0.3"}}
+                }
+            },
+        ]
         with mock.patch.object(r8, "docker", side_effect=record_docker), mock.patch.object(
-            r8, "published_port", side_effect=[18081, r8.CPA_HOST_PORT]
-        ), mock.patch.object(r8, "require_tcp_port_available"), mock.patch.object(
-            r8, "http_json", side_effect=fake_http_json
-        ):
+            r8, "docker_inspect_one", side_effect=inspect_payloads
+        ), mock.patch.object(r8, "http_json", side_effect=fake_http_json):
             lane.create_network()
             lane.start_mock()
             lane.start_cpa()
@@ -1385,18 +1726,26 @@ class Round9HostEvidenceTest(unittest.TestCase):
         installed = lane.plugin_dir / "linux" / "amd64" / r8.SO_NAME
         self.assertTrue(installed.is_file())
         self.assertFalse((lane.plugin_dir / r8.SO_NAME).exists())
+        if os.name == "posix":
+            self.assertEqual((lane.secret_dir / "hmac.key").stat().st_mode & 0o777, 0o600)
+        config_text = (lane.config_dir / "config.yaml").read_text(encoding="utf-8")
+        self.assertIn("commercial-mode: true\n", config_text)
+        self.assertIn("request-log: false\n", config_text)
+        self.assertIn("logging-to-file: false\n", config_text)
         lane.transcript.close()
         for path in lane.directory.rglob("*"):
             if path.is_file():
                 path.chmod(0o700)
         lane.cleanup_sensitive_work()
 
-    def test_plugin_config_and_ready_status_lock_both_16k_limits(self) -> None:
+    def test_plugin_config_and_ready_status_separate_window_and_total_limits(self) -> None:
         lane = object.__new__(r8.Lane)
         lane.release_commit = COMMIT
+        lane.total_text_limit_bytes = r8.TOTAL_TEXT_LIMIT_BYTES
         config = lane.plugin_config("balanced", True)
         self.assertEqual(config["max_scan_bytes"], r8.SCAN_LIMIT_BYTES)
-        self.assertEqual(config["max_total_text_bytes"], r8.SCAN_LIMIT_BYTES)
+        self.assertEqual(config["max_total_text_bytes"], r8.TOTAL_TEXT_LIMIT_BYTES)
+        self.assertIs(config["audit"]["require_persistent_storage"], True)
         plugins = {
             "plugins_enabled": True,
             "plugins": [
@@ -1430,7 +1779,7 @@ class Round9HostEvidenceTest(unittest.TestCase):
             "classifier_policy_sha256": "b" * 64,
             "effective_limits": {
                 "max_text_window_bytes": r8.SCAN_LIMIT_BYTES,
-                "max_total_text_bytes": r8.SCAN_LIMIT_BYTES,
+                "max_total_text_bytes": r8.TOTAL_TEXT_LIMIT_BYTES,
                 "legacy_max_scan_bytes_configured": r8.SCAN_LIMIT_BYTES,
             },
             "audit": {
@@ -1438,6 +1787,8 @@ class Round9HostEvidenceTest(unittest.TestCase):
                 "healthy": True,
                 "degraded": False,
                 "schema_version": 6,
+                "persistence_expected": True,
+                "persistence_verified": True,
             },
             "raw_capture": {
                 "enabled": True,
@@ -1447,9 +1798,48 @@ class Round9HostEvidenceTest(unittest.TestCase):
             },
         }
         lane.assert_plugin_ready(plugins, status, "balanced", True)
-        status["effective_limits"]["max_total_text_bytes"] = 8 << 20
+        status["effective_limits"]["max_total_text_bytes"] = r8.SCAN_LIMIT_BYTES
         with self.assertRaises(r8.RunnerError):
             lane.assert_plugin_ready(plugins, status, "balanced", True)
+
+    def test_request_logging_controls_require_exact_booleans_and_empty_auth(self) -> None:
+        lane = object.__new__(r8.Lane)
+        lane.cpa_url = "http://172.19.0.3:8317"
+        lane.management_key = "test-management-key"
+        lane.auth_dir = self.root / "logging-auth"
+        lane.auth_dir.mkdir()
+        safe = {
+            "commercial-mode": True,
+            "request-log": False,
+            "logging-to-file": False,
+        }
+        with mock.patch.object(r8, "http_json", return_value=safe):
+            lane.verify_request_logging_controls()
+        for key, value in (
+            ("commercial-mode", False),
+            ("commercial-mode", "true"),
+            ("request-log", True),
+            ("logging-to-file", True),
+        ):
+            with self.subTest(key=key, value=value):
+                unsafe = dict(safe)
+                unsafe[key] = value
+                with mock.patch.object(r8, "http_json", return_value=unsafe):
+                    with self.assertRaises(r8.RunnerError):
+                        lane.verify_request_logging_controls()
+        missing = dict(safe)
+        del missing["commercial-mode"]
+        with mock.patch.object(r8, "http_json", return_value=missing):
+            with self.assertRaises(r8.RunnerError):
+                lane.verify_request_logging_controls()
+        logs = lane.auth_dir / "logs"
+        logs.mkdir()
+        (logs / "error-v1-chat-completions-fixture.log").write_text(
+            "synthetic fixture", encoding="utf-8"
+        )
+        with mock.patch.object(r8, "http_json", return_value=safe):
+            with self.assertRaisesRegex(r8.RunnerError, "auth directory must remain empty"):
+                lane.verify_request_logging_controls()
 
     def test_assembler_refuses_existing_output(self) -> None:
         output = self.root / "occupied"

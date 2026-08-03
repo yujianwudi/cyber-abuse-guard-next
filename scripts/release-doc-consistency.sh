@@ -194,6 +194,73 @@ for retired_link_target in \
   [[ "$retired_link_count" == 1 ]] ||
     fail "retired workflow link must appear exactly once and only in the historical workflow section: $retired_link_target"
 done
+
+round9_host_guide="$doc_root/docs/ROUND9_HOST_RUNNER.md"
+[[ "$(grep -Fxc '## Current retained runner maintenance contract' "$round9_host_guide")" == 1 ]] ||
+  fail "docs/ROUND9_HOST_RUNNER.md must contain exactly one current retained runner maintenance contract"
+current_runner_maintenance_contract="$(awk '
+  $0 == "## Current retained runner maintenance contract" { inside = 1; next }
+  inside && /^## / { exit }
+  inside { print }
+' "$round9_host_guide")"
+required_current_runner_network_markers=(
+  'Runner version 2 no longer publishes Mock or'
+  'CPA ports to the Host.'
+  'inspected RFC1918 bridge addresses'
+  '`Internal=true`, IPv6/attachable/ingress disabled, one RFC1918 IPAM subnet,'
+  'exact execution labels and container identities, distinct private addresses,'
+  'and no configured or runtime Host port binding.'
+)
+for marker in "${required_current_runner_network_markers[@]}"; do
+  grep -Fq "$marker" <<<"$current_runner_maintenance_contract" ||
+    fail "current retained runner maintenance contract lost the Docker 29 internal-only boundary: $marker"
+done
+[[ "$(grep -Fxc 'host_ip=internal-only, host_port=0, container_port=8317' \
+  <<<"$current_runner_maintenance_contract")" == 1 ]] ||
+  fail "current retained runner maintenance contract must contain exactly one internal-only evidence tuple"
+if grep -Fq '127.0.0.1:18394 -> 8317/tcp' <<<"$current_runner_maintenance_contract"; then
+  fail "current retained runner maintenance contract must not reuse the historical Host listener"
+fi
+
+[[ "$(grep -Fxc '## Historical CPA sandbox and listener' "$round9_host_guide")" == 1 ]] ||
+  fail "docs/ROUND9_HOST_RUNNER.md must contain exactly one historical CPA listener snapshot"
+historical_runner_listener_snapshot="$(awk '
+  $0 == "## Historical CPA sandbox and listener" { inside = 1; next }
+  inside && /^## / { exit }
+  inside { print }
+' "$round9_host_guide")"
+[[ "$(grep -Fxc '127.0.0.1:18394 -> 8317/tcp' \
+  <<<"$historical_runner_listener_snapshot")" == 1 ]] ||
+  fail "historical CPA listener snapshot must retain exactly one 127.0.0.1:18394 -> 8317/tcp record"
+
+active_network_tuple='host_ip=internal-only, host_port=0, container_port=8317'
+for relative in README.md README_CN.md docs/THREAT_MODEL.md; do
+  document="$doc_root/$relative"
+  tuple_count="$(
+    { LC_ALL=C grep -Fo -- "$active_network_tuple" "$document" || true; } |
+      wc -l |
+      tr -d '[:space:]'
+  )"
+  [[ "$tuple_count" == 1 ]] ||
+    fail "$relative must contain exactly one active internal-only evidence tuple"
+  if grep -Fq '127.0.0.1:18394 -> 8317/tcp' "$document"; then
+    fail "$relative must not present the historical Host listener as an active contract"
+  fi
+done
+
+grep -Fq 'publishes no CPA or counted-Mock ports to the Host' "$doc_root/README.md" &&
+  grep -Fq 'exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4 addresses' "$doc_root/README.md" &&
+  grep -Fq 'any Host binding, additional container, or non-internal network is inadmissible' "$doc_root/README.md" ||
+  fail "README.md lost the active Docker 29 internal-only Host boundary"
+grep -Fq '不向 Host 发布 CPA 或 counted-Mock 端口' "$doc_root/README_CN.md" &&
+  grep -Fq '经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4' "$doc_root/README_CN.md" &&
+  grep -Fq '任何 Host binding、额外容器或非内部网络均不准入' "$doc_root/README_CN.md" ||
+  fail "README_CN.md lost the active Docker 29 internal-only Host boundary"
+grep -Fq 'publishes neither CPA nor counted-Mock ports to the' "$doc_root/docs/THREAT_MODEL.md" &&
+  grep -Fq 'exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4' "$doc_root/docs/THREAT_MODEL.md" &&
+  grep -Fq 'Any Host binding, additional container, or non-internal network is' "$doc_root/docs/THREAT_MODEL.md" ||
+  fail "docs/THREAT_MODEL.md lost the active Docker 29 internal-only Host boundary"
+
 workflow_directory="$doc_root/.github/workflows"
 verify_canonical_relative_path .github/workflows
 [[ -d "$workflow_directory" && ! -L "$workflow_directory" ]] ||
@@ -236,8 +303,6 @@ if [[ "$doc_root" == "$root" ]]; then
   grep -Fq '[Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)' \
     "$root/docs/README.md" ||
     fail "documentation index lost the Round 9 execution-record link"
-  grep -Fq '127.0.0.1:18394 -> 8317/tcp' "$root/docs/ROUND9_HOST_RUNNER.md" ||
-    fail "Round 9 Host guide lost the fixed CPA listener contract"
   grep -Fq 'HTTP `503` and the fixed `audit_unavailable` error' \
     "$root/docs/ROUND9_AUDIT_SCHEMA_V6.md" ||
     fail "Round 9 audit guide lost the enabled-but-unavailable management contract"
@@ -487,6 +552,9 @@ for marker in "${required_active_workflow_policy_markers[@]}"; do
   grep -Fq "$marker" "$policy" ||
     fail "docs/RELEASE_POLICY.md is missing the active workflow inventory boundary: $marker"
 done
+# RELEASE_POLICY.md is an explicitly historical snapshot. Its current_* keys,
+# including the old loopback listener below, are intentionally asserted
+# verbatim and must not be rewritten as the active maintenance contract.
 required_policy_lines=(
   "current_round: 9"
   "current_source_version: $current_release_version"

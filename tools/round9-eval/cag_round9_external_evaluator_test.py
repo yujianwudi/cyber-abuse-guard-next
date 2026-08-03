@@ -13,6 +13,7 @@ import tempfile
 import threading
 import unittest
 from unittest import mock
+from urllib import parse, request
 
 from cag_round9_external_evaluator import (
     AUDIT_EXPECTATIONS_SCHEMA,
@@ -20,11 +21,16 @@ from cag_round9_external_evaluator import (
     CORPUS_BUNDLE_SCHEMA,
     MALICIOUS_MANIFEST_SCHEMA,
     CPAClient,
+    PRIVACY_BOOLEANS,
+    SANDBOX_OPENER,
+    SCAN_LIMIT_BYTES,
     SANDBOX_SCHEMA,
+    TOTAL_TEXT_LIMIT_BYTES,
     evaluate_cases,
     expected_plugin_config,
     load_corpus_bundle,
     main as evaluator_main,
+    require_rfc1918_http_url,
     validate_sandbox_descriptor,
 )
 from round9_eval_core import (
@@ -39,6 +45,10 @@ from round9_eval_core import (
 from round9_eval_test_fixtures import runtime_checks
 
 
+CPA_BASE = "http://172.30.0.2:8317"
+COUNTER_URL = "http://172.30.0.3:18080/__cag/stats"
+
+
 class SyntheticCPAHandler(BaseHTTPRequestHandler):
     requests_seen = 0
     usage_seen = 0
@@ -46,8 +56,11 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
     management_token = "synthetic-management-token"
     bodies_seen: list[str] = []
     request_modes: list[str] = []
+    request_total_text_budgets: list[int] = []
     mode = "audit"
     mode_switch_count = 0
+    budget_reconfigure_count = 0
+    max_total_text_bytes = TOTAL_TEXT_LIMIT_BYTES
     usage_queue_items: list[dict] = []
     block_public = True
     block_malicious = True
@@ -72,7 +85,7 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         if self.path == "/redirect":
             self.send_response(302)
-            self.send_header("Location", "/counter")
+            self.send_header("Location", "http://169.254.169.254/latest/meta-data/")
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
@@ -86,20 +99,23 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
                     "loaded": True,
                     "initialized": True,
                     "enforcement_ready": True,
+                    "operational_ready": True,
                     "enabled": True,
                     "mode": type(self).mode,
                     "priority": 300,
                     "opaque_media_policy": "audit",
                     "subjects": 0,
                     "audit_degraded": False,
+                    "persistence_degraded": False,
+                    "readiness_reasons": [],
                     "router_errors": 0,
                     "panics_recovered": 0,
                     "last_reconfigure_error": "",
                     "last_config_error": "",
                     "effective_limits": {
-                        "max_text_window_bytes": 16_384,
-                        "max_total_text_bytes": 16_384,
-                        "legacy_max_scan_bytes_configured": 16_384,
+                        "max_text_window_bytes": SCAN_LIMIT_BYTES,
+                        "max_total_text_bytes": type(self).max_total_text_bytes,
+                        "legacy_max_scan_bytes_configured": SCAN_LIMIT_BYTES,
                     },
                     "audit": {"enabled": True, "healthy": True, "degraded": False},
                     "subject_control": {"enabled": False, "subjects": 0},
@@ -122,7 +138,7 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
             type(self).usage_queue_items = []
             self._json(200, observed)
             return
-        if not self._authorized() or self.path != "/counter":
+        if self.path != "/__cag/stats":
             self._json(404, {"error": {"type": "not_found"}})
             return
         self._json(
@@ -139,7 +155,12 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
         serialized = json.dumps(body, ensure_ascii=False)
         type(self).bodies_seen.append(serialized)
         type(self).request_modes.append(type(self).mode)
-        if type(self).mode == "strict" and len(serialized.encode("utf-8")) > 16_384:
+        type(self).request_total_text_budgets.append(type(self).max_total_text_bytes)
+        if (
+            type(self).mode == "strict"
+            and type(self).max_total_text_bytes == SCAN_LIMIT_BYTES
+            and len(serialized.encode("utf-8")) > SCAN_LIMIT_BYTES
+        ):
             self._json(403, {"error": {"type": "cyber_policy"}})
             return
         if (
@@ -180,13 +201,172 @@ class SyntheticCPAHandler(BaseHTTPRequestHandler):
             return
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length))
+        for total_bytes in (SCAN_LIMIT_BYTES, TOTAL_TEXT_LIMIT_BYTES):
+            same_mode = expected_plugin_config(type(self).mode)
+            same_mode["max_total_text_bytes"] = total_bytes
+            if body == same_mode:
+                type(self).max_total_text_bytes = total_bytes
+                type(self).budget_reconfigure_count += 1
+                self._json(200, {"status": "ok"})
+                return
         expected = {"audit": "balanced", "balanced": "strict"}.get(type(self).mode)
         if expected is None or body != expected_plugin_config(expected):
             self._json(400, {"error": {"type": "invalid_transition"}})
             return
         type(self).mode = expected
+        type(self).max_total_text_bytes = TOTAL_TEXT_LIMIT_BYTES
         type(self).mode_switch_count += 1
         self._json(200, {"status": "ok"})
+
+
+class ExternalEvaluatorBudgetContractTest(unittest.TestCase):
+    def test_descriptor_url_parser_is_literal_canonical_and_rfc1918_only(self) -> None:
+        self.assertEqual(
+            require_rfc1918_http_url(
+                CPA_BASE,
+                "CPA fixture",
+                expected_port=8317,
+                expected_path="",
+            ),
+            (CPA_BASE, "172.30.0.2"),
+        )
+        for invalid in (
+            "http://127.0.0.1:8317",
+            "http://169.254.169.254:8317",
+            "http://example.invalid:8317",
+            CPA_BASE + "/",
+            CPA_BASE + "\n",
+            "http://user@172.30.0.2:8317",
+        ):
+            with self.subTest(invalid=invalid), self.assertRaises(ContractError):
+                require_rfc1918_http_url(
+                    invalid,
+                    "CPA fixture",
+                    expected_port=8317,
+                    expected_path="",
+                )
+
+    def test_normal_config_uses_8_mib_total_with_16_kib_scan_window(self) -> None:
+        self.assertEqual(
+            PRIVACY_BOOLEANS,
+            {
+                "raw_prompts_in_result": False,
+                "raw_responses_in_result": False,
+                "request_bodies_in_logs": False,
+            },
+        )
+        for mode in ("audit", "balanced", "strict"):
+            configuration = expected_plugin_config(mode)
+            self.assertEqual(configuration["max_scan_bytes"], SCAN_LIMIT_BYTES)
+            self.assertEqual(
+                configuration["max_total_text_bytes"], TOTAL_TEXT_LIMIT_BYTES
+            )
+            self.assertIs(configuration["audit"]["require_persistent_storage"], True)
+
+    def test_authenticated_budget_reconfigure_verifies_temp_and_restored_status(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        token = root / "authorization.token"
+        management = root / "management.token"
+        token.write_text("client\n", encoding="ascii")
+        management.write_text("management\n", encoding="ascii")
+        client = CPAClient(
+            {
+                "authorization_token_file": str(token),
+                "management_token_file": str(management),
+                "base_url": CPA_BASE,
+                "counter_url": COUNTER_URL,
+            },
+            timeout=1,
+        )
+        observed_total = {"value": TOTAL_TEXT_LIMIT_BYTES}
+        configurations: list[dict] = []
+
+        def effective_status() -> dict:
+            return {
+                "loaded": True,
+                "initialized": True,
+                "enforcement_ready": True,
+                "operational_ready": True,
+                "enabled": True,
+                "mode": "audit",
+                "priority": 300,
+                "opaque_media_policy": "audit",
+                "subjects": 0,
+                "audit_degraded": False,
+                "persistence_degraded": False,
+                "readiness_reasons": [],
+                "router_errors": 0,
+                "panics_recovered": 0,
+                "last_reconfigure_error": "",
+                "last_config_error": "",
+                "effective_limits": {
+                    "max_text_window_bytes": SCAN_LIMIT_BYTES,
+                    "max_total_text_bytes": observed_total["value"],
+                    "legacy_max_scan_bytes_configured": SCAN_LIMIT_BYTES,
+                },
+                "audit": {"enabled": True, "healthy": True, "degraded": False},
+                "subject_control": {"enabled": False, "subjects": 0},
+                "classifier": {"remote": False},
+                "raw_capture": {
+                    "enabled": False,
+                    "only_blocked": True,
+                    "redact_secrets": True,
+                    "max_bytes": 8192,
+                    "ttl_hours": 1,
+                },
+            }
+
+        def fake_open(target, *, method="GET", body=None, **_kwargs):  # noqa: ANN001
+            if target.endswith("/config") and method == "PUT":
+                configuration = json.loads(body)
+                configurations.append(configuration)
+                observed_total["value"] = configuration["max_total_text_bytes"]
+                return 200, b"{}\n"
+            return 200, canonical_bytes(effective_status())
+
+        with mock.patch.object(client, "_open", side_effect=fake_open):
+            client._set_total_text_budget(SCAN_LIMIT_BYTES)
+            self.assertNotIn("audit", client.effective_config_sha256)
+            client._set_total_text_budget(TOTAL_TEXT_LIMIT_BYTES)
+        self.assertEqual(
+            [item["max_total_text_bytes"] for item in configurations],
+            [SCAN_LIMIT_BYTES, TOTAL_TEXT_LIMIT_BYTES],
+        )
+        self.assertEqual(configurations[1], expected_plugin_config("audit"))
+        self.assertTrue(client.mode_status_verified["audit"])
+
+    def test_incomplete_execution_restores_8_mib_even_when_request_fails(self) -> None:
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        token = root / "authorization.token"
+        management = root / "management.token"
+        token.write_text("client\n", encoding="ascii")
+        management.write_text("management\n", encoding="ascii")
+        client = CPAClient(
+            {
+                "authorization_token_file": str(token),
+                "management_token_file": str(management),
+                "base_url": CPA_BASE,
+                "counter_url": COUNTER_URL,
+            }
+        )
+        budgets: list[int] = []
+        with (
+            mock.patch.object(
+                client, "_set_total_text_budget", side_effect=budgets.append
+            ),
+            mock.patch.object(
+                client,
+                "execute_body",
+                side_effect=ContractError("synthetic incomplete failure"),
+            ),
+        ):
+            with self.assertRaisesRegex(ContractError, "synthetic incomplete failure"):
+                client.execute_incomplete_body(b"{}\n", "audit", "chat")
+        self.assertEqual(budgets, [SCAN_LIMIT_BYTES, TOTAL_TEXT_LIMIT_BYTES])
 
 
 @unittest.skipUnless(shutil.which("openssl"), "OpenSSL is required for Ed25519 tests")
@@ -214,16 +394,46 @@ class ExternalEvaluatorTest(unittest.TestCase):
         SyntheticCPAHandler.usage_seen = 0
         SyntheticCPAHandler.bodies_seen = []
         SyntheticCPAHandler.request_modes = []
+        SyntheticCPAHandler.request_total_text_budgets = []
         SyntheticCPAHandler.mode = "audit"
         SyntheticCPAHandler.mode_switch_count = 0
+        SyntheticCPAHandler.budget_reconfigure_count = 0
+        SyntheticCPAHandler.max_total_text_bytes = TOTAL_TEXT_LIMIT_BYTES
         SyntheticCPAHandler.usage_queue_items = []
         SyntheticCPAHandler.block_public = True
         SyntheticCPAHandler.block_malicious = True
-        self.server = ThreadingHTTPServer(("127.0.0.1", 18394), SyntheticCPAHandler)
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), SyntheticCPAHandler)
         thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         thread.start()
-        self.addCleanup(self.server.shutdown)
         self.addCleanup(self.server.server_close)
+        self.addCleanup(self.server.shutdown)
+        real_open = SANDBOX_OPENER.open
+
+        def route_sandbox_request(operation, *, timeout):  # noqa: ANN001, ANN202
+            target = parse.urlsplit(operation.full_url)
+            local_target = parse.urlunsplit(
+                (
+                    "http",
+                    f"127.0.0.1:{self.server.server_address[1]}",
+                    target.path,
+                    target.query,
+                    "",
+                )
+            )
+            routed = request.Request(
+                local_target,
+                data=operation.data,
+                headers=dict(operation.header_items()),
+                method=operation.get_method(),
+            )
+            return real_open(routed, timeout=timeout)
+
+        transport = mock.patch(
+            "cag_round9_external_evaluator.SANDBOX_OPENER.open",
+            side_effect=route_sandbox_request,
+        )
+        transport.start()
+        self.addCleanup(transport.stop)
 
     def write_corpus(self) -> tuple[Path, Path]:
         corpus = self.root / "synthetic-corpus"
@@ -370,12 +580,11 @@ class ExternalEvaluatorTest(unittest.TestCase):
         strict_config.write_bytes(canonical_bytes(expected_plugin_config("strict")))
         canary_file = self.root / "runtime-canary.txt"
         canary_file.write_text("CAG_ROUND9_NORMAL_CANARY_SYNTHETIC\n", encoding="ascii")
-        port = self.server.server_address[1]
         descriptor = validate_sandbox_descriptor(
             {
                 "schema": SANDBOX_SCHEMA,
-                "base_url": f"http://127.0.0.1:{port}",
-                "counter_url": f"http://127.0.0.1:{port}/counter",
+                "base_url": CPA_BASE,
+                "counter_url": COUNTER_URL,
                 "authorization_token_file": str(token_file),
                 "management_token_file": str(management_file),
                 "balanced_plugin_config_file": str(balanced_config),
@@ -383,7 +592,7 @@ class ExternalEvaluatorTest(unittest.TestCase):
                 "network_binding": dict(FIXED_NETWORK_BINDING),
                 "phase_protocol": dict(FIXED_PHASE_PROTOCOL),
                 "model": "gpt-5.4",
-                "scan_limit_bytes": 16_384,
+                "scan_limit_bytes": SCAN_LIMIT_BYTES,
                 "candidate_so_sha256": "b" * 64,
                 "cpa_version": "v7.2.113",
                 "cpa_commit": "bc71c77f5cc42f3fbe1bf040cf14d4f166894835",
@@ -462,6 +671,22 @@ class ExternalEvaluatorTest(unittest.TestCase):
         self.assertEqual(SyntheticCPAHandler.requests_seen, 74)
         self.assertEqual(SyntheticCPAHandler.usage_seen, 74)
         self.assertEqual(SyntheticCPAHandler.mode_switch_count, 2)
+        self.assertEqual(SyntheticCPAHandler.budget_reconfigure_count, 6)
+        self.assertEqual(
+            SyntheticCPAHandler.request_total_text_budgets.count(SCAN_LIMIT_BYTES), 3
+        )
+        self.assertEqual(
+            SyntheticCPAHandler.request_total_text_budgets.count(TOTAL_TEXT_LIMIT_BYTES),
+            len(SyntheticCPAHandler.request_total_text_budgets) - 3,
+        )
+        self.assertEqual(
+            SyntheticCPAHandler.max_total_text_bytes, TOTAL_TEXT_LIMIT_BYTES
+        )
+        for mode in ("audit", "balanced", "strict"):
+            self.assertEqual(
+                expected_plugin_config(mode)["max_total_text_bytes"],
+                TOTAL_TEXT_LIMIT_BYTES,
+            )
         self.assertEqual(
             metrics["route_order"]["phase_order"], ["audit", "balanced", "strict"]
         )
@@ -519,8 +744,8 @@ class ExternalEvaluatorTest(unittest.TestCase):
             self.assertNotIn(forbidden, transmitted)
 
         changed = dict(descriptor)
-        changed["base_url"] = "http://127.0.0.1:18395"
-        with self.assertRaisesRegex(ContractError, "fixed CPA base URL"):
+        changed["base_url"] = "http://169.254.169.254:8317"
+        with self.assertRaisesRegex(ContractError, "RFC1918"):
             validate_sandbox_descriptor(
                 changed, "b" * 64, enforce_root_ownership=False
             )
@@ -544,8 +769,8 @@ class ExternalEvaluatorTest(unittest.TestCase):
         descriptor = validate_sandbox_descriptor(
             {
                 "schema": SANDBOX_SCHEMA,
-                "base_url": "http://127.0.0.1:18394",
-                "counter_url": "http://127.0.0.1:18394/counter",
+                "base_url": CPA_BASE,
+                "counter_url": COUNTER_URL,
                 "authorization_token_file": str(token_file),
                 "management_token_file": str(management_file),
                 "balanced_plugin_config_file": str(balanced_config),
@@ -553,7 +778,7 @@ class ExternalEvaluatorTest(unittest.TestCase):
                 "network_binding": dict(FIXED_NETWORK_BINDING),
                 "phase_protocol": dict(FIXED_PHASE_PROTOCOL),
                 "model": "gpt-5.4",
-                "scan_limit_bytes": 16_384,
+                "scan_limit_bytes": SCAN_LIMIT_BYTES,
                 "candidate_so_sha256": "b" * 64,
                 "cpa_version": "v7.2.113",
                 "cpa_commit": "bc71c77f5cc42f3fbe1bf040cf14d4f166894835",
@@ -651,8 +876,11 @@ class ExternalEvaluatorTest(unittest.TestCase):
         SyntheticCPAHandler.usage_seen = 0
         SyntheticCPAHandler.bodies_seen = []
         SyntheticCPAHandler.request_modes = []
+        SyntheticCPAHandler.request_total_text_budgets = []
         SyntheticCPAHandler.mode = "audit"
         SyntheticCPAHandler.mode_switch_count = 0
+        SyntheticCPAHandler.budget_reconfigure_count = 0
+        SyntheticCPAHandler.max_total_text_bytes = TOTAL_TEXT_LIMIT_BYTES
         SyntheticCPAHandler.usage_queue_items = []
         SyntheticCPAHandler.block_malicious = True
         SyntheticCPAHandler.block_public = False
@@ -668,7 +896,7 @@ class ExternalEvaluatorTest(unittest.TestCase):
                 audit_expectations=[],
             )
 
-    def test_loopback_client_bypasses_environment_proxy_and_rejects_redirects(self) -> None:
+    def test_rfc1918_client_bypasses_proxy_and_rejects_ssrf_and_redirects(self) -> None:
         token_file = self.root / "authorization.token"
         token_file.write_text(SyntheticCPAHandler.token + "\n", encoding="utf-8")
         management_file = self.root / "management.token"
@@ -679,10 +907,11 @@ class ExternalEvaluatorTest(unittest.TestCase):
             {
                 "authorization_token_file": str(token_file),
                 "management_token_file": str(management_file),
+                "base_url": CPA_BASE,
+                "counter_url": COUNTER_URL,
             },
             timeout=2,
         )
-        port = self.server.server_address[1]
         poisoned_proxy = {
             "HTTP_PROXY": "http://127.0.0.1:9",
             "HTTPS_PROXY": "http://127.0.0.1:9",
@@ -694,10 +923,20 @@ class ExternalEvaluatorTest(unittest.TestCase):
             "no_proxy": "",
         }
         with mock.patch.dict(os.environ, poisoned_proxy, clear=False):
-            status, _raw = client._open(f"http://127.0.0.1:{port}/counter")
+            status, _raw = client._open(COUNTER_URL)
             self.assertEqual(status, 200)
             with self.assertRaisesRegex(ContractError, "redirect was rejected"):
-                client._open(f"http://127.0.0.1:{port}/redirect")
+                client._open(CPA_BASE + "/redirect")
+            for escaped in (
+                "http://169.254.169.254/latest/meta-data/",
+                "http://example.invalid:8317/v1/models",
+                "http://172.30.0.2:18080/__cag/stats",
+                "http://172.30.0.3:18080/other",
+            ):
+                with self.subTest(escaped=escaped), self.assertRaisesRegex(
+                    ContractError, "escaped"
+                ):
+                    client._open(escaped)
 
     def test_failed_aggregate_write_removes_new_audit_expectations(self) -> None:
         output = self.root / "aggregate.json"

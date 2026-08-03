@@ -607,7 +607,7 @@ func TestManagementRegistrationUsesOnlyExactAuthenticatedRoutes(t *testing.T) {
 	}
 	var registration struct {
 		Routes    []struct{ Method, Path string }
-		Resources []any
+		Resources []struct{ Path, Menu, Description string }
 	}
 	decodeOKResult(t, raw, &registration)
 	want := [][2]string{
@@ -618,6 +618,8 @@ func TestManagementRegistrationUsesOnlyExactAuthenticatedRoutes(t *testing.T) {
 		{http.MethodPost, managementBasePath + "/test"},
 		{http.MethodPost, managementBasePath + "/subjects/unblock"},
 		{http.MethodPost, managementHealthProbePath},
+		{http.MethodPost, managementStartupPrivacyProofPath},
+		{http.MethodGet, managementStartupPrivacyProofPath},
 		{http.MethodPost, managementMigrationBackupPurgePath},
 		{http.MethodDelete, managementBasePath + "/events"},
 	}
@@ -629,8 +631,9 @@ func TestManagementRegistrationUsesOnlyExactAuthenticatedRoutes(t *testing.T) {
 			t.Fatalf("route[%d] = %v, want %v", index, got, want[index])
 		}
 	}
-	if len(registration.Resources) != 0 {
-		t.Fatalf("public resources = %#v, want none", registration.Resources)
+	if len(registration.Resources) != 1 || registration.Resources[0].Path != startupPrivacyProofResourcePath ||
+		registration.Resources[0].Menu != "" || registration.Resources[0].Description != "" {
+		t.Fatalf("public resources = %#v, want one hidden startup privacy proof route", registration.Resources)
 	}
 }
 

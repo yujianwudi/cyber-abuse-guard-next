@@ -82,7 +82,7 @@ is not sent to a public classifier.
 | Safety audit | **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
 | Current remediation | Round 10 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594` is bound to green starting baseline `aaa71d9`; Round 11 hardens Host evidence, Raw Capture Host lifecycle coverage, and workflow/document truth without changing classifier policy. Round 11 still needs its own exact-commit GitHub checks; independent second-machine revalidation remains owner-run |
 | CPA source/compile target | Pinned target `v7.2.113` (`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`), C ABI 1 / RPC schema 2. Source, SDK/API, integration compile, and Linux Host `.so` load checks are authoritative only after the exact-commit GitHub lane passes; protected runtime testing remains pending |
-| Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker must bind CPA exactly to `127.0.0.1:18394 -> 8317/tcp` and produce signed external-evaluation v3 plus ledger proof |
+| Protected external CPA evaluation | **NOT RUN / PROTECTED SANDBOX REQUIRED**; the no-checkout root-owned broker's retained Linux amd64 runner uses a Docker 29-compatible internal-only bridge, publishes no CPA or counted-Mock ports to the Host, and records `host_ip=internal-only, host_port=0, container_port=8317`. The Host may reach only the exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4 addresses; any Host binding, additional container, or non-internal network is inadmissible. Signed external-evaluation v3 and ledger proof remain required |
 | External evidence contracts | evaluator aggregate v3; ledger event v3; protected Git ledger proof v1; mechanically derived external counted-Mock v1; CPA sandbox descriptor v2 |
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
 | Independent audit | The 2026-07-29 isolated audit of exact baseline `150c25e6` is a safety **FAIL / BLOCKED** with the counts above. The current remediation has not been independently re-audited |
@@ -350,6 +350,15 @@ policy.
 - This is a Guard-local guarantee, not an end-to-end Host guarantee. CPA may
   temporarily spool non-multipart request bodies and may persist raw bodies in
   Host HTTP error logs; see [Decision output and privacy](docs/RULES.md#decision-output-and-privacy).
+- The admitted production deployment contract requires CPA v7.2.113 to use an
+  absolute `WRITABLE_PATH`, a dedicated empty log bind mount, and a direct CPA
+  listener; the watchdog enforces the observable parts of that contract. It
+  binds initial/final status, both classifier health probes,
+  challenge issue, ResourceRoute response, and confirmation to one random
+  256-bit plugin process identity.
+  A same-host proxy that rewrites that identity, preserves hop-by-hop headers,
+  or normalizes lowercase `get` remains outside the plugin ABI boundary; see
+  [Docker installation](docs/INSTALL_DOCKER.md#7-restart-and-baseline-checks).
 - Ordinary audit, metrics, and management status expose fixed fields, counters,
   and identities rather than prompt fragments or offsets. Only the
   authenticated `/raw-captures` route can return an enabled review preview.

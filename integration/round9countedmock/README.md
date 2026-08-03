@@ -17,3 +17,10 @@ candidate revision, release tag, and source-tree labels. Chat streaming ends
 with `[DONE]`; Responses streaming ends with a `response.completed` event. The
 builder emits an invocation-unique image tag, while the runner resolves and
 records the immutable image ID.
+
+For the maintained CPA v7.2.113 Host lane, a client `/v1/responses` request is
+translated through the Mock's Chat Completions stream and then converted by
+CPA into the nine-event Responses SSE contract. The Mock's direct
+`/v1/responses` endpoint is not the source of that Host response and must not be
+used as a substitute fixture. Its standard upstream SSE framing also does not
+include CPA's additional terminal LF.

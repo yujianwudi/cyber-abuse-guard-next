@@ -481,7 +481,8 @@ func TestManagementHealthProbeIsLocalReadOnlyAndBounded(t *testing.T) {
 		if err := json.Unmarshal(body, &result); err != nil {
 			t.Fatal(err)
 		}
-		if result["action"] != testCase.wantAction || result["local_only"] != true || result["upstream_attempted"] != false || result["self_route"] != testCase.wantSelf {
+		if result["instance_id"] != p.startupPrivacyInstanceID || result["action"] != testCase.wantAction ||
+			result["local_only"] != true || result["upstream_attempted"] != false || result["self_route"] != testCase.wantSelf {
 			t.Fatalf("%s probe result=%#v", testCase.kind, result)
 		}
 		if testCase.wantSelf && result["target_kind"] != string(pluginapi.ModelRouteTargetSelf) {

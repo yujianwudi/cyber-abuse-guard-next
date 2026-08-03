@@ -27,6 +27,44 @@ reports only `SCHEMA_VALID_ATTESTATION_EXTERNAL`; the execution path reports
 Only separately verified external attestation could elevate such a document,
 and no active workflow currently performs that step.
 
+## Current retained runner maintenance contract
+
+The retained source-level runner is still maintained for authorized, manual
+Linux amd64 sandbox diagnostics. Runner version 2 no longer publishes Mock or
+CPA ports to the Host. Docker 29 does not create the declared loopback mapping
+for an `--internal` network, so the Host now reaches the two containers through
+their inspected RFC1918 bridge addresses while the stable evidence records only:
+
+```text
+host_ip=internal-only, host_port=0, container_port=8317
+```
+
+Before its first HTTP request the runner verifies a rootful local Linux bridge,
+`Internal=true`, IPv6/attachable/ingress disabled, one RFC1918 IPAM subnet,
+exact execution labels and container identities, distinct private addresses,
+and no configured or runtime Host port binding. Docker Desktop, rootless Docker,
+remote daemons, and IPv6-only bridges are outside this diagnostic contract; a
+private-address timeout is a failed environment check, not a Host PASS.
+
+The normal classifier window remains 16 KiB while cumulative inspected text is
+8 MiB. Only the explicit incomplete-disposition probes temporarily lower the
+cumulative limit to 16 KiB; the runner verifies Balanced allow/upstream `1`,
+Strict block/upstream `0`, and restores 8 MiB before continuing. Large tool
+schemas are sent as raw JSON in `model,tools,current-user` order so key sorting
+cannot hide the regression.
+
+CPA v7.2.113 Responses streaming is checked as the exact nine-event sequence
+from `response.created` through `response.completed`, with event/payload type,
+sequence numbers `1..9`, linked item/content identities, final text, nested
+completed response, and CPA's exact three-LF terminal framing. Old three-event,
+two/four-LF, comment, `id:`, and `retry:` forms fail closed.
+
+Every maintained CPA sandbox starts with `commercial-mode: true`,
+`request-log: false`, and `logging-to-file: false`. The first setting is the
+startup-time control that prevents CPA 403 error-only logs from persisting the
+blocked request body; the management config and empty auth/log directory are
+checked before requests, after controlled restart, and at finalization.
+
 When it existed, `.github/workflows/round9-host-validation.yml` was designed as
 the only admissible Round 9 Host evaluation path for `v0.16-rc.4`, but even a
 successful run would not have been publication authorization by itself. The
@@ -118,7 +156,7 @@ refs both name the exact RC tag and that both GitHub SHA values equal the exact
 candidate commit. It then forwards all four values as distinct broker arguments;
 the root-owned broker rejects any mismatch or substitution.
 
-## CPA sandbox and listener
+## Historical CPA sandbox and listener
 
 The adapter starts one counted upstream and one authenticated CPA container on
 an execution-private internal Docker network. CPA has exactly one published

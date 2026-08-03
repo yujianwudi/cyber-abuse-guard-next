@@ -32,6 +32,14 @@ integration packages against v7.2.113, explicitly tests schema-2
 focused behavior tests. Official
 upstream test graphs use ephemeral modfiles; checked-in module
 files are never rewritten.
+
+The production-watchdog request-log proof is a separate source-only contract.
+It resolves the checksum-pinned v7.2.113 module with `GOPROXY=off`, parses the
+upstream Go syntax without compiling or executing upstream packages, and locks
+the startup-only commercial-mode middleware installation, reload-time
+`RequestLog` toggle behavior, disabled-logger error-only body capture,
+management-path exclusion, request-error-log route and inventory fields, and
+the management build-identity response headers.
 With `CPA_COMPAT_VERIFY_REMOTE=1`, it verifies the exact Tag-to-Commit identity
 through the official Git origin, the official Go module `Origin`, and both Go
 sums. It needs no repository token. A PASS applies only to the fixed v7.2.113

@@ -58,7 +58,8 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
   non-gating evidence.
 - The container is Linux amd64 with glibc 2.34 or newer. Debian Bookworm is the
   intended base; musl/Alpine is unsupported.
-- The deployment host has `curl`, `jq`, `unzip`, `sha256sum`, and `openssl`.
+- The deployment host has `curl`, `jq`, `python3`, `unzip`, `sha256sum`, and
+  `openssl`.
 - The CPA Management Key is available through a secret file for local health
   checks; do not place it on a shared command line.
 - Back up CPA configuration, count CPA auth files, and record other enabled
@@ -298,9 +299,16 @@ bodies.
 
 ## 5. Configure Observe first
 
-Merge `config.example.yaml` below `plugins.configs`. Start with:
+Add the three CPA controls at the document root, and merge the Guard stanza
+from `config.example.yaml` below `plugins.configs`. Start with:
 
 ```yaml
+# CPA top-level production request-log privacy controls. Keep these outside
+# plugins; all three current values are checked by the production watchdog.
+commercial-mode: true
+request-log: false
+logging-to-file: false
+
 plugins:
   enabled: true
   dir: plugins
@@ -326,6 +334,22 @@ plugins:
 ```
 
 `log_original_text: true` is always rejected. There is no debug override.
+
+For CPA v7.2.113, `request-log: false` by itself is not a raw-body logging
+boundary: an installed request-logging middleware still captures request bodies
+and can retain an HTTP error-only log, including a Guard block on a normal model
+route. `commercial-mode: true` is the startup control that prevents that
+middleware from being installed.
+`logging-to-file: false` keeps ordinary CPA application logs on stdout instead
+of rotating files. The operational cost is the loss of CPA's detailed
+request/error artifacts for incident diagnosis; use container stdout, plugin
+status/counters, and the Guard's typed audit records instead.
+
+The authenticated `/v0/management/config` response reports current values; it
+does not report which middleware was installed at process start. After editing
+the on-disk CPA configuration, recreate or restart CPA before validation. A hot
+reload can change ordinary logging flags but cannot remove middleware that was
+installed at startup.
 
 Observe leaves subject control disabled, so requests are not correlated and no
 cross-request risk is accumulated. If subject control is explicitly enabled in
@@ -388,14 +412,77 @@ matching exact pre-v6 database before loading an older binary.
 ## 7. Restart and baseline checks
 
 ```bash
-docker compose restart cli-proxy-api
+# Recreate from the edited on-disk configuration. A hot reload is insufficient
+# for commercial-mode because request middleware is selected at process start.
+docker compose up -d --force-recreate cli-proxy-api
 docker compose logs --since=2m cli-proxy-api \
   | grep -E 'plugin (loaded|registered)|cyber-abuse-guard'
 
 CPA_MANAGEMENT_KEY_FILE=/run/secrets/cpa-management.key \
+CPA_DIRECT_BASE_URL=http://127.0.0.1:8317 \
+CPA_LOG_DIR=/absolute/path/to/the/cpa-runtime-log-root \
 EXPECTED_MODE=observe \
 ./scripts/check-production-health.sh
 ```
+
+`CPA_LOG_DIR` is mandatory and must be an existing, dedicated, empty absolute
+directory visible from the watchdog. For the admitted production contract, CPA
+must start with `WRITABLE_PATH` set to an absolute, dedicated directory and
+`CPA_LOG_DIR` must name the host-visible side of that exact
+`WRITABLE_PATH/logs` bind mount. Do not rely on CPA v7.2.113's relative `./logs`
+fallback: the request logger resolves a relative path against the configuration
+directory while the management inventory resolves it against the process
+working directory. Those roots can differ. No path component may be a symlink.
+
+`CPA_DIRECT_BASE_URL` is also mandatory. It must be the loopback HTTP/1.1
+listener of this exact CPA process, not Nginx or another reverse proxy. The
+usual in-container value is the same `http://127.0.0.1:<port>` used for
+`CPA_BASE_URL`. The watchdog issues and confirms each challenge through
+`CPA_BASE_URL`, but consumes it through the hidden ResourceRoute and reads the
+CPA configuration/error-log inventory through `CPA_DIRECT_BASE_URL`. A run can
+therefore succeed only when the initial/final status identity, both classifier
+health probes, challenge issue, ResourceRoute response, and challenge
+confirmation all report the same random 256-bit process identity. This rejects
+a non-rewriting BASE proxy that routes status/proof to one instance but health
+probes or only the startup-proof management path to another. Production ingress
+must also be deployment-bound to that same CPA instance; health paths cannot
+prove how an arbitrary external proxy routes ordinary `/v1` traffic. The
+active resource proof deliberately marks its challenge header hop-by-hop; a
+conforming intermediary removes that header, so a proxied path fails closed
+instead of being mistaken for direct evidence.
+
+CPA v7.2.113's plugin ABI cannot cryptographically identify the owning listener
+or detect a non-conforming same-host proxy that deliberately preserves the
+hop-by-hop challenge header while normalizing lowercase `get` to uppercase
+`GET`. Do not place such an intermediary on `CPA_DIRECT_BASE_URL`. The operator
+must bind that URL to the real CPA listener/socket using container/network or
+service-manager controls; loopback syntax alone is not proof of socket
+ownership. A deployment that cannot establish this binding is outside the
+admitted startup-privacy contract and the watchdog result must not be treated
+as production evidence.
+
+The watchdog mechanically binds `CPA_LOG_DIR` to CPA's authenticated management
+error-log inventory:
+it opens every path component without following symlinks, requires the root to
+be empty, creates one unique mode-0600 `error-cag-watchdog-root-*.log` marker,
+and requires CPA's authenticated `/v0/management/request-error-logs` inventory
+to report that exact marker name and byte size. The watchdog retains the opened
+directory and marker file descriptors through the probes and repeatedly
+compares the held descriptors with the no-follow path device, inode, size, link
+count, and mode. A missing or replaced marker fails closed and the watchdog
+does not delete the replacement; only a name still resolving to the inode it
+created is removed. Linux does not expose an atomic compare-and-unlink primitive
+to Python, so the log root must not be writable by an untrusted same-UID
+concurrent process. The final `stat`/`unlink` interval is not claimed to resist
+such an actor.
+The marker/inventory check is not the sole evidence that startup middleware is
+absent. The incomplete-body proof below blocks before ResourceRoute dispatch
+whenever CPA's pinned request-logging middleware is installed, independent of
+where a relative logger path would write. The absolute `WRITABLE_PATH` contract
+still removes the logger/inventory path ambiguity and makes the complete
+artifact check meaningful.
+Review and remove historical request/error artifacts before running this gate;
+the watchdog never deletes artifacts it did not create.
 
 The production watchdog defaults both cumulative restart-scoped budgets,
 `MAX_ROUTER_ERRORS` and `MAX_PANICS_RECOVERED`, to zero. A reviewed non-zero
@@ -403,12 +490,45 @@ budget must be explicit. Audit, subject-persistence, or HMAC degradation cannot
 be bypassed with an `ALLOW_*` switch; a red operational readiness signal stays
 red.
 
-The watchdog is read-only and loopback-only. It checks CPA reachability,
-authenticated status, enforcement and operational readiness, verified audit
-persistence, exact mode and priority, build/ruleset identity, degradation,
-router/panic counters, and two built-in local probes. The
-malicious probe never enters a provider route, auth selector, usage queue, or
-upstream.
+The watchdog is loopback-only and does not mutate CPA configuration, accounts,
+usage, or provider traffic. Its bounded process-local plugin mutation is two
+random 30-second, one-time startup-proof challenges; the plugin admits at most
+16 outstanding challenges. A status check before resource consumption returns
+`409` without invalidating the challenge; a consumed confirmation deletes it,
+and every unconsumed challenge expires after 30 seconds. The watchdog's sole filesystem
+mutation is the exact temporary marker described above. Before its first plugin
+health request,
+it checks the authenticated CPA configuration and strictly requires the boolean
+values `commercial-mode: true`, `request-log: false`, and
+`logging-to-file: false`. It then checks CPA reachability, authenticated status,
+enforcement and operational readiness, verified audit persistence, exact mode
+and priority, build/ruleset identity, degradation, router/panic counters, and
+two built-in local probes. The malicious probe never enters a provider route,
+auth selector, usage queue, or upstream.
+
+The malicious built-in probe is a `/v0/management` 403. CPA v7.2.113 explicitly
+skips management paths in its request-logging middleware, so that 403 is not a
+startup proof. Immediately afterward the watchdog verifies the exact runtime
+headers for CPA `7.2.113` at commit `bc71c77` and uses the authenticated CAG
+management route on `CPA_BASE_URL` to issue two independent 256-bit challenges.
+The initial status, both built-in classifier probes, each challenge response,
+each ResourceRoute body, each confirmation, and the final status must carry one
+unchanged random 256-bit plugin process identity. Each challenge is consumed through
+`CPA_DIRECT_BASE_URL` by the hidden non-management resource
+`/v0/resource/plugins/cyber-abuse-guard/health/startup-privacy-proof`, whose
+fixed `418`, challenge header/body echo, and authenticated consumed status must
+all agree; confirmation is then required from the issuing plugin through
+`CPA_BASE_URL`. This cross-entry one-time challenge binds the two configured
+request paths to one plugin process, subject to the listener-ownership and
+non-conforming-proxy boundary above.
+The complete request makes a stranded error-only logger produce an
+artifact; the intentionally incomplete request fails closed if the stranded
+middleware waits for the missing body. CPA 113 accepts the raw lowercase
+`get` resource method case-insensitively while its request logger skips only
+exact uppercase `GET`; source and Host contracts pin that behavior. Timeouts
+are reported only as inconclusive failures, never as proof that middleware was
+detected. Both requests are local, contain no user prompt or credential, and
+never enter `/v1`, an auth selector, usage accounting, a provider, or upstream.
 
 `enforcement_ready` is the request-decision engine state; `operational_ready`
 also requires the configured audit persistence contract and other local
@@ -505,6 +625,8 @@ enabling cross-request risk accumulation.
 
 ```bash
 CPA_MANAGEMENT_KEY_FILE=/run/secrets/cpa-management.key \
+CPA_DIRECT_BASE_URL=http://127.0.0.1:8317 \
+CPA_LOG_DIR=/absolute/path/to/the/cpa-runtime-log-root \
 EXPECTED_MODE=balanced \
 ./scripts/check-production-health.sh
 ```

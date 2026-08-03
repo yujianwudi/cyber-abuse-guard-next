@@ -108,6 +108,8 @@ make_fixture() {
   for relative in "${documents[@]}"; do
     mkdir -p "$(dirname "$fixture/$relative")"
     if [[ "$relative" == docs/RELEASE_POLICY.md ]]; then
+      # This fixture is an explicitly historical snapshot. Preserve its
+      # current_* field names and old loopback listener verbatim.
       printf '%s\n' \
         '# Release policy' \
         '' \
@@ -220,6 +222,21 @@ make_fixture() {
         '> **HISTORICAL / NON-EXECUTABLE DESIGN.**' \
         '> The retired workflows were deleted from the executable workflow directory.' \
         '' \
+        '## Current retained runner maintenance contract' \
+        '' \
+        'The retained source-level runner is still maintained for authorized, manual' \
+        'Linux amd64 sandbox diagnostics. Runner version 2 no longer publishes Mock or' \
+        'CPA ports to the Host. Docker 29 reaches both containers through their' \
+        'inspected RFC1918 bridge addresses.' \
+        '' \
+        'host_ip=internal-only, host_port=0, container_port=8317' \
+        '' \
+        '`Internal=true`, IPv6/attachable/ingress disabled, one RFC1918 IPAM subnet,' \
+        'exact execution labels and container identities, distinct private addresses,' \
+        'and no configured or runtime Host port binding.' \
+        '' \
+        '## Historical CPA sandbox and listener' \
+        '' \
         '127.0.0.1:18394 -> 8317/tcp' \
         >"$fixture/$relative"
     elif [[ "$relative" == docs/ROUND9_INDEPENDENT_AUDIT_CONTRACT.md ]]; then
@@ -277,6 +294,18 @@ make_fixture() {
     printf '\nround6-prerelease-attestation.json\nformal-release-attestation.json\n' \
       >>"$fixture/$relative"
   done
+  printf '%s\n' \
+    'The current runner publishes no CPA or counted-Mock ports to the Host, records host_ip=internal-only, host_port=0, container_port=8317, and uses the exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4 addresses; any Host binding, additional container, or non-internal network is inadmissible.' \
+    >>"$fixture/README.md"
+  printf '%s\n' \
+    '当前 runner 不向 Host 发布 CPA 或 counted-Mock 端口，记录 host_ip=internal-only, host_port=0, container_port=8317，且只使用经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4；任何 Host binding、额外容器或非内部网络均不准入。' \
+    >>"$fixture/README_CN.md"
+  printf '%s\n' \
+    'The runner publishes neither CPA nor counted-Mock ports to the' \
+    'Host and records host_ip=internal-only, host_port=0, container_port=8317.' \
+    'The Host reaches only the exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4 addresses.' \
+    'Any Host binding, additional container, or non-internal network is outside the admitted sandbox.' \
+    >>"$fixture/docs/THREAT_MODEL.md"
   for relative in "${classifier_identity_documents[@]}"; do
     staged="$fixture/.classifier-prologue"
     {
@@ -369,6 +398,52 @@ sed -i \
   "$work/retired-host-design-marked-current/docs/ROUND9_HOST_RUNNER.md"
 must_fail retired-host-design-marked-current "$work/retired-host-design-marked-current" \
   'docs/ROUND9_HOST_RUNNER.md must remain explicitly titled as a historical non-executable design'
+
+cp -a "$work/pass" "$work/current-runner-internal-tuple-changed"
+sed -i \
+  's/host_ip=internal-only, host_port=0, container_port=8317/host_ip=127.0.0.1, host_port=18394, container_port=8317/' \
+  "$work/current-runner-internal-tuple-changed/docs/ROUND9_HOST_RUNNER.md"
+must_fail current-runner-internal-tuple-changed "$work/current-runner-internal-tuple-changed" \
+  'current retained runner maintenance contract must contain exactly one internal-only evidence tuple'
+
+cp -a "$work/pass" "$work/current-runner-host-publication-relaxed"
+sed -i 's/no longer publishes Mock or/no longer documents Mock or/' \
+  "$work/current-runner-host-publication-relaxed/docs/ROUND9_HOST_RUNNER.md"
+must_fail current-runner-host-publication-relaxed "$work/current-runner-host-publication-relaxed" \
+  'current retained runner maintenance contract lost the Docker 29 internal-only boundary: Runner version 2 no longer publishes Mock or'
+
+cp -a "$work/pass" "$work/historical-runner-listener-removed"
+sed -i '/^127\.0\.0\.1:18394 -> 8317\/tcp$/d' \
+  "$work/historical-runner-listener-removed/docs/ROUND9_HOST_RUNNER.md"
+must_fail historical-runner-listener-removed "$work/historical-runner-listener-removed" \
+  'historical CPA listener snapshot must retain exactly one 127.0.0.1:18394 -> 8317/tcp record'
+
+cp -a "$work/pass" "$work/readme-host-admission-relaxed"
+sed -i \
+  's/any Host binding, additional container, or non-internal network is inadmissible/Host bindings are implementation-defined/' \
+  "$work/readme-host-admission-relaxed/README.md"
+must_fail readme-host-admission-relaxed "$work/readme-host-admission-relaxed" \
+  'README.md lost the active Docker 29 internal-only Host boundary'
+
+cp -a "$work/pass" "$work/readme-cn-host-admission-relaxed"
+sed -i \
+  's/任何 Host binding、额外容器或非内部网络均不准入/Host binding 由环境决定/' \
+  "$work/readme-cn-host-admission-relaxed/README_CN.md"
+must_fail readme-cn-host-admission-relaxed "$work/readme-cn-host-admission-relaxed" \
+  'README_CN.md lost the active Docker 29 internal-only Host boundary'
+
+cp -a "$work/pass" "$work/threat-model-host-admission-relaxed"
+sed -i \
+  's/Any Host binding, additional container, or non-internal network is outside the admitted sandbox/Additional containers may be admitted/' \
+  "$work/threat-model-host-admission-relaxed/docs/THREAT_MODEL.md"
+must_fail threat-model-host-admission-relaxed "$work/threat-model-host-admission-relaxed" \
+  'docs/THREAT_MODEL.md lost the active Docker 29 internal-only Host boundary'
+
+cp -a "$work/pass" "$work/readme-historical-listener-reactivated"
+printf '%s\n' '127.0.0.1:18394 -> 8317/tcp' \
+  >>"$work/readme-historical-listener-reactivated/README.md"
+must_fail readme-historical-listener-reactivated "$work/readme-historical-listener-reactivated" \
+  'README.md must not present the historical Host listener as an active contract'
 
 cp -a "$work/pass" "$work/retired-independent-warning-removed"
 sed -i '/HISTORICAL \/ NON-EXECUTABLE DESIGN/d' \

@@ -69,7 +69,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 安全审计 | **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
 | 当前修复 | 第十轮 classifier `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594` 已绑定绿色起始基线 `aaa71d9`；第十一轮在不改变 classifier policy 的前提下加固 Host evidence、Raw Capture Host 生命周期覆盖及 workflow/文档真实性。第十一轮仍须完成自身的精确提交 GitHub 检查，二号机独立重验仍由所有者执行 |
 | CPA 源码/编译目标 | 固定 `v7.2.113`（`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`），C ABI 1 / RPC schema 2；源码、SDK/API、集成编译与 Linux Host `.so` 加载结论仅以精确提交 GitHub 门禁为准，独立受保护运行时验证仍待执行 |
-| 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 必须把 CPA 精确绑定到 `127.0.0.1:18394 -> 8317/tcp`，并生成签名 external-evaluation v3 与账本证明 |
+| 受保护 CPA 外部评估 | **NOT RUN / PROTECTED SANDBOX REQUIRED**；无 checkout 的 root-owned broker 所保留的 Linux amd64 runner 使用 Docker 29 兼容的 internal-only bridge，不向 Host 发布 CPA 或 counted-Mock 端口，并记录 `host_ip=internal-only, host_port=0, container_port=8317`。Host 仅可访问经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4；任何 Host binding、额外容器或非内部网络均不准入。仍须生成签名 external-evaluation v3 与账本证明 |
 | 外部证据合同 | evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、机械派生 external counted-Mock v1、CPA sandbox descriptor v2 |
 | 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
 | 独立审计 | 2026-07-29 对精确基线 `150c25e6` 的隔离审计为安全 **FAIL / BLOCKED**，失败计数见上；当前修复尚未接受独立重审 |
@@ -233,6 +233,12 @@ data exfiltration、service disruption 和 defense evasion。它不是通用内�
 - 这只是 Guard 本地边界，不是端到端 Host 保证。CPA 可能临时 spool 非 multipart
   请求体，并可能在 Host HTTP 错误日志中持久化原始 body；见
   [决策输出与隐私](docs/RULES.md#decision-output-and-privacy)。
+- 准入的生产部署合同要求 CPA v7.2.113 使用绝对 `WRITABLE_PATH`、专用空日志
+  bind mount 和真实 CPA 直连 listener；watchdog 只机械验证其中可观测的部分。初始/最终 status、两个 classifier
+  health probe、challenge 签发、ResourceRoute 回执与确认必须携带同一个随机
+  256-bit 插件进程 identity。
+  会改写该 identity、保留 hop-by-hop header 或把小写 `get` 规范化的同机代理
+  超出插件 ABI 能证明的边界；见[Docker 安装](docs/INSTALL_DOCKER.md#7-restart-and-baseline-checks)。
 - 常规审计、metrics 和 management status 只暴露固定字段、counter 与 identity，
   不暴露 prompt 片段或 offset；只有通过认证的 `/raw-captures` 路由可在启用后返回审查预览。
 - 永不抓取媒体 URL，也不执行请求携带的代码。

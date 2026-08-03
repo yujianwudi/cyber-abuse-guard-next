@@ -25,9 +25,9 @@ CONTRACT_SCHEMA = "round9-evaluation-contract/v1"
 TAG = "v0.16-rc.4"
 CPA_VERSION = "v7.2.113"
 CPA_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
-VALIDATION_SCOPE = "CPA_V7_2_109_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION"
-CPA_HOST_IP = "127.0.0.1"
-CPA_HOST_PORT = 18394
+VALIDATION_SCOPE = "CPA_V7_2_113_COUNTED_MOCK_AND_FROZEN_CORPUS_ADMISSION"
+CPA_NETWORK_MODE = "internal-only"
+CPA_NETWORK_HOST_PORT = 0
 CPA_CONTAINER_PORT = 8317
 REPOSITORY = "yujianwudi/cyber-abuse-guard-next"
 RELEASE_WORKFLOW = ".github/workflows/round9-release-rc.yml"
@@ -1377,12 +1377,16 @@ def derive_contract_from_machine_reports(
         {"host_ip", "host_port", "container_port"},
         "counted-Mock CPA network binding",
     )
-    if network_binding != {
-        "host_ip": CPA_HOST_IP,
-        "host_port": CPA_HOST_PORT,
-        "container_port": CPA_CONTAINER_PORT,
-    }:
-        fail("counted-Mock CPA must listen only on 127.0.0.1:18394 -> 8317")
+    if (
+        type(network_binding["host_port"]) is not int
+        or type(network_binding["container_port"]) is not int
+        or network_binding != {
+            "host_ip": CPA_NETWORK_MODE,
+            "host_port": CPA_NETWORK_HOST_PORT,
+            "container_port": CPA_CONTAINER_PORT,
+        }
+    ):
+        fail("counted-Mock CPA must use the internal-only Docker network with no Host port")
     matrix = exact_keys(
         host_results["matrix"],
         {

@@ -4992,14 +4992,14 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 with self.assertRaises(ContractError):
                     validate_round9_host_workflow(mutation, path)
 
-    def test_round9_rc_script_fixed_port_and_host_guide_fail_closed_after_hash_review(self):
+    def test_round9_rc_script_internal_network_and_host_guide_fail_closed_after_hash_review(self):
         root = Path(__file__).resolve().parent.parent
         source = root / "scripts/round6-rc-artifacts.sh"
         original = source.read_text(encoding="utf-8")
         mutations = (
             original.replace(
+                'host_ip: "internal-only", host_port: 0, container_port: 8317',
                 'host_ip: "127.0.0.1", host_port: 18394, container_port: 8317',
-                'host_ip: "127.0.0.1", host_port: 0, container_port: 8317',
                 1,
             ),
             original.replace("      docs/ROUND9_HOST_RUNNER.md\n", "", 1),
