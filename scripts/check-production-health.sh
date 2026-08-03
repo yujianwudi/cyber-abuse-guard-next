@@ -360,11 +360,11 @@ def request(
         connection.close()
 
 
-def header_value(headers, name):
+def header_value(headers, name, rejection_code="missing_runtime_identity"):
     wanted = name.lower()
     values = [value for key, value in headers if key.lower() == wanted]
     if len(values) != 1 or not isinstance(values[0], str):
-        reject("missing_runtime_identity")
+        reject(rejection_code)
     return values[0].strip()
 
 
@@ -546,7 +546,11 @@ def prove_startup_privacy_challenge(
                 pass
     if status_code != STARTUP_PROOF_STATUS:
         reject("startup_privacy_proof_not_terminated_locally")
-    if header_value(headers, STARTUP_PROOF_HEADER) != challenge:
+    if header_value(
+        headers,
+        STARTUP_PROOF_HEADER,
+        "startup_privacy_proof_response_mismatch",
+    ) != challenge:
         reject("startup_privacy_proof_response_mismatch")
     try:
         payload = json.loads(raw)

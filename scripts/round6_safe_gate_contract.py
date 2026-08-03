@@ -1377,7 +1377,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "a41ee4404ff24d37030baf0d2b283a560bdb0f0de2ea689273415d6887e51b87"
+    "905e64ee8b1c128cba215b5a7ef1e26126f292718371bb576b00bf448ddf7a23"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then

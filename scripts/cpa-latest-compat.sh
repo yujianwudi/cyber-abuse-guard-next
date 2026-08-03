@@ -321,6 +321,10 @@ for profile in "${profiles[@]}"; do
       TestLatestCPAStartupPrivacyResourceDispatchSourceContract
       TestLatestCPARequestErrorLogManagementSourceContract
     )
+    required_tests_pattern="$(
+      IFS='|'
+      printf '^(%s)$' "${required_request_logging_contract_tests[*]}"
+    )"
     listed="$(
       CPA_COMPAT_PROFILE="$profile" \
         CPA_COMPAT_MODFILE="$contract_modfile" \
@@ -328,7 +332,7 @@ for profile in "${profiles[@]}"; do
         CPA_COMPAT_ORIGIN_FILE="$origin_metadata_file" \
         GOWORK=off "$go_bin" -C integration/cpalatestcontract test \
         "${contract_mod_flags[@]}" -mod=readonly \
-        -list='^(TestLatestCPARequestLoggingStartupSourceContract|TestLatestCPARequestLoggingReloadSourceContract|TestLatestCPARequestLoggingErrorOnlyCaptureSourceContract|TestLatestCPAStartupPrivacyResourceDispatchSourceContract|TestLatestCPARequestErrorLogManagementSourceContract)$' .
+        -list="$required_tests_pattern" .
     )" || exit $?
     for test_name in "${required_request_logging_contract_tests[@]}"; do
       printf '%s\n' "$listed" | grep -Fxq "$test_name" || {

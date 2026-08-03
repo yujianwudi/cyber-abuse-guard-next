@@ -69,6 +69,7 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
     startup_proof_requests = 0
     last_consumed_challenge = ""
     startup_proof_response_delay = 0.0
+    startup_proof_header_mode = "valid"
     delayed_error_log_responses = 0
     error_log_response_delay = 0.0
     replace_marker_on_error_inventory = False
@@ -330,13 +331,16 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
                 stream.write(body)
         if self.startup_proof_response_delay > 0:
             time.sleep(self.startup_proof_response_delay)
+        proof_headers = {}
+        if self.startup_proof_header_mode == "valid":
+            proof_headers[startup_proof_header] = challenge
         self.send_json(418, {
             "challenge": challenge,
             "instance_id": self.startup_privacy_instance_id,
             "consumed": True,
             "local_only": True,
             "upstream_attempted": False,
-        }, {startup_proof_header: challenge})
+        }, proof_headers)
 
 
 class ProxyCaptureHandler(socketserver.BaseRequestHandler):
@@ -692,6 +696,10 @@ try:
     })
     ManagementHandler.startup_proof_response_delay = 0.0
 
+    ManagementHandler.startup_proof_header_mode = "missing"
+    missing_startup_proof_header = run_watchdog()
+    ManagementHandler.startup_proof_header_mode = "valid"
+
     ManagementHandler.delayed_error_log_responses = 1
     ManagementHandler.error_log_response_delay = 4.0
     slow_management = run_watchdog({
@@ -963,6 +971,14 @@ if slow_safe_proof.returncode != 0:
     sys.stderr.write(slow_safe_proof.stdout)
     sys.stderr.write(slow_safe_proof.stderr)
     raise SystemExit("safe startup privacy proof did not use the configured response budget")
+if (
+    missing_startup_proof_header.returncode == 0
+    or "startup_privacy_proof_response_mismatch" not in missing_startup_proof_header.stderr
+    or "missing_runtime_identity" in missing_startup_proof_header.stderr
+):
+    sys.stderr.write(missing_startup_proof_header.stdout)
+    sys.stderr.write(missing_startup_proof_header.stderr)
+    raise SystemExit("missing startup proof header did not report the proof-specific failure")
 if slow_management.returncode != 0 or delayed_error_log_responses_remaining != 0:
     sys.stderr.write(slow_management.stdout)
     sys.stderr.write(slow_management.stderr)

@@ -1377,11 +1377,15 @@ def derive_contract_from_machine_reports(
         {"host_ip", "host_port", "container_port"},
         "counted-Mock CPA network binding",
     )
-    if network_binding != {
-        "host_ip": CPA_NETWORK_MODE,
-        "host_port": CPA_NETWORK_HOST_PORT,
-        "container_port": CPA_CONTAINER_PORT,
-    }:
+    if (
+        type(network_binding["host_port"]) is not int
+        or type(network_binding["container_port"]) is not int
+        or network_binding != {
+            "host_ip": CPA_NETWORK_MODE,
+            "host_port": CPA_NETWORK_HOST_PORT,
+            "container_port": CPA_CONTAINER_PORT,
+        }
+    ):
         fail("counted-Mock CPA must use the internal-only Docker network with no Host port")
     matrix = exact_keys(
         host_results["matrix"],

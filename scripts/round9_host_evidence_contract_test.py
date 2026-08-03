@@ -534,6 +534,16 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         with self.assertRaisesRegex(contract.ContractError, "internal-only"):
             contract.assemble(self.assemble_args())
 
+    def test_boolean_cpa_network_ports_are_rejected(self):
+        for field in ("host_port", "container_port"):
+            with self.subTest(field=field):
+                value = self.probe_evidence()
+                value["cpa"]["primary"]["host_results"]["network_binding"][field] = False
+                self.probe.write_bytes(canonical(value))
+                self.write_sidecar(self.probe, self.probe_sidecar)
+                with self.assertRaisesRegex(contract.ContractError, "internal-only"):
+                    contract.assemble(self.assemble_args())
+
     def test_any_benign_block_is_a_whole_gate_failure(self):
         value = self.benign_report("independent")
         value["metrics"]["blocked_executions"] = 1

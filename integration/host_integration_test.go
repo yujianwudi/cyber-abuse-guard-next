@@ -3999,7 +3999,7 @@ func assertNoCPARequestLogArtifacts(t *testing.T, roots ...string) {
 			t.Fatalf("inspect CPA request-log root: %v", err)
 		}
 		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			t.Fatal("CPA request-log root is not a real directory")
+			t.Fatalf("CPA request-log root %q is not a real directory: mode=%v", root, info.Mode())
 		}
 		entries, err := os.ReadDir(root)
 		if err != nil {
@@ -4008,7 +4008,7 @@ func assertNoCPARequestLogArtifacts(t *testing.T, roots ...string) {
 		for _, entry := range entries {
 			name := entry.Name()
 			if strings.HasPrefix(name, "error-") || strings.HasPrefix(name, "request-log-parts-") {
-				t.Fatal("CPA persisted an unexpected request-log artifact")
+				t.Fatalf("CPA persisted an unexpected request-log artifact %q in %q", name, root)
 			}
 		}
 		logsDir := filepath.Join(root, "logs")
@@ -4020,14 +4020,14 @@ func assertNoCPARequestLogArtifacts(t *testing.T, roots ...string) {
 			t.Fatalf("inspect CPA request-log directory: %v", err)
 		}
 		if logsInfo.Mode()&os.ModeSymlink != 0 || !logsInfo.IsDir() {
-			t.Fatal("CPA request-log path is not a real directory")
+			t.Fatalf("CPA request-log path %q is not a real directory: mode=%v", logsDir, logsInfo.Mode())
 		}
 		logEntries, err := os.ReadDir(logsDir)
 		if err != nil {
 			t.Fatalf("read CPA request-log directory: %v", err)
 		}
 		if len(logEntries) != 0 {
-			t.Fatal("CPA request-log directory is not empty")
+			t.Fatalf("CPA request-log directory %q is not empty: entries=%d", logsDir, len(logEntries))
 		}
 	}
 }
