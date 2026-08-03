@@ -175,6 +175,8 @@ type Plugin struct {
 	requestHasher             func([]byte) string
 	requestFingerprintKey     [32]byte
 	requestFingerprintEnabled bool
+	startupPrivacyInstanceID  string
+	startupPrivacyChallenges  startupPrivacyChallengeStore
 	pending                   pendingCache
 	requestLifecycle          requestLifecycleCache
 	counters                  counters
@@ -196,6 +198,7 @@ type LogFunc func(level, message string, fields map[string]any)
 func New() *Plugin {
 	identifier, err := subject.NewIdentifier(subject.IdentifierConfig{})
 	requestFingerprintKey, requestFingerprintEnabled := newRequestFingerprintKey()
+	startupPrivacyInstanceID := newStartupPrivacyInstanceID()
 	return &Plugin{
 		identifier:                identifier,
 		identifierErr:             err,
@@ -203,6 +206,8 @@ func New() *Plugin {
 		requestHasher:             audit.HashRequest,
 		requestFingerprintKey:     requestFingerprintKey,
 		requestFingerprintEnabled: requestFingerprintEnabled,
+		startupPrivacyInstanceID:  startupPrivacyInstanceID,
+		startupPrivacyChallenges:  newStartupPrivacyChallengeStore(),
 		pending:                   newPendingCache(4096, 2*time.Minute),
 		requestLifecycle: newRequestLifecycleCache(
 			8192,
@@ -685,6 +690,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	}
 	previous := p.runtime.Swap(state)
 	p.pending.clear()
+	p.startupPrivacyChallenges.clear()
 	p.setLastConfigError(nil)
 	p.setLastReconfigureError(nil)
 	p.opMu.Unlock()
@@ -1084,6 +1090,7 @@ func (p *Plugin) Shutdown() {
 	state := p.runtime.Swap(nil)
 	p.pending.clear()
 	p.requestLifecycle.clear()
+	p.startupPrivacyChallenges.clear()
 	p.opMu.Unlock()
 	p.lifecycleMu.Unlock()
 	p.closeRuntime(state)

@@ -79,13 +79,13 @@ broker invokes it with the exact downloaded candidate SO and a private work
 directory. The adapter must create a canonical descriptor containing:
 
     schema=round9-external-cpa-sandbox/v2
-    base_url=http://127.0.0.1:18394
-    counter_url=http://127.0.0.1:...
+    base_url=http://<inspect-verified CPA RFC1918 IPv4>:8317
+    counter_url=http://<different inspect-verified Mock RFC1918 IPv4>:18080/__cag/stats
     authorization_token_file=<root-owned 0600 file>
     management_token_file=<root-owned 0600 file>
     balanced_plugin_config_file=<root-owned canonical 0600 file>
     strict_plugin_config_file=<root-owned canonical 0600 file>
-    network_binding=127.0.0.1:18394 -> 8317/tcp
+    network_binding={host_ip=internal-only,host_port=0,container_port=8317}
     phase_protocol=authenticated Audit -> Balanced -> Strict
     runtime_checks.schema=round9-external-cpa-runtime-checks/v1
     candidate_so_sha256=<exact Phase 1 SO>
@@ -96,7 +96,14 @@ directory. The adapter must create a canonical descriptor containing:
 
 The adapter is an independently installed host component, not a repository
 script executed by the candidate workflow. It must isolate CPA and counted
-Mock, bind only loopback, load the exact SO, and use one CPA container. Before
+Mock on one Docker `bridge`/`local` network with `Internal=true`, IPv6,
+attachable and ingress disabled, and no published Host ports. It accepts only a
+single RFC1918 IPv4 IPAM pool, verifies the exact execution/role/container/image
+identities and distinct container IPv4 addresses through Docker inspect, then
+uses only those inspected addresses. Both containers must retain the exact
+security, CPU/memory and bounded local `LogConfig` settings, with no configured
+or runtime Host port bindings. The adapter loads the exact SO and uses one CPA
+container. Before
 the descriptor is publishable it starts in Audit and mechanically observes:
 
 - SQLite schema v6, migrations 1 through 6, `PRAGMA quick_check=ok`, and a
@@ -108,12 +115,20 @@ the descriptor is publishable it starts in Audit and mechanically observes:
 - exactly one usage-queue record for an allowed synthetic request and zero for
   a locally blocked synthetic request;
 - Raw Capture disabled by default, zero normal-request capture records, and no
-  normal-request plaintext canary in the SQLite DB/WAL/SHM files.
+  normal-request plaintext canary in the SQLite DB/WAL/SHM files;
+- `audit.require_persistent_storage=true`, healthy non-degraded audit storage,
+  `operational_ready=true`, `persistence_degraded=false`, and no readiness
+  reasons;
+- exact Boolean logging privacy controls: `commercial-mode=true`,
+  `request-log=false`, and `logging-to-file=false`.
 
 The adapter then resets counted Mock, drains usage state, and leaves that same
 container healthy in Audit. The evaluator verifies Audit status, performs an
 authenticated management `PUT` to Balanced and then Strict, and verifies status
-after both transitions. Missing, unobserved, contradictory, or drifted runtime
+after both transitions. Normal configurations keep a 16 KiB scan window and an
+8 MiB total-text budget. Only the intentionally incomplete request temporarily
+uses a 16 KiB total-text budget, and the evaluator restores and verifies 8 MiB
+in a `finally` path. Missing, unobserved, contradictory, or drifted runtime
 checks make PASS publication fail closed. Cleanup still tears down only the
 adapter-owned containers and network.
 
@@ -147,11 +162,11 @@ No payload text or raw public payload ID is emitted.
 
 The counted-Mock control plane is intentionally not a tenant-facing service.
 Its reset and statistics endpoints do not authenticate callers. Their security
-boundary is the dedicated protected evaluator host: random loopback-only
-ports, an internal Docker network, root-owned broker synchronization, and no
-untrusted local users or workloads. Never install this evaluator on a shared
-runner or expose any CPA, counted-Mock, reset, statistics, or adapter port on a
-non-loopback interface.
+boundary is the dedicated protected evaluator host: an internal-only Docker
+bridge with zero Host port publication, inspect-verified distinct RFC1918
+container addresses, root-owned broker synchronization, and no untrusted local
+users or workloads. Never install this evaluator on a shared runner or publish
+any CPA, counted-Mock, reset, statistics, or adapter port on the Host.
 
 Before every evaluation, the operator must verify that the host has no
 unrelated containers using the configured images or network namespace and that

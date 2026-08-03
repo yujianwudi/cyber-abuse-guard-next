@@ -314,6 +314,29 @@ for profile in "${profiles[@]}"; do
       "${root_mod_flags[@]}" -mod=readonly -count=1 \
       "$cpa_module/sdk/pluginabi" \
       "$cpa_module/sdk/pluginapi"
+    required_request_logging_contract_tests=(
+      TestLatestCPARequestLoggingStartupSourceContract
+      TestLatestCPARequestLoggingReloadSourceContract
+      TestLatestCPARequestLoggingErrorOnlyCaptureSourceContract
+      TestLatestCPAStartupPrivacyResourceDispatchSourceContract
+      TestLatestCPARequestErrorLogManagementSourceContract
+    )
+    listed="$(
+      CPA_COMPAT_PROFILE="$profile" \
+        CPA_COMPAT_MODFILE="$contract_modfile" \
+        CPA_COMPAT_EXPECTED_COMMIT="$cpa_commit" \
+        CPA_COMPAT_ORIGIN_FILE="$origin_metadata_file" \
+        GOWORK=off "$go_bin" -C integration/cpalatestcontract test \
+        "${contract_mod_flags[@]}" -mod=readonly \
+        -list='^(TestLatestCPARequestLoggingStartupSourceContract|TestLatestCPARequestLoggingReloadSourceContract|TestLatestCPARequestLoggingErrorOnlyCaptureSourceContract|TestLatestCPAStartupPrivacyResourceDispatchSourceContract|TestLatestCPARequestErrorLogManagementSourceContract)$' .
+    )" || exit $?
+    for test_name in "${required_request_logging_contract_tests[@]}"; do
+      printf '%s\n' "$listed" | grep -Fxq "$test_name" || {
+        printf 'required latest CPA request-logging source-contract test %s is missing\n' \
+          "$test_name" >&2
+        exit 1
+      }
+    done
     CPA_COMPAT_PROFILE="$profile" \
       CPA_COMPAT_MODFILE="$contract_modfile" \
       CPA_COMPAT_EXPECTED_COMMIT="$cpa_commit" \

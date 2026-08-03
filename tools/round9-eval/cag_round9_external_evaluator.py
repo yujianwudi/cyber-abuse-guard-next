@@ -3,7 +3,7 @@
 
 The evaluator never imports the Guard Go module and never emits prompt or
 response text.  It accepts only a private, already-decrypted corpus directory,
-talks to loopback CPA/counting endpoints, and returns bounded aggregate/hash
+talks only to inspect-derived RFC1918 CPA/counting endpoints, and returns bounded aggregate/hash
 evidence for the broker to sign.
 """
 
@@ -13,6 +13,7 @@ import argparse
 from collections import Counter, defaultdict
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -64,12 +65,26 @@ SANDBOX_SCHEMA = "round9-external-cpa-sandbox/v2"
 AUDIT_EXPECTATIONS_SCHEMA = "round9-cpa-audit-expectations/v3"
 CPA_VERSION = "v7.2.113"
 CPA_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
+SCAN_LIMIT_BYTES = 16_384
+TOTAL_TEXT_LIMIT_BYTES = 8 * 1024 * 1024
+CPA_PORT = 8_317
+MOCK_PORT = 18_080
 MAX_PROMPT_BYTES = 131_072
 MAX_RESPONSE_BYTES = 1_048_576
 USAGE_QUIET_WINDOW_SECONDS = 0.02
 USAGE_OBSERVE_TIMEOUT_SECONDS = 2.0
 REQUEST_HASH_DOMAIN = b"cyber-abuse-guard/audit/request/v1\x00"
 MODEL_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+PRIVATE_DOCKER_IPV4_RANGES = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+)
+PRIVACY_BOOLEANS = {
+    "raw_prompts_in_result": False,
+    "raw_responses_in_result": False,
+    "request_bodies_in_logs": False,
+}
 
 BENIGN_ROUTES = tuple(
     (mode, protocol, stream)
@@ -96,7 +111,7 @@ class _NoRedirect(request.HTTPRedirectHandler):
         return None
 
 
-LOOPBACK_OPENER = request.build_opener(request.ProxyHandler({}), _NoRedirect())
+SANDBOX_OPENER = request.build_opener(request.ProxyHandler({}), _NoRedirect())
 
 
 def fail(message: str) -> None:
@@ -339,20 +354,44 @@ def load_corpus_bundle(
     return corpus, benign_cases, malicious_cases
 
 
-def require_loopback_url(value: Any, label: str) -> str:
-    if not isinstance(value, str):
+def require_rfc1918_http_url(
+    value: Any,
+    label: str,
+    *,
+    expected_port: int,
+    expected_path: str,
+) -> tuple[str, str]:
+    if not isinstance(value, str) or any(
+        ord(character) < 0x20 or ord(character) == 0x7F for character in value
+    ):
         fail(f"{label} must be text")
-    parsed = parse.urlsplit(value)
+    try:
+        parsed = parse.urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ContractError(f"{label} port is invalid") from exc
+    hostname = parsed.hostname
+    try:
+        address = ipaddress.IPv4Address(hostname) if isinstance(hostname, str) else None
+    except ipaddress.AddressValueError as exc:
+        raise ContractError(f"{label} must use a literal RFC1918 IPv4 address") from exc
+    canonical = f"http://{address}:{expected_port}{expected_path}"
     if (
         parsed.scheme != "http"
-        or parsed.hostname not in {"127.0.0.1", "::1"}
+        or address is None
+        or not any(address in network for network in PRIVATE_DOCKER_IPV4_RANGES)
+        or hostname != str(address)
         or parsed.username is not None
         or parsed.password is not None
+        or port != expected_port
+        or parsed.netloc != f"{address}:{expected_port}"
+        or parsed.path != expected_path
         or parsed.query
         or parsed.fragment
+        or value != canonical
     ):
-        fail(f"{label} must be an uncredentialed loopback HTTP URL")
-    return value.rstrip("/")
+        fail(f"{label} must be the exact inspect-derived RFC1918 sandbox endpoint")
+    return f"http://{address}:{expected_port}", str(address)
 
 
 def expected_plugin_config(mode: str) -> dict[str, Any]:
@@ -362,13 +401,14 @@ def expected_plugin_config(mode: str) -> dict[str, Any]:
         "enabled": True,
         "priority": 300,
         "mode": mode,
-        "max_scan_bytes": 16_384,
-        "max_total_text_bytes": 16_384,
+        "max_scan_bytes": SCAN_LIMIT_BYTES,
+        "max_total_text_bytes": TOTAL_TEXT_LIMIT_BYTES,
         "opaque_media_policy": "audit",
         "subject_control": {"enabled": False},
         "audit": {
             "enabled": True,
             "data_dir": "/cag/audit",
+            "require_persistent_storage": True,
             "retention_days": 1,
             "max_db_mb": 32,
             "log_request_hash": True,
@@ -431,15 +471,29 @@ def validate_sandbox_descriptor(
         "sandbox descriptor",
     )
     require_literal(descriptor["schema"], SANDBOX_SCHEMA, "sandbox schema")
-    for key in ("base_url", "counter_url"):
-        require_loopback_url(descriptor[key], f"sandbox {key}")
-    require_literal(
+    _cpa_origin, cpa_address = require_rfc1918_http_url(
         descriptor["base_url"],
-        "http://127.0.0.1:18394",
-        "sandbox fixed CPA base URL",
+        "sandbox base_url",
+        expected_port=CPA_PORT,
+        expected_path="",
     )
-    if descriptor["network_binding"] != FIXED_NETWORK_BINDING:
-        fail("sandbox network binding differs from 127.0.0.1:18394 -> 8317/tcp")
+    _mock_origin, mock_address = require_rfc1918_http_url(
+        descriptor["counter_url"],
+        "sandbox counter_url",
+        expected_port=MOCK_PORT,
+        expected_path="/__cag/stats",
+    )
+    if cpa_address == mock_address:
+        fail("sandbox CPA and counted Mock addresses must be distinct")
+    binding = descriptor["network_binding"]
+    if (
+        not isinstance(binding, dict)
+        or binding != FIXED_NETWORK_BINDING
+        or type(binding.get("host_ip")) is not str
+        or type(binding.get("host_port")) is not int
+        or type(binding.get("container_port")) is not int
+    ):
+        fail("sandbox network binding differs from internal-only/zero-Host-port contract")
     if descriptor["phase_protocol"] != FIXED_PHASE_PROTOCOL:
         fail(
             "sandbox phase protocol is not one authenticated CPA in Audit, Balanced, then Strict order"
@@ -451,7 +505,7 @@ def validate_sandbox_descriptor(
         or any(marker in model.casefold() for marker in ("round9", "eval", "mock", "corpus", "holdout", "test"))
     ):
         fail("sandbox model must be an ordinary non-evaluation model identity")
-    if exact_int(descriptor["scan_limit_bytes"], "sandbox scan limit", minimum=4096) != 16_384:
+    if exact_int(descriptor["scan_limit_bytes"], "sandbox scan limit", minimum=4096) != SCAN_LIMIT_BYTES:
         fail("sandbox scan limit must remain exactly 16 KiB")
     for key, label in (
         ("authorization_token_file", "sandbox authorization token"),
@@ -521,6 +575,23 @@ class CPAClient:
     def __init__(self, descriptor: dict[str, Any], *, timeout: float = 20.0):
         self.descriptor = descriptor
         self.timeout = timeout
+        self.cpa_origin, cpa_address = require_rfc1918_http_url(
+            descriptor.get("base_url"),
+            "sandbox base_url",
+            expected_port=CPA_PORT,
+            expected_path="",
+        )
+        _mock_origin, mock_address = require_rfc1918_http_url(
+            descriptor.get("counter_url"),
+            "sandbox counter_url",
+            expected_port=MOCK_PORT,
+            expected_path="/__cag/stats",
+        )
+        if cpa_address == mock_address:
+            fail("sandbox CPA and counted Mock addresses must be distinct")
+        self.cpa_address = cpa_address
+        self.mock_address = mock_address
+        self.counter_url = descriptor["counter_url"]
         token_path = Path(descriptor["authorization_token_file"])
         token = token_path.read_text(encoding="utf-8").strip()
         if not token or len(token) > 4096 or "\n" in token or "\r" in token:
@@ -554,24 +625,45 @@ class CPAClient:
         body: bytes | None = None,
         authorization: str | None = None,
     ) -> tuple[int, bytes]:
-        parsed = parse.urlsplit(target)
+        if not isinstance(target, str) or any(
+            ord(character) < 0x20 or ord(character) == 0x7F for character in target
+        ):
+            fail("CPA sandbox request target is invalid")
+        try:
+            parsed = parse.urlsplit(target)
+            port = parsed.port
+        except ValueError as exc:
+            raise ContractError("CPA sandbox request target port is invalid") from exc
+        cpa_target = (
+            parsed.hostname == self.cpa_address
+            and port == CPA_PORT
+            and parsed.netloc == f"{self.cpa_address}:{CPA_PORT}"
+            and parsed.path.startswith("/")
+            and not parsed.path.startswith("//")
+        )
+        counter_target = target == self.counter_url
         if (
             parsed.scheme != "http"
-            or parsed.hostname not in {"127.0.0.1", "::1"}
             or parsed.username is not None
             or parsed.password is not None
             or parsed.fragment
+            or not (cpa_target or counter_target)
+            or (counter_target and (parsed.query or parsed.hostname != self.mock_address))
         ):
-            fail("CPA sandbox request target must remain loopback-only")
+            fail("CPA sandbox request target escaped its inspect-derived RFC1918 endpoints")
         headers = {"Accept": "application/json"}
-        selected_authorization = self.authorization if authorization is None else authorization
+        if counter_target and authorization not in (None, ""):
+            fail("counted Mock request must not receive CPA credentials")
+        selected_authorization = (
+            "" if counter_target else self.authorization if authorization is None else authorization
+        )
         if selected_authorization:
             headers["Authorization"] = selected_authorization
         if body is not None:
             headers["Content-Type"] = "application/json"
         operation = request.Request(target, data=body, headers=headers, method=method)
         try:
-            with LOOPBACK_OPENER.open(operation, timeout=self.timeout) as response:
+            with SANDBOX_OPENER.open(operation, timeout=self.timeout) as response:
                 raw = response.read(MAX_RESPONSE_BYTES + 1)
                 status = response.status
         except error.HTTPError as exc:
@@ -589,7 +681,7 @@ class CPAClient:
         return status, raw
 
     def counter(self) -> int:
-        status, raw = self._open(self.descriptor["counter_url"])
+        status, raw = self._open(self.counter_url, authorization="")
         if status != 200:
             fail("counted Mock counter endpoint failed")
         value = load_json_bytes(raw, "counted Mock counter response")
@@ -604,7 +696,7 @@ class CPAClient:
 
     def usage_queue(self) -> list[Any]:
         status, raw = self._open(
-            self.descriptor["base_url"] + "/v0/management/usage-queue?count=100",
+            self.cpa_origin + "/v0/management/usage-queue?count=100",
             authorization=self.management_authorization,
         )
         if status != 200:
@@ -653,7 +745,11 @@ class CPAClient:
         fail("allowed request did not produce exactly one independently observed usage record")
 
     @staticmethod
-    def _effective_status(value: Any, expected: str) -> dict[str, Any]:
+    def _effective_status(
+        value: Any,
+        expected: str,
+        expected_total_text_bytes: int = TOTAL_TEXT_LIMIT_BYTES,
+    ) -> dict[str, Any]:
         if not isinstance(value, dict):
             fail("CPA plugin status is not an object")
         limits = value.get("effective_limits")
@@ -663,19 +759,30 @@ class CPAClient:
         classifier = value.get("classifier")
         if (
             value.get("mode") != expected
-            or any(value.get(key) is not True for key in ("loaded", "initialized", "enforcement_ready", "enabled"))
+            or any(
+                value.get(key) is not True
+                for key in (
+                    "loaded",
+                    "initialized",
+                    "enforcement_ready",
+                    "operational_ready",
+                    "enabled",
+                )
+            )
             or value.get("priority") != 300
             or value.get("opaque_media_policy") != "audit"
             or value.get("subjects") != 0
             or value.get("audit_degraded") is not False
+            or value.get("persistence_degraded") is not False
+            or value.get("readiness_reasons") != []
             or value.get("router_errors") != 0
             or value.get("panics_recovered") != 0
             or value.get("last_reconfigure_error") not in ("", None)
             or value.get("last_config_error") not in ("", None)
             or not isinstance(limits, dict)
-            or limits.get("max_text_window_bytes") != 16_384
-            or limits.get("max_total_text_bytes") != 16_384
-            or limits.get("legacy_max_scan_bytes_configured") != 16_384
+            or limits.get("max_text_window_bytes") != SCAN_LIMIT_BYTES
+            or limits.get("max_total_text_bytes") != expected_total_text_bytes
+            or limits.get("legacy_max_scan_bytes_configured") != SCAN_LIMIT_BYTES
             or not isinstance(audit, dict)
             or audit.get("enabled") is not True
             or audit.get("healthy") is not True
@@ -714,33 +821,47 @@ class CPAClient:
             "classifier": {"remote": classifier["remote"]},
         }
 
-    def status_snapshot(self, expected: str) -> tuple[dict[str, Any], str]:
+    def status_snapshot(
+        self,
+        expected: str,
+        expected_total_text_bytes: int = TOTAL_TEXT_LIMIT_BYTES,
+    ) -> tuple[dict[str, Any], str]:
         status, raw = self._open(
-            self.descriptor["base_url"] + FIXED_PHASE_PROTOCOL["status_endpoint"],
+            self.cpa_origin + FIXED_PHASE_PROTOCOL["status_endpoint"],
             authorization=self.management_authorization,
         )
         if status != 200:
             fail("CPA plugin status endpoint failed")
         value = load_json_bytes(raw, "CPA plugin status")
-        effective = self._effective_status(value, expected)
+        effective = self._effective_status(value, expected, expected_total_text_bytes)
         return effective, sha256_bytes(canonical_bytes(effective))
 
-    def verify_mode(self, expected: str) -> None:
+    def verify_mode(
+        self,
+        expected: str,
+        expected_total_text_bytes: int = TOTAL_TEXT_LIMIT_BYTES,
+        *,
+        record_standard: bool = True,
+    ) -> None:
+        if record_standard and expected_total_text_bytes != TOTAL_TEXT_LIMIT_BYTES:
+            fail("temporary plugin budget cannot become phase evidence")
         deadline = time.monotonic() + min(30.0, max(2.0, self.timeout * 2))
         while time.monotonic() < deadline:
             try:
                 status, raw = self._open(
-                    self.descriptor["base_url"]
-                    + FIXED_PHASE_PROTOCOL["status_endpoint"],
+                    self.cpa_origin + FIXED_PHASE_PROTOCOL["status_endpoint"],
                     authorization=self.management_authorization,
                 )
                 value = load_json_bytes(raw, "CPA plugin status") if status == 200 else None
-                effective = self._effective_status(value, expected)
+                effective = self._effective_status(
+                    value, expected, expected_total_text_bytes
+                )
                 if effective:
-                    self.mode_status_verified[expected] = True
-                    self.effective_config_sha256[expected] = sha256_bytes(
-                        canonical_bytes(effective)
-                    )
+                    if record_standard:
+                        self.mode_status_verified[expected] = True
+                        self.effective_config_sha256[expected] = sha256_bytes(
+                            canonical_bytes(effective)
+                        )
                     return
             except ContractError:
                 pass
@@ -761,7 +882,7 @@ class CPAClient:
         if configuration != expected_plugin_config(target):
             fail(f"sandbox {target} configuration changed after descriptor validation")
         _before, before_sha = self.status_snapshot(self.current_mode)
-        endpoint = self.descriptor["base_url"] + FIXED_PHASE_PROTOCOL["mode_switch_endpoint"]
+        endpoint = self.cpa_origin + FIXED_PHASE_PROTOCOL["mode_switch_endpoint"]
         for authorization in ("", "Bearer cag-round9-intentionally-wrong-management-token"):
             denied, _raw = self._open(
                 endpoint,
@@ -786,6 +907,29 @@ class CPAClient:
         self.verify_mode(target)
         self.current_mode = target
         self.authenticated_mode_switches.append(target)
+
+    def _set_total_text_budget(self, total_bytes: int) -> None:
+        if type(total_bytes) is not int or total_bytes not in {
+            SCAN_LIMIT_BYTES,
+            TOTAL_TEXT_LIMIT_BYTES,
+        }:
+            fail("CPA temporary total-text budget is invalid")
+        configuration = expected_plugin_config(self.current_mode)
+        configuration["max_total_text_bytes"] = total_bytes
+        endpoint = self.cpa_origin + FIXED_PHASE_PROTOCOL["mode_switch_endpoint"]
+        status, _raw = self._open(
+            endpoint,
+            method=FIXED_PHASE_PROTOCOL["mode_switch_method"],
+            body=canonical_bytes(configuration),
+            authorization=self.management_authorization,
+        )
+        if status != 200:
+            fail("CPA authenticated temporary total-text budget reconfiguration failed")
+        self.verify_mode(
+            self.current_mode,
+            total_bytes,
+            record_standard=total_bytes == TOTAL_TEXT_LIMIT_BYTES,
+        )
 
     def mode_switch_authenticated(self) -> bool:
         return self.authenticated_mode_switches == ["balanced", "strict"]
@@ -838,7 +982,7 @@ class CPAClient:
             fail("CPA request phase differs from the verified current plugin mode")
         self.wait_usage_quiet(reject_records=False)
         before = self.counter()
-        base = self.descriptor["base_url"]
+        base = self.cpa_origin
         suffix = "/v1/chat/completions" if protocol == "chat" else "/v1/responses"
         status, raw = self._open(base + suffix, method="POST", body=body)
         after = self.counter()
@@ -866,6 +1010,15 @@ class CPAClient:
         return self.execute_body(
             canonical_bytes(self._body(protocol, prompt, stream)), mode, protocol
         )
+
+    def execute_incomplete_body(
+        self, body: bytes, mode: str, protocol: str
+    ) -> dict[str, Any]:
+        try:
+            self._set_total_text_budget(SCAN_LIMIT_BYTES)
+            return self.execute_body(body, mode, protocol)
+        finally:
+            self._set_total_text_budget(TOTAL_TEXT_LIMIT_BYTES)
 
 
 def evaluate_cases(
@@ -1178,7 +1331,9 @@ def evaluate_cases(
                 fail("route-order phase contains a mixed-mode task")
             if task["kind"] == "incomplete":
                 body = task["body"]
-                outcome = client.execute_body(body, task["mode"], task["protocol"])
+                outcome = client.execute_incomplete_body(
+                    body, task["mode"], task["protocol"]
+                )
                 expected = frozen_outcomes.get(task["opaque"])
                 if expected is None or any(
                     outcome[key] is not value
@@ -1467,9 +1622,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         "metrics": metrics,
         "public_counted_mock_transport": public_transport,
         "privacy": {
-            "raw_prompts_in_result": False,
-            "raw_responses_in_result": False,
-            "request_bodies_in_logs": False,
+            **PRIVACY_BOOLEANS,
             "failure_identifier_policy": "challenge_hmac_sha256_case_id_only",
         },
     }

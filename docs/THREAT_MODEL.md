@@ -26,9 +26,13 @@ non-latest Linux amd64 prerelease `v0.16-rc.4`. Stable `v0.16` does not exist an
 production approval has not been granted. The source/compile and future
 counted-Mock Host matrix is fixed to CPA v7.2.113
 (`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`). Later upstream
-versions are not followed automatically. The protected Host may expose CPA
-only as `127.0.0.1:18394 -> 8317/tcp`; wildcard, random, extra, or multiple CPA
-bindings are outside the admitted sandbox.
+versions are not followed automatically. The retained Docker 29 runner uses
+one internal-only bridge, publishes neither CPA nor counted-Mock ports to the
+Host, and records only
+`host_ip=internal-only, host_port=0, container_port=8317`. The Host may contact
+only the exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4
+addresses. Any Host binding, additional container, or non-internal network is
+outside the admitted sandbox.
 
 Source overlays, CI, candidate bytes, local dirty Host runs, protected Host
 records, one-shot independent corpora, and independent review are separate
@@ -47,7 +51,7 @@ from another:
 |---|---|---|
 | Local dirty development Host/Router | `PASS / DEVELOPMENT ONLY` | No release boundary is closed; the result is non-transferable from its generated `0.16-dirty` `.so` |
 | Repository-local counted-Mock | `NOT_PROVIDED` | A final-source, exact-candidate Linux run with persisted counters and hashes |
-| Tencent Cloud #2 isolated counted-Mock | `NOT_PROVIDED` | An operator-authorized run in the isolated loopback sandbox, with no production, real Provider, real account, or real-user contact |
+| Tencent Cloud #2 isolated counted-Mock | `NOT_PROVIDED` | An operator-authorized run on the internal-only Docker bridge, with no Host-published port and no production, real Provider, real account, or real-user contact |
 | Protected external evaluation and one-shot ledger | `NOT_PROVIDED` | Signed external-evaluation, counted-Mock, ledger-event, and ledger-proof assets bound to the same frozen candidate |
 
 The Round 9 task requires production to remain `mode=audit` with subject
@@ -92,7 +96,7 @@ did not inspect or change production.
 | Before/after-auth callbacks or executor retries count one logical request multiple times | The bounded lifecycle cache stores the stable CPA `RequestID` plus a per-process, request-ID-bound HMAC-SHA256 fingerprint of canonical source format, body, case-normalized header names with exact ordered values, and stream. Identical after-auth input pays the O(n) fingerprint cost but skips duplicate classification and side effects; any security-relevant mutation is reclassified and replaces the fingerprint. A fail-open operational failure is not marked checked, so after auth can retry. Completion removes the ID and fingerprint, and no raw request/header value is retained. Subject risk separately uses a domain-separated request digest and bounded idempotency receipts, so the same subject/request pair is counted once across retry, concurrency, legacy executor callbacks, reconfigure, and shutdown races. Receipts persist with optional subject snapshots. |
 | Regex denial of service | Default rules use normalized literal terms; validation rejects unsupported/oversized rule constructs. |
 | Prompt or secret leakage through Guard audit | Fixed minimal event schema; SHA-256/HMAC correlation; tests search the DB for canary prompt/key/unknown-field values. This does not cover CPA Host request/error logs. |
-| CPA Host logging persists request bodies outside the Guard audit boundary | CPA may temporarily spool non-multipart bodies and persist a raw body in an HTTP error log. Every current Host-matrix sandbox uses a temporary log directory and must review mode, retention, permissions, canary absence/presence, and cleanup before any production observation. |
+| CPA Host logging persists request bodies outside the Guard audit boundary | CPA may temporarily spool non-multipart bodies and persist a raw body in an HTTP error log. The production contract sets an absolute `WRITABLE_PATH`, uses a dedicated empty bind-mounted log root, and rejects CPA v7.2.113's ambiguous relative fallback. The watchdog binds a protected marker to Management inventory and independently requires an incomplete-body ResourceRoute response: an installed pinned middleware blocks before dispatch and makes the gate fail closed even if logger/inventory roots were misconfigured. Every Host-matrix sandbox must still review mode, retention, permissions, canary absence/presence, and cleanup. |
 | Subject hash reversal/correlation or secret-file path swap | HMAC-SHA256 with a production mode-0600 regular-file secret; Linux uses `O_NOFOLLOW` and validates/reads the same descriptor; no plaintext subjects; status exposes no secret. |
 | Persisted subject state leaks plaintext or is restored under a different key | Typed HMAC-only schema, bounded atomic snapshots, one-way key ID, explicit key mismatch with writes blocked, expiry/decay/capacity on restore. |
 | Forged `X-Forwarded-For` | CPA schema 2 exposes no trusted peer address to RequestInterceptor, so the Guard rejects trusted-proxy activation and never accepts the header as identity. |
@@ -103,7 +107,8 @@ did not inspect or change production.
 | Invalid hot reload weakens policy or erases enforcement history | Parse/compile/validate full state before atomic swap; last valid state is retained; compatible enabled-to-enabled changes preserve subject risk, cooldown, and manual blocks; unsafe capacity shrink is rejected. |
 | Plugin panic crashes CPA or bypasses enforcement | ABI entrypoints recover. A recovered request-interceptor panic returns a successful direct termination in a validated Balanced/Strict runtime and increments counters; non-enforcing modes pass through and unrelated methods preserve a non-zero ABI failure signal. CPA may still fuse a plugin, so monitoring remains required. |
 | Interceptor error silently weakens enforcement | Known scan-boundary, recovered panic, shutdown, malformed-envelope, and guarded runtime failures return mode-aware successful interceptor responses. Strict oversized RPCs terminate while Balanced preserves its documented incomplete allow+audit policy. Status exposes readiness, aggregate `router_errors`, and panic counters; the watchdog alarms on deltas. CPA still owns host-level fail-open policy that the plugin cannot change; the sole pinned CPA v7.2.113 Host profile must verify it. |
-| Management test/unblock exposed to normal API keys | Routes registered exclusively through CPA Management API; no public resource routes. |
+| Management test/unblock exposed to normal API keys | Mutating and diagnostic management routes remain exclusively behind CPA Management authentication. The sole unauthenticated resource is a hidden, fixed-response startup-privacy proof: it consumes only a 256-bit, 30-second, bounded, one-time challenge issued through authenticated Management, requires a hop-by-hop direct-listener header, never accepts user content, and cannot reach auth selection, usage, a provider, or upstream. |
+| A loopback proxy splices production status or classifier probes from CPA A with startup proof from CPA B | Initial/final status, both built-in classifier probes, challenge issue, ResourceRoute body, and confirmation must carry one unchanged random 256-bit process identity, so simple path routing or load balancing fails closed before the proof is accepted. `CPA_DIRECT_BASE_URL` must still be deployment-bound to the real CPA listener/socket, and the production ingress must be deployment-bound to that same CPA instance. CPA's v7.2.113 plugin ABI cannot cryptographically identify socket ownership or defeat a malicious same-host intermediary that rewrites identities, preserves hop-by-hop headers, normalizes methods, or special-cases health paths; such a topology is outside the admitted boundary. |
 | Oversized management HTTP body is fully buffered by CPA before plugin limits run | CPA currently uses `io.ReadAll` in `ServeManagementHTTP`, so plugin 1 MiB body / 2 MiB envelope checks are not a host memory ceiling. The deployment proxy sets `client_max_body_size 1m`; the server sandbox must prove Nginx returns 413 before CPA receives the request. |
 | CPA store rejects or misinstalls the release archive | Keep the store ZIP separate from the audit bundle. CI must require real `.so`/ZIP/metadata/checksums, use `InstallManifest` for first install and Host load, then verify same-Dist repeat-skip/tamper-repair with `TestPublishedStoreArchive`. Synthetic fallback is source evidence only. |
 | SSRF or prompt/media exfiltration via classifier or URL inspection | The Guard rejects external classifier activation, never fetches media URLs, and performs no outbound classification/telemetry call. |

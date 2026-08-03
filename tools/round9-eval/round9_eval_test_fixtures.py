@@ -203,7 +203,7 @@ def public_counted_mock(*, hard_policy_blocked: int = 0) -> dict[str, Any]:
         },
         "claim_boundary": (
             "Public, candidate-visible development regression payloads executed as exact decoded bytes "
-            "through loopback-only CPA counted-Mock routes; this is Host transport and decision evidence, "
+            "through an inspect-verified internal Docker bridge; this is Host transport and decision evidence, "
             "not independent holdout evidence or production approval. Candidate-owned manifest provenance "
             "is format/hash checked but does not independently prove third-party source extraction."
         ),

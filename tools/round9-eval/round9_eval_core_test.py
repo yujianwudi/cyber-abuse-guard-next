@@ -556,8 +556,13 @@ class Round9EvalCoreTest(unittest.TestCase):
 
     def test_fixed_network_and_sequential_phase_contract_cannot_drift(self) -> None:
         _envelope, payload, _proof = self.fixture()
+        self.assertEqual(
+            FIXED_NETWORK_BINDING,
+            {"host_ip": "internal-only", "host_port": 0, "container_port": 8317},
+        )
         for key, value in (
-            ("host_port", 18395),
+            ("host_port", 1),
+            ("host_port", False),
             ("container_port", 8318),
             ("host_ip", "0.0.0.0"),
         ):

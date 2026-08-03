@@ -862,8 +862,13 @@ The authenticated status exposes `loaded`, `enforcement_ready`,
 `router_errors` (the compatibility aggregate for Router/interceptor protocol
 failures), `panics_recovered`, audit/HMAC/persistence degradation,
 reconfigure error, build/ruleset identity, and the classifier-policy
-version/hash. The read-only production watchdog checks those fields and runs
-built-in local-only probes. The ABI cannot enumerate interceptor ordering or
+version/hash. The loopback-only production watchdog checks those fields, runs
+built-in local probes, and actively proves the CPA v7.2.113 startup logging
+boundary with one temporary root-bound marker plus two one-time, same-process
+CAG resource challenges over the direct CPA listener. The complete and partial
+lowercase-`get` probes are source-pinned to traverse CPA request logging without
+entering `/v1`, auth selection, usage, or Provider traffic.
+The ABI cannot enumerate interceptor ordering or
 scan the plugin directory, so earlier interceptor conflicts and duplicate `.so`
 versions remain mandatory operator checks.
 `enforcement_ready` reflects plugin-internal runtime state only; it does not

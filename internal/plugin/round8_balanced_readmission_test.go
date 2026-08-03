@@ -109,19 +109,22 @@ func TestRound8ChatAndResponsesToolSchemaContamination(t *testing.T) {
 
 	for _, format := range []string{"openai", "openai-response"} {
 		format := format
-		t.Run(format+" benign user", func(t *testing.T) {
-			body := round8RouterToolSchemaBody(t, format, schemaVocabulary, benignUser)
-			if route := callRoleRoute(t, p, format, body); route.Handled {
-				t.Fatalf("large tool schema polluted benign current user intent: %+v", route)
-			}
-		})
-		t.Run(format+" independent malicious user", func(t *testing.T) {
-			body := round8RouterToolSchemaBody(t, format, schemaVocabulary, maliciousUser)
-			route := callRoleRoute(t, p, format, body)
-			if !route.Handled || route.TargetKind != pluginapi.ModelRouteTargetSelf {
-				t.Fatalf("tool schema hid independent current-user abuse: %+v", route)
-			}
-		})
+		for _, order := range []string{"model-tools-current", "current-model-tools"} {
+			order := order
+			t.Run(format+"/"+order+" benign user", func(t *testing.T) {
+				body := round8RouterOrderedToolSchemaBody(t, format, order, schemaVocabulary, benignUser)
+				if route := callRoleRoute(t, p, format, body); route.Handled {
+					t.Fatalf("large tool schema polluted benign current user intent: %+v", route)
+				}
+			})
+			t.Run(format+"/"+order+" independent malicious user", func(t *testing.T) {
+				body := round8RouterOrderedToolSchemaBody(t, format, order, schemaVocabulary, maliciousUser)
+				route := callRoleRoute(t, p, format, body)
+				if !route.Handled || route.TargetKind != pluginapi.ModelRouteTargetSelf {
+					t.Fatalf("tool schema hid independent current-user abuse: %+v", route)
+				}
+			})
+		}
 	}
 }
 
@@ -196,7 +199,7 @@ func round8RouterUserBody(t testing.TB, format, prompt string) string {
 	return round8RouterMarshal(t, envelope)
 }
 
-func round8RouterToolSchemaBody(t testing.TB, format, schema, user string) string {
+func round8RouterOrderedToolSchemaBody(t testing.TB, format, order, schema, user string) string {
 	t.Helper()
 	parameters := map[string]any{
 		"type": "object",
@@ -207,46 +210,64 @@ func round8RouterToolSchemaBody(t testing.TB, format, schema, user string) strin
 			},
 		},
 	}
-	var envelope any
+	var tools any
+	var currentField string
+	var current any
 	switch format {
 	case "openai":
-		envelope = map[string]any{
-			"model": "round8-test-model",
-			"tools": []any{
-				map[string]any{
-					"type": "function",
-					"function": map[string]any{
-						"name":        "ordinary_development_helper",
-						"description": schema,
-						"parameters":  parameters,
-					},
-				},
-			},
-			"messages": []any{map[string]any{"role": "user", "content": user}},
-		}
-	case "openai-response":
-		envelope = map[string]any{
-			"model": "round8-test-model",
-			"tools": []any{
-				map[string]any{
-					"type":        "function",
+		tools = []any{
+			map[string]any{
+				"type": "function",
+				"function": map[string]any{
 					"name":        "ordinary_development_helper",
 					"description": schema,
 					"parameters":  parameters,
 				},
 			},
-			"input": []any{
-				map[string]any{
-					"type":    "message",
-					"role":    "user",
-					"content": []any{map[string]any{"type": "input_text", "text": user}},
-				},
+		}
+		currentField = "messages"
+		current = []any{map[string]any{"role": "user", "content": user}}
+	case "openai-response":
+		tools = []any{
+			map[string]any{
+				"type":        "function",
+				"name":        "ordinary_development_helper",
+				"description": schema,
+				"parameters":  parameters,
+			},
+		}
+		currentField = "input"
+		current = []any{
+			map[string]any{
+				"type":    "message",
+				"role":    "user",
+				"content": []any{map[string]any{"type": "input_text", "text": user}},
 			},
 		}
 	default:
 		t.Fatalf("unsupported Round 8 router format %q", format)
 	}
-	return round8RouterMarshal(t, envelope)
+
+	modelJSON := round8RouterMarshal(t, "round8-test-model")
+	toolsJSON := round8RouterMarshal(t, tools)
+	currentJSON := round8RouterMarshal(t, current)
+	var body string
+	switch order {
+	case "model-tools-current":
+		body = `{"model":` + modelJSON + `,"tools":` + toolsJSON + `,"` + currentField + `":` + currentJSON + `}`
+	case "current-model-tools":
+		body = `{"` + currentField + `":` + currentJSON + `,"model":` + modelJSON + `,"tools":` + toolsJSON + `}`
+	default:
+		t.Fatalf("unsupported Round 8 top-level order %q", order)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal([]byte(body), &decoded); err != nil {
+		t.Fatalf("ordered Round 8 tool-schema body is invalid JSON: %v", err)
+	}
+	if len(decoded) != 3 {
+		t.Fatalf("ordered Round 8 tool-schema body has %d top-level fields", len(decoded))
+	}
+	return body
 }
 
 func round8RouterHistoryBody(t testing.TB, format, attack, refusal, followUp string) string {

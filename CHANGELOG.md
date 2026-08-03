@@ -5,9 +5,29 @@ current_classifier_policy_version: classifier-policy-v10
 current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
 ```
 
-Source-tree status updated: 2026-08-01 (Asia/Shanghai)
+Source-tree status updated: 2026-08-03 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
+
+- Harden the retained CPA v7.2.113 Linux Host and external sandbox contracts:
+  use a Docker 29-compatible internal-only bridge with no published Host ports;
+  validate RFC1918 IPAM, container/network identity, isolation, resources, and
+  log rotation before the first request; validate the exact nine-event
+  Responses SSE sequence and CPA three-LF termination; separate the 16 KiB
+  classifier window from the normal 8 MiB cumulative text budget; constrain
+  16 KiB total-text mode to explicit Balanced/Strict incomplete probes; and
+  preserve raw top-level tool-schema field order in Chat and Responses tests.
+  CPA startup now fixes `commercial-mode: true`, `request-log: false`, and
+  `logging-to-file: false`, verifies those effective booleans through Management,
+  requires persistent audit storage, and rejects any auth-directory request-log
+  artifact. Production examples and the watchdog enforce the same request-body
+  privacy baseline with a direct-listener, a random 256-bit process identity
+  shared by status/probes/challenge/resource/confirmation, complete and incomplete-body
+  same-process proofs, held-inode marker checks, and independent
+  connection/request timeouts. A BASE proxy that path-routes proof management
+  calls to another CPA instance now fails closed before ResourceRoute dispatch.
+  These changes do not alter classifier rules, thresholds, or corpus
+  expectations and do not create a tag or Release.
 
 - Advance the sole active CPA contract from official `v7.2.109` to official
   `v7.2.113` (`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`) with module sum

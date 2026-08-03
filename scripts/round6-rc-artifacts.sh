@@ -1338,7 +1338,7 @@ finalize_rc_package() {
         .payload.public_counted_mock.total.decision_kind_counts.block_malicious_text == 80 and
         .payload.metrics.public_counted_mock == .payload.public_counted_mock and
         .payload.execution.network_binding == {
-          host_ip: "127.0.0.1", host_port: 18394, container_port: 8317
+          host_ip: "internal-only", host_port: 0, container_port: 8317
         } and
         .payload.execution.phase_protocol == {
           single_cpa_container: true,
@@ -1419,9 +1419,9 @@ finalize_rc_package() {
         }')"
       primary_host_results="$(jq -c '.host_results' <<<"$round9_counted_mock")"
       jq -e '.network_binding == {
-        host_ip: "127.0.0.1", host_port: 18394, container_port: 8317
+        host_ip: "internal-only", host_port: 0, container_port: 8317
       }' <<<"$primary_host_results" >/dev/null ||
-        release_die "Round 9 counted-Mock evidence lost the fixed 127.0.0.1:18394 CPA listener contract"
+        release_die "Round 9 counted-Mock evidence lost the internal-only/no-Host-port CPA contract"
       host_validation='SIGNED_EXTERNAL_EVALUATION_VERIFIED / GITHUB_ATTESTED_HOST_WORKFLOW / PROTECTED_LEDGER'
       host_evidence_origin='SIGNED_EXTERNAL_EVALUATION_AND_PROTECTED_LEDGER'
       host_evidence_claim='PHASE1_ATTESTATION_TAG_COMMIT_TREE_RUN_ARTIFACT_CHALLENGE_EVALUATOR_AND_LEDGER_VERIFIED'
@@ -1538,7 +1538,7 @@ EOF
     printf -- '- CPA %s primary counted-Mock validation: %s\n' \
       "$cpa_version" "$counted_mock_validation"
     if [[ "$rc_release_lane" == round9 && "$publish_rc_release" == true ]]; then
-      printf -- '- CPA Host listener: 127.0.0.1:18394 -> container 8317/tcp (exact)\n'
+      printf -- '- CPA network: internal-only bridge, no Host port; container 8317/tcp (exact)\n'
     fi
     printf -- '- Real Provider validation: NOT_RUN / PROHIBITED\n'
     printf -- '- Production validation: NOT_RUN / PROHIBITED\n'

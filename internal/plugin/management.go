@@ -43,6 +43,8 @@ const (
 	managementRawPreviewRendering       = "text-only-never-html"
 	managementRawCaptureSchema          = 4
 	managementHealthProbePath           = managementBasePath + "/health/probe"
+	managementStartupPrivacyProofPath   = managementBasePath + "/health/startup-privacy-proof"
+	startupPrivacyProofResourcePath     = "/v0/resource/plugins/" + ID + "/health/startup-privacy-proof"
 	managementMigrationBackupPurgePath  = managementBasePath + "/migration-backups/purge"
 	managementAuthDocumentation         = "CPA v7.2.113 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
 	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 2 RequestInterceptor protocol-path failures"
@@ -52,6 +54,12 @@ const (
 
 type managementRoute struct {
 	Method      string `json:"Method"`
+	Path        string `json:"Path"`
+	Menu        string `json:"Menu,omitempty"`
+	Description string `json:"Description,omitempty"`
+}
+
+type resourceRoute struct {
 	Path        string `json:"Path"`
 	Menu        string `json:"Menu,omitempty"`
 	Description string `json:"Description,omitempty"`
@@ -92,7 +100,7 @@ type managementRawCaptureResponse struct {
 
 type managementRegistration struct {
 	Routes    []managementRoute `json:"routes"`
-	Resources []any             `json:"resources"`
+	Resources []resourceRoute   `json:"resources"`
 }
 
 type managementMigrationBackupStatus struct {
@@ -115,6 +123,18 @@ type migrationBackupPurgeRequest struct {
 	RollbackLossConfirmation string `json:"rollback_loss_confirmation"`
 }
 
+type managementStartupPrivacyChallenge struct {
+	Challenge     string `json:"challenge"`
+	InstanceID    string `json:"instance_id"`
+	ExpiresAtUnix int64  `json:"expires_at_unix"`
+}
+
+type managementStartupPrivacyProofStatus struct {
+	Challenge  string `json:"challenge"`
+	InstanceID string `json:"instance_id"`
+	Consumed   bool   `json:"consumed"`
+}
+
 func (p *Plugin) registerManagement(raw []byte) []byte {
 	if len(raw) != 0 {
 		var request pluginapi.ManagementRegistrationRequest
@@ -131,10 +151,12 @@ func (p *Plugin) registerManagement(raw []byte) []byte {
 			{Method: http.MethodPost, Path: managementBasePath + "/test"},
 			{Method: http.MethodPost, Path: managementBasePath + "/subjects/unblock"},
 			{Method: http.MethodPost, Path: managementHealthProbePath},
+			{Method: http.MethodPost, Path: managementStartupPrivacyProofPath},
+			{Method: http.MethodGet, Path: managementStartupPrivacyProofPath},
 			{Method: http.MethodPost, Path: managementMigrationBackupPurgePath},
 			{Method: http.MethodDelete, Path: managementBasePath + "/events"},
 		},
-		Resources: []any{},
+		Resources: []resourceRoute{{Path: startupPrivacyProofResourcePath}},
 	})
 }
 
@@ -151,6 +173,9 @@ func (p *Plugin) handleManagement(raw []byte) []byte {
 	}
 	if status, code, message := validateManagementTransport(request); status != 0 {
 		return managementError(status, code, message)
+	}
+	if request.Method == http.MethodGet && request.Path == startupPrivacyProofResourcePath {
+		return p.startupPrivacyResourceResponse(request)
 	}
 	// CPA's management middleware validates the configured key before invoking
 	// plugin routes. The ABI does not expose the configured key to plugins, so
@@ -208,6 +233,16 @@ func (p *Plugin) handleManagement(raw []byte) []byte {
 			return managementError(http.StatusBadRequest, "invalid_query", "health probe does not accept query parameters")
 		}
 		return p.managementHealthProbe(state, request.Body)
+	case request.Method == http.MethodPost && request.Path == managementStartupPrivacyProofPath:
+		if len(request.Query) != 0 {
+			return managementError(http.StatusBadRequest, "invalid_query", "startup privacy challenge does not accept query parameters")
+		}
+		return p.managementIssueStartupPrivacyChallenge(request.Body)
+	case request.Method == http.MethodGet && request.Path == managementStartupPrivacyProofPath:
+		if len(request.Body) != 0 {
+			return managementError(http.StatusBadRequest, "invalid_request", "startup privacy proof status does not accept a body")
+		}
+		return p.managementStartupPrivacyProofStatus(request.Query)
 	case request.Method == http.MethodPost && request.Path == managementMigrationBackupPurgePath:
 		if len(request.Query) != 0 {
 			return managementError(http.StatusBadRequest, "invalid_query", "migration-backup cleanup does not accept query parameters")
@@ -221,6 +256,47 @@ func (p *Plugin) handleManagement(raw []byte) []byte {
 	default:
 		return managementError(http.StatusNotFound, "not_found", "management route not found")
 	}
+}
+
+func (p *Plugin) managementIssueStartupPrivacyChallenge(raw []byte) []byte {
+	if !bytes.Equal(bytes.TrimSpace(raw), []byte("{}")) {
+		return managementError(http.StatusBadRequest, "invalid_request", "startup privacy challenge body must be exactly one empty JSON object")
+	}
+	if !validStartupPrivacyChallenge(p.startupPrivacyInstanceID) {
+		return managementError(http.StatusServiceUnavailable, "instance_identity_unavailable", "startup privacy process identity is unavailable")
+	}
+	challenge, expiresAt, err := p.startupPrivacyChallenges.issue()
+	if err != nil {
+		return managementError(http.StatusServiceUnavailable, "challenge_unavailable", "startup privacy challenge is temporarily unavailable")
+	}
+	return managementJSONResponse(http.StatusOK, managementStartupPrivacyChallenge{
+		Challenge:     challenge,
+		InstanceID:    p.startupPrivacyInstanceID,
+		ExpiresAtUnix: expiresAt.Unix(),
+	})
+}
+
+func (p *Plugin) managementStartupPrivacyProofStatus(values url.Values) []byte {
+	if len(values) != 1 {
+		return managementError(http.StatusBadRequest, "invalid_query", "startup privacy proof status requires one challenge parameter")
+	}
+	entries, exists := values["challenge"]
+	if !exists || len(entries) != 1 || !validStartupPrivacyChallenge(entries[0]) {
+		return managementError(http.StatusBadRequest, "invalid_query", "startup privacy proof challenge is invalid")
+	}
+	challenge := entries[0]
+	known, consumed := p.startupPrivacyChallenges.statusAndDeleteConsumed(challenge)
+	if !known {
+		return managementError(http.StatusNotFound, "challenge_not_found", "startup privacy proof challenge is unavailable")
+	}
+	if !consumed {
+		return managementError(http.StatusConflict, "challenge_not_consumed", "startup privacy proof request did not reach this plugin process")
+	}
+	return managementJSONResponse(http.StatusOK, managementStartupPrivacyProofStatus{
+		Challenge:  challenge,
+		InstanceID: p.startupPrivacyInstanceID,
+		Consumed:   true,
+	})
 }
 
 func validateManagementTransport(request pluginapi.ManagementRequest) (status int, code, message string) {
@@ -391,42 +467,46 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 	if state != nil && state.config.SubjectControl.Enabled && hmacDegraded {
 		readinessReasons = append(readinessReasons, "subject_identifier_unstable")
 	}
+	if !validStartupPrivacyChallenge(p.startupPrivacyInstanceID) {
+		readinessReasons = append(readinessReasons, "startup_privacy_identity_unavailable")
+	}
 	operationalReady = loaded && len(readinessReasons) == 0
 	body := map[string]any{
-		"id":                        ID,
-		"name":                      metadata.Name,
-		"version":                   build.Version,
-		"commit":                    build.Commit,
-		"ruleset_sha256":            build.RulesetSHA256,
-		"dirty":                     build.Dirty,
-		"build":                     build,
-		"loaded":                    loaded,
-		"initialized":               loaded,
-		"enforcement_ready":         enforcementReady,
-		"operational_ready":         operationalReady,
-		"readiness_reasons":         readinessReasons,
-		"mode":                      mode,
-		"ruleset_version":           rulesetVersion,
-		"build_ruleset_version":     build.RulesetVersion,
-		"ruleset_version_match":     rulesetVersion != "" && rulesetVersion == build.RulesetVersion,
-		"classifier_policy_version": policyIdentity.Version,
-		"classifier_policy_sha256":  policyIdentity.SHA256,
-		"router_errors":             p.counters.routerErrors.Load(),
-		"router_errors_semantics":   routerErrorsDocumentation,
-		"panics_recovered":          p.counters.panicsRecovered.Load(),
-		"audit_degraded":            auditDegraded,
-		"hmac_stable":               hmacStable,
-		"hmac_initialized":          p.identifier != nil,
-		"hmac_degraded":             hmacDegraded,
-		"persistence_degraded":      persistenceDegraded,
-		"last_reconfigure_error":    p.lastReconfigureErrorMessage(),
-		"last_config_error":         p.lastConfigErrorMessage(),
-		"counters":                  p.counters.snapshot(),
-		"audit":                     auditStatus,
-		"subject_identifier":        identifierStatus,
-		"subject_control":           subjectStatus,
-		"subject_persistence":       persistenceStatus,
-		"raw_capture":               map[string]any{"enabled": false},
+		"id":                          ID,
+		"name":                        metadata.Name,
+		"version":                     build.Version,
+		"commit":                      build.Commit,
+		"ruleset_sha256":              build.RulesetSHA256,
+		"dirty":                       build.Dirty,
+		"build":                       build,
+		"loaded":                      loaded,
+		"initialized":                 loaded,
+		"enforcement_ready":           enforcementReady,
+		"operational_ready":           operationalReady,
+		"readiness_reasons":           readinessReasons,
+		"startup_privacy_instance_id": p.startupPrivacyInstanceID,
+		"mode":                        mode,
+		"ruleset_version":             rulesetVersion,
+		"build_ruleset_version":       build.RulesetVersion,
+		"ruleset_version_match":       rulesetVersion != "" && rulesetVersion == build.RulesetVersion,
+		"classifier_policy_version":   policyIdentity.Version,
+		"classifier_policy_sha256":    policyIdentity.SHA256,
+		"router_errors":               p.counters.routerErrors.Load(),
+		"router_errors_semantics":     routerErrorsDocumentation,
+		"panics_recovered":            p.counters.panicsRecovered.Load(),
+		"audit_degraded":              auditDegraded,
+		"hmac_stable":                 hmacStable,
+		"hmac_initialized":            p.identifier != nil,
+		"hmac_degraded":               hmacDegraded,
+		"persistence_degraded":        persistenceDegraded,
+		"last_reconfigure_error":      p.lastReconfigureErrorMessage(),
+		"last_config_error":           p.lastConfigErrorMessage(),
+		"counters":                    p.counters.snapshot(),
+		"audit":                       auditStatus,
+		"subject_identifier":          identifierStatus,
+		"subject_control":             subjectStatus,
+		"subject_persistence":         persistenceStatus,
+		"raw_capture":                 map[string]any{"enabled": false},
 		"migration_backups": managementMigrationBackupStatus{
 			MigrationBackupStatus:             migrationBackups,
 			CleanupMethod:                     http.MethodPost,
@@ -1133,6 +1213,7 @@ func (p *Plugin) managementHealthProbe(state *runtimeState, raw []byte) []byte {
 
 	return managementJSONResponse(status, map[string]any{
 		"kind":               request.Kind,
+		"instance_id":        p.startupPrivacyInstanceID,
 		"action":             result.Action,
 		"category":           result.Category,
 		"ruleset_version":    result.RuleSetVersion,

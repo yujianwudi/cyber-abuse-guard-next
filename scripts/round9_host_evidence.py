@@ -18,13 +18,13 @@ import argparse
 import base64
 import errno
 import hashlib
+import ipaddress
 import json
 import os
 import platform
 import re
 import secrets
 import shutil
-import socket
 import sqlite3
 import stat
 import subprocess
@@ -37,7 +37,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 import round9_docker_sandbox as docker_sandbox
@@ -50,16 +50,27 @@ STORE_NAME = f"cyber-abuse-guard_{ARTIFACT_VERSION}_linux_amd64.zip"
 SOURCE_NAME = f"cyber-abuse-guard-v{ARTIFACT_VERSION}-source.tar.gz"
 PRIMARY_VERSION = "v7.2.113"
 PRIMARY_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
-RUNNER_VERSION = 1
+RUNNER_VERSION = 2
 MOCK_PORT = 18080
 CPA_PORT = 8317
 CPA_HOST_IP = "127.0.0.1"
-CPA_HOST_PORT = 18394
+CPA_NETWORK_MODE = "internal-only"
+CPA_NETWORK_HOST_PORT = 0
+PRIVATE_DOCKER_IPV4_RANGES = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+)
 MAX_BODY = 16 * 1024 * 1024
 SCAN_LIMIT_BYTES = 16 * 1024
+TOTAL_TEXT_LIMIT_BYTES = 8 * 1024 * 1024
 MODEL_NAME = "round9-test-model"
 CLIENT_KEY = "round9-internal-client-key"
 MANAGEMENT_PATH = "/v0/management/plugins/cyber-abuse-guard"
+HTTP_QUERY_ALLOWLIST = {
+    ("GET", "/v0/management/usage-queue"): (("count", "100"),),
+    ("GET", MANAGEMENT_PATH + "/raw-captures"): (("limit", "100"),),
+}
 MOCK_CONTRACT = "round9-counted-mock/v1"
 CPA_SOURCE = "https://github.com/router-for-me/CLIProxyAPI"
 MOCK_SOURCE = "https://github.com/yujianwudi/cyber-abuse-guard-next"
@@ -693,39 +704,82 @@ def http_request(
     path: str,
     body: Any = None,
     headers: dict[str, str] | None = None,
+    *,
+    query: tuple[tuple[str, str], ...] | None = None,
 ) -> tuple[int, bytes]:
     parsed = urlsplit(base_url)
+    hostname = parsed.hostname
+    try:
+        port = parsed.port
+    except ValueError:
+        fail("Host runner HTTP base URL has an invalid port")
+    private_container_address = False
+    if hostname not in (None, CPA_HOST_IP):
+        try:
+            candidate_address = ipaddress.ip_address(hostname)
+        except ValueError:
+            fail("Host runner HTTP base URL must use a literal IPv4 address")
+        private_container_address = (
+            candidate_address.version == 4
+            and any(candidate_address in network for network in PRIVATE_DOCKER_IPV4_RANGES)
+            and not candidate_address.is_loopback
+            and port in {MOCK_PORT, CPA_PORT}
+        )
     if (
         parsed.scheme != "http"
-        or parsed.hostname != "127.0.0.1"
+        or (hostname != CPA_HOST_IP and not private_container_address)
         or parsed.username is not None
         or parsed.password is not None
         or parsed.path != ""
         or parsed.query
         or parsed.fragment
     ):
-        fail("Host runner HTTP base URL must be exact loopback HTTP")
-    try:
-        port = parsed.port
-    except ValueError:
-        fail("Host runner HTTP base URL has an invalid port")
+        fail("Host runner HTTP base URL must be exact loopback or isolated-container HTTP")
     if port is None or port < 1024 or port > 65535:
         fail("Host runner HTTP base URL must use an explicit unprivileged port")
+    if not isinstance(path, str):
+        fail("Host runner HTTP request path is invalid")
+    try:
+        parsed_path = urlsplit(path)
+    except ValueError:
+        fail("Host runner HTTP request path is invalid")
     if (
-        not isinstance(path, str)
-        or not path.startswith("/")
+        not path.startswith("/")
         or path.startswith("//")
-        or "\r" in path
-        or "\n" in path
+        or parsed_path.scheme
+        or parsed_path.netloc
+        or parsed_path.path != path
+        or parsed_path.query
+        or parsed_path.fragment
+        or "%" in path
+        or "\\" in path
+        or any(ord(character) <= 0x20 or ord(character) == 0x7F for character in path)
     ):
         fail("Host runner HTTP request path is invalid")
+    expected_query = HTTP_QUERY_ALLOWLIST.get((method, path))
+    if query is None and expected_query is None:
+        query_string = ""
+    else:
+        if (
+            not isinstance(query, tuple)
+            or any(
+                not isinstance(item, tuple)
+                or len(item) != 2
+                or not all(isinstance(value, str) for value in item)
+                for item in query
+            )
+            or query != expected_query
+        ):
+            fail("Host runner HTTP query is outside the fixed endpoint contract")
+        query_string = urlencode(query)
+    request_target = path + ("?" + query_string if query_string else "")
     if body is None:
         data = None
     elif isinstance(body, bytes):
         data = body
     else:
         data = canonical_bytes(body)
-    request = Request(base_url + path, data=data, method=method)
+    request = Request(base_url + request_target, data=data, method=method)
     request.add_header("Accept", "application/json")
     if data is not None:
         request.add_header("Content-Type", "application/json")
@@ -756,8 +810,12 @@ def http_json(
     body: Any = None,
     headers: dict[str, str] | None = None,
     expected: int = 200,
+    *,
+    query: tuple[tuple[str, str], ...] | None = None,
 ) -> Any:
-    status, raw = http_request(base_url, method, path, body, headers)
+    status, raw = http_request(
+        base_url, method, path, body, headers, query=query
+    )
     if status != expected:
         fail(f"HTTP {method} {path} returned {status}, expected {expected}")
     return parse_json_bytes(raw, f"HTTP {method} {path}")
@@ -792,6 +850,25 @@ def parse_sse_frames(raw: bytes, label: str) -> list[tuple[str | None, bytes]]:
     if not frames:
         fail(f"{label} SSE response is empty")
     return frames
+
+
+def parse_cpa_responses_sse_frames(
+    raw: bytes, label: str
+) -> list[tuple[str | None, bytes]]:
+    """Normalize only CPA v7.2.113's one documented extra terminal LF.
+
+    The generic SSE parser remains strict about the standard two-LF boundary.
+    Requiring exactly three LF here rejects the old two-LF fixture as well as
+    four-or-more LF drift without using a permissive ``rstrip`` operation.
+    """
+
+    if (
+        len(raw) < 3
+        or raw[-3:] != b"\n\n\n"
+        or (len(raw) > 3 and raw[-4] == 0x0A)
+    ):
+        fail(f"{label} SSE response terminal framing mismatch")
+    return parse_sse_frames(raw[:-1], label)
 
 
 def validate_upstream_response(protocol: str, stream: bool, raw: bytes) -> tuple[bool, bool]:
@@ -843,7 +920,11 @@ def validate_upstream_response(protocol: str, stream: bool, raw: bytes) -> tuple
             fail("unsupported response protocol")
         return True, True
 
-    frames = parse_sse_frames(raw, label)
+    frames = (
+        parse_cpa_responses_sse_frames(raw, label)
+        if protocol == "responses"
+        else parse_sse_frames(raw, label)
+    )
     if protocol == "chat":
         if frames[-1] != (None, b"[DONE]") or len(frames) < 3:
             fail("Chat stream is missing its final [DONE] marker")
@@ -872,24 +953,131 @@ def validate_upstream_response(protocol: str, stream: bool, raw: bytes) -> tuple
         ):
             fail("Chat stream chunk/termination contract mismatch")
     elif protocol == "responses":
-        events = [event for event, _ in frames]
-        if events != [
+        expected_events = [
             "response.created",
+            "response.in_progress",
+            "response.output_item.added",
+            "response.content_part.added",
             "response.output_text.delta",
+            "response.output_text.done",
+            "response.content_part.done",
+            "response.output_item.done",
             "response.completed",
-        ]:
+        ]
+        events = [event for event, _ in frames]
+        if events != expected_events:
             fail("Responses stream event order/termination marker mismatch")
-        completed = parse_json_bytes(frames[-1][1], "Responses completed event")
+
+        payloads: list[dict[str, Any]] = []
+        for sequence_number, ((event, data), expected_event) in enumerate(
+            zip(frames, expected_events, strict=True), start=1
+        ):
+            payload = parse_json_bytes(data, f"Responses {expected_event} event")
+            if (
+                not isinstance(payload, dict)
+                or payload.get("type") != event
+                or not strict_int(payload.get("sequence_number"))
+                or payload["sequence_number"] != sequence_number
+            ):
+                fail("Responses stream event type/sequence contract mismatch")
+            payloads.append(payload)
+
+        created = payloads[0].get("response")
+        in_progress = payloads[1].get("response")
+        added_item = payloads[2].get("item")
+        added_part = payloads[3].get("part")
+        delta = payloads[4]
+        text_done = payloads[5]
+        part_done = payloads[6].get("part")
+        item_done = payloads[7].get("item")
+        completed = payloads[8].get("response")
+        response_id = created.get("id") if isinstance(created, dict) else None
+        item_id = added_item.get("id") if isinstance(added_item, dict) else None
+        completed_output = completed.get("output") if isinstance(completed, dict) else None
+        completed_item = (
+            completed_output[0]
+            if isinstance(completed_output, list) and len(completed_output) == 1
+            else None
+        )
+        completed_content = (
+            completed_item.get("content") if isinstance(completed_item, dict) else None
+        )
+        completed_text = (
+            completed_content[0]
+            if isinstance(completed_content, list) and len(completed_content) == 1
+            else None
+        )
+        item_done_content = (
+            item_done.get("content") if isinstance(item_done, dict) else None
+        )
+        item_done_text = (
+            item_done_content[0]
+            if isinstance(item_done_content, list) and len(item_done_content) == 1
+            else None
+        )
         if (
-            not isinstance(completed, dict)
+            not isinstance(response_id, str)
+            or not response_id
+            or not isinstance(created, dict)
+            or created.get("object") != "response"
+            or created.get("status") != "in_progress"
+            or created.get("output") != []
+            or not isinstance(in_progress, dict)
+            or in_progress.get("id") != response_id
+            or in_progress.get("object") != "response"
+            or in_progress.get("status") != "in_progress"
+            or not isinstance(item_id, str)
+            or not item_id
+            or not isinstance(added_item, dict)
+            or added_item.get("type") != "message"
+            or added_item.get("status") != "in_progress"
+            or added_item.get("role") != "assistant"
+            or added_item.get("content") != []
+            or payloads[2].get("output_index") != 0
+            or payloads[3].get("item_id") != item_id
+            or payloads[3].get("output_index") != 0
+            or payloads[3].get("content_index") != 0
+            or not isinstance(added_part, dict)
+            or added_part.get("type") != "output_text"
+            or added_part.get("text") != ""
+            or delta.get("item_id") != item_id
+            or delta.get("output_index") != 0
+            or delta.get("content_index") != 0
+            or delta.get("delta") != "ok"
+            or text_done.get("item_id") != item_id
+            or text_done.get("output_index") != 0
+            or text_done.get("content_index") != 0
+            or text_done.get("text") != "ok"
+            or payloads[6].get("item_id") != item_id
+            or payloads[6].get("output_index") != 0
+            or payloads[6].get("content_index") != 0
+            or not isinstance(part_done, dict)
+            or part_done.get("type") != "output_text"
+            or part_done.get("text") != "ok"
+            or payloads[7].get("output_index") != 0
+            or not isinstance(item_done, dict)
+            or item_done.get("id") != item_id
+            or item_done.get("type") != "message"
+            or item_done.get("status") != "completed"
+            or item_done.get("role") != "assistant"
+            or not isinstance(item_done_text, dict)
+            or item_done_text.get("type") != "output_text"
+            or item_done_text.get("text") != "ok"
+            or not isinstance(completed, dict)
+            or completed.get("id") != response_id
             or completed.get("object") != "response"
             or completed.get("status") != "completed"
             or completed.get("model") != MODEL_NAME
+            or not isinstance(completed_item, dict)
+            or completed_item.get("id") != item_id
+            or completed_item.get("type") != "message"
+            or completed_item.get("status") != "completed"
+            or completed_item.get("role") != "assistant"
+            or not isinstance(completed_text, dict)
+            or completed_text.get("type") != "output_text"
+            or completed_text.get("text") != "ok"
         ):
             fail("Responses stream completed event contract mismatch")
-        delta = parse_json_bytes(frames[1][1], "Responses delta event")
-        if not isinstance(delta, dict) or delta.get("type") != "response.output_text.delta":
-            fail("Responses stream delta event contract mismatch")
     else:
         fail("unsupported response protocol")
     return True, True
@@ -911,8 +1099,8 @@ def exact_equal(actual: Any, expected: Any) -> bool:
 
 EXPECTED_HOST_RESULTS = {
     "network_binding": {
-        "host_ip": CPA_HOST_IP,
-        "host_port": CPA_HOST_PORT,
+        "host_ip": CPA_NETWORK_MODE,
+        "host_port": CPA_NETWORK_HOST_PORT,
         "container_port": CPA_PORT,
     },
     "protocol_requests": {
@@ -1174,8 +1362,8 @@ def derive_host_results(
     )
     require_observation(network_binding)
     if (
-        network_binding.get("host_ip") != CPA_HOST_IP
-        or network_binding.get("host_port") != CPA_HOST_PORT
+        network_binding.get("host_ip") != CPA_NETWORK_MODE
+        or network_binding.get("host_port") != CPA_NETWORK_HOST_PORT
         or network_binding.get("container_port") != CPA_PORT
     ):
         fail("CPA Host network binding observation is not exact")
@@ -1777,60 +1965,41 @@ def verify_mock_image(image: str, commit: str, tree: str) -> dict[str, str]:
     return closed_mock_identity(image_id, commit, tree)
 
 
-def require_tcp_port_available(host: str, port: int) -> None:
-    if host != CPA_HOST_IP or port != CPA_HOST_PORT:
-        fail("CPA Host listener preflight requires the fixed 127.0.0.1:18394 contract")
-    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def container_private_ipv4(
+    info: dict[str, Any], *, network_name: str, role: str
+) -> str:
+    networks = (info.get("NetworkSettings") or {}).get("Networks") or {}
+    if set(networks) != {network_name} or not isinstance(networks.get(network_name), dict):
+        fail(f"{role} container is not attached only to the isolated network")
+    endpoint = networks[network_name]
+    if (
+        endpoint.get("GlobalIPv6Address") not in (None, "")
+        or endpoint.get("IPv6Gateway") not in (None, "")
+        or endpoint.get("GlobalIPv6PrefixLen") not in (None, 0)
+    ):
+        fail(f"{role} container unexpectedly received IPv6 network state")
+    address = endpoint.get("IPAddress")
+    if not isinstance(address, str):
+        fail(f"{role} container has no private IPv4 address")
     try:
-        probe.bind((host, port))
-    except OSError as exc:
-        fail(f"CPA Host listener {host}:{port} is occupied or unavailable: {exc}")
-    finally:
-        probe.close()
+        candidate = ipaddress.IPv4Address(address)
+    except ipaddress.AddressValueError:
+        fail(f"{role} container IPv4 address is invalid")
+    if not any(candidate in network for network in PRIVATE_DOCKER_IPV4_RANGES):
+        fail(f"{role} container address is outside the private Docker ranges")
+    return str(candidate)
 
 
-def published_port(
-    container: str,
-    port: int,
-    *,
-    expected_host_port: int | None = None,
-) -> int:
-    result = docker(
-        ["port", container, f"{port}/tcp"],
-        label=f"resolve {container} published port",
-        timeout=30,
-    )
-    lines = [line.strip() for line in result.stdout.decode("utf-8", "strict").splitlines() if line.strip()]
-    if len(lines) != 1 or not lines[0].startswith(CPA_HOST_IP + ":"):
-        fail(f"{container} port must be published exactly once on 127.0.0.1")
-    try:
-        value = int(lines[0].rsplit(":", 1)[1])
-    except ValueError:
-        fail(f"{container} published port is invalid")
-    if value < 1024 or value > 65535:
-        fail(f"{container} published port is outside the unprivileged range")
-    if expected_host_port is not None and value != expected_host_port:
-        fail(f"{container} published port does not match the fixed Host contract")
-    return value
-
-
-def verify_port_binding(
-    info: dict[str, Any],
-    *,
-    role: str,
-    container_port: int,
-    host_port: int,
-) -> None:
-    expected_key = f"{container_port}/tcp"
-    expected_binding = [{"HostIp": CPA_HOST_IP, "HostPort": str(host_port)}]
-    host = info.get("HostConfig") or {}
-    host_bindings = host.get("PortBindings") or {}
-    network = info.get("NetworkSettings") or {}
-    runtime_bindings = network.get("Ports") or {}
-    if set(host_bindings) != {expected_key} or host_bindings.get(expected_key) != expected_binding:
-        fail(f"{role} container HostConfig port binding is not exact")
-    if set(runtime_bindings) != {expected_key} or runtime_bindings.get(expected_key) != expected_binding:
-        fail(f"{role} container runtime port binding is not exact")
+def verify_no_host_port_binding(info: dict[str, Any], *, role: str) -> None:
+    host_config = info.get("HostConfig") or {}
+    host_bindings = host_config.get("PortBindings")
+    runtime_bindings = (info.get("NetworkSettings") or {}).get("Ports")
+    if host_config.get("PublishAllPorts") is not False:
+        fail(f"{role} container enables Host port publication")
+    if host_bindings not in (None, {}):
+        fail(f"{role} container must not publish a HostConfig port")
+    if any(value not in (None, []) for value in (runtime_bindings or {}).values()):
+        fail(f"{role} container must not publish a runtime Host port")
 
 
 class DockerResources:
@@ -2020,8 +2189,11 @@ class Lane:
         self.transcript_closed = False
         self.mock_url = ""
         self.cpa_url = ""
-        self.mock_host_port = 0
-        self.cpa_host_port = 0
+        self.mock_container_ip = ""
+        self.cpa_container_ip = ""
+        self.mock_container_id = ""
+        self.cpa_container_id = ""
+        self.cpa_host_port = CPA_NETWORK_HOST_PORT
         self.client_key = "cag-r9-client-" + secrets.token_urlsafe(24)
         self.management_key = "cag-r9-management-" + secrets.token_urlsafe(32)
         self.upstream_key = "cag-r9-upstream-" + secrets.token_urlsafe(24)
@@ -2034,6 +2206,7 @@ class Lane:
         self.database_path = self.audit_dir / "events.db"
         self.purge_removed = 0
         self.purge_wal_busy = -1
+        self.total_text_limit_bytes = TOTAL_TEXT_LIMIT_BYTES
 
     @property
     def management_headers(self) -> dict[str, str]:
@@ -2062,7 +2235,7 @@ class Lane:
         write_bytes(
             self.secret_dir / "hmac.key",
             secrets.token_bytes(48),
-            0o400,
+            0o600,
         )
         self.write_initial_config()
         self.record(
@@ -2089,12 +2262,13 @@ class Lane:
             "priority": 300,
             "mode": mode,
             "max_scan_bytes": SCAN_LIMIT_BYTES,
-            "max_total_text_bytes": SCAN_LIMIT_BYTES,
+            "max_total_text_bytes": self.total_text_limit_bytes,
             "opaque_media_policy": "audit",
             "subject_control": {"enabled": False},
             "audit": {
                 "enabled": True,
                 "data_dir": "/cag/audit",
+                "require_persistent_storage": True,
                 "retention_days": 30,
                 "max_db_mb": 32,
                 "log_request_hash": True,
@@ -2132,6 +2306,8 @@ class Lane:
             f"  secret-key: {json.dumps(self.management_key)}",
             "  disable-control-panel: true",
             "usage-statistics-enabled: true",
+            "commercial-mode: true",
+            "request-log: false",
             "logging-to-file: false",
             "debug: false",
             "plugins:",
@@ -2168,6 +2344,8 @@ class Lane:
             [
                 "network",
                 "create",
+                "--driver",
+                "bridge",
                 "--internal",
                 "--label",
                 f"cag.round9.execution={self.execution_id}",
@@ -2251,11 +2429,19 @@ class Lane:
 
     def start_mock(self) -> None:
         args = self.common_container_args("mock", self.mock_container)
-        args.extend(["--publish", f"127.0.0.1::{MOCK_PORT}", self.mock_image_id])
+        args.append(self.mock_image_id)
         self.resources.add_container(self.mock_container)
         docker(args, label=f"start {self.lane} counted-Mock", timeout=60)
-        self.mock_host_port = published_port(self.mock_container, MOCK_PORT)
-        self.mock_url = f"http://{CPA_HOST_IP}:{self.mock_host_port}"
+        mock_info = docker_inspect_one(self.mock_container)
+        self.mock_container_id = str(mock_info.get("Id", ""))
+        if re.fullmatch(r"[0-9a-f]{64}", self.mock_container_id) is None:
+            fail("counted-Mock container identity is invalid")
+        self.mock_container_ip = container_private_ipv4(
+            mock_info, network_name=self.network, role="mock"
+        )
+        self.verify_container_security(self.mock_container, "mock")
+        self.verify_internal_network({self.mock_container: self.mock_container_ip})
+        self.mock_url = f"http://{self.mock_container_ip}:{MOCK_PORT}"
         deadline = time.monotonic() + 30
         health: Any = None
         while time.monotonic() < deadline:
@@ -2287,12 +2473,9 @@ class Lane:
         )
 
     def start_cpa(self) -> None:
-        require_tcp_port_available(CPA_HOST_IP, CPA_HOST_PORT)
         args = self.common_container_args("cpa", self.cpa_container)
         args.extend(
             [
-                "--publish",
-                f"{CPA_HOST_IP}:{CPA_HOST_PORT}:{CPA_PORT}",
                 "--mount",
                 f"type=bind,src={self.plugin_dir},dst=/cag/plugins,readonly",
                 "--mount",
@@ -2315,23 +2498,125 @@ class Lane:
         )
         self.resources.add_container(self.cpa_container)
         docker(args, label=f"start {self.lane} CPA", timeout=60)
-        self.cpa_host_port = published_port(
-            self.cpa_container,
-            CPA_PORT,
-            expected_host_port=CPA_HOST_PORT,
+        cpa_info = docker_inspect_one(self.cpa_container)
+        self.cpa_container_id = str(cpa_info.get("Id", ""))
+        if re.fullmatch(r"[0-9a-f]{64}", self.cpa_container_id) is None:
+            fail("CPA container identity is invalid")
+        self.cpa_container_ip = container_private_ipv4(
+            cpa_info, network_name=self.network, role="cpa"
         )
-        self.cpa_url = f"http://{CPA_HOST_IP}:{CPA_HOST_PORT}"
+        self.verify_container_security(self.cpa_container, "cpa")
+        self.verify_internal_network(
+            {
+                self.mock_container: self.mock_container_ip,
+                self.cpa_container: self.cpa_container_ip,
+            }
+        )
+        self.cpa_url = f"http://{self.cpa_container_ip}:{CPA_PORT}"
         self.wait_plugin("balanced", True)
+        self.verify_request_logging_controls()
         self.verify_container_security(self.mock_container, "mock")
         self.verify_container_security(self.cpa_container, "cpa")
         self.record(
             "network_binding",
             case="cpa_management_and_api",
-            host_ip=CPA_HOST_IP,
-            host_port=CPA_HOST_PORT,
+            host_ip=CPA_NETWORK_MODE,
+            host_port=CPA_NETWORK_HOST_PORT,
             container_port=CPA_PORT,
             passed=True,
         )
+
+    def verify_internal_network(self, expected: dict[str, str]) -> None:
+        raw = docker(
+            ["network", "inspect", self.network],
+            label=f"inspect {self.lane} internal bridge",
+            timeout=30,
+        ).stdout
+        payload = parse_json_bytes(raw, "Docker internal network inspect")
+        if not isinstance(payload, list) or len(payload) != 1 or not isinstance(payload[0], dict):
+            fail("isolated Docker network inspection failed")
+        network = payload[0]
+        labels = network.get("Labels") or {}
+        expected_labels = {
+            "cag.round9.execution": self.execution_id,
+            "cag.round9.lane": self.lane,
+        }
+        if (
+            network.get("Driver") != "bridge"
+            or network.get("Scope") != "local"
+            or network.get("Internal") is not True
+            or network.get("EnableIPv6") is not False
+            or network.get("Attachable") is not False
+            or network.get("Ingress") is not False
+            or labels != expected_labels
+        ):
+            fail("Host lane network isolation/ownership contract mismatch")
+        ipam = network.get("IPAM") or {}
+        configurations = ipam.get("Config") if isinstance(ipam, dict) else None
+        if not isinstance(configurations, list) or len(configurations) != 1:
+            fail("Host lane network must expose one IPv4 IPAM configuration")
+        configuration = configurations[0]
+        if not isinstance(configuration, dict) or not isinstance(configuration.get("Subnet"), str):
+            fail("Host lane network IPAM configuration is invalid")
+        try:
+            subnet = ipaddress.IPv4Network(configuration["Subnet"], strict=False)
+        except (ipaddress.AddressValueError, ipaddress.NetmaskValueError):
+            fail("Host lane network subnet is not valid IPv4")
+        if not any(subnet.subnet_of(private) for private in PRIVATE_DOCKER_IPV4_RANGES):
+            fail("Host lane network subnet is outside RFC1918")
+        gateway_raw = configuration.get("Gateway")
+        if not isinstance(gateway_raw, str) or not gateway_raw:
+            fail("Host lane network gateway is missing")
+        try:
+            gateway = ipaddress.IPv4Address(gateway_raw)
+        except ipaddress.AddressValueError:
+            fail("Host lane network gateway is invalid")
+        if not any(gateway in private for private in PRIVATE_DOCKER_IPV4_RANGES):
+            fail("Host lane network gateway is outside RFC1918")
+        if (
+            gateway not in subnet
+            or gateway in {subnet.network_address, subnet.broadcast_address}
+            or gateway.is_unspecified
+            or gateway.is_multicast
+        ):
+            fail("Host lane network gateway is not a usable address in the isolated subnet")
+        containers = network.get("Containers") or {}
+        if not isinstance(containers, dict):
+            fail("Host lane network container inventory is invalid")
+        observed: dict[str, str] = {}
+        expected_ids = {
+            self.mock_container: self.mock_container_id,
+            self.cpa_container: self.cpa_container_id,
+        }
+        for container_id, item in containers.items():
+            if (
+                not isinstance(container_id, str)
+                or not container_id
+                or not isinstance(item, dict)
+                or not isinstance(item.get("Name"), str)
+                or not isinstance(item.get("IPv4Address"), str)
+                or item.get("IPv6Address") not in (None, "")
+            ):
+                fail("Host lane network container record is invalid")
+            try:
+                interface = ipaddress.IPv4Interface(item["IPv4Address"])
+            except (ipaddress.AddressValueError, ipaddress.NetmaskValueError):
+                fail("Host lane network container IPv4 record is invalid")
+            if interface.ip not in subnet or interface.network.prefixlen != subnet.prefixlen:
+                fail("Host lane container IPv4 is outside the isolated subnet")
+            if (
+                interface.ip in {subnet.network_address, subnet.broadcast_address}
+                or interface.ip.is_unspecified
+                or interface.ip.is_multicast
+            ):
+                fail("Host lane container IPv4 is not a usable isolated-subnet address")
+            if interface.ip == gateway:
+                fail("Host lane container reused the isolated network gateway")
+            if expected_ids.get(item["Name"]) != container_id:
+                fail("Host lane network container identity mismatch")
+            observed[item["Name"]] = str(interface.ip)
+        if observed != expected or len(set(observed.values())) != len(observed):
+            fail("Host lane network does not contain the exact expected containers")
 
     def verify_container_security(self, name: str, role: str) -> None:
         info = docker_inspect_one(name)
@@ -2339,6 +2624,16 @@ class Lane:
         host = info.get("HostConfig") or {}
         state = info.get("State") or {}
         networks = (info.get("NetworkSettings") or {}).get("Networks") or {}
+        expected_container_id = (
+            self.mock_container_id if role == "mock" else self.cpa_container_id
+        )
+        expected_image_id = self.mock_image_id if role == "mock" else self.cpa_image_id
+        if (
+            info.get("Id") != expected_container_id
+            or info.get("Name") != "/" + name
+            or info.get("Image") != expected_image_id
+        ):
+            fail(f"{role} container/image identity changed")
         if set(networks) != {self.network} or host.get("NetworkMode") != self.network:
             fail(f"{role} container escaped the isolated network")
         if state.get("Running") is not True or state.get("OOMKilled") is not False:
@@ -2367,27 +2662,18 @@ class Lane:
             or host.get("MemorySwap") != limits["memory"]
             or not isinstance(log_config, dict)
             or log_config.get("Type") != "local"
-            or log_config.get("Config") != {"max-file": "1", "max-size": "8m"}
+            or log_config.get("Config")
+            != {"compress": "false", "max-file": "1", "max-size": "8m"}
         ):
             fail(f"{role} container CPU/memory/log limits mismatch")
-        if role == "mock":
-            if self.mock_host_port < 1024 or self.mock_host_port > 65535:
-                fail("counted-Mock Host port was not resolved")
-            verify_port_binding(
-                info,
-                role=role,
-                container_port=MOCK_PORT,
-                host_port=self.mock_host_port,
-            )
-        else:
-            if self.cpa_host_port != CPA_HOST_PORT:
-                fail("CPA Host port does not match the fixed contract")
-            verify_port_binding(
-                info,
-                role=role,
-                container_port=CPA_PORT,
-                host_port=CPA_HOST_PORT,
-            )
+        verify_no_host_port_binding(info, role=role)
+        expected_ip = self.mock_container_ip if role == "mock" else self.cpa_container_ip
+        if not expected_ip or container_private_ipv4(
+            info, network_name=self.network, role=role
+        ) != expected_ip:
+            fail(f"{role} container private IPv4 identity changed")
+        if role == "cpa" and self.cpa_host_port != CPA_NETWORK_HOST_PORT:
+            fail("CPA internal-only Host port state is invalid")
         if config.get("User") != f"{os.getuid()}:{os.getgid()}":
             fail(f"{role} container does not use the invoking uid/gid")
         labels = config.get("Labels") or {}
@@ -2493,11 +2779,11 @@ class Lane:
         if (
             not isinstance(limits, dict)
             or limits.get("max_text_window_bytes") != SCAN_LIMIT_BYTES
-            or limits.get("max_total_text_bytes") != SCAN_LIMIT_BYTES
+            or limits.get("max_total_text_bytes") != self.total_text_limit_bytes
             or limits.get("legacy_max_scan_bytes_configured")
             != SCAN_LIMIT_BYTES
         ):
-            fail("Guard status does not expose the fixed 16 KiB scan/total limits")
+            fail("Guard status does not expose the configured window/total limits")
         audit = status.get("audit")
         if (
             not isinstance(audit, dict)
@@ -2505,6 +2791,8 @@ class Lane:
             or audit.get("healthy") is not True
             or audit.get("degraded") is not False
             or audit.get("schema_version") != 6
+            or audit.get("persistence_expected") is not True
+            or audit.get("persistence_verified") is not True
         ):
             fail("Guard audit database is not schema-v6 healthy")
         raw = status.get("raw_capture")
@@ -2517,7 +2805,16 @@ class Lane:
         ):
             fail("Guard Raw Capture safety settings mismatch")
 
-    def reconfigure(self, mode: str, raw_capture: bool) -> dict[str, Any]:
+    def reconfigure(
+        self,
+        mode: str,
+        raw_capture: bool,
+        total_text_limit_bytes: int | None = None,
+    ) -> dict[str, Any]:
+        if total_text_limit_bytes is not None:
+            if total_text_limit_bytes not in {SCAN_LIMIT_BYTES, TOTAL_TEXT_LIMIT_BYTES}:
+                fail("Host runner total-text limit is outside the closed test contract")
+            self.total_text_limit_bytes = total_text_limit_bytes
         response = http_json(
             self.cpa_url,
             "PUT",
@@ -2584,6 +2881,13 @@ class Lane:
         self.reset_mock()
         before = self.mock_total()
         request_bytes = body if isinstance(body, bytes) else canonical_bytes(body)
+        parsed_request: Any = None
+        valid_json = False
+        try:
+            parsed_request = json.loads(request_bytes.decode("utf-8", "strict"))
+            valid_json = True
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            pass
         status, response = http_request(
             self.cpa_url,
             "POST",
@@ -2597,7 +2901,7 @@ class Lane:
         response_format = False
         termination_marker = False
         if status == 200 and delta == 1:
-            stream = isinstance(body, dict) and body.get("stream") is True
+            stream = isinstance(parsed_request, dict) and parsed_request.get("stream") is True
             response_format, termination_marker = validate_upstream_response(
                 protocol, stream, response
             )
@@ -2613,14 +2917,14 @@ class Lane:
             "request_sha256": sha256_bytes(request_bytes),
             "response_sha256": sha256_bytes(response),
             "request_bytes": len(request_bytes),
-            "valid_json": not isinstance(body, bytes),
+            "valid_json": valid_json,
             "passed": passed,
         }
         if status == 200 and delta == 1:
             values["response_format"] = response_format
             values["termination_marker"] = termination_marker
-        if isinstance(body, dict) and type(body.get("stream")) is bool:
-            values["stream"] = body["stream"]
+        if isinstance(parsed_request, dict) and type(parsed_request.get("stream")) is bool:
+            values["stream"] = parsed_request["stream"]
         if mode is not None:
             values["mode"] = mode
         if family is not None:
@@ -2637,8 +2941,9 @@ class Lane:
             payload = http_json(
                 self.cpa_url,
                 "GET",
-                "/v0/management/usage-queue?count=100",
+                "/v0/management/usage-queue",
                 headers=self.management_headers,
+                query=(("count", "100"),),
             )
             if not isinstance(payload, list):
                 fail("CPA usage queue response is not a list")
@@ -2665,8 +2970,9 @@ class Lane:
             queue = http_json(
                 self.cpa_url,
                 "GET",
-                "/v0/management/usage-queue?count=100",
+                "/v0/management/usage-queue",
                 headers=self.management_headers,
+                query=(("count", "100"),),
             )
             if isinstance(queue, list) and queue:
                 break
@@ -2721,8 +3027,9 @@ class Lane:
             payload = http_json(
                 self.cpa_url,
                 "GET",
-                "/v0/management/usage-queue?count=100",
+                "/v0/management/usage-queue",
                 headers=self.management_headers,
+                query=(("count", "100"),),
             )
             if not isinstance(payload, list):
                 fail("CPA usage queue response is not a list")
@@ -2751,7 +3058,7 @@ class Lane:
         if not passed:
             fail("blocked request produced an upstream or CPA usage side effect")
 
-    def tool_schema_body(self, protocol: str, user: str) -> dict[str, Any]:
+    def tool_schema_body(self, protocol: str, user: str) -> bytes:
         schema = (
             "Documentation labels only: working code; sandbox; hidden field; silent mode; "
             "session token; API key; credentials; command; create a tool; payload; loader; "
@@ -2767,7 +3074,7 @@ class Lane:
             },
         }
         if protocol == "chat":
-            return {
+            envelope = {
                 "model": MODEL_NAME,
                 "tools": [
                     {
@@ -2781,31 +3088,43 @@ class Lane:
                 ],
                 "messages": [{"role": "user", "content": user}],
             }
-        return {
-            "model": MODEL_NAME,
-            "tools": [
-                {
-                    "type": "function",
-                    "name": "ordinary_development_helper",
-                    "description": schema,
-                    "parameters": parameters,
-                }
-            ],
-            "input": [
-                {
-                    "type": "message",
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": user}],
-                }
-            ],
-        }
+        elif protocol == "responses":
+            envelope = {
+                "model": MODEL_NAME,
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "ordinary_development_helper",
+                        "description": schema,
+                        "parameters": parameters,
+                    }
+                ],
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": user}],
+                    }
+                ],
+            }
+        else:
+            fail("unsupported tool-schema request protocol")
+        # Preserve the asserted model,tools,current-user top-level order. The
+        # canonical encoder sorts keys and therefore cannot test this regression.
+        return json.dumps(
+            envelope,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=False,
+        ).encode("utf-8")
 
     def query_raw_captures(self) -> dict[str, Any]:
         payload = http_json(
             self.cpa_url,
             "GET",
-            MANAGEMENT_PATH + "/raw-captures?limit=100",
+            MANAGEMENT_PATH + "/raw-captures",
             headers=self.management_headers,
+            query=(("limit", "100"),),
         )
         if not isinstance(payload, dict) or not isinstance(payload.get("captures"), list):
             fail("Raw Capture management response is invalid")
@@ -2997,6 +3316,7 @@ class Lane:
             timeout=30,
         )
         self.wait_plugin("balanced", True)
+        self.verify_request_logging_controls()
         info = docker_inspect_one(self.cpa_container)
         state = info.get("State") or {}
         restart_count = info.get("RestartCount")
@@ -3020,20 +3340,36 @@ class Lane:
         if not passed:
             fail("controlled CPA restart changed unexpected restart/OOM state")
 
+    def verify_request_logging_controls(self) -> None:
+        config = http_json(
+            self.cpa_url,
+            "GET",
+            "/v0/management/config",
+            headers=self.management_headers,
+        )
+        if (
+            not isinstance(config, dict)
+            or config.get("commercial-mode") is not True
+            or config.get("request-log") is not False
+            or config.get("logging-to-file") is not False
+        ):
+            fail("CPA request/file logging controls are not hardened at startup")
+        if self.auth_dir.is_symlink() or not self.auth_dir.is_dir():
+            fail("CPA auth directory identity is invalid")
+        # This isolated lane configures only an inline api-keys entry and no
+        # OAuth/file-backed provider. CPA therefore has no valid runtime state
+        # to persist here; every entry, including a request-log directory, is a
+        # contract violation rather than merely an unfamiliar auth artifact.
+        if any(self.auth_dir.iterdir()):
+            fail("CPA inline-key auth directory must remain empty")
+
     def verify_provider_isolation(self) -> None:
-        network_raw = docker(
-            ["network", "inspect", self.network],
-            label=f"inspect {self.lane} internal network",
-            timeout=30,
-        ).stdout
-        network_payload = parse_json_bytes(network_raw, "Docker network inspect")
-        if not isinstance(network_payload, list) or len(network_payload) != 1:
-            fail("isolated Docker network inspection failed")
-        network = network_payload[0]
-        containers = network.get("Containers") or {}
-        names = {item.get("Name") for item in containers.values() if isinstance(item, dict)}
-        if network.get("Internal") is not True or names != {self.mock_container, self.cpa_container}:
-            fail("Host lane network is not a closed two-container internal network")
+        self.verify_internal_network(
+            {
+                self.mock_container: self.mock_container_ip,
+                self.cpa_container: self.cpa_container_ip,
+            }
+        )
         config = http_json(
             self.cpa_url,
             "GET",
@@ -3042,6 +3378,12 @@ class Lane:
         )
         if not isinstance(config, dict):
             fail("CPA management config inspection failed")
+        if (
+            config.get("commercial-mode") is not True
+            or config.get("request-log") is not False
+            or config.get("logging-to-file") is not False
+        ):
+            fail("CPA Host lane request/file logging controls are not hardened")
         providers = config.get("openai-compatibility")
         if not isinstance(providers, list) or len(providers) != 1:
             fail("CPA Host lane must contain exactly one provider")
@@ -3059,8 +3401,7 @@ class Lane:
             value = config.get(key)
             if value not in (None, []):
                 fail(f"CPA Host lane unexpectedly configured {key}")
-        if any(self.auth_dir.iterdir()):
-            fail("CPA Host lane auth directory is not empty")
+        self.verify_request_logging_controls()
         self.record(
             "safety",
             case="network_isolation",
@@ -3155,15 +3496,6 @@ class Lane:
             != incomplete_body
         ):
             fail("over-limit incomplete fixture is not valid bounded JSON")
-        self.observe_request(
-            check="policy",
-            case="balanced_incomplete",
-            protocol="chat",
-            body=incomplete_body,
-            expected_status=200,
-            expected_delta=1,
-            scan_limit_bytes=SCAN_LIMIT_BYTES,
-        )
         self.observe_usage_allow(self.request_body("chat", safe_prompt))
         self.observe_usage_blocked(self.request_body("chat", malicious_prompt))
 
@@ -3205,6 +3537,21 @@ class Lane:
                 expected_status=status,
                 expected_delta=delta,
             )
+
+        # The normal matrix, large tool schema, usage, and mode checks all run
+        # with the production-like 8 MiB cumulative budget. Only these two
+        # disposition probes deliberately lower total text to 16 KiB.
+        self.reconfigure("balanced", True, SCAN_LIMIT_BYTES)
+        self.observe_request(
+            check="policy",
+            case="balanced_incomplete",
+            protocol="chat",
+            body=incomplete_body,
+            expected_status=200,
+            expected_delta=1,
+            scan_limit_bytes=SCAN_LIMIT_BYTES,
+        )
+        self.reconfigure("strict", True, SCAN_LIMIT_BYTES)
         self.observe_request(
             check="policy",
             case="strict_incomplete",
@@ -3214,7 +3561,7 @@ class Lane:
             expected_delta=0,
             scan_limit_bytes=SCAN_LIMIT_BYTES,
         )
-        self.reconfigure("balanced", True)
+        self.reconfigure("balanced", True, TOTAL_TEXT_LIMIT_BYTES)
         self.raw_capture_suite(safe_prompt, malicious_prompt)
 
     def stop_and_record_final_state(self) -> None:

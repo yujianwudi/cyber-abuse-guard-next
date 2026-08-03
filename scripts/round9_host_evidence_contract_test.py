@@ -129,8 +129,8 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
     def host_results() -> dict[str, object]:
         return {
             "network_binding": {
-                "host_ip": contract.CPA_HOST_IP,
-                "host_port": contract.CPA_HOST_PORT,
+                "host_ip": contract.CPA_NETWORK_MODE,
+                "host_port": contract.CPA_NETWORK_HOST_PORT,
                 "container_port": contract.CPA_CONTAINER_PORT,
             },
             "protocol_requests": {
@@ -524,14 +524,14 @@ class Round9HostEvidenceContractTest(unittest.TestCase):
         with self.assertRaisesRegex(contract.ContractError, "schema v6"):
             contract.assemble(self.assemble_args())
 
-    def test_non_contract_cpa_host_port_is_rejected(self):
+    def test_non_contract_cpa_network_binding_is_rejected(self):
         value = self.probe_evidence()
         value["cpa"]["primary"]["host_results"]["network_binding"][
             "host_port"
-        ] = contract.CPA_HOST_PORT + 1
+        ] = 1
         self.probe.write_bytes(canonical(value))
         self.write_sidecar(self.probe, self.probe_sidecar)
-        with self.assertRaisesRegex(contract.ContractError, "127.0.0.1:18394"):
+        with self.assertRaisesRegex(contract.ContractError, "internal-only"):
             contract.assemble(self.assemble_args())
 
     def test_any_benign_block_is_a_whole_gate_failure(self):

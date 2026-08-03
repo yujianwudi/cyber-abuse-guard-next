@@ -1,6 +1,21 @@
 # Production also requires a regular mode-0600 secret file mounted read-only:
 # CYBER_ABUSE_GUARD_HMAC_KEY_FILE=/run/secrets/cyber-abuse-guard-hmac.key
 # Never commit the secret or put it in this YAML.
+
+# CPA v7.2.113 production request-log privacy baseline. commercial-mode is the
+# critical startup control that omits the request-logging middleware, including
+# its HTTP 403 error-only raw request-body log path. request-log: false alone is
+# not sufficient. After changing the on-disk CPA configuration, recreate or
+# restart CPA; hot reload cannot remove middleware installed during startup.
+# The management config endpoint exposes current values only. Production must
+# also pass check-production-health.sh with CPA_LOG_DIR bound to the actual,
+# empty CPA runtime log root and CPA_DIRECT_BASE_URL bound to the process-local
+# CPA listener (never a reverse proxy) so its active startup-middleware proof
+# can run.
+commercial-mode: true
+request-log: false
+logging-to-file: false
+
 plugins:
   enabled: true
   dir: plugins

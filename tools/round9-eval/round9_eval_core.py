@@ -62,8 +62,8 @@ PUBLIC_DEVELOPMENT_SUMMARY = {
 }
 
 FIXED_NETWORK_BINDING = {
-    "host_ip": "127.0.0.1",
-    "host_port": 18_394,
+    "host_ip": "internal-only",
+    "host_port": 0,
     "container_port": 8_317,
 }
 FIXED_PHASE_PROTOCOL = {
@@ -81,7 +81,7 @@ DEVELOPMENT_CLAIM_BOUNDARY = (
     "does not authorize production, and executed no third-party repository code."
 )
 COUNTED_MOCK_CLAIM_BOUNDARY = (
-    "Loopback-only CPA, counted-Mock, audit database, controlled restart, lifecycle, "
+    "Internal-only CPA, counted-Mock, audit database, controlled restart, lifecycle, "
     "usage-queue, and Raw Capture-disabled observations with synthetic probes only; "
     "no real Provider, production, or real-user traffic claim."
 )
@@ -137,7 +137,7 @@ PUBLIC_COUNTED_MOCK_EXPECTED_FAMILIES = {
 }
 PUBLIC_COUNTED_MOCK_CLAIM_BOUNDARY = (
     "Public, candidate-visible development regression payloads executed as exact decoded bytes "
-    "through loopback-only CPA counted-Mock routes; this is Host transport and decision evidence, "
+    "through an inspect-verified internal Docker bridge; this is Host transport and decision evidence, "
     "not independent holdout evidence or production approval. Candidate-owned manifest provenance "
     "is format/hash checked but does not independently prove third-party source extraction."
 )
@@ -1614,8 +1614,15 @@ def validate_development_evidence(
 
 def validate_network_binding(value: Any) -> dict[str, Any]:
     binding = exact_object(value, set(FIXED_NETWORK_BINDING), "CPA network binding")
-    if binding != FIXED_NETWORK_BINDING:
-        raise ContractError("CPA network binding must be exactly 127.0.0.1:18394 -> 8317/tcp")
+    if (
+        binding != FIXED_NETWORK_BINDING
+        or type(binding["host_ip"]) is not str
+        or type(binding["host_port"]) is not int
+        or type(binding["container_port"]) is not int
+    ):
+        raise ContractError(
+            "CPA network binding must be exactly internal-only with no Host port and container port 8317"
+        )
     return binding
 
 
