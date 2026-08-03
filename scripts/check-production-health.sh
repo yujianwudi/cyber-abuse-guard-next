@@ -213,6 +213,7 @@ import urllib.parse
 
 EXPECTED_VERSION = "7.2.113"
 EXPECTED_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
+MIN_COMMIT_PREFIX_LENGTH = 7
 MAX_RESPONSE_BYTES = 1 << 20
 STARTUP_PROOF_MANAGEMENT_PATH = "/v0/management/plugins/cyber-abuse-guard/health/startup-privacy-proof"
 STARTUP_PROOF_RESOURCE_PATH = "/v0/resource/plugins/cyber-abuse-guard/health/startup-privacy-proof"
@@ -374,7 +375,16 @@ def validate_runtime_identity(headers):
     normalized_version = version[1:] if version[:1].lower() == "v" else version
     if normalized_version != EXPECTED_VERSION:
         reject("unexpected_cpa_version")
-    if commit.lower() not in (EXPECTED_COMMIT, EXPECTED_COMMIT[:7]):
+    normalized_commit = commit.lower()
+    # Official CPA builds may expose Git's dynamically sized abbreviated hash
+    # (v7.2.113 currently emits eight characters). Keep the identity pinned to
+    # the reviewed full commit while accepting no prefix weaker than the
+    # seven-character form already supported by this watchdog.
+    if (
+        len(normalized_commit) < MIN_COMMIT_PREFIX_LENGTH
+        or len(normalized_commit) > len(EXPECTED_COMMIT)
+        or not EXPECTED_COMMIT.startswith(normalized_commit)
+    ):
         reject("unexpected_cpa_commit")
 
 

@@ -901,6 +901,12 @@ try:
     ManagementHandler.runtime_version = "7.2.112"
     wrong_cpa_version = run_watchdog()
     ManagementHandler.runtime_version = "7.2.113"
+    ManagementHandler.runtime_commit = "bc71c77f"
+    official_eight_character_commit = run_watchdog()
+    ManagementHandler.runtime_commit = "bc71c7"
+    too_short_cpa_commit = run_watchdog()
+    ManagementHandler.runtime_commit = "bc71c770"
+    divergent_cpa_commit = run_watchdog()
     ManagementHandler.runtime_commit = "deadbeef"
     wrong_cpa_commit = run_watchdog()
     ManagementHandler.runtime_commit = "bc71c77"
@@ -1114,8 +1120,14 @@ for name, result in rejected_error_log_contracts:
         sys.stderr.write(result.stdout)
         sys.stderr.write(result.stderr)
         raise SystemExit("%s error-log inventory did not reach startup proof" % name)
+if official_eight_character_commit.returncode != 0:
+    sys.stderr.write(official_eight_character_commit.stdout)
+    sys.stderr.write(official_eight_character_commit.stderr)
+    raise SystemExit("official eight-character CPA commit abbreviation was rejected")
 for name, result, failure in (
     ("version", wrong_cpa_version, "unexpected_cpa_version"),
+    ("too-short commit", too_short_cpa_commit, "unexpected_cpa_commit"),
+    ("divergent commit", divergent_cpa_commit, "unexpected_cpa_commit"),
     ("commit", wrong_cpa_commit, "unexpected_cpa_commit"),
 ):
     if result.returncode == 0 or failure not in result.stderr:
@@ -1178,6 +1190,9 @@ for index, result in enumerate((
     stale_artifact,
     *(result for _, result in rejected_error_log_contracts),
     wrong_cpa_version,
+    official_eight_character_commit,
+    too_short_cpa_commit,
+    divergent_cpa_commit,
     wrong_cpa_commit,
     missing_log_dir,
     missing_direct_base,
