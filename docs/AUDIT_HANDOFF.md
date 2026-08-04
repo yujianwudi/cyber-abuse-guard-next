@@ -2,7 +2,29 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+```
+
+## 2026-08-04 CPA v7.2.116 source-contract delta
+
+The active source/compile target is now CPA
+`v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
+with classifier source identity `classifier-policy-v10` /
+`7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2`.
+The classifier algorithm and policy version are unchanged; the digest changed
+because the exact CPA module pin in `go.mod` and `go.sum` is part of the source
+identity. This delta does not relabel any CPA v7.2.113 Round 9 evidence.
+
+```text
+local_v7_2_116_source_contract: PASS / LINUX_AMD64 / GO1.26.4 / PINNED_MODULE_ORIGIN_AND_SUMS
+remote_latest_release_api: PASS / v7.2.116
+remote_tag_ref_api: PASS / a88197f845c979132c8978ea223c6af05cc81536 / COMMIT_VERIFIED
+remote_git_tag_gate: NOT_COMPLETED_LOCAL_NETWORK / TWO_BOUNDED_TIMEOUT_RUNS / GITHUB_CI_REQUIRED
+exact_commit_ci_codeql_policy: PENDING
+candidate_so_host_load: NOT_PROVIDED
+second_machine_isolated_watchdog: NOT_PROVIDED
+independent_security_audit: NOT_PROVIDED
+production_admission: BLOCKED
 ```
 
 ## 2026-07-29 当前审计与修复门禁
@@ -25,7 +47,7 @@ CI `30353591705` 只证明上述精确 HEAD 的工程构建与测试门禁通过
 恶意 incomplete 样本返回 HTTP 403，以及 2 个 coverage complete 的正常样本误拦；
 因此该基线不得发布、部署或恢复生产 Balanced。
 
-当前候选修复的源码身份是 `classifier-policy-v10` /
+**Historical 2026-07-29 evidence:** 当时候选修复的源码身份是 `classifier-policy-v10` /
 `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`，固定 CPA
 `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835`。这是从冻结的 CPA
 v7.2.104 / `e7a00b02...` 身份进行的依赖重绑定，不是新的已审计候选：提交绑定 CI

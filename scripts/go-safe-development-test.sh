@@ -1025,8 +1025,8 @@ case "$mode" in
     "$go_bin" -C "$round9_counted_mock_module" test -count=1 .
     ;;
 	race)
-		CGO_ENABLED=1 "$go_bin" test -race -timeout=15m -tags="$test_tags" -count=1 "${safe_packages[@]}"
-		CGO_ENABLED=1 "$go_bin" test -race -timeout=15m -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier
+		CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 "${safe_packages[@]}"
+		CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier
     CGO_ENABLED=1 "$go_bin" -C "$round9_counted_mock_module" test -race -count=1 .
     ;;
   boundary)

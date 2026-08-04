@@ -2,10 +2,14 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
-Last updated: 2026-07-22 (Asia/Shanghai)
+> **Active-tree identity overlay refreshed 2026-08-04 (Asia/Shanghai).** The
+> prologue above identifies the repository tree containing this report; it is
+> not evidence produced by the older privacy run.
+
+Report evidence last updated: 2026-07-22 (Asia/Shanghai)
 
 ## Status
 

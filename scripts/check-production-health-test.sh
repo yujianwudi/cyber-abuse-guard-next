@@ -60,8 +60,8 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
     startup_request_logging_installed = False
     emit_request_log_artifact = False
     swap_log_dir_on_probe = False
-    runtime_version = "7.2.113"
-    runtime_commit = "bc71c77"
+    runtime_version = "7.2.116"
+    runtime_commit = "a88197f8"
     log_dir = ""
     swapped_log_dir = ""
     request_paths = []
@@ -430,8 +430,8 @@ class SplitFrontProxyHandler(http.server.BaseHTTPRequestHandler):
 
 class IsolatedDirectHandler(http.server.BaseHTTPRequestHandler):
     startup_privacy_instance_id = "b" * 64
-    runtime_version = "7.2.113"
-    runtime_commit = "bc71c77"
+    runtime_version = "7.2.116"
+    runtime_commit = "a88197f8"
     log_dir = ""
     startup_challenges = {}
     startup_proof_requests = 0
@@ -857,7 +857,7 @@ try:
     ManagementHandler.config_contract = "valid"
 
     # A current safe config must not mask middleware installed by an unsafe
-    # startup. The non-management fixed-418 proof models CPA v7.2.113's synchronous
+    # startup. The non-management fixed-418 proof models CPA v7.2.116's synchronous
     # error-only raw-body artifact.
     ManagementHandler.startup_request_logging_installed = True
     stranded_startup_middleware = run_watchdog()
@@ -900,16 +900,17 @@ try:
 
     ManagementHandler.runtime_version = "7.2.112"
     wrong_cpa_version = run_watchdog()
-    ManagementHandler.runtime_version = "7.2.113"
-    ManagementHandler.runtime_commit = "bc71c77f"
+    ManagementHandler.runtime_version = "7.2.116"
+    ManagementHandler.runtime_commit = "a88197f8"
     official_eight_character_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "bc71c7"
+    ManagementHandler.runtime_commit = "a88197"
     too_short_cpa_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "bc71c770"
+    ManagementHandler.runtime_commit = "a88197f0"
     divergent_cpa_commit = run_watchdog()
     ManagementHandler.runtime_commit = "deadbeef"
     wrong_cpa_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "bc71c77"
+    ManagementHandler.runtime_commit = "a88197f"
+    minimum_seven_character_commit = run_watchdog()
 
     missing_log_dir = run_watchdog({"CPA_LOG_DIR": ""})
     missing_direct_base = run_watchdog({"CPA_DIRECT_BASE_URL": ""})
@@ -1124,6 +1125,10 @@ if official_eight_character_commit.returncode != 0:
     sys.stderr.write(official_eight_character_commit.stdout)
     sys.stderr.write(official_eight_character_commit.stderr)
     raise SystemExit("official eight-character CPA commit abbreviation was rejected")
+if minimum_seven_character_commit.returncode != 0:
+    sys.stderr.write(minimum_seven_character_commit.stdout)
+    sys.stderr.write(minimum_seven_character_commit.stderr)
+    raise SystemExit("minimum seven-character CPA commit abbreviation was rejected")
 for name, result, failure in (
     ("version", wrong_cpa_version, "unexpected_cpa_version"),
     ("too-short commit", too_short_cpa_commit, "unexpected_cpa_commit"),
@@ -1191,6 +1196,7 @@ for index, result in enumerate((
     *(result for _, result in rejected_error_log_contracts),
     wrong_cpa_version,
     official_eight_character_commit,
+    minimum_seven_character_commit,
     too_short_cpa_commit,
     divergent_cpa_commit,
     wrong_cpa_commit,

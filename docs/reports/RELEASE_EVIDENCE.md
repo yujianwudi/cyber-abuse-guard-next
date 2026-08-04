@@ -1,15 +1,76 @@
-# v0.16 Round 9 release evidence — current candidate contract plus frozen history
+# v0.16 release evidence — CPA v7.2.116 active target plus frozen history
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
-Last updated: 2026-07-31 (Asia/Shanghai)
+Last updated: 2026-08-04 (Asia/Shanghai)
 
-## Current Round 9 source-tree status — not a release PASS
+## CPA v7.2.116 active dependency target — release evidence pending
 
-The active development target is Linux amd64 source validation only; no
+The source/compile target is
+`v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
+with module sum `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`. The standard upstream
+Linux amd64 input `CLIProxyAPI_7.2.116_linux_amd64.tar.gz` is identified by
+SHA-256 `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`.
+This upstream hash is not a CAG artifact hash, and the asset was not downloaded
+or executed for this documentation update.
+The top `current_classifier_policy_*` prologue identifies the active working
+tree; it is not metadata for the frozen v7.2.113 evidence sections below.
+
+The reviewed v7.2.113-to-v7.2.116 range keeps C ABI 1, RPC schema 2, and all 235
+scoped plugin blobs byte-identical. Home may refresh an OAuth credential and
+retry once within the same logical request after a 401. Claude builds its final
+upstream wire headers after request interceptors have run. CAG does not register
+`UsagePlugin`, so Home's result-only usage record is not a CAG callback. These
+reviewed delta facts do not satisfy a source, CI, Host, watchdog, sandbox,
+artifact, audit, or release gate.
+
+```text
+active_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
+active_cpa_c_abi: 1
+active_cpa_rpc_schema: 2
+active_cpa_module_sum: h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=
+active_cpa_linux_amd64_sha256: 469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b
+active_cpa_local_source_compile: PASS / LINUX_AMD64 / GO1.26.4 / PINNED_MODULE_ORIGIN_AND_SUMS
+active_cpa_remote_latest_release_api: PASS / v7.2.116
+active_cpa_remote_tag_ref_api: PASS / a88197f845c979132c8978ea223c6af05cc81536 / COMMIT_VERIFIED
+active_cpa_remote_git_tag_gate: NOT_COMPLETED_LOCAL_NETWORK / TWO_BOUNDED_TIMEOUT_RUNS / GITHUB_CI_REQUIRED
+active_cpa_exact_commit_ci: PENDING
+active_cpa_linux_host: NOT_PROVIDED
+active_cpa_second_machine_watchdog: NOT_PROVIDED
+active_cpa_independent_audit: NOT_PROVIDED
+active_cpa_release: NOT_CREATED
+active_cpa_production_approval: NOT_GRANTED
+```
+
+Overall v7.2.116 status is **LOCAL SOURCE PASS / EXTERNAL GATES PENDING /
+NOT A RELEASE PASS**. No v7.2.113 result
+is relabelled or used to close a v7.2.116 gate.
+
+## Frozen CPA v7.2.113 final engineering evidence
+
+The final historical v7.2.113 baseline is
+`main@a9fba4e32bfa8f7ce4b5db35e69183400c3de5b4`, with CPA
+`v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835`. Its pinned local Linux
+source/ABI/RPC schema-2 compatibility PASS remains historical and retains the
+original `HOST NOT_PROVIDED` boundary. GitHub records exact-commit CI
+`30851294941`, Policy and Corpus Gate `30851294902`, and CodeQL `30851294956`
+as successful engineering checks.
+
+Those checks are not a protected Host, independent audit, sandbox, artifact,
+Release, or production PASS. No checked-in report or GitHub-attested artifact
+binds a second-machine watchdog PASS to `a9fba4e`; that evidence remains
+`NOT_PROVIDED`. Nothing in this frozen section transfers to v7.2.116.
+
+## Frozen pre-final CPA v7.2.113 Round 9 source-tree status — not a release PASS
+
+This retained section predates the final `main@a9fba4e` baseline. Its references
+to the active/current snapshot are historical and must not be read as the
+v7.2.116 state.
+
+At that time, the development target was Linux amd64 source validation only; no
 candidate tag or executable publication workflow is active. The source uses
 classifier-policy-v10, ruleset 1.0.10, audit schema v6, and CPA
 `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835` with RPC schema 2. The protected Host lane may
@@ -24,10 +85,10 @@ safety or release PASS. The isolated safety audit returned `FAIL / BLOCKED`:
 287 complete malicious cases failed open, 36 malicious incomplete cases
 returned HTTP 403, and 2 complete benign cases were false positives.
 
-The current source snapshot carries a remediation at
+That historical source snapshot carried a remediation at
 `classifier-policy-v10` /
 `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`.
-It has no commit-bound CI or second-machine retest. Final remediation freeze,
+It had no commit-bound CI or second-machine retest at that time. Final remediation freeze,
 exact-main CI, protected Host execution, and independent re-audit remain
 pending. A tag, package, and GitHub Release are outside this source-only change.
 
@@ -45,7 +106,8 @@ audited_classifier_policy_digest: e0cbc975... / historical exact value retained 
 engineering_ci: 30353591705 / PASS / ENGINEERING ONLY
 safety_audit: FAIL / BLOCKED
 safety_findings: complete_malicious_fail_open=287 / malicious_incomplete_http_403=36 / complete_benign_false_positive=2
-remediation_source_snapshot: classifier-policy-v10 / db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594 / SOURCE GATES ONLY
+historical snapshot: 2026-07-29 remediation identity
+historical_remediation_source_snapshot: classifier-policy-v10 / db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594 / SOURCE GATES ONLY
 remediation_exact_commit_ci: PENDING
 second_machine_retest: PENDING
 counted_mock_host: NOT_PROVIDED

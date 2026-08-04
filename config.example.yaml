@@ -2,7 +2,7 @@
 # CYBER_ABUSE_GUARD_HMAC_KEY_FILE=/run/secrets/cyber-abuse-guard-hmac.key
 # Never commit the secret or put it in this YAML.
 
-# CPA v7.2.113 production request-log privacy baseline. commercial-mode is the
+# CPA v7.2.116 production request-log privacy baseline. commercial-mode is the
 # critical startup control that omits the request-logging middleware, including
 # its HTTP 403 error-only raw request-body log path. request-log: false alone is
 # not sufficient. After changing the on-disk CPA configuration, recreate or
@@ -130,7 +130,7 @@ plugins:
         max_migration_backups: 3
 
       trusted_proxy:
-        # CPA v7.2.113 request interception lacks a trustworthy direct-peer address;
+        # CPA v7.2.116 request interception lacks a trustworthy direct-peer address;
         # v0.16 therefore rejects enabled: true instead of trusting spoofable headers.
         enabled: false
         header: X-Forwarded-For

@@ -72,6 +72,28 @@ func TestRegistrationMatchesTargetCPAContract(t *testing.T) {
 	}
 }
 
+func TestRegistrationDoesNotAdvertiseUsagePlugin(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+
+	raw, code := p.Call(pluginabi.MethodPluginRegister, lifecyclePayload(t, "audit:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("Call(plugin.register) code = %d; envelope=%s", code, raw)
+	}
+	var result struct {
+		Capabilities *struct {
+			UsagePlugin bool `json:"usage_plugin"`
+		} `json:"capabilities"`
+	}
+	decodeOKResult(t, raw, &result)
+	if result.Capabilities == nil {
+		t.Fatal("plugin.register result omitted capabilities")
+	}
+	if result.Capabilities.UsagePlugin {
+		t.Fatal("capabilities.usage_plugin = true; Cyber-Abuse-Guard must not receive CPA usage records")
+	}
+}
+
 func TestSchemaNegotiationRejectsLegacyAndAcceptsFutureHost(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)

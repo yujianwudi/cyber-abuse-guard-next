@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594
+current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
 Last updated: 2026-07-27 (Asia/Shanghai)
@@ -119,7 +119,7 @@ corpus, or local dirty Host result can close those release boundaries.
    metadata from forging tool authority.
 
 8. **CPA interceptor failures retain host-level fail-open boundaries.** The
-   required Host matrix is CPA v7.2.113 with C ABI 1 and RPC schema 2. CPA skips
+   required Host matrix is CPA v7.2.116 with C ABI 1 and RPC schema 2. CPA skips
    an interceptor that returns an RPC error and fuses an interceptor that
    panics across the Host boundary; it may then continue the remaining chain and
    native execution. The plugin returns successful, mode-aware responses for
@@ -147,7 +147,7 @@ corpus, or local dirty Host result can close those release boundaries.
    as outside the admission boundary. A higher-priority legacy schema-1
    ModelRouter alone no longer bypasses ordinary model requests because the
    schema-2 before-auth interceptor still runs before execution. Alpha Search is
-   different: CPA v7.2.113 omits RequestInterceptor there, so deployment must
+   different: CPA v7.2.116 omits RequestInterceptor there, so deployment must
    also ensure no unreviewed higher-priority ModelRouter handles
    `codex-alpha-search` before CAG.
 
@@ -161,15 +161,15 @@ corpus, or local dirty Host result can close those release boundaries.
     frame; successful chunks would force HTTP 200. The policy executor routes
     `execute`, `execute_stream`, and `count_tokens` to the same policy HTTP 403;
     `http_request` returns an unsupported-method RPC error whose `StatusCode()`
-    is 405; the official adapter returns `(nil, error)`. CPA v7.2.113's two Alpha
+    is 405; the official adapter returns `(nil, error)`. CPA v7.2.116's two Alpha
     Search routes do not call RequestInterceptor or request lifecycle. CAG's
-    format-gated ModelRouter returns a self target for malicious search, which
+    format-gated ModelRouter returns a self-target for malicious search, which
     the Alpha handler rejects as HTTP 503 before Codex credential selection or
     upstream execution. Native policy HTTP 403 is therefore unavailable on
     Alpha Search until CPA exposes local termination there; the Linux Host test
     must prove both aliases with an in-memory OAuth auth and a networkless Codex
     probe rather than claiming the ordinary interceptor response shape.
-    `ModelRouter` registration is global in CPA v7.2.113, so ordinary requests
+    `ModelRouter` registration is global in CPA v7.2.116, so ordinary requests
     still pay Host-side body cloning, JSON/Base64 serialization, and one Router
     RPC before CAG returns `Handled:false`; the plugin cannot make that work
     O(1). An oversized callback supplies only the method name, not the source
@@ -190,7 +190,7 @@ corpus, or local dirty Host result can close those release boundaries.
 13. **No `Retry-After` on executor errors.** ABI-v1 RPC errors cannot attach
     arbitrary downstream response headers.
 
-14. **Exact management routes only.** CPA v7.2.113 rejects dynamic `:`/`*`
+14. **Exact management routes only.** CPA v7.2.116 rejects dynamic `:`/`*`
     plugin routes, so subject unblock uses a fixed path and bounded JSON body.
     CPA host middleware, not the plugin, is the Management Key verification
     authority; ABI v1 does not reveal the configured key to the plugin. Host
@@ -211,7 +211,7 @@ corpus, or local dirty Host result can close those release boundaries.
     reserved, but `classifier.enabled: true` is rejected. The plugin makes no
     classifier network request and does not upload prompts to a third party.
 
-17. **No authenticated management UI.** CPA v7.2.113 resource routes are not a
+17. **No authenticated management UI.** CPA v7.2.116 resource routes are not a
     safe place for audit/subject data. This version exposes exact authenticated
     management API routes only.
 
@@ -278,7 +278,7 @@ corpus, or local dirty Host result can close those release boundaries.
 
 29. **Only one platform and one fixed CPA Host target are in scope.** The
     release platform is Linux amd64 with glibc 2.34+; musl/Alpine is unsupported.
-    The root module and both current contract modules pin CPA v7.2.113.
+    The root module and both current contract modules pin CPA v7.2.116.
     Source/compile success is not runtime admission. Exact-candidate counted-Mock
     Host evidence is required for this target.
     Earlier v7.2.85/v7.2.84/v7.2.83/v7.2.82/v7.2.81 checks are historical and non-gating.
@@ -350,9 +350,9 @@ corpus, or local dirty Host result can close those release boundaries.
     source compilation or another boundary's result.
 
 37. **Classifier-policy identity is source- and artifact-bound, but still not
-    independent approval.** The working Round 9 identity is
+    independent approval.** The active source-line identity is
     `classifier-policy-v10` / SHA-256
-`db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`,
+`7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2`,
     and remains pending until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -526,7 +526,7 @@ corpus, or local dirty Host result can close those release boundaries.
 
 54. **The CPA source/compile contract is evidence only until counted-Mock Host
     validation.** `integration/cpalatestcontract` and
-    `integration/pluginstorecontract` both bind CPA v7.2.113. Each module asserts
+    `integration/pluginstorecontract` both bind CPA v7.2.116. Each module asserts
     the named critical Host tests and executes the complete upstream
     `internal/pluginhost` package, so this source coverage overlaps rather than
     forming two non-duplicative exact-name runs. The wider contract compiles the
@@ -564,7 +564,7 @@ corpus, or local dirty Host result can close those release boundaries.
     v7.2.80, an `agent` request that the Guard self-routes is rejected by CPA's
     native-Interactions validator with HTTP 400 before the Guard executor runs;
     a uniform Guard 403 would require an upstream CPA change. The owner-operated
-    sandbox must recheck that behavior on v7.2.113 and
+    sandbox must recheck that behavior on v7.2.116 and
     separately verify model/agent, stream/non-stream, exact status
     shapes, first-byte behavior, and zero Auth/Provider/Usage/upstream effects.
 

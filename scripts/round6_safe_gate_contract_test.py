@@ -37,12 +37,14 @@ from round6_safe_gate_contract import (
     ACTIVE_WORKFLOW_PATHS,
     ARCHIVED_RC_WORKFLOW_PATH,
     BLOCKED_PRERELEASE_MARKER,
-    CPA_CURRENT_COMMIT,
-    CPA_CURRENT_GO_MOD_SUM,
-    CPA_CURRENT_MODULE_SUM,
-    CPA_CURRENT_VERSION,
+    CPA_ACTIVE_COMMIT,
+    CPA_ACTIVE_GO_MOD_SUM,
+    CPA_ACTIVE_MODULE_SUM,
+    CPA_ACTIVE_VERSION,
     CPA_ROUND8_COMMIT,
     CPA_ROUND8_VERSION,
+    CPA_ROUND9_COMMIT,
+    CPA_ROUND9_VERSION,
     CONSUMED_BOUNDARY_LINES,
     EXTERNAL_ATTESTATION_SCRIPT_SHA256,
     FORMAL_OPERATION_SCRIPTS,
@@ -1941,7 +1943,7 @@ jobs:
             ),
             text.replace(
                 "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest",
-                f"https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/tags/{CPA_CURRENT_VERSION}",
+                f"https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/tags/{CPA_ACTIVE_VERSION}",
                 1,
             ),
         )
@@ -2057,9 +2059,9 @@ jobs:
         validate_cpa_module_pins(fixture_root)
 
         module_versions = {
-            "go.mod": CPA_CURRENT_VERSION,
-            "integration/cpalatestcontract/go.mod": CPA_CURRENT_VERSION,
-            "integration/pluginstorecontract/go.mod": CPA_CURRENT_VERSION,
+            "go.mod": CPA_ACTIVE_VERSION,
+            "integration/cpalatestcontract/go.mod": CPA_ACTIVE_VERSION,
+            "integration/pluginstorecontract/go.mod": CPA_ACTIVE_VERSION,
         }
         for relative, version in module_versions.items():
             with self.subTest(relative=relative):
@@ -2081,8 +2083,8 @@ jobs:
         original_sum = sum_path.read_text(encoding="utf-8")
         sum_path.write_text(
             original_sum.replace(
-                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION} {CPA_CURRENT_MODULE_SUM}",
-                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION} h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_ACTIVE_VERSION} {CPA_ACTIVE_MODULE_SUM}",
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_ACTIVE_VERSION} h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 1,
             ),
             encoding="utf-8",
@@ -2092,13 +2094,13 @@ jobs:
 
         sum_path.write_text(original_sum, encoding="utf-8")
         primary_go_mod_sum = (
-            f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
-            f"{CPA_CURRENT_GO_MOD_SUM}"
+            f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_ACTIVE_VERSION}/go.mod "
+            f"{CPA_ACTIVE_GO_MOD_SUM}"
         )
         sum_path.write_text(
             original_sum.replace(
                 primary_go_mod_sum,
-                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_ACTIVE_VERSION}/go.mod "
                 "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 1,
             ),
@@ -2112,9 +2114,9 @@ jobs:
         original_store_sum = store_sum_path.read_text(encoding="utf-8")
         store_sum_path.write_text(
             original_store_sum.replace(
-                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
-                f"{CPA_CURRENT_GO_MOD_SUM}",
-                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_CURRENT_VERSION}/go.mod "
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_ACTIVE_VERSION}/go.mod "
+                f"{CPA_ACTIVE_GO_MOD_SUM}",
+                f"github.com/router-for-me/CLIProxyAPI/v7 {CPA_ACTIVE_VERSION}/go.mod "
                 "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
                 1,
             ),
@@ -2526,6 +2528,21 @@ jobs:
         with self.assertRaisesRegex(ContractError, "must not execute Round 8 counted-Mock"):
             validate_round6_go_safe_development_script(mutation, source)
 
+    def test_safe_development_race_timeout_is_finite_and_locked(self):
+        source = Path(__file__).with_name("go-safe-development-test.sh")
+        original = source.read_text(encoding="utf-8")
+        validate_round6_go_safe_development_script(original, source)
+        mutations = (
+            ("shortened", original.replace("-timeout=20m", "-timeout=15m", 1)),
+            ("removed", original.replace("-timeout=20m", "", 1)),
+            ("disabled", original.replace("-timeout=20m", "-timeout=0", 1)),
+        )
+        for label, mutation in mutations:
+            with self.subTest(label=label):
+                self.assertNotEqual(mutation, original)
+                with self.assertRaisesRegex(ContractError, "finite 20-minute timeout"):
+                    validate_round6_go_safe_development_script(mutation, source)
+
     def test_round6_makefile_candidate_script_gates_are_reachable(self):
         source = Path(__file__).parent.parent / "Makefile"
         original = source.read_text(encoding="utf-8")
@@ -2897,14 +2914,14 @@ jobs:
                 "        run: true\n",
                 1,
             ),
-            original.replace(CPA_CURRENT_VERSION, CPA_ROUND8_VERSION, 1),
-            original.replace(CPA_CURRENT_COMMIT, CPA_ROUND8_COMMIT, 1),
+            original.replace(CPA_ACTIVE_VERSION, CPA_ROUND8_VERSION, 1),
+            original.replace(CPA_ACTIVE_COMMIT, CPA_ROUND8_COMMIT, 1),
         )
         for workflow in mutations:
             self.assertNotEqual(workflow, original)
             with self.assertRaisesRegex(
                 ContractError,
-                rf"{re.escape(CPA_CURRENT_VERSION)} primary profile|pinned source API and SDK|remote verification|pinned-lane latest opt-out|current CPA|historical Round 8 identity|must be a mapping|exact scalar",
+                rf"{re.escape(CPA_ACTIVE_VERSION)} primary profile|pinned source API and SDK|remote verification|pinned-lane latest opt-out|current CPA|historical Round 8 identity|must be a mapping|exact scalar",
             ):
                 validate_ci_workflow(workflow, source)
 
@@ -4903,8 +4920,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "              true\n",
                 1,
             ),
-            original.replace(CPA_CURRENT_VERSION, CPA_ROUND8_VERSION, 1),
-            original.replace(CPA_CURRENT_COMMIT, CPA_ROUND8_COMMIT, 1),
+            original.replace(CPA_ROUND9_VERSION, CPA_ROUND8_VERSION, 1),
+            original.replace(CPA_ROUND9_COMMIT, CPA_ROUND8_COMMIT, 1),
         )
         for mutation in mutations:
             self.assertNotEqual(mutation, original)
@@ -5055,31 +5072,31 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         mutations = (
             original.replace(
                 'cpa_gate_key="rc_gate.cpa_${cpa_version}_primary_source_compatibility=PASS"',
-                f'cpa_gate_key="rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS"',
+                f'cpa_gate_key="rc_gate.cpa_{CPA_ROUND9_VERSION}_primary_source_compatibility=PASS"',
                 1,
             ),
             original.replace(
                 '"$cpa_gate_key" \\\n',
-                f"'rc_gate.cpa_{CPA_CURRENT_VERSION}_primary_source_compatibility=PASS' \\\n",
+                f"'rc_gate.cpa_{CPA_ROUND9_VERSION}_primary_source_compatibility=PASS' \\\n",
                 1,
             ),
             original.replace(
                 f"    cpa_version='{CPA_ROUND8_VERSION}'\n",
-                f"    cpa_version='{CPA_CURRENT_VERSION}'\n",
+                f"    cpa_version='{CPA_ROUND9_VERSION}'\n",
                 1,
             ),
             original.replace(
                 f"    cpa_commit='{CPA_ROUND8_COMMIT}'\n",
-                f"    cpa_commit='{CPA_CURRENT_COMMIT}'\n",
+                f"    cpa_commit='{CPA_ROUND9_COMMIT}'\n",
                 1,
             ),
             original.replace(
-                f"    cpa_version='{CPA_CURRENT_VERSION}'\n",
+                f"    cpa_version='{CPA_ROUND9_VERSION}'\n",
                 f"    cpa_version='{CPA_ROUND8_VERSION}'\n",
                 1,
             ),
             original.replace(
-                f"    cpa_commit='{CPA_CURRENT_COMMIT}'\n",
+                f"    cpa_commit='{CPA_ROUND9_COMMIT}'\n",
                 f"    cpa_commit='{CPA_ROUND8_COMMIT}'\n",
                 1,
             ),
@@ -5136,8 +5153,10 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "env:\n  UNREVIEWED_ROOT_ENV: true\n\npermissions:\n",
                 1,
             ),
-            original.replace(CPA_ROUND8_VERSION, CPA_CURRENT_VERSION, 1),
-            original.replace(CPA_ROUND8_COMMIT, CPA_CURRENT_COMMIT, 1),
+            original.replace(CPA_ROUND8_VERSION, CPA_ROUND9_VERSION, 1),
+            original.replace(CPA_ROUND8_COMMIT, CPA_ROUND9_COMMIT, 1),
+            original.replace(CPA_ROUND8_VERSION, CPA_ACTIVE_VERSION, 1),
+            original.replace(CPA_ROUND8_COMMIT, CPA_ACTIVE_COMMIT, 1),
             original.replace(
                 "    runs-on:\n",
                 "    container: unreviewed.example/host:latest\n    runs-on:\n",

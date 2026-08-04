@@ -1,0 +1,280 @@
+package handlers
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"net/http"
+	"sync"
+	"sync/atomic"
+	"testing"
+
+	internalconfig "github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executionregistry"
+	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+)
+
+const (
+	cagHomeOAuthRetryProvider = "cag-home-oauth-retry-contract"
+	cagHomeOAuthRetryModel    = "cag-home-oauth-retry-model"
+	cagHomeOAuthRetryAuthID   = "cag-home-oauth-retry-auth"
+	cagHomeOAuthStaleToken    = "cag-stale-access-token"
+	cagHomeOAuthFreshToken    = "cag-fresh-access-token"
+)
+
+var cagHomeOAuthAfterAuthBody = []byte(`{"model":"cag-home-oauth-retry-model","cag_after_auth":true}`)
+
+type cagHomeOAuthRetryDispatcher struct {
+	calls atomic.Int32
+
+	mu             sync.Mutex
+	requestedModel string
+}
+
+func (*cagHomeOAuthRetryDispatcher) HeartbeatOK() bool { return true }
+
+func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel, _ string, _ http.Header, _ int) ([]byte, error) {
+	d.calls.Add(1)
+	d.mu.Lock()
+	d.requestedModel = requestedModel
+	d.mu.Unlock()
+	return json.Marshal(struct {
+		Model     string        `json:"model"`
+		Provider  string        `json:"provider"`
+		AuthIndex string        `json:"auth_index"`
+		Auth      coreauth.Auth `json:"auth"`
+	}{
+		Model:     requestedModel,
+		Provider:  cagHomeOAuthRetryProvider,
+		AuthIndex: cagHomeOAuthRetryAuthID,
+		Auth: coreauth.Auth{
+			ID:       cagHomeOAuthRetryAuthID,
+			Provider: cagHomeOAuthRetryProvider,
+			Status:   coreauth.StatusActive,
+			Attributes: map[string]string{
+				coreauth.AttributeAuthKind: coreauth.AuthKindOAuth,
+			},
+			Metadata: map[string]any{"access_token": cagHomeOAuthStaleToken},
+		},
+	})
+}
+
+func (*cagHomeOAuthRetryDispatcher) AbortAmbiguousDispatch() {}
+
+func (d *cagHomeOAuthRetryDispatcher) model() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.requestedModel
+}
+
+type cagHomeOAuthExecutorAttempt struct {
+	token     string
+	body      []byte
+	header    string
+	lifecycle coreexecutor.ExecutionLifecycle
+}
+
+type cagHomeOAuthRetryExecutor struct {
+	executeCalls atomic.Int32
+	refreshCalls atomic.Int32
+
+	mu       sync.Mutex
+	attempts []cagHomeOAuthExecutorAttempt
+}
+
+func (*cagHomeOAuthRetryExecutor) Identifier() string { return cagHomeOAuthRetryProvider }
+
+func (e *cagHomeOAuthRetryExecutor) Execute(_ context.Context, auth *coreauth.Auth, req coreexecutor.Request, opts coreexecutor.Options) (coreexecutor.Response, error) {
+	e.executeCalls.Add(1)
+	token, _ := auth.Metadata["access_token"].(string)
+	e.mu.Lock()
+	e.attempts = append(e.attempts, cagHomeOAuthExecutorAttempt{
+		token:     token,
+		body:      bytes.Clone(req.Payload),
+		header:    opts.Headers.Get("X-CAG-After-Auth"),
+		lifecycle: opts.ExecutionLifecycle,
+	})
+	e.mu.Unlock()
+	if token == cagHomeOAuthStaleToken {
+		return coreexecutor.Response{}, &coreauth.Error{HTTPStatus: http.StatusUnauthorized, Message: "expired CAG contract token"}
+	}
+	if token != cagHomeOAuthFreshToken {
+		return coreexecutor.Response{}, &coreauth.Error{HTTPStatus: http.StatusInternalServerError, Message: "unexpected CAG contract token"}
+	}
+	return coreexecutor.Response{Payload: []byte(`{"ok":true}`)}, nil
+}
+
+func (*cagHomeOAuthRetryExecutor) ExecuteStream(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (*coreexecutor.StreamResult, error) {
+	return nil, &coreauth.Error{HTTPStatus: http.StatusNotImplemented, Message: "stream not used by CAG Home retry contract"}
+}
+
+func (e *cagHomeOAuthRetryExecutor) Refresh(_ context.Context, auth *coreauth.Auth) (*coreauth.Auth, error) {
+	e.refreshCalls.Add(1)
+	updated := auth.Clone()
+	if updated.Metadata == nil {
+		updated.Metadata = make(map[string]any)
+	}
+	updated.Metadata["access_token"] = cagHomeOAuthFreshToken
+	return updated, nil
+}
+
+func (*cagHomeOAuthRetryExecutor) CountTokens(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (coreexecutor.Response, error) {
+	return coreexecutor.Response{}, &coreauth.Error{HTTPStatus: http.StatusNotImplemented, Message: "count not used by CAG Home retry contract"}
+}
+
+func (*cagHomeOAuthRetryExecutor) HttpRequest(context.Context, *coreauth.Auth, *http.Request) (*http.Response, error) {
+	return nil, &coreauth.Error{HTTPStatus: http.StatusNotImplemented, Message: "HTTP request not used by CAG Home retry contract"}
+}
+
+func (e *cagHomeOAuthRetryExecutor) snapshot() []cagHomeOAuthExecutorAttempt {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make([]cagHomeOAuthExecutorAttempt, len(e.attempts))
+	copy(out, e.attempts)
+	for index := range out {
+		out[index].body = bytes.Clone(out[index].body)
+	}
+	return out
+}
+
+type cagHomeOAuthRetryHost struct {
+	beforeCalls     atomic.Int32
+	afterCalls      atomic.Int32
+	responseCalls   atomic.Int32
+	completionCalls atomic.Int32
+
+	mu           sync.Mutex
+	beforeID     string
+	afterID      string
+	completion   pluginapi.RequestCompletion
+	responseBody []byte
+}
+
+func (h *cagHomeOAuthRetryHost) InterceptRequestBeforeAuth(_ context.Context, request pluginapi.RequestInterceptRequest) pluginapi.RequestInterceptResponse {
+	h.beforeCalls.Add(1)
+	h.mu.Lock()
+	h.beforeID = request.RequestID
+	h.mu.Unlock()
+	return pluginapi.RequestInterceptResponse{Headers: request.Headers.Clone(), Body: bytes.Clone(request.Body)}
+}
+
+func (h *cagHomeOAuthRetryHost) InterceptRequestAfterAuth(_ context.Context, request pluginapi.RequestInterceptRequest) pluginapi.RequestInterceptResponse {
+	h.afterCalls.Add(1)
+	h.mu.Lock()
+	h.afterID = request.RequestID
+	h.mu.Unlock()
+	headers := request.Headers.Clone()
+	if headers == nil {
+		headers = make(http.Header)
+	}
+	headers.Set("X-CAG-After-Auth", "once")
+	return pluginapi.RequestInterceptResponse{Headers: headers, Body: bytes.Clone(cagHomeOAuthAfterAuthBody)}
+}
+
+func (h *cagHomeOAuthRetryHost) InterceptResponse(_ context.Context, request pluginapi.ResponseInterceptRequest) pluginapi.ResponseInterceptResponse {
+	h.responseCalls.Add(1)
+	h.mu.Lock()
+	h.responseBody = bytes.Clone(request.Body)
+	h.mu.Unlock()
+	return pluginapi.ResponseInterceptResponse{Headers: request.ResponseHeaders.Clone(), Body: bytes.Clone(request.Body)}
+}
+
+func (*cagHomeOAuthRetryHost) InterceptStreamChunk(_ context.Context, request pluginapi.StreamChunkInterceptRequest) pluginapi.StreamChunkInterceptResponse {
+	return pluginapi.StreamChunkInterceptResponse{Headers: request.ResponseHeaders.Clone(), Body: bytes.Clone(request.Body)}
+}
+
+func (h *cagHomeOAuthRetryHost) CompleteRequest(_ context.Context, completion pluginapi.RequestCompletion) {
+	h.completionCalls.Add(1)
+	h.mu.Lock()
+	h.completion = completion
+	h.mu.Unlock()
+}
+
+func (h *cagHomeOAuthRetryHost) snapshot() (string, string, pluginapi.RequestCompletion, []byte) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.beforeID, h.afterID, h.completion, bytes.Clone(h.responseBody)
+}
+
+func TestCyberAbuseGuardHomeOAuthUnauthorizedRetrySingleLogicalLifecycle(t *testing.T) {
+	dispatcher := &cagHomeOAuthRetryDispatcher{}
+	executor := &cagHomeOAuthRetryExecutor{}
+	manager := coreauth.NewManager(nil, nil, nil)
+	manager.SetConfig(&internalconfig.Config{Home: internalconfig.HomeConfig{Enabled: true}})
+	manager.RegisterExecutor(executor)
+	if bundle := manager.PublishHomeDispatch(dispatcher, executionregistry.New(), 1); bundle == nil {
+		t.Fatal("publish CAG Home dispatch bundle returned nil")
+	}
+
+	host := &cagHomeOAuthRetryHost{}
+	handler := NewBaseAPIHandlers(&sdkconfig.SDKConfig{}, manager)
+	handler.SetPluginHost(host)
+	originalBody := []byte(`{"model":"cag-home-oauth-retry-model"}`)
+	body, _, errMessage := handler.ExecuteWithAuthManager(context.Background(), "openai", cagHomeOAuthRetryModel, originalBody, "")
+	if errMessage != nil {
+		t.Fatalf("Home OAuth retry handler error = %#v", errMessage)
+	}
+	if string(body) != `{"ok":true}` {
+		t.Fatalf("Home OAuth retry response body = %q, want successful retry body", body)
+	}
+	if got := dispatcher.calls.Load(); got != 1 {
+		t.Fatalf("Home dispatch calls = %d, want 1 logical selection", got)
+	}
+	if got := dispatcher.model(); got != cagHomeOAuthRetryModel {
+		t.Fatalf("Home requested model = %q, want %q", got, cagHomeOAuthRetryModel)
+	}
+	if got := executor.refreshCalls.Load(); got != 1 {
+		t.Fatalf("OAuth refresh calls = %d, want 1", got)
+	}
+	if got := executor.executeCalls.Load(); got != 2 {
+		t.Fatalf("executor attempts = %d, want initial 401 plus one refreshed retry", got)
+	}
+	if got := host.beforeCalls.Load(); got != 1 {
+		t.Fatalf("before-auth interceptor calls = %d, want 1 logical request", got)
+	}
+	if got := host.afterCalls.Load(); got != 1 {
+		t.Fatalf("after-auth interceptor calls = %d, want 1 across the Home 401 retry", got)
+	}
+	if got := host.responseCalls.Load(); got != 1 {
+		t.Fatalf("response interceptor calls = %d, want 1 logical response", got)
+	}
+	if got := host.completionCalls.Load(); got != 1 {
+		t.Fatalf("RequestCompletion calls = %d, want 1 logical lifecycle", got)
+	}
+
+	attempts := executor.snapshot()
+	if len(attempts) != 2 {
+		t.Fatalf("captured executor attempts = %d, want 2", len(attempts))
+	}
+	if attempts[0].token != cagHomeOAuthStaleToken || attempts[1].token != cagHomeOAuthFreshToken {
+		t.Fatalf("executor attempt tokens = %q then %q, want stale then refreshed", attempts[0].token, attempts[1].token)
+	}
+	for index, attempt := range attempts {
+		if !bytes.Equal(attempt.body, cagHomeOAuthAfterAuthBody) || attempt.header != "once" {
+			t.Fatalf("executor attempt %d request = body %s header %q, want one intercepted request reused by retry", index+1, attempt.body, attempt.header)
+		}
+		if attempt.lifecycle == nil {
+			t.Fatalf("executor attempt %d has nil Home execution lifecycle", index+1)
+		}
+	}
+	if attempts[0].lifecycle != attempts[1].lifecycle {
+		t.Fatal("Home OAuth retry created a second execution lifecycle instead of reusing the logical selection")
+	}
+
+	beforeID, afterID, completion, responseBody := host.snapshot()
+	if beforeID == "" || afterID != beforeID || completion.RequestID != beforeID {
+		t.Fatalf("logical request IDs = before %q after %q completion %q", beforeID, afterID, completion.RequestID)
+	}
+	if completion.Outcome != pluginapi.RequestCompletionSucceeded || completion.StatusCode != http.StatusOK {
+		t.Fatalf("RequestCompletion = %#v, want one successful logical completion", completion)
+	}
+	if completion.StartedAt.IsZero() || completion.CompletedAt.Before(completion.StartedAt) {
+		t.Fatalf("RequestCompletion timestamps = %#v", completion)
+	}
+	if !bytes.Equal(responseBody, []byte(`{"ok":true}`)) {
+		t.Fatalf("response interceptor body = %s, want final successful response only", responseBody)
+	}
+}

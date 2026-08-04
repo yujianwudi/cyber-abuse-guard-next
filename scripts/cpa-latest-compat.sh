@@ -76,9 +76,9 @@ fi
 set_profile_identity() {
   case "$1" in
     primary)
-      cpa_version='v7.2.113'
-      cpa_commit='bc71c77f5cc42f3fbe1bf040cf14d4f166894835'
-      cpa_module_sum='h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA='
+      cpa_version='v7.2.116'
+      cpa_commit='a88197f845c979132c8978ea223c6af05cc81536'
+      cpa_module_sum='h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU='
       cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
       ;;
     *)
@@ -182,15 +182,15 @@ fi
 
 assert_checked_in_module_identity \
   "$root" root \
-  v7.2.113 h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA= \
+  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/cpalatestcontract" cpalatestcontract \
-  v7.2.113 h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA= \
+  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/pluginstorecontract" pluginstorecontract \
-  v7.2.113 h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA= \
+  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 verify_primary_latest=0
@@ -304,7 +304,7 @@ for profile in "${profiles[@]}"; do
     GOWORK=off CGO_ENABLED=1 "$go_bin" test \
       "${root_mod_flags[@]}" -mod=readonly \
       -tags=sqlite_omit_load_extension -count=1 \
-      -run='^(TestRegistrationMatchesTargetCPAContract|TestRouterUsesRoleAwareConversationClassification)$' \
+      -run='^(TestRegistrationMatchesTargetCPAContract|TestRegistrationDoesNotAdvertiseUsagePlugin|TestRouterUsesRoleAwareConversationClassification)$' \
       ./internal/plugin
     GOWORK=off CGO_ENABLED=1 "$go_bin" test \
       "${root_mod_flags[@]}" -mod=readonly \

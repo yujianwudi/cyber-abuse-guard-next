@@ -1,9 +1,9 @@
-# CPA v7.2.113 schema-2 plugin-store source contracts
+# CPA v7.2.116 schema-2 plugin-store source contracts
 
 This isolated Go module exists because the repository's main module cannot
 legally import CPA's `internal/pluginstore` package. Its module path is under
-the CPA v7 import prefix and its dependency is pinned exactly to `v7.2.113`
-(`bc71c77f5cc42f3fbe1bf040cf14d4f166894835`).
+the CPA v7 import prefix and its dependency is pinned exactly to `v7.2.116`
+(`a88197f845c979132c8978ea223c6af05cc81536`).
 
 It contains source-level contract suites and checksum-pinned overlays:
 
@@ -31,7 +31,7 @@ The exact audited behaviors and limitations are recorded in
   [CPA_HOST_SOURCE_CONTRACT.md](CPA_HOST_SOURCE_CONTRACT.md).
 
 These source suites never load or execute this project's `.so`. The repository
-root is also pinned to CPA v7.2.113; native-host evidence is produced separately
+root is also pinned to CPA v7.2.116; native-host evidence is produced separately
 by the integration-tagged Store-installed Host tests in GitHub CI. The pure-C
 multi-Router test remains schema-1 compatibility evidence. Source-contract PASS
 must not be reported as native-load PASS.
