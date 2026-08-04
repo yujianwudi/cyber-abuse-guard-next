@@ -5,6 +5,12 @@ current_classifier_policy_version: classifier-policy-v10
 current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
+> **Active-tree identity overlay refreshed 2026-08-04 (Asia/Shanghai).** The
+> prologue above is repository navigation metadata, not a rebind of this frozen
+> Round 9 design. Its historical classifier identity remains
+> `classifier-policy-v10` / `db8fb0113943b544ee4d4166a42a3e1f4cb0cca067309838fba712d5e39a8594`
+> on CPA `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835`.
+
 Status: **NOT AUTHORIZED FOR EXECUTION BY CODEX**.
 
 This runbook is a reviewable production-change design only. It does not grant

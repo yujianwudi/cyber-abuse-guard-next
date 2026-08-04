@@ -163,7 +163,7 @@ corpus, or local dirty Host result can close those release boundaries.
     `http_request` returns an unsupported-method RPC error whose `StatusCode()`
     is 405; the official adapter returns `(nil, error)`. CPA v7.2.116's two Alpha
     Search routes do not call RequestInterceptor or request lifecycle. CAG's
-    format-gated ModelRouter returns a self target for malicious search, which
+    format-gated ModelRouter returns a self-target for malicious search, which
     the Alpha handler rejects as HTTP 503 before Codex credential selection or
     upstream execution. Native policy HTTP 403 is therefore unavailable on
     Alpha Search until CPA exposes local termination there; the Linux Host test

@@ -5,7 +5,12 @@ current_classifier_policy_version: classifier-policy-v10
 current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
 ```
 
-Last updated: 2026-07-22 (Asia/Shanghai)
+> **Active-tree identity overlay refreshed 2026-08-04 (Asia/Shanghai).** The
+> `current_classifier_policy_*` fields above identify the repository tree
+> containing this report. They are navigation metadata only and do not rebind
+> or relabel the frozen Round 8 evidence below.
+
+Historical snapshot last updated: 2026-07-22 (Asia/Shanghai)
 
 > **Frozen historical snapshot.** This report preserves the Round 8
 > `v0.16-rc.2` source-tree release contract as recorded on the date above. Every
