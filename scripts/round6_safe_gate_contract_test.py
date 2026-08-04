@@ -2528,6 +2528,21 @@ jobs:
         with self.assertRaisesRegex(ContractError, "must not execute Round 8 counted-Mock"):
             validate_round6_go_safe_development_script(mutation, source)
 
+    def test_safe_development_race_timeout_is_finite_and_locked(self):
+        source = Path(__file__).with_name("go-safe-development-test.sh")
+        original = source.read_text(encoding="utf-8")
+        validate_round6_go_safe_development_script(original, source)
+        mutations = (
+            ("shortened", original.replace("-timeout=20m", "-timeout=15m", 1)),
+            ("removed", original.replace("-timeout=20m", "", 1)),
+            ("disabled", original.replace("-timeout=20m", "-timeout=0", 1)),
+        )
+        for label, mutation in mutations:
+            with self.subTest(label=label):
+                self.assertNotEqual(mutation, original)
+                with self.assertRaisesRegex(ContractError, "finite 20-minute timeout"):
+                    validate_round6_go_safe_development_script(mutation, source)
+
     def test_round6_makefile_candidate_script_gates_are_reachable(self):
         source = Path(__file__).parent.parent / "Makefile"
         original = source.read_text(encoding="utf-8")

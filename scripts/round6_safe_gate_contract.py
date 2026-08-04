@@ -1492,7 +1492,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "0ecbdec7f1acb3150d00debc2b4f5d1fe86ca5cbff4b76feda01f0a9d9b9d4d8"
+ROUND6_SAFE_GATE_TEST_SHA256 = "0484d4a1376e7812c0b7dba7d18bed214888b79df77af8b2a9f3b2fa3ab6abd2"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -9335,6 +9335,16 @@ def validate_round6_go_safe_development_script(text: str, source: Path) -> None:
     if any(text.count(command) != 1 for command in required_round9_commands):
         raise ContractError(
             f"safe-development test modes lost the exact Round 9 counted-Mock contract: {source}"
+        )
+    required_race_commands = (
+        'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 "${safe_packages[@]}"',
+        'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier',
+    )
+    if text.count("-timeout=20m") != len(required_race_commands) or any(
+        text.count(command) != 1 for command in required_race_commands
+    ):
+        raise ContractError(
+            f"safe-development race tests lost the exact finite 20-minute timeout contract: {source}"
         )
 
 
