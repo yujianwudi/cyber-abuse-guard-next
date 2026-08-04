@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: github.com/router-for-me/CLIProxyAPI/v7
+
+  - package-ecosystem: gomod
+    directory: /integration/cpalatestcontract
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: github.com/router-for-me/CLIProxyAPI/v7
+
+  - package-ecosystem: gomod
+    directory: /integration/pluginstorecontract
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: github.com/router-for-me/CLIProxyAPI/v7
+
+  - package-ecosystem: gomod
+    directory: /integration/round8countedmock
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: gomod
+    directory: /integration/round9countedmock
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2

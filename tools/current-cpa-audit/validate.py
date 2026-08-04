@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""Fail-closed CLI validator for current-CPA corpus, config, and evidence."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any, Sequence
+
+from acquire import validate_policy
+from audit_contract import (
+    ContractError,
+    canonical_bytes,
+    load_json_bytes,
+    load_json_file,
+    read_regular_bytes,
+    sha256_bytes,
+    validate_corpus_manifest,
+    validate_evidence_run_config,
+    validate_machine_evidence,
+    validate_manifest_policy,
+    validate_run_config,
+)
+
+
+TOOL_DIR = Path(__file__).resolve().parent
+
+
+def fixed_policy() -> tuple[dict[str, Any], str]:
+    path = TOOL_DIR / "repository-policy.json"
+    raw = read_regular_bytes(path, "fixed source policy", 2 * 1024 * 1024)
+    return (
+        validate_policy(
+            load_json_bytes(raw, "fixed source policy"), require_approved=True
+        ),
+        sha256_bytes(raw),
+    )
+
+
+def bind_policy(manifest: dict[str, Any]) -> None:
+    policy, policy_sha256 = fixed_policy()
+    if manifest["policy_sha256"] != policy_sha256:
+        raise ContractError("corpus policy SHA does not match this validator bundle")
+    validate_manifest_policy(manifest, policy, require_approved=True)
+
+
+def parser() -> argparse.ArgumentParser:
+    root = argparse.ArgumentParser(description=__doc__)
+    commands = root.add_subparsers(dest="command", required=True)
+    corpus = commands.add_parser("corpus", help="validate an acquired corpus manifest")
+    corpus.add_argument("--manifest", type=Path, required=True)
+    corpus.add_argument(
+        "--corpus-root",
+        type=Path,
+        help="verify ephemeral text files too; omit after the runner has cleaned them",
+    )
+    config = commands.add_parser("run-config", help="validate a closed run config")
+    config.add_argument("--config", type=Path, required=True)
+    evidence = commands.add_parser("evidence", help="validate final machine evidence")
+    evidence.add_argument("--manifest", type=Path, required=True)
+    evidence.add_argument("--evidence", type=Path, required=True)
+    evidence.add_argument("--results", type=Path, required=True)
+    evidence.add_argument("--run-config", type=Path, required=True)
+    return root
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = parser().parse_args(argv)
+    try:
+        if args.command == "corpus":
+            manifest = load_json_file(args.manifest, "corpus manifest")
+            validated = validate_corpus_manifest(manifest, args.corpus_root)
+            bind_policy(validated)
+            output: dict[str, Any] = {
+                "repository_count": validated["repository_count"],
+                "source_count": validated["source_count"],
+                "unique_content_hashes": validated["unique_content_hashes"],
+                "unique_semantic_cases": validated["unique_semantic_cases"],
+                "valid": True,
+            }
+        elif args.command == "run-config":
+            config_raw = read_regular_bytes(args.config, "run config", 2 * 1024 * 1024)
+            config = validate_run_config(load_json_bytes(config_raw, "run config"))
+            if config_raw != canonical_bytes(config) + b"\n":
+                raise ContractError("run config is not canonical JSON with one terminal newline")
+            policy, policy_sha256 = fixed_policy()
+            if config["policy_sha256"] != policy_sha256:
+                raise ContractError("run config policy SHA does not match this validator bundle")
+            manifest_path = Path(config["paths"]["corpus_manifest"])
+            manifest_raw = read_regular_bytes(
+                manifest_path, "corpus manifest", 64 * 1024 * 1024
+            )
+            manifest = validate_corpus_manifest(
+                load_json_bytes(manifest_raw, "corpus manifest")
+            )
+            if manifest_raw != canonical_bytes(manifest) + b"\n":
+                raise ContractError(
+                    "corpus manifest is not canonical JSON with one terminal newline"
+                )
+            if sha256_bytes(manifest_raw) != config["corpus_manifest_sha256"]:
+                raise ContractError("run config corpus manifest SHA drifted")
+            if manifest["policy_sha256"] != policy_sha256:
+                raise ContractError("corpus candidate was not acquired with this approved policy")
+            validate_manifest_policy(manifest, policy, require_approved=True)
+            output = {"policy_review_status": "approved", "valid": True}
+        else:
+            manifest = load_json_file(args.manifest, "corpus manifest")
+            bind_policy(validate_corpus_manifest(manifest))
+            evidence = load_json_file(args.evidence, "machine evidence")
+            from run import runner_identities
+
+            if evidence.get("identities", {}).get("runner") != runner_identities():
+                raise ContractError("machine evidence runner identity does not match this bundle")
+            validated = validate_machine_evidence(manifest, evidence, args.results)
+            declared_manifest = args.evidence.parent / validated["corpus"]["manifest_path"]
+            declared_results = args.evidence.parent / validated["transport"]["results_path"]
+            if declared_manifest.resolve(strict=True) != args.manifest.resolve(strict=True):
+                raise ContractError("supplied manifest path does not match evidence.corpus.manifest_path")
+            if declared_results.resolve(strict=True) != args.results.resolve(strict=True):
+                raise ContractError("supplied results path does not match evidence.transport.results_path")
+            config_raw = read_regular_bytes(args.run_config, "run config", 2 * 1024 * 1024)
+            config = validate_run_config(load_json_bytes(config_raw, "run config"))
+            if config_raw != canonical_bytes(config) + b"\n":
+                raise ContractError("run config is not canonical JSON with one terminal newline")
+            if Path(config["paths"]["evidence_directory"]).resolve(strict=True) != args.evidence.parent.resolve(strict=True):
+                raise ContractError("run config evidence directory does not match the supplied evidence")
+            validate_evidence_run_config(validated, config, config_raw)
+            output = {
+                "cold_start_count": validated["run"]["cold_start_count"],
+                "third_party_code_executions": validated["third_party_code_executions"],
+                "transport_executions": validated["transport"]["transport_executions"],
+                "valid": True,
+            }
+        print(json.dumps(output, sort_keys=True))
+        return 0
+    except (ContractError, OSError) as exc:
+        print(f"VALIDATION FAILED: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

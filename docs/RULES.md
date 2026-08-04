@@ -1,8 +1,8 @@
 # Rule System — ruleset 1.0.10
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v11
+current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
 The default rule set is embedded into the shared object from `/rules`. Every
@@ -285,8 +285,8 @@ This identity covers the embedded YAML rule assets. The complete code-level
 policy is separately identified as:
 
 ```text
-current_release_classifier_policy_version: classifier-policy-v10
-current_release_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_release_classifier_policy_version: classifier-policy-v11
+current_release_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
 The policy digest test binds the deterministic classifier, matcher,

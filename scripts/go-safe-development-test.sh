@@ -679,6 +679,17 @@ expected_round10_classifier_entries=(
   TestRound10TwoPendingFieldsRequireMoreThanOneFieldWinner
 )
 
+expected_round12_classifier_entries=(
+  TestRound12CarrierOmissionRecomputesGroupClassificationFlags
+  TestRound12CrossScopeBareReferentDoesNotReactivateOuterDefensiveOwner
+  TestRound12NativeReferentActivationDisposition
+  TestRound12NativeReferentActivationSingleIntentMatrix
+  TestRound12OuterDefensiveOwnerBoundaries
+  TestRound12OuterDefensiveOwnerDoesNotLendDirectiveToAnotherInertField
+  TestRound12OuterDefensiveOwnerLaterContinuationProofLossIsIncomplete
+  TestRound12OuterDefensiveOwnerSuppressesInternalActivation
+)
+
 # Every classifier test-like entry visible without the consumed_evaluation build
 # tag is explicitly classified. Restricted evaluation/holdout tests are not
 # compiled or listed in development test/race/list modes. Any new visible test,
@@ -958,6 +969,7 @@ expected_safe_classifier_entries=(
 expected_safe_classifier_entries+=("${expected_round8_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round9_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round10_classifier_entries[@]}")
+expected_safe_classifier_entries+=("${expected_round12_classifier_entries[@]}")
 declare -A safe_seen=()
 for name in "${expected_safe_classifier_entries[@]}"; do
 	if [[ -v safe_seen["$name"] ]]; then
@@ -1015,9 +1027,11 @@ case "$mode" in
       ${#expected_round10_plugin_entries[@]} +
       ${#expected_round10_classifier_entries[@]}
     ))
-    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d\n' \
+    round12_entry_count=${#expected_round12_classifier_entries[@]}
+    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d round12_entries=%d\n' \
       "${#safe_packages[@]}" "${#expected_safe_classifier_entries[@]}" \
-      "$round8_entry_count" "$round9_entry_count" "$round10_entry_count"
+      "$round8_entry_count" "$round9_entry_count" "$round10_entry_count" \
+      "$round12_entry_count"
     ;;
   test)
     "$go_bin" test -tags="$test_tags" -count=1 "${safe_packages[@]}"

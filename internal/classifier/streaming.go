@@ -365,6 +365,7 @@ type profiledCurrentReferentUnit struct {
 	carrierProofComplete  bool
 	defensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
 	independentActivation bool
+	outerDefensiveOwned   bool
 }
 
 type profiledOverflowIntentKind uint8
@@ -2784,11 +2785,29 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		}
 		return
 	}
-	candidate, ok := batch.classifyWithIncompleteAuthority(
-		genericParts,
-		s.profiledGroupStructuredTool,
-		enforcementScopeForProfiledGroup(genericRefs) != EnforcementScopeNone,
-	)
+	var candidate Result
+	ok := false
+	inlineToolCandidate := false
+	if pendingTool && len(genericRefs) == 1 &&
+		enforcementScopeForProfiledGroup(genericRefs) == EnforcementScopeRequestLocalTool {
+		var complete bool
+		candidate, inlineToolCandidate, complete =
+			s.classifier.profiledRequestLocalToolInlineReactivationCandidate(
+				genericRefs[0], s.mode, s.thresholds, s.policy,
+			)
+		if !complete {
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return
+		}
+		ok = inlineToolCandidate
+	}
+	if !inlineToolCandidate {
+		candidate, ok = batch.classifyWithIncompleteAuthority(
+			genericParts,
+			s.profiledGroupStructuredTool,
+			enforcementScopeForProfiledGroup(genericRefs) != EnforcementScopeNone,
+		)
+	}
 	if !ok {
 		if historicalReferent {
 			s.clearProfiledHistoricalCandidate()
@@ -2801,7 +2820,9 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		// Preserve the provider's non-current tool-result metadata while the
 		// candidate is provisional so the final explanation and occurrences can
 		// pass the same audit provenance contract as batch classification.
-		candidate = s.prepareProfiledCandidate(candidate, refs, true)
+		if !inlineToolCandidate {
+			candidate = s.prepareProfiledCandidate(candidate, refs, true)
+		}
 		if profiledHistoricalToolResultCarrier(segment) {
 			s.rememberProfiledReferableToolCandidate(candidate, segment, len(refs))
 		} else {
@@ -2853,8 +2874,21 @@ func (s *ScanSession) considerProfiledRequestLocalSystemCarrierReactivation(
 		if !ok {
 			return false
 		}
-		if !profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+		if candidate.Category == "" || len(candidate.EvidenceOccurrences) == 0 {
 			continue
+		}
+		if len(proof.carrierRefs) == 1 && proof.parts[0] != proof.carrierRefs[0].segment.Text {
+			core, coreComplete := profiledNormalizedReconstructedCore(proof.parts[0])
+			if !coreComplete || !s.classifier.rebaseProfiledReconstructedCore(
+				&candidate, proof.carrierRefs, core, s.policy,
+			) {
+				candidate, ok = batch.classify(
+					[]string{proof.carrierRefs[0].segment.Text}, false,
+				)
+				if !ok {
+					return false
+				}
+			}
 		}
 		if len(proof.carrierRefs) > 1 {
 			profiledCarrierRunClearOccurrenceOffsets(&candidate)
@@ -3611,7 +3645,21 @@ func (s *ScanSession) profiledCurrentReferentCarrierCandidate(
 	if batch == nil {
 		return Result{}, false
 	}
-	return batch.classify([]string{carrier.text}, false)
+	carrierBody := profiledClosedFenceBodyOrText(carrier.text)
+	candidate, ok := batch.classify([]string{carrierBody}, false)
+	if !ok || carrierBody == carrier.text {
+		return candidate, ok
+	}
+	core, complete := profiledNormalizedReconstructedCore(carrierBody)
+	if !complete {
+		return Result{}, true
+	}
+	if !s.classifier.rebaseProfiledReconstructedCore(
+		&candidate, []profiledSegmentRef{carrier.ref}, core, s.policy,
+	) {
+		return batch.classify([]string{carrier.text}, false)
+	}
+	return candidate, true
 }
 
 func finalizeProfiledDefensiveQuoteOverflowRun(state *profiledCurrentReferentScope) {
@@ -4046,6 +4094,7 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 			return
 		}
 	}
+	s.markProfiledOuterDefensiveOwnerFields(state)
 	s.considerProfiledDirectCompactionApplications(state)
 	if s.coverage.State != CoverageComplete {
 		return
@@ -4057,6 +4106,9 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	hasLocalCarrier := false
 	for index, unit := range state.units {
 		hasLocalCarrier = hasLocalCarrier || unit.carrier
+		if unit.outerDefensiveOwned {
+			continue
+		}
 		if !unit.directive {
 			continue
 		}
@@ -4235,6 +4287,10 @@ func (s *ScanSession) considerProfiledDirectCompactionApplications(
 		end := start + 1
 		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
 			end++
+		}
+		if first.outerDefensiveOwned {
+			start = end
+			continue
 		}
 		applicationIndex := -1
 		hasCarrierAfterApplication := false
@@ -4422,6 +4478,144 @@ func selectProfiledStreamingCurrentNeighbor(
 	default:
 		return -1, false
 	}
+}
+
+// markProfiledOuterDefensiveOwnerFields carries a successful whole-field quote
+// proof into the later carrier/referent passes. Without this marker the exact
+// reconstruction below can recognize a valid defensive wrapper, yet an
+// imperative sentence extracted from inside its quotation may still be treated
+// as an independent directive and reactivate a neighboring carrier.
+//
+// Only a complete, bounded logical field with one closed quotation receives the
+// marker. Invalid structure and proof loss remain visible to the existing
+// ambiguity/incomplete paths, while a later directive in another field stays
+// unmarked and may explicitly reactivate the retained carrier.
+func (s *ScanSession) markProfiledOuterDefensiveOwnerFields(
+	state *profiledCurrentReferentScope,
+) {
+	if s == nil || s.classifier == nil || state == nil ||
+		s.coverage.State != CoverageComplete {
+		return
+	}
+	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	for start := 0; start < len(state.units); {
+		first := state.units[start]
+		if first.barrier || first.ref.segment.FieldPathHash == "" {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
+			end++
+		}
+
+		hasCarrier := false
+		hasDirective := false
+		complete := true
+		totalBytes := 0
+		for index := start; index < end; index++ {
+			unit := state.units[index]
+			hasCarrier = hasCarrier || unit.carrier
+			hasDirective = hasDirective || unit.directive
+			complete = complete && unit.complete
+			if !complete || len(unit.text) > maxReconstructedBytes-totalBytes {
+				complete = false
+				break
+			}
+			totalBytes += len(unit.text)
+		}
+		if complete && hasCarrier && hasDirective && totalBytes != 0 {
+			var raw strings.Builder
+			raw.Grow(totalBytes)
+			for index := start; index < end; index++ {
+				raw.WriteString(state.units[index].text)
+			}
+			if s.classifier.isRawInertQuotedSafetyReview(raw.String()) {
+				laterActivation, laterProofComplete :=
+					s.profiledOuterDefensiveOwnerHasLaterActivation(state, first, end)
+				if laterActivation {
+					start = end
+					continue
+				}
+				for index := start; index < end; index++ {
+					state.units[index].outerDefensiveOwned = true
+				}
+				if !laterProofComplete {
+					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					return
+				}
+			}
+		}
+		start = end
+	}
+}
+
+func (s *ScanSession) profiledOuterDefensiveOwnerHasLaterActivation(
+	state *profiledCurrentReferentScope,
+	owner profiledCurrentReferentUnit,
+	start int,
+) (bool, bool) {
+	if s == nil || s.classifier == nil || state == nil || start < 0 || start >= len(state.units) {
+		return false, true
+	}
+	const maxContinuationBytes = maxInertQuotedReviewFrameBytes
+	for index := start; index < len(state.units); {
+		first := state.units[index]
+		end := index + 1
+		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
+			end++
+		}
+		firstSegment := first.ref.segment
+		ownerSegment := owner.ref.segment
+		if !profiledSegmentsShareOwnerScope(ownerSegment, firstSegment) ||
+			firstSegment.FieldPathHash == ownerSegment.FieldPathHash {
+			index = end
+			continue
+		}
+		if first.barrier || firstSegment.FieldPathHash == "" {
+			if first.directive && strings.TrimSpace(first.text) != "" {
+				return false, false
+			}
+			index = end
+			continue
+		}
+
+		totalBytes := 0
+		hasDirective := false
+		complete := true
+		var raw strings.Builder
+		for current := index; current < end; current++ {
+			unit := state.units[current]
+			if !unit.directive {
+				continue
+			}
+			hasDirective = true
+			if !unit.complete || len(unit.text) > maxContinuationBytes-totalBytes {
+				complete = false
+				break
+			}
+			totalBytes += len(unit.text)
+			raw.WriteString(unit.text)
+		}
+		if hasDirective {
+			if !complete {
+				return false, false
+			}
+			continuation := firstSegment
+			continuation.ContentKind = extract.ContentKindNaturalLanguageDirective
+			continuation.Text = raw.String()
+			disposition, proofComplete := s.classifier.profiledCarrierLocalOwnerDisposition(continuation)
+			if !proofComplete {
+				return false, false
+			}
+			if disposition == quotedReviewContinuationActive {
+				return true, true
+			}
+		}
+		index = end
+	}
+	return false, true
 }
 
 // considerProfiledDefensiveQuotedAmbiguity restores the whole-field safety
@@ -4616,7 +4810,7 @@ func (s *ScanSession) considerProfiledSelfContainedCarriers(state *profiledCurre
 	batch := &roleClassificationBatch{session: s}
 	for index := 0; index < len(state.units); {
 		unit := state.units[index]
-		if !unit.carrier || !unit.complete ||
+		if unit.outerDefensiveOwned || !unit.carrier || !unit.complete ||
 			!profiledSelfContainedCarrierKind(unit.ref.segment.ContentKind) {
 			index++
 			continue

@@ -496,6 +496,169 @@ func profiledGroupAllowsExtendedGeneratedAgentWindow(group profiledSegmentGroup)
 	return true
 }
 
+// profiledOuterDefensiveOwnerSegmentIndexes returns the exact physical units
+// owned by one complete current-user defensive quotation. Provider extractors
+// may split a single logical Markdown field into directive and carrier units;
+// classifying those units independently must not let an imperative sentence
+// inside the quotation outrank the outer user's terminal non-execution owner.
+//
+// The proof is deliberately field-local and optional. A second quotation, an
+// unclosed delimiter, a later execution clause, a scope/path change, or any
+// reconstruction budget loss receives no omission and continues through the
+// existing active/incomplete paths.
+func (c *Classifier) profiledOuterDefensiveOwnerSegmentIndexes(
+	segments []extract.Segment,
+) (map[int]struct{}, bool) {
+	if c == nil || len(segments) < 2 {
+		return nil, false
+	}
+	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	var omitted map[int]struct{}
+	proofUnavailable := false
+	for start := 0; start < len(segments); {
+		first := segments[start]
+		if strings.TrimSpace(first.Text) == "" || first.FieldPathHash == "" ||
+			!first.IsCurrentTurn || !trustedUserContentSegment(first) {
+			start++
+			continue
+		}
+		end := start + 1
+		for end < len(segments) && profiledSegmentsShareLogicalTextField(first, segments[end]) &&
+			profiledSegmentRefsPhysicallyAdjacent(
+				profiledSegmentRef{index: end - 1, segment: segments[end-1]},
+				profiledSegmentRef{index: end, segment: segments[end]},
+			) {
+			end++
+		}
+
+		hasCarrier := false
+		hasDirective := false
+		totalBytes := 0
+		complete := true
+		for index := start; index < end; index++ {
+			segment := segments[index]
+			hasCarrier = hasCarrier || profiledReferentCarrierKind(segment.ContentKind)
+			hasDirective = hasDirective ||
+				segment.ContentKind == extract.ContentKindNaturalLanguageDirective ||
+				segment.ContentKind == extract.ContentKindUnknown
+			if len(segment.Text) > maxReconstructedBytes-totalBytes {
+				complete = false
+				break
+			}
+			totalBytes += len(segment.Text)
+		}
+		if complete && hasCarrier && hasDirective && totalBytes != 0 {
+			var raw strings.Builder
+			raw.Grow(totalBytes)
+			for index := start; index < end; index++ {
+				raw.WriteString(segments[index].Text)
+			}
+			if c.isRawInertQuotedSafetyReview(raw.String()) {
+				laterActivation, laterProofComplete :=
+					c.profiledOuterDefensiveOwnerHasLaterActivation(segments, first, end)
+				if laterActivation {
+					start = end
+					continue
+				}
+				proofUnavailable = proofUnavailable || !laterProofComplete
+				if omitted == nil {
+					omitted = make(map[int]struct{}, end-start)
+				}
+				for index := start; index < end; index++ {
+					omitted[index] = struct{}{}
+				}
+			}
+		}
+		start = end
+	}
+	return omitted, proofUnavailable
+}
+
+// profiledOuterDefensiveOwnerHasLaterActivation prevents optional whole-field
+// suppression from hiding a separate same-scope speech act that explicitly
+// reactivates the quoted material. A proof-budget loss also revokes suppression:
+// an optional defensive credit must never survive an unclassified continuation.
+func (c *Classifier) profiledOuterDefensiveOwnerHasLaterActivation(
+	segments []extract.Segment,
+	owner extract.Segment,
+	start int,
+) (bool, bool) {
+	if c == nil || start < 0 || start >= len(segments) {
+		return false, true
+	}
+	const maxContinuationBytes = maxInertQuotedReviewFrameBytes
+	for index := start; index < len(segments); {
+		first := segments[index]
+		end := index + 1
+		for end < len(segments) && profiledSegmentsShareLogicalTextField(first, segments[end]) &&
+			profiledSegmentRefsPhysicallyAdjacent(
+				profiledSegmentRef{index: end - 1, segment: segments[end-1]},
+				profiledSegmentRef{index: end, segment: segments[end]},
+			) {
+			end++
+		}
+		if !profiledSegmentsShareOwnerScope(owner, first) ||
+			first.FieldPathHash == owner.FieldPathHash {
+			index = end
+			continue
+		}
+		if first.FieldPathHash == "" {
+			if profiledContentActiveDirective(first.ContentKind) && strings.TrimSpace(first.Text) != "" {
+				return false, false
+			}
+			index = end
+			continue
+		}
+
+		totalBytes := 0
+		hasDirective := false
+		complete := true
+		var raw strings.Builder
+		for current := index; current < end; current++ {
+			segment := segments[current]
+			if segment.ContentKind != extract.ContentKindNaturalLanguageDirective &&
+				segment.ContentKind != extract.ContentKindUnknown {
+				continue
+			}
+			hasDirective = true
+			if len(segment.Text) > maxContinuationBytes-totalBytes {
+				complete = false
+				break
+			}
+			totalBytes += len(segment.Text)
+			raw.WriteString(segment.Text)
+		}
+		if hasDirective {
+			if !complete {
+				return false, false
+			}
+			continuation := first
+			continuation.ContentKind = extract.ContentKindNaturalLanguageDirective
+			continuation.Text = raw.String()
+			disposition, proofComplete := c.profiledCarrierLocalOwnerDisposition(continuation)
+			if !proofComplete {
+				return false, false
+			}
+			if disposition == quotedReviewContinuationActive {
+				return true, true
+			}
+		}
+		index = end
+	}
+	return false, true
+}
+
+func profiledSegmentsShareOwnerScope(left, right extract.Segment) bool {
+	return left.ScopeID != 0 && left.ScopeID == right.ScopeID &&
+		left.Role == right.Role && left.Provenance == right.Provenance &&
+		left.UserAttribution == right.UserAttribution &&
+		left.ToolAssociation == right.ToolAssociation &&
+		left.ConversationIndex == right.ConversationIndex && left.TurnIndex == right.TurnIndex &&
+		left.IsCurrentTurn == right.IsCurrentTurn && left.IsCurrentTurn &&
+		trustedUserContentSegment(left) && trustedUserContentSegment(right)
+}
+
 func (c *Classifier) classifyProfiledGroupWithPolicy(
 	group profiledSegmentGroup,
 	mode Mode,
@@ -581,9 +744,14 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	best := c.classifyWithPolicy(nil, mode, thresholds, policy, false)
 	truncated := false
 	quotedOrInertSuppressed := false
-	carrierProofUnavailable := false
+	outerDefensiveOmissions, carrierProofUnavailable :=
+		c.profiledOuterDefensiveOwnerSegmentIndexes(segments)
 	var pendingClassifierIncomplete profiledIncompleteCorrelation
+	if len(outerDefensiveOmissions) != 0 {
+		quotedOrInertSuppressed = true
+	}
 	for _, group := range buildProfiledCurrentMetaControlGroups(segments) {
+		group = profiledGroupWithoutCarrierIndexes(group, outerDefensiveOmissions, nil)
 		for _, run := range profiledDirectCompactionRuns(group) {
 			if !run.hasCarrier || run.totalBytes == 0 {
 				pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
@@ -624,6 +792,9 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			carrierProofUnavailable = true
 			continue
 		}
+		activeGroup = profiledGroupWithoutCarrierIndexes(
+			activeGroup, outerDefensiveOmissions, nil,
+		)
 		activeGroup = profiledGroupWithoutDirectCompactionApplications(activeGroup)
 		if !activeGroup.activeDirective || len(activeGroup.parts) < 2 {
 			continue
@@ -653,6 +824,11 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			if profiledContentInert(segment.ContentKind) || profiledTrustedCurrentUserCarrier(segment) {
 				quotedOrInertSuppressed = true
 			}
+			index++
+			continue
+		}
+		if _, omitted := outerDefensiveOmissions[index]; omitted {
+			quotedOrInertSuppressed = true
 			index++
 			continue
 		}
@@ -730,6 +906,11 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	}
 	systemCarrierGroups := buildProfiledRequestLocalSystemReactivationGroups(segments)
 	groups := buildProfiledSegmentGroups(segments, false)
+	for index := range groups {
+		groups[index] = profiledGroupWithoutCarrierIndexes(
+			groups[index], outerDefensiveOmissions, nil,
+		)
+	}
 	carrierOmissions, unresolvedCarriers, carrierSuppressed, carrierOwnershipComplete :=
 		c.profiledRequestLocalSystemCarrierGenericPlan(systemCarrierGroups, true)
 	if !carrierOwnershipComplete {
@@ -743,6 +924,31 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	); !complete {
 		carrierProofUnavailable = true
 	} else if ok {
+		truncated = truncated || candidate.Truncated
+		if roleResultBetter(candidate, best) {
+			best = candidate
+		}
+	}
+	var inlineToolOmissions map[int]struct{}
+	for _, group := range groups {
+		if len(group.refs) != 1 {
+			continue
+		}
+		ref := group.refs[0]
+		candidate, ok, complete := c.profiledRequestLocalToolInlineReactivationCandidate(
+			ref, mode, thresholds, policy,
+		)
+		if !complete {
+			pendingClassifierIncomplete.rememberField(CoverageReasonClassifierWindow, ref)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if inlineToolOmissions == nil {
+			inlineToolOmissions = make(map[int]struct{}, 1)
+		}
+		inlineToolOmissions[ref.index] = struct{}{}
 		truncated = truncated || candidate.Truncated
 		if roleResultBetter(candidate, best) {
 			best = candidate
@@ -762,6 +968,7 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	}
 	for _, group := range groups {
 		group = profiledGroupWithoutCarrierIndexes(group, carrierOmissions, unresolvedCarriers)
+		group = profiledGroupWithoutCarrierIndexes(group, inlineToolOmissions, nil)
 		group = profiledMultiFieldGroupWithRecoveryRangesMasked(group, activationProofs)
 		if len(group.parts) == 0 {
 			continue
@@ -887,6 +1094,24 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 					referent := c.classifyWithPolicy(carrier.parts, mode, thresholds, policy, false)
 					truncated = truncated || referent.Truncated
 					if referent.FindingConfidence != FindingNone {
+						if len(carrier.refs) == 1 && carrier.parts[0] != carrier.refs[0].segment.Text {
+							core := carrier.parts[0]
+							complete := true
+							if profiledReferentCarrierKind(carrier.refs[0].segment.ContentKind) {
+								core, complete = profiledNormalizedReconstructedCore(carrier.parts[0])
+							}
+							if !complete || !c.rebaseProfiledReconstructedCore(
+								&referent, carrier.refs, core, policy,
+							) {
+								referent = c.classifyWithPolicy(
+									[]string{carrier.refs[0].segment.Text},
+									mode, thresholds, policy, false,
+								)
+								if referent.FindingConfidence == FindingNone {
+									continue
+								}
+							}
+						}
 						// The roleless carrier result cannot prove current-user ownership or
 						// the referent chain yet. Bind the exact profiled actor, carrier
 						// occurrences, and current speech-act anchor before asking the
@@ -1417,8 +1642,19 @@ func (c *Classifier) bestProfiledRequestLocalSystemReactivationCandidate(
 			if candidate.Truncated {
 				return Result{}, false, false
 			}
-			if !profiledSelfContainedCarrierCandidate(candidate, thresholds) {
-				continue
+			if len(proof.carrierRefs) == 1 && proof.parts[0] != proof.carrierRefs[0].segment.Text {
+				core, complete := profiledNormalizedReconstructedCore(proof.parts[0])
+				if !complete || !c.rebaseProfiledReconstructedCore(
+					&candidate, proof.carrierRefs, core, policy,
+				) {
+					candidate = c.classifyWithPolicy(
+						[]string{proof.carrierRefs[0].segment.Text},
+						mode, thresholds, policy, false,
+					)
+					if candidate.Truncated {
+						return Result{}, false, false
+					}
+				}
 			}
 			if len(proof.carrierRefs) > 1 {
 				profiledCarrierRunClearOccurrenceOffsets(&candidate)
@@ -1456,6 +1692,60 @@ func (c *Classifier) bindProfiledRequestLocalSystemReactivation(
 		candidate.DecisionExplanation.EvidenceSegmentCount = len(carrierRefs) + 1
 	}
 	return candidate
+}
+
+// profiledRequestLocalToolInlineReactivationCandidate handles the provider
+// shape in which a tool result remains one physical field even though its text
+// contains a closed fenced carrier followed by an explicit execution referent.
+// User/system Markdown is split into profiled units by the extractor; tool
+// output is intentionally opaque, so the classifier must prove the same narrow
+// relation without inventing synthetic fields or losing physical offsets.
+func (c *Classifier) profiledRequestLocalToolInlineReactivationCandidate(
+	ref profiledSegmentRef,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (Result, bool, bool) {
+	if c == nil || enforcementScopeForSegment(ref.segment) != EnforcementScopeRequestLocalTool {
+		return Result{}, false, true
+	}
+	carrier, matched, complete := c.profiledInlineFencedReferent(ref.segment.Text)
+	if !complete {
+		return Result{}, false, false
+	}
+	if !matched {
+		return Result{}, false, true
+	}
+	candidate := c.classifyWithPolicy([]string{carrier}, mode, thresholds, policy, false)
+	if candidate.Truncated || resultIsNeutralClassifierIncomplete(candidate) {
+		return Result{}, false, false
+	}
+	core, complete := profiledNormalizedReconstructedCore(carrier)
+	if !complete || !c.rebaseProfiledReconstructedCore(
+		&candidate, []profiledSegmentRef{ref}, core, policy,
+	) {
+		return Result{}, false, true
+	}
+	c.annotateProfiledResult(
+		&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
+	)
+	markResultRequestLocalReferentActivated(
+		&candidate, EnforcementScopeRequestLocalTool, true, mode, thresholds,
+	)
+	candidate = withRoleAwareFindingOriginAndScope(
+		candidate, FindingOriginNonUserOrUntrusted,
+		EnforcementScopeRequestLocalTool, mode, thresholds,
+	)
+	bindResultCandidateReferentAnchor(&candidate, ref, true, mode, thresholds)
+	if candidate.DecisionExplanation != nil {
+		candidate.DecisionExplanation.CrossSegmentComposition = false
+		candidate.DecisionExplanation.ReferentLinkUsed = true
+		candidate.DecisionExplanation.EvidenceSegmentCount = 1
+	}
+	if !resultHasEligibleMaliciousWinner(candidate, thresholds) {
+		return Result{}, false, true
+	}
+	return candidate, true, true
 }
 
 func profiledNaturalLanguageMayContainLocalSubcandidate(text string) bool {
@@ -2120,7 +2410,7 @@ func profiledHistoricalToolIntentHasExplicitReferent(intent string) bool {
 		"the output", "this output", "that output",
 		"preceding tool output", "preceding tool result", "previous tool output", "previous tool result",
 		"preceding role content", "previous role content",
-		"它", "该内容", "上述", "上面", "前面", "前述", "照做",
+		"它", "该内容", "上述", "上面", "以上", "前面", "前述", "照做",
 	)
 }
 
@@ -2640,7 +2930,7 @@ func (c *Classifier) profiledRequestLocalSystemCarrierRefs(
 		return proofParts, false, complete
 	}
 	if len(refs) == 1 {
-		return []string{refs[0].segment.Text}, true, true
+		return proofParts, true, true
 	}
 	return []string{strings.Join(proofParts, " ")}, true, true
 }
@@ -2945,6 +3235,7 @@ func profiledGroupWithoutCarrierIndexes(
 		len(omitted) == 0 && len(unresolved) == 0 {
 		return group
 	}
+	originalActiveDirective := group.activeDirective
 	filteredParts := make([]string, 0, len(group.parts))
 	filteredRefs := make([]profiledSegmentRef, 0, len(group.refs))
 	for index, ref := range group.refs {
@@ -2959,6 +3250,15 @@ func profiledGroupWithoutCarrierIndexes(
 	}
 	group.parts = filteredParts
 	group.refs = filteredRefs
+	group.activeDirective = false
+	group.structuredTool = false
+	for _, ref := range filteredRefs {
+		segment := ref.segment
+		group.activeDirective = group.activeDirective || profiledContentActiveDirective(segment.ContentKind) ||
+			originalActiveDirective && profiledRequestLocalToolResultCarrier(segment)
+		group.structuredTool = group.structuredTool || segment.Provenance == extract.ProvenanceToolPayload ||
+			segment.ContentKind == extract.ContentKindToolCallArguments
+	}
 	return group
 }
 
@@ -2982,12 +3282,9 @@ func (c *Classifier) profiledRequestLocalSystemCarrierReactivationProofs(
 			continue
 		}
 		carrierRefs := append([]profiledSegmentRef(nil), refs[run.first:run.end]...)
-		parts, imperative, proofComplete := c.profiledRequestLocalSystemCarrierRefs(carrierRefs)
+		parts, _, proofComplete := c.profiledRequestLocalSystemCarrierRefs(carrierRefs)
 		if !proofComplete {
 			return nil, false
-		}
-		if !imperative {
-			continue
 		}
 		proofs = append(proofs, profiledRequestLocalSystemReactivationProof{
 			carrierRefs: carrierRefs,
@@ -3234,6 +3531,69 @@ func profiledClosedFenceBodyOrText(text string) string {
 		return text
 	}
 	return strings.Join(lines[1:len(lines)-1], "\n")
+}
+
+// profiledNormalizedReconstructedCore returns the exact normalized clause
+// space used when a stripped fenced body is classified. Rebinding evidence
+// against the original profiled field must use that same space; raw fenced
+// bytes can differ after case folding, whitespace compaction, or sentinels.
+func profiledNormalizedReconstructedCore(text string) (string, bool) {
+	if strings.TrimSpace(text) == "" {
+		return "", false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return "", false
+	}
+	return string(views.standardRunes), true
+}
+
+// profiledInlineFencedReferent proves exactly one leading closed Markdown
+// fence followed by a bounded explicit referential activation in the same raw
+// field. A second fence, missing close, neutral prose, cancellation, or intent
+// proof loss never receives the reconstructed-core path.
+func (c *Classifier) profiledInlineFencedReferent(text string) (string, bool, bool) {
+	if c == nil || strings.TrimSpace(text) == "" {
+		return "", false, true
+	}
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	if len(lines) < 4 {
+		return "", false, true
+	}
+	marker, count, ok := profiledFenceMarkerLine(strings.TrimSuffix(lines[0], "\r"))
+	if !ok {
+		return "", false, true
+	}
+	closing := -1
+	for index := 2; index < len(lines); index++ {
+		if profiledClosingFenceLine(strings.TrimSuffix(lines[index], "\r"), marker, count) {
+			closing = index
+			break
+		}
+	}
+	if closing < 0 || closing == len(lines)-1 {
+		return "", false, true
+	}
+	for _, line := range lines[closing+1:] {
+		if _, _, fenced := profiledFenceMarkerLine(strings.TrimSuffix(line, "\r")); fenced {
+			return "", false, true
+		}
+	}
+	followUp := strings.TrimSpace(strings.Join(lines[closing+1:], "\n"))
+	active, complete := c.profiledHistoricalToolActivationDirective(followUp)
+	if !complete {
+		return "", true, false
+	}
+	if !active {
+		return "", false, true
+	}
+	carrier := strings.TrimSpace(strings.Join(lines[1:closing], "\n"))
+	if carrier == "" {
+		return "", false, true
+	}
+	return carrier, true, true
 }
 
 func profiledFenceMarkerLine(line string) (byte, int, bool) {
@@ -3929,6 +4289,8 @@ func (c *Classifier) selectProfiledCurrentCarrier(
 		default:
 			return profiledSegmentGroup{}, true
 		}
+	} else {
+		parts[0] = profiledClosedFenceBodyOrText(selected.segment.Text)
 	}
 	return profiledSegmentGroup{
 		refs:  []profiledSegmentRef{selected},

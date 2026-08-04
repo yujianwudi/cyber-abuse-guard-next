@@ -2604,6 +2604,34 @@ jobs:
                 with self.assertRaisesRegex(ContractError, "privacy-safe mutation fixture"):
                     validate_round6_makefile_contract(text, source)
 
+    def test_round6_makefile_requires_current_cpa_audit_unittest(self):
+        source = Path(__file__).parent.parent / "Makefile"
+        original = source.read_text(encoding="utf-8")
+        required_line = (
+            "\tpython3 -B -m unittest discover -s "
+            "./tools/current-cpa-audit/tests -p 'test_*.py'\n"
+        )
+        self.assertEqual(original.count(required_line), 2)
+        validate_round6_makefile_contract(original, source)
+        before_last, last, after_last = original.rpartition(required_line)
+        self.assertEqual(last, required_line)
+        mutations = (
+            ("script-test", original.replace(required_line, "", 1)),
+            ("round6-script-test", before_last + after_last),
+        )
+        for target, mutation in mutations:
+            with self.subTest(target=target):
+                self.assertNotEqual(mutation, original)
+                self.assertEqual(mutation.count(required_line), 1)
+                with tempfile.TemporaryDirectory() as directory:
+                    mutated_source = Path(directory) / "Makefile"
+                    mutated_source.write_text(mutation, encoding="utf-8")
+                    with self.assertRaisesRegex(ContractError, "current-cpa-audit"):
+                        validate_round6_makefile_contract(
+                            mutated_source.read_text(encoding="utf-8"),
+                            mutated_source,
+                        )
+
     def candidate_workflow(self) -> str:
         source = Path(__file__).parent.parent / ".github/workflows/candidate.yml"
         return source.read_text(encoding="utf-8")

@@ -175,6 +175,9 @@ func (s *Store) RecordRawCapture(input RawCaptureInput) error {
 	if !s.cfg.RawCapture.Enabled {
 		return ErrRawCaptureDisabled
 	}
+	if err := s.rejectCapacityAdmission(1, 1); err != nil {
+		return err
+	}
 	if err := s.checkStorageAccess(); err != nil {
 		s.rejected.Add(1)
 		s.rawRejected.Add(1)
@@ -223,6 +226,9 @@ func (s *Store) EnqueueEventWithRawCapture(event Event, input RawCaptureInput) (
 	}
 	if !s.cfg.RawCapture.Enabled {
 		return false, ErrRawCaptureDisabled
+	}
+	if err := s.rejectCapacityAdmission(2, 1); err != nil {
+		return false, err
 	}
 	if err := s.checkStorageAccess(); err != nil {
 		s.rejected.Add(2)
@@ -435,7 +441,14 @@ func (s *Store) PurgeRawCaptures(ctx context.Context) (int64, error) {
 	if err := s.Flush(ctx); err != nil {
 		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: flush before raw capture purge: %w", err))
 	}
-	return s.purgeRawCaptures(ctx)
+	deleted, err := s.purgeRawCaptures(ctx)
+	if err != nil {
+		return deleted, err
+	}
+	if capacityErr := s.enforceCapacity(ctx); capacityErr != nil {
+		return deleted, capacityErr
+	}
+	return deleted, nil
 }
 
 // purgeRawCaptures is the startup form used before the writer goroutine starts.
@@ -462,8 +475,10 @@ func (s *Store) purgeRawCaptures(ctx context.Context) (int64, error) {
 	if deleted > 0 {
 		s.cleaned.Add(uint64(deleted))
 	}
-	s.degraded.Store(false)
-	s.lastErr.Store("")
+	if !s.overLimit.Load() {
+		s.degraded.Store(false)
+		s.lastErr.Store("")
+	}
 	return deleted, nil
 }
 

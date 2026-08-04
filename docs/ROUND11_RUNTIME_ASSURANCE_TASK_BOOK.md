@@ -1,8 +1,8 @@
 # Cyber-Abuse-Guard Next 第十一轮运行时可信度完善任务书
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v11
+current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
 状态：**实现已完成 / 本地与 GitHub 收口中**

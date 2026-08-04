@@ -2,12 +2,12 @@ package classifier
 
 // ClassifierPolicyVersion identifies the behavior-model contract independently
 // from the separately versioned YAML ruleset.
-const ClassifierPolicyVersion = "classifier-policy-v10"
+const ClassifierPolicyVersion = "classifier-policy-v11"
 
 // ClassifierPolicySHA256 binds the deterministic classifier, role handling,
 // bounded extractor, rules schema, and embedded policy sources listed in
 // policy_identity_test.go. It is updated only when one of those sources changes.
-const ClassifierPolicySHA256 = "7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2"
+const ClassifierPolicySHA256 = "f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55"
 
 // PolicyIdentity is safe to expose through management or audit metadata: it
 // contains only stable identifiers and never includes request text.

@@ -19,12 +19,15 @@ import (
 )
 
 var (
-	ErrClosed          = errors.New("audit: store is closed")
-	ErrQueueFull       = errors.New("audit: async queue is full")
-	ErrInvalidEvent    = errors.New("audit: invalid event")
-	ErrUnavailable     = errors.New("audit: database is unavailable")
-	ErrStorageBlocked  = errors.New("audit: persistent storage access is blocked")
-	ErrRawCapturePurge = errors.New("audit: raw request capture purge failed")
+	ErrClosed                = errors.New("audit: store is closed")
+	ErrQueueFull             = errors.New("audit: async queue is full")
+	ErrInvalidEvent          = errors.New("audit: invalid event")
+	ErrUnavailable           = errors.New("audit: database is unavailable")
+	ErrStorageBlocked        = errors.New("audit: persistent storage access is blocked")
+	ErrRawCapturePurge       = errors.New("audit: raw request capture purge failed")
+	ErrCapacityExceeded      = errors.New("audit: database capacity exceeded")
+	ErrCapacityCheckFailed   = errors.New("audit: database capacity check failed")
+	ErrCapacityCleanupFailed = errors.New("audit: database capacity cleanup failed")
 )
 
 const schema = `
@@ -132,12 +135,19 @@ type Status struct {
 	RawCaptureQueueHighWater uint64 `json:"raw_capture_queue_high_water"`
 	// Prepare latency covers attempts that reached request preview preparation
 	// after admission. Rejected metadata/body preparations are included.
-	RawCapturePrepareCount   uint64                `json:"raw_capture_prepare_count"`
-	RawCapturePrepareTotalUS uint64                `json:"raw_capture_prepare_total_us"`
-	RawCapturePrepareLastUS  uint64                `json:"raw_capture_prepare_last_us"`
-	RawCapturePrepareMaxUS   uint64                `json:"raw_capture_prepare_max_us"`
-	CleanupDeleted           uint64                `json:"cleanup_deleted"`
-	MigrationBackups         MigrationBackupStatus `json:"migration_backups"`
+	RawCapturePrepareCount       uint64                `json:"raw_capture_prepare_count"`
+	RawCapturePrepareTotalUS     uint64                `json:"raw_capture_prepare_total_us"`
+	RawCapturePrepareLastUS      uint64                `json:"raw_capture_prepare_last_us"`
+	RawCapturePrepareMaxUS       uint64                `json:"raw_capture_prepare_max_us"`
+	CleanupDeleted               uint64                `json:"cleanup_deleted"`
+	CurrentLiveBytes             int64                 `json:"current_live_bytes"`
+	ConfiguredMaxBytes           int64                 `json:"configured_max_bytes"`
+	CapacityMeasurementAvailable bool                  `json:"capacity_measurement_available"`
+	OverLimit                    bool                  `json:"over_limit"`
+	CapacityCleanupRuns          uint64                `json:"capacity_cleanup_runs"`
+	CapacityCleanupDeleted       uint64                `json:"capacity_cleanup_deleted"`
+	CapacityRejected             uint64                `json:"capacity_rejected"`
+	MigrationBackups             MigrationBackupStatus `json:"migration_backups"`
 }
 
 // Stats combines persisted aggregates with the in-memory fail-open counters.
@@ -156,27 +166,34 @@ type Stats struct {
 	UniqueDecisionRuleWindows int64 `json:"unique_decision_rule_windows"`
 	// WindowRepeatEvents counts hashed events after the first event in each
 	// distinct decision/rule retry window.
-	WindowRepeatEvents       int64            `json:"window_repeat_events"`
-	ByAction                 map[string]int64 `json:"by_action"`
-	ByDecisionKind           map[string]int64 `json:"by_decision_kind"`
-	ByCategory               map[string]int64 `json:"by_category"`
-	Enqueued                 uint64           `json:"enqueued"`
-	Written                  uint64           `json:"written"`
-	Dropped                  uint64           `json:"dropped"`
-	Failed                   uint64           `json:"failed"`
-	Rejected                 uint64           `json:"rejected"`
-	RawCaptureEnqueued       uint64           `json:"raw_capture_enqueued"`
-	RawCaptureWritten        uint64           `json:"raw_capture_written"`
-	RawCaptureDropped        uint64           `json:"raw_capture_dropped"`
-	RawCaptureFailed         uint64           `json:"raw_capture_failed"`
-	RawCaptureRejected       uint64           `json:"raw_capture_rejected"`
-	RawCaptureDeduplicated   uint64           `json:"raw_capture_deduplicated"`
-	RawCaptureQueueHighWater uint64           `json:"raw_capture_queue_high_water"`
-	RawCapturePrepareCount   uint64           `json:"raw_capture_prepare_count"`
-	RawCapturePrepareTotalUS uint64           `json:"raw_capture_prepare_total_us"`
-	RawCapturePrepareLastUS  uint64           `json:"raw_capture_prepare_last_us"`
-	RawCapturePrepareMaxUS   uint64           `json:"raw_capture_prepare_max_us"`
-	CleanupDeleted           uint64           `json:"cleanup_deleted"`
+	WindowRepeatEvents           int64            `json:"window_repeat_events"`
+	ByAction                     map[string]int64 `json:"by_action"`
+	ByDecisionKind               map[string]int64 `json:"by_decision_kind"`
+	ByCategory                   map[string]int64 `json:"by_category"`
+	Enqueued                     uint64           `json:"enqueued"`
+	Written                      uint64           `json:"written"`
+	Dropped                      uint64           `json:"dropped"`
+	Failed                       uint64           `json:"failed"`
+	Rejected                     uint64           `json:"rejected"`
+	RawCaptureEnqueued           uint64           `json:"raw_capture_enqueued"`
+	RawCaptureWritten            uint64           `json:"raw_capture_written"`
+	RawCaptureDropped            uint64           `json:"raw_capture_dropped"`
+	RawCaptureFailed             uint64           `json:"raw_capture_failed"`
+	RawCaptureRejected           uint64           `json:"raw_capture_rejected"`
+	RawCaptureDeduplicated       uint64           `json:"raw_capture_deduplicated"`
+	RawCaptureQueueHighWater     uint64           `json:"raw_capture_queue_high_water"`
+	RawCapturePrepareCount       uint64           `json:"raw_capture_prepare_count"`
+	RawCapturePrepareTotalUS     uint64           `json:"raw_capture_prepare_total_us"`
+	RawCapturePrepareLastUS      uint64           `json:"raw_capture_prepare_last_us"`
+	RawCapturePrepareMaxUS       uint64           `json:"raw_capture_prepare_max_us"`
+	CleanupDeleted               uint64           `json:"cleanup_deleted"`
+	CurrentLiveBytes             int64            `json:"current_live_bytes"`
+	ConfiguredMaxBytes           int64            `json:"configured_max_bytes"`
+	CapacityMeasurementAvailable bool             `json:"capacity_measurement_available"`
+	OverLimit                    bool             `json:"over_limit"`
+	CapacityCleanupRuns          uint64           `json:"capacity_cleanup_runs"`
+	CapacityCleanupDeleted       uint64           `json:"capacity_cleanup_deleted"`
+	CapacityRejected             uint64           `json:"capacity_rejected"`
 }
 
 type workItem struct {
@@ -209,28 +226,35 @@ type Store struct {
 	abortOnce      sync.Once
 	closeErr       error
 
-	degraded          atomic.Bool
-	aborted           atomic.Bool
-	lastErr           atomic.Value // string
-	enqueued          atomic.Uint64
-	written           atomic.Uint64
-	dropped           atomic.Uint64
-	failed            atomic.Uint64
-	rejected          atomic.Uint64
-	cleaned           atomic.Uint64
-	rawEnqueued       atomic.Uint64
-	rawWritten        atomic.Uint64
-	rawDropped        atomic.Uint64
-	rawFailed         atomic.Uint64
-	rawRejected       atomic.Uint64
-	rawDeduplicated   atomic.Uint64
-	rawQueueHighWater atomic.Uint64
-	rawPrepareCount   atomic.Uint64
-	rawPrepareTotalUS atomic.Uint64
-	rawPrepareLastUS  atomic.Uint64
-	rawPrepareMaxUS   atomic.Uint64
-	schemaVersion     atomic.Int64
-	migrationBackupMu sync.Mutex
+	degraded               atomic.Bool
+	aborted                atomic.Bool
+	lastErr                atomic.Value // string
+	enqueued               atomic.Uint64
+	written                atomic.Uint64
+	dropped                atomic.Uint64
+	failed                 atomic.Uint64
+	rejected               atomic.Uint64
+	cleaned                atomic.Uint64
+	rawEnqueued            atomic.Uint64
+	rawWritten             atomic.Uint64
+	rawDropped             atomic.Uint64
+	rawFailed              atomic.Uint64
+	rawRejected            atomic.Uint64
+	rawDeduplicated        atomic.Uint64
+	rawQueueHighWater      atomic.Uint64
+	rawPrepareCount        atomic.Uint64
+	rawPrepareTotalUS      atomic.Uint64
+	rawPrepareLastUS       atomic.Uint64
+	rawPrepareMaxUS        atomic.Uint64
+	currentLiveBytes       atomic.Int64
+	capacityMeasured       atomic.Bool
+	overLimit              atomic.Bool
+	capacityCleanupRuns    atomic.Uint64
+	capacityCleanupDeleted atomic.Uint64
+	capacityRejected       atomic.Uint64
+	schemaVersion          atomic.Int64
+	migrationBackupMu      sync.Mutex
+	capacityMu             sync.Mutex
 
 	reportMu   sync.Mutex
 	lastReport time.Time
@@ -272,6 +296,9 @@ func Open(cfg Config) (*Store, error) {
 			if _, purgeErr := store.purgeRawCaptures(context.Background()); purgeErr != nil {
 				err = fmt.Errorf("%w: %w", ErrRawCapturePurge, purgeErr)
 			}
+		}
+		if err == nil {
+			_ = store.enforceCapacity(context.Background())
 		}
 	}
 	store.wg.Add(1)
@@ -413,6 +440,9 @@ func (s *Store) Record(event Event) bool { return s.Enqueue(event) == nil }
 func (s *Store) Enqueue(event Event) error {
 	if s == nil {
 		return ErrUnavailable
+	}
+	if err := s.rejectCapacityAdmission(1, 0); err != nil {
+		return err
 	}
 	if err := s.checkStorageAccess(); err != nil {
 		s.rejected.Add(1)
@@ -609,6 +639,11 @@ func (s *Store) handleBatch(batch []workItem) {
 		if item.event == nil && item.rawCapture == nil {
 			continue
 		}
+		if s.overLimit.Load() {
+			hadFailure = true
+			s.rejectQueuedCapacityWork(item)
+			continue
+		}
 		storageErr := s.checkStorageAccess()
 		if storageErr != nil {
 			hadFailure = true
@@ -660,8 +695,11 @@ func (s *Store) handleBatch(batch []workItem) {
 			s.lastErr.Store(err.Error())
 			s.report(err)
 		}
+		if err := s.enforceCapacity(s.workerCtx); err != nil {
+			hadFailure = true
+		}
 	}
-	if anySuccess && !hadFailure {
+	if anySuccess && !hadFailure && !s.overLimit.Load() {
 		s.degraded.Store(false)
 		s.lastErr.Store("")
 	}
@@ -681,6 +719,34 @@ func (s *Store) checkStorageAccess() error {
 		return fmt.Errorf("%w: %v", ErrStorageBlocked, err)
 	}
 	return nil
+}
+
+func (s *Store) rejectCapacityAdmission(logicalRecords, rawCaptures uint64) error {
+	if s == nil || !s.overLimit.Load() {
+		return nil
+	}
+	s.rejected.Add(logicalRecords)
+	if rawCaptures != 0 {
+		s.rawRejected.Add(rawCaptures)
+	}
+	s.capacityRejected.Add(logicalRecords)
+	return ErrCapacityExceeded
+}
+
+func (s *Store) rejectQueuedCapacityWork(item workItem) {
+	logicalRecords := uint64(0)
+	if item.event != nil {
+		logicalRecords++
+		s.failed.Add(1)
+	}
+	if item.rawCapture != nil {
+		logicalRecords++
+		s.failed.Add(1)
+		s.rawFailed.Add(1)
+	}
+	if logicalRecords != 0 {
+		s.capacityRejected.Add(logicalRecords)
+	}
 }
 
 type contextExecer interface {
@@ -832,31 +898,38 @@ func (s *Store) Status() Status {
 		lastError = MigrationBackupInventoryWarning
 	}
 	return Status{
-		Healthy:                  !degraded && !closed && s.db != nil,
-		Degraded:                 degraded,
-		Closed:                   closed,
-		SchemaVersion:            int(s.schemaVersion.Load()),
-		LastError:                lastError,
-		QueueDepth:               len(s.queueSlots),
-		QueueCapacity:            cap(s.queueSlots),
-		Enqueued:                 s.enqueued.Load(),
-		Written:                  s.written.Load(),
-		Dropped:                  s.dropped.Load(),
-		Failed:                   s.failed.Load(),
-		Rejected:                 s.rejected.Load(),
-		RawCaptureEnqueued:       s.rawEnqueued.Load(),
-		RawCaptureWritten:        s.rawWritten.Load(),
-		RawCaptureDropped:        s.rawDropped.Load(),
-		RawCaptureFailed:         s.rawFailed.Load(),
-		RawCaptureRejected:       s.rawRejected.Load(),
-		RawCaptureDeduplicated:   s.rawDeduplicated.Load(),
-		RawCaptureQueueHighWater: s.rawQueueHighWater.Load(),
-		RawCapturePrepareCount:   s.rawPrepareCount.Load(),
-		RawCapturePrepareTotalUS: s.rawPrepareTotalUS.Load(),
-		RawCapturePrepareLastUS:  s.rawPrepareLastUS.Load(),
-		RawCapturePrepareMaxUS:   s.rawPrepareMaxUS.Load(),
-		CleanupDeleted:           s.cleaned.Load(),
-		MigrationBackups:         migrationBackups,
+		Healthy:                      !degraded && !closed && s.db != nil,
+		Degraded:                     degraded,
+		Closed:                       closed,
+		SchemaVersion:                int(s.schemaVersion.Load()),
+		LastError:                    lastError,
+		QueueDepth:                   len(s.queueSlots),
+		QueueCapacity:                cap(s.queueSlots),
+		Enqueued:                     s.enqueued.Load(),
+		Written:                      s.written.Load(),
+		Dropped:                      s.dropped.Load(),
+		Failed:                       s.failed.Load(),
+		Rejected:                     s.rejected.Load(),
+		RawCaptureEnqueued:           s.rawEnqueued.Load(),
+		RawCaptureWritten:            s.rawWritten.Load(),
+		RawCaptureDropped:            s.rawDropped.Load(),
+		RawCaptureFailed:             s.rawFailed.Load(),
+		RawCaptureRejected:           s.rawRejected.Load(),
+		RawCaptureDeduplicated:       s.rawDeduplicated.Load(),
+		RawCaptureQueueHighWater:     s.rawQueueHighWater.Load(),
+		RawCapturePrepareCount:       s.rawPrepareCount.Load(),
+		RawCapturePrepareTotalUS:     s.rawPrepareTotalUS.Load(),
+		RawCapturePrepareLastUS:      s.rawPrepareLastUS.Load(),
+		RawCapturePrepareMaxUS:       s.rawPrepareMaxUS.Load(),
+		CleanupDeleted:               s.cleaned.Load(),
+		CurrentLiveBytes:             s.currentLiveBytes.Load(),
+		ConfiguredMaxBytes:           s.cfg.MaxBytes,
+		CapacityMeasurementAvailable: s.capacityMeasured.Load(),
+		OverLimit:                    s.overLimit.Load(),
+		CapacityCleanupRuns:          s.capacityCleanupRuns.Load(),
+		CapacityCleanupDeleted:       s.capacityCleanupDeleted.Load(),
+		CapacityRejected:             s.capacityRejected.Load(),
+		MigrationBackups:             migrationBackups,
 	}
 }
 

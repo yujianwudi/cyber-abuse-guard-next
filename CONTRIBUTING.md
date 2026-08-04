@@ -6,6 +6,13 @@ source/compile and Host contract.
 Windows, macOS, musl/Alpine, local deployment, and production deployment are
 outside the ordinary contribution and validation scope.
 
+Round 12 is source/test/audit work only. The green
+`main@21267e742b624b29a75bd3683fd6914f76c764b5` engineering baseline does not
+transfer to a later pull-request commit; the final candidate requires its own
+GitHub checks and second-machine execution. Protected Host, independent
+attestation, production approval, and release readiness remain `NOT_PROVIDED`.
+See [the active status boundary](docs/ROUND12_STATUS.md).
+
 ## Restricted-data boundary
 
 Ordinary development must not open, read, print, copy, transform, or execute
@@ -48,7 +55,8 @@ real-Host, or release validation from these checks.
 - Preserve full-SHA pinning and least privilege in GitHub Actions changes.
 - Resolve all actionable review conversations.
 - Before merge, the required checks must pass: `quality-and-artifacts`,
-  `fuzz-long`, `reproducibility`, and `Analyze Go on Linux`.
+  `fuzz-long`, `reproducibility`, `Analyze Go on Linux`, and
+  `round9-policy-and-corpus`.
 - Follow the desired default-branch controls in
   [docs/REPOSITORY_GOVERNANCE.md](docs/REPOSITORY_GOVERNANCE.md).
 
@@ -60,3 +68,8 @@ rollout. Unless the maintainer explicitly authorizes release work, contributors
 must not push release tags, dispatch publication workflows, publish artifacts,
 or change release evidence to claim external Host, audit, evaluation, or
 production approval.
+
+The current Round 12 scope explicitly forbids creating a tag, RC, plugin asset,
+or GitHub Release. The owner-run input diagnostic is not an independent
+attestation and must not be relabelled as the pending final-candidate
+second-machine result.

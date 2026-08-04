@@ -189,6 +189,7 @@ jobs:
             dist/ruleset.sha256
             dist/sbom.cdx.json
           if-no-files-found: error
+          retention-days: 14
   reproducibility:
     needs: quality-and-artifacts
     runs-on: ubuntu-24.04

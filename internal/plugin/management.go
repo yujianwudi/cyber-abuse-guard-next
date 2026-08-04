@@ -27,8 +27,8 @@ import (
 
 const (
 	managementBasePath                  = "/v0/management/plugins/" + ID
-	maxManagementBody                   = 2 << 20
-	maxManagementEnvelope               = 4 << 20
+	maxManagementBody                   = 1 << 20
+	maxManagementEnvelope               = 2 << 20
 	maxManagementPathBytes              = 512
 	maxManagementQueryBytes             = 4096
 	maxManagementQueryKeys              = 16
@@ -368,8 +368,11 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 	if state != nil && state.config.Audit.Enabled && state.audit == nil {
 		auditDegraded = true
 		auditStatus = managementAuditStatus{
-			Enabled:                  true,
-			Status:                   audit.Status{Degraded: true},
+			Enabled: true,
+			Status: audit.Status{
+				Degraded:           true,
+				ConfiguredMaxBytes: int64(state.config.Audit.MaxDBMB) << 20,
+			},
 			auditStorageVerification: auditStorage,
 		}
 	} else if state != nil && state.audit != nil {

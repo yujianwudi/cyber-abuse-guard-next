@@ -14,6 +14,12 @@ round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
 round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+round12_source_policy: APPROVED_EXACT_PINS / 14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97
+round12_audit_runner_bundle: 90978e3ee06b108735fe6d4dbd79b33cc55eed01a14ba8d7c01b2b3b828383f3
+round12_local_audit_tool_tests: PASS / LINUX / 57_OF_57
+round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
+round12_local_go_unit: PASS / GO1.26.0_DEVELOPMENT_EVIDENCE_ONLY
+round12_local_go_race: INCOMPLETE_SESSION_INTERRUPTION / NOT_PASS / EXACT_CI_REQUIRED
 round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
 round12_working_candidate_engineering_ci: PENDING_FINAL_CANDIDATE
 round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
@@ -29,6 +35,25 @@ legacy_v0.15_support: SUSPENDED
 <!-- round12-status:end -->
 
 ## What has passed
+
+The Round 12 implementation has passed its pre-final Linux development checks:
+
+- the complete safe package, classifier, and counted-Mock unit lanes passed
+  under the locally available Go 1.26.0 toolchain;
+- format, diff, module verification, vet, fuzz seed, repository-secret,
+  workflow, ShellCheck, script-contract, corpus, and release-document gates
+  passed;
+- the Safe Gate mutation suite passed 209 tests with 91 explicitly retired
+  workflow cases skipped, and its live contract closed three entrypoints,
+  38 Make targets, and 47 scripts;
+- the current CPA audit harness passed 57/57 Linux tests, including the
+  concatenated-ZIP rejection regression, with 11 reviewed source pins and 19
+  semantic cases bound by the approved policy above.
+
+These are working-tree development results, not exact Go 1.26.4 candidate CI
+or second-machine evidence. The local race attempt was interrupted by the tool
+session and is explicitly `NOT_PASS`; it must complete in the required GitHub
+lane.
 
 Exact baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed the five
 required GitHub engineering contexts through CI run `30880739397`, Policy and
@@ -54,6 +79,9 @@ pending and no `SECOND-MACHINE DIAGNOSTIC PASS` is claimed for Round 12.
 ## What remains open
 
 - The final candidate must obtain its own five required GitHub checks.
+- Exact Go 1.26.4 race, CPA compatibility, build, reproducibility, and bounded
+  fuzz results must come from that candidate's GitHub jobs; local Go 1.26.0
+  development evidence does not replace them.
 - RT12-05/06 must run against the final candidate on CPA
   `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536` and close the functional,
   security, side-effect, identity, database, and performance evidence schema.

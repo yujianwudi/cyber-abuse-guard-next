@@ -3987,6 +3987,9 @@ var quotedReviewSpecificContinuationIntents = []string{
 	"run the payload", "run this payload", "run that payload", "run the output", "run this output", "run that output",
 	"deploy it", "deploy that", "deploy the quoted request", "deploy quoted request",
 	"deploy the payload", "deploy this payload", "deploy that payload", "deploy the output", "deploy this output", "deploy that output",
+	"install and activate it", "install and activate that", "install and activate the above skill", "install and activate this skill",
+	"install and activate the quoted skill", "install and activate the preceding skill",
+	"execute the default workflow above", "follow the default workflow above", "run the default workflow above",
 	"build it", "build that", "build the quoted request", "build quoted request",
 	"build the payload", "build this payload", "build that payload", "build the output", "build this output", "build that output",
 	"operationalize it", "operationalize that", "operationalize the above", "operationalize the request", "operationalize the quoted request", "operationalize quoted request",
@@ -3994,6 +3997,8 @@ var quotedReviewSpecificContinuationIntents = []string{
 	"operationalise it", "operationalise that", "operationalise the above", "operationalise the request", "operationalise the quoted request", "operationalise quoted request",
 	"operationalise the payload", "operationalise this payload", "operationalise that payload", "operationalise the output", "operationalise this output", "operationalise that output",
 	"执行它", "执行该内容", "执行上述", "执行上面的请求", "执行前面的请求", "执行前述请求",
+	"安装并激活以上 skill", "安装并激活上述 skill", "安装并激活上面的 skill", "安装并激活前述 skill",
+	"按上面的默认流程执行", "按上述默认流程执行", "按以上默认流程执行", "按前述默认流程执行",
 	"照做", "按上述执行", "按前述方案部署", "继续执行", "实施它", "实施上述",
 	"应用它", "应用上述", "实现它", "实现上述", "运行它", "运行上述", "部署它", "部署上述",
 }
@@ -4304,8 +4309,10 @@ func quotedReviewContinuationIntentsEquivalent(first, second string) bool {
 func quotedReviewContinuationIntentFamily(intent string) string {
 	intent = strings.TrimSpace(intent)
 	switch {
-	case hasAnyPrefix(intent, "execute", "run", "执行", "按上述执行", "运行"):
+	case hasAnyPrefix(intent, "execute", "run", "执行", "按上述执行", "按上面的默认流程执行", "按上述默认流程执行", "按以上默认流程执行", "按前述默认流程执行", "运行"):
 		return "execute"
+	case hasAnyPrefix(intent, "install and activate", "安装并激活"):
+		return "activate"
 	case hasAnyPrefix(intent, "carry"):
 		return "carry"
 	case hasAnyPrefix(intent, "follow", "obey"):
@@ -4649,7 +4656,7 @@ func quotedReviewContinuationOccurrences(
 func quotedReviewContinuationIntentNeedsClosedReferent(intent string) bool {
 	intent = strings.TrimSpace(intent)
 	for _, referent := range []string{
-		"request", "payload", "output", "instruction", "instructions", "operation",
+		"request", "payload", "output", "instruction", "instructions", "operation", "skill", "workflow",
 	} {
 		if strings.HasSuffix(intent, " "+referent) {
 			return true
@@ -6602,7 +6609,7 @@ func continuesPriorRiskDirective(clause string) bool {
 		"do the same", "apply it", "implement it", "implement the above", "carry it out", "execute it",
 		"working code", "complete code", "source code", "ready-to-run", "ready to run",
 		"commands", "script", "payload", "executable", "implementation",
-		"它", "该内容", "上述", "上面", "同一载荷", "同一工具", "同一操作", "照做", "执行它", "应用它", "实现上述", "完整代码", "可运行代码",
+		"它", "该内容", "上述", "上面", "以上", "同一载荷", "同一工具", "同一操作", "照做", "执行它", "应用它", "实现上述", "完整代码", "可运行代码",
 		"源码", "命令", "脚本", "载荷", "可执行文件", "实现出来",
 	)
 }

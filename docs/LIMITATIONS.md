@@ -1,49 +1,52 @@
-# Known Limitations — v0.16 Round 9 development candidate
+# Known Limitations — v0.16 Round 12 development source
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v11
+current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
-Last updated: 2026-07-27 (Asia/Shanghai)
+Last updated: 2026-08-04 (Asia/Shanghai)
 
-## Current Round 9 evidence boundary
+## Current Round 12 evidence boundary
 
-Round 9 source development now lands on `main`; no final release source freeze
-or exact candidate has been declared. The following evidence classes are
-independent and must not be collapsed into a generic "Host" or "counted-Mock"
-claim:
+Round 12 starts from exact
+`main@21267e742b624b29a75bd3683fd6914f76c764b5`, targets CPA v7.2.116 with
+Go 1.26.4 on Linux amd64, and ends with a gated PR merge rather than a tag or
+Release. The following evidence classes are independent and must not be
+collapsed into a generic "Host," "second machine," or "counted-Mock" claim.
+See the [canonical status boundary](ROUND12_STATUS.md).
 
 | Evidence boundary | Current status |
 |---|---|
-| Local dirty development Host/Router | `PASS / DEVELOPMENT ONLY; NOT RELEASE EVIDENCE` |
-| Repository-local counted-Mock | `NOT_PROVIDED` |
-| Tencent Cloud #2 isolated counted-Mock | `NOT_PROVIDED` |
-| Protected external evaluation and one-shot ledger | `NOT_PROVIDED` |
+| Exact baseline GitHub engineering checks | `PASS / EXACT_MAIN_ONLY`; five required contexts for `main@21267e7` |
+| Round 12 working/final candidate GitHub checks | `PENDING_FINAL_CANDIDATE`; baseline PASS does not transfer |
+| Supplied 1,320-transport second-machine report | `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION` |
+| RT12-05/06 final-candidate second-machine run | `PENDING_FINAL_CANDIDATE_EXECUTION` |
+| Protected Host / external evaluation | `NOT_PROVIDED` |
+| Independent attestation | `NOT_PROVIDED` |
+| Production approval / release readiness | `NOT_PROVIDED`; no tag or Release is authorized |
 
-The local Host result used a generated Linux amd64 `0.16-dirty` `.so`, loopback
-fixtures, and a Mock upstream. It is real development execution for those dirty
-bytes, but is non-transferable and cannot substitute for any of the three missing
-exact-candidate runtime evidence classes. The task requires production to remain
-`mode=audit` and subject control to remain disabled. This repository work did not
-inspect production, so that is a requested constraint rather than a live-verified
-production state. No source, unit, compatibility, Docker-runner, development-
-corpus, or local dirty Host result can close those release boundaries.
+Historical local Host results used generated Linux amd64 development bytes,
+loopback fixtures, and a Mock upstream. They remain non-transferable. The owner-
+run input diagnostic also cannot substitute for the pending final-candidate
+RT12-05/06 evidence. This repository work did not inspect production. No source,
+unit, compatibility, Docker-runner, development-corpus, baseline CI, or input
+diagnostic result can close the protected, independent, production, or release
+boundaries.
 
 1. **No guarantee against account action.** The plugin reduces the number of
    clearly risky requests that reach upstream. It cannot guarantee that an
    account will never be warned, rate-limited, suspended, or deactivated.
 
-2. **The Round 9 candidate is not frozen or production-approved.** The current
-   source version is `0.16`; the development artifact target is the non-latest
-   Linux amd64 prerelease `v0.16-rc.4`, but there is no final source freeze,
-   exact candidate, tag, or Release. Stable `v0.16` does not exist. Independent
-   source/artifact audit, repository-local counted-Mock, Tencent Cloud #2
-   isolated counted-Mock, protected external evaluation/one-shot-ledger
-   evidence, and external admission remain required. The local `v0.16-rc.1`
+2. **The Round 12 candidate is not final or production-approved.** The current
+   source version is `0.16`, but Round 12 does not create an RC, stable tag, or
+   GitHub Release. Stable `v0.16` does not exist. Final-candidate exact GitHub
+   checks, RT12-05/06 second-machine execution, protected Host evidence, and
+   external admission remain required. Independent attestation and production
+   approval are not provided by this round. The local `v0.16-rc.1`
    package, Round 8 `v0.16-rc.2` identity, failed Phase 1 `v0.16-rc.3` identity,
    and Round 5/6 v0.15 evidence are immutable historical records and cannot be
-   moved, overwritten, or relabeled as current Round 9 output.
+   moved, overwritten, or relabeled as current Round 12 output.
 
 3. **Deterministic language rules are imperfect.** Novel phrasing, languages,
    slang, semantic indirection, encrypted content, unknown encodings, and
@@ -351,8 +354,8 @@ corpus, or local dirty Host result can close those release boundaries.
 
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The active source-line identity is
-    `classifier-policy-v10` / SHA-256
-`7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2`,
+    `classifier-policy-v11` / SHA-256
+`f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`,
     and remains pending until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -397,10 +400,10 @@ corpus, or local dirty Host result can close those release boundaries.
     reports, and operator scripts belong in the separate
     `cyber-abuse-guard-v<version>-audit-bundle.zip`. Historical round5.1 dirty
     versions of these files exist on a blocked development prerelease, but
-    neither is an approved stable release artifact. Any future Round 9 runtime
-    evidence must use the exact frozen v0.16-rc.4 candidate and name its
-    repository-local, Tencent Cloud #2 isolated, or protected-external boundary;
-    it cannot use a historical Round 5/6/8 or v0.16-rc.1 asset.
+    neither is an approved stable release artifact. Round 12 runtime evidence
+    must use the exact final-candidate commit/tree/SO and name its Tencent Cloud
+    #2 diagnostic or protected-external boundary; it cannot use a historical
+    Round 5/6/8/9 or v0.16-rc.1 through v0.16-rc.4 asset.
 
 41. **Visible Round 9 development corpora are not independent evidence.** The
     1,200-case development-benign corpus, paired-malicious v3 corpus, and

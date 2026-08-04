@@ -1,13 +1,55 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v11
+current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
-Source-tree status updated: 2026-08-04 (Asia/Shanghai)
+Source-tree status updated: 2026-08-05 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
+
+- Complete the Round 12 working-tree implementation without claiming final
+  acceptance or a release. SQLite audit writes now enforce the configured live
+  page ceiling after bounded write batches, purge Raw Capture before ordinary
+  events, reject further audit writes when capacity cannot be recovered, and
+  expose low-cardinality capacity state. Management and RPC request limits are
+  fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
+  `X-API-Key` values resolve to a deterministic conflict identity. The
+  classifier advances to `classifier-policy-v11` /
+  `f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`:
+  an outer defensive owner suppresses only its own inert carrier, and a later
+  explicit activation must be in the same scope and a distinct logical field;
+  missing paths or exhausted proof budgets remain incomplete rather than
+  fabricated semantic positives. Batch and streaming paths share the same
+  proof and recompute group flags after carrier omission.
+
+- Add the closed `tools/current-cpa-audit` RT12-05 harness. The approved policy
+  binds 11 reviewed paths across the five fixed repositories to exact
+  commit/tree/blob/raw/text identities and 19 semantic cases; policy SHA-256 is
+  `14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97`.
+  Acquisition and cleanup are device/inode, SHA, size, and link-count bound;
+  pending material cannot run, source drift requires a new human review, and
+  private corpus text is removed after use. A final audit found and closed a
+  concatenated-ZIP prefix bypass that Python's ZIP reader would otherwise
+  silently rebase to the last archive. The current runner bundle is
+  `90978e3ee06b108735fe6d4dbd79b33cc55eed01a14ba8d7c01b2b3b828383f3`;
+  Linux unit verification is 57/57 PASS. Exact Go 1.26.4 candidate CI and the
+  final-candidate second-machine run remain pending and are not relabelled as
+  PASS.
+
+- Freeze the Round 12 evidence vocabulary and publication boundary. Exact
+  baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI
+  `30880739397`, Policy and Corpus Gate `30880739368`, and CodeQL
+  `30880739360`; those are exact-main engineering results only. The supplied
+  1,320-transport second-machine report remains
+  `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`; the
+  RT12-05/06 final-candidate run remains
+  `PENDING_FINAL_CANDIDATE_EXECUTION`. Protected Host, independent attestation,
+  production approval, and release readiness remain `NOT_PROVIDED`. This round
+  may merge a gated PR to `main` and does not create a tag, RC, plugin asset, or
+  GitHub Release. The old repository and `v0.15` Release now return GitHub API
+  `404`, so legacy availability is `UNAVAILABLE` and support is `SUSPENDED`.
 
 - Advance the sole active CPA contract from official `v7.2.113` to official
   `v7.2.116` (`a88197f845c979132c8978ea223c6af05cc81536`) with module sum
@@ -24,8 +66,10 @@ Source-tree status updated: 2026-08-04 (Asia/Shanghai)
   `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`;
   recording that upstream hash is not a download, execution, CAG artifact, or
   Host PASS. Frozen v7.2.113 results remain bound to their original commit and
-  bytes; all v7.2.116 exact-commit CI, Host, watchdog, sandbox, and production
-  conclusions remain pending. The final tree must rebind the classifier source
+  bytes. Exact v7.2.116 baseline `main@21267e7` engineering CI passed, while the
+  Round 12 final candidate still needs its own exact-commit CI and second-machine
+  execution; protected Host, independent, sandbox, release, and production
+  conclusions remain `NOT_PROVIDED`. The final tree must rebind the classifier source
   identity because root `go.mod` and `go.sum` changed; no prior result is
   reattributed.
 

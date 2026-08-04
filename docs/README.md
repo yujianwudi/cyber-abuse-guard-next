@@ -1,22 +1,26 @@
 # Documentation index
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v11
+current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
-are the shortest current-status entry points. `v0.15` is the manually published
-[historical stable release](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15).
+are the shortest current-status entry points. The previously documented old
+repository and `v0.15` Release both returned GitHub API `404` on 2026-08-04;
+legacy availability is `UNAVAILABLE` and security support is `SUSPENDED`.
 The current project target is source validation on `main`, pinned to CPA
-v7.2.116. GitHub Actions no longer builds or publishes an RC or Release. The
-owner performs the independent server-side sandbox review separately;
-production approval has not been granted and no stable `v0.16` exists.
+v7.2.116. GitHub Actions no longer builds or publishes an RC or Release.
+Owner-run server diagnostics are not independent evidence; production approval
+and release readiness are `NOT_PROVIDED`, and no stable `v0.16` exists.
 
-Commit `aaa71d9924bef935196790976c838968408dcdeb` is the confirmed green
-engineering baseline. The current feature branch still requires its own PR
-checks. Engineering CI validates source and development artifacts only; it does
-not establish a Host PASS, independent-audit PASS, or production PASS.
+Commit `21267e742b624b29a75bd3683fd6914f76c764b5` is the confirmed green
+v7.2.116 engineering baseline. The supplied second-machine report is an input
+diagnostic only; RT12-05/06 against the final candidate remains
+`PENDING_FINAL_CANDIDATE_EXECUTION`. The current feature branch still requires
+its own PR checks. Engineering CI validates source and development artifacts
+only; it does not establish a protected Host, independent-audit, release, or
+production PASS.
 
 This cleanup adds navigation without relocating frozen evaluation or Holdout
 evidence. Those files keep their existing paths so historical hashes and
@@ -26,6 +30,9 @@ references remain stable.
 
 Use these files for the current implementation and evidence state:
 
+- [Round 12 active status and evidence boundary](ROUND12_STATUS.md)
+- [Round 12 production-hardening task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md)
+- [Round 12 GitHub governance read-only snapshot](reports/ROUND12_GITHUB_GOVERNANCE_SNAPSHOT.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Historical v0.16 release admission policy](RELEASE_POLICY.md)
 - [Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)
@@ -33,7 +40,7 @@ Use these files for the current implementation and evidence state:
 - [Round 9 Linux old-SO rollback gate](ROUND9_OLD_SO_ROLLBACK_GATE.md)
 - [Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)
 - [Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)
-- [Current test status and exact-main CI failures](reports/TEST_REPORT.md)
+- [Current test status and exact-main engineering evidence](reports/TEST_REPORT.md)
 - [Local-package and publication evidence](reports/RELEASE_EVIDENCE.md)
 - [Historical performance evidence and v0.16 acceptance table](reports/PERFORMANCE.md)
 - [Privacy boundary](reports/PRIVACY.md)
