@@ -146,8 +146,9 @@ jobs:
           REQUIRE_DIST_ARTIFACTS: '1'
           ROUND6_SAFE_SPARSE_BUILD: '1'
         run: |
-          export RELEASE_CANDIDATE_EXPECTED_COMMIT="$GITHUB_SHA"
-          export RELEASE_CANDIDATE_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          RELEASE_CANDIDATE_EXPECTED_COMMIT="$GITHUB_SHA"
+          RELEASE_CANDIDATE_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          export RELEASE_CANDIDATE_EXPECTED_COMMIT RELEASE_CANDIDATE_EXPECTED_TREE
           make integration-test round6-development-artifacts round6-cpa-store-contract
           jq -e \
             --arg commit "$RELEASE_CANDIDATE_EXPECTED_COMMIT" \
@@ -493,8 +494,9 @@ jobs:
           ROUND6_REPRODUCIBILITY_MODE: release
           ROUND6_SAFE_SPARSE_BUILD: '1'
         run: |
-          export RELEASE_CANDIDATE_EXPECTED_COMMIT="$GITHUB_SHA"
-          export RELEASE_CANDIDATE_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          RELEASE_CANDIDATE_EXPECTED_COMMIT="$GITHUB_SHA"
+          RELEASE_CANDIDATE_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          export RELEASE_CANDIDATE_EXPECTED_COMMIT RELEASE_CANDIDATE_EXPECTED_TREE
           make round6-reproducibility-test
       - name: clean-tree-check
         run: make clean-tree-check
