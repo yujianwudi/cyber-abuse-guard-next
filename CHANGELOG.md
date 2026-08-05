@@ -116,8 +116,9 @@ Source-tree status updated: 2026-08-06 (Asia/Shanghai)
   and RC normalization also accepts a valid CycloneDX Go pseudo-version derived
   from an ancestor formal tag only when its terminal revision matches the exact
   current HEAD prefix; an otherwise identical version for another commit is
-  rejected. The new exact-merge GitHub run and second-machine evidence remain
-  pending.
+  rejected. The synthetic no-lazy-fetch proof now rejects Git older than 2.39
+  explicitly instead of reporting a misleading reproducibility failure. The
+  new exact-merge GitHub run and second-machine evidence remain pending.
 
 - Freeze the Round 12 evidence vocabulary and publication boundary. Exact
   baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI

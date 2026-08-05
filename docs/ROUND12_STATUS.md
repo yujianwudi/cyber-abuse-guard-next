@@ -19,7 +19,7 @@ round12_audit_runner_bundle: d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce
 round12_audit_run_source: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
 round12_local_audit_tool_tests: PASS / LINUX / 73_OF_73
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
-round12_local_safe_gate: PASS / 210_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
+round12_local_safe_gate: PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
 round12_local_go_race: INCOMPLETE_SESSION_INTERRUPTION / NOT_PASS / EXACT_CI_REQUIRED
 round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
@@ -55,7 +55,7 @@ The Round 12 implementation has passed its pre-final Linux development checks:
 - format, diff, module verification, vet, fuzz seed, repository-secret,
   workflow, ShellCheck, script-contract, corpus, and release-document gates
   passed;
-- the Safe Gate mutation suite passed 210 tests with 91 explicitly retired
+- the Safe Gate mutation suite passed 211 tests with 91 explicitly retired
   workflow cases skipped, and its live contract closed three entrypoints,
   38 Make targets, and 47 scripts;
 - the CycloneDX main-component contract passed versioned/unversioned byte

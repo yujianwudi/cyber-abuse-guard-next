@@ -6,6 +6,24 @@ root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 source "$root/scripts/release-common.sh"
 release_require_commands git mktemp rm mkdir sed jq cmp date
 
+# GIT_NO_LAZY_FETCH is required to prove that the excluded synthetic blob was
+# never materialized. Reject older Git clients explicitly instead of turning an
+# unsupported environment into a misleading reproducibility failure.
+require_git_no_lazy_fetch_contract() {
+  local version_text major minor
+  version_text="$(git version)"
+  if [[ "$version_text" =~ ^git\ version\ ([0-9]+)\.([0-9]+)(\.|$) ]]; then
+    major="${BASH_REMATCH[1]}"
+    minor="${BASH_REMATCH[2]}"
+  else
+    release_die "cannot parse Git version for the GIT_NO_LAZY_FETCH contract"
+  fi
+  if ((major < 2 || (major == 2 && minor < 39))); then
+    release_die "candidate contract requires Git 2.39 or newer for GIT_NO_LAZY_FETCH"
+  fi
+}
+require_git_no_lazy_fetch_contract
+
 # This script owns the complete formal/candidate/RC test matrix. Do not let a
 # caller's active release mode or identity leak into the synthetic fixture.
 unset \
@@ -349,7 +367,7 @@ write_sbom_fixture() {
   local destination="$1"
   local identity_mode="$2"
   local version_override="${3:-}"
-  local module="github.com/yujianwudi/cyber-abuse-guard-next"
+  local module="$RELEASE_CYCLONEDX_MAIN_MODULE"
   local version ref purl has_version
   version="$(release_cyclonedx_component_version)"
   [[ -z "$version_override" ]] || version="$version_override"
@@ -410,7 +428,7 @@ assert_normalized_sbom_identity() {
   local sbom="$1"
   local expected_version="$2"
   local expected_kind="$3"
-  local expected_ref="pkg:golang/github.com/yujianwudi/cyber-abuse-guard-next@${expected_version}?type=module"
+  local expected_ref="pkg:golang/${RELEASE_CYCLONEDX_MAIN_MODULE}@${expected_version}?type=module"
   jq -e \
     --arg version "$expected_version" \
     --arg kind "$expected_kind" \

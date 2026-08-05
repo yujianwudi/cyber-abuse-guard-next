@@ -1057,7 +1057,7 @@ CANDIDATE_ARTIFACTS = (
 )
 CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
-    "release-candidate-contract-test.sh": "5454357a64a3f4515026c5ce8e57db06e5ba96a09d6fd11d0bb5e21361ab3563",
+    "release-candidate-contract-test.sh": "ffd78a8531d2f8c1d10e4931327b0c7575a030381d7dd1a1dd5ac1896f33c141",
 }
 RC_RELEASE_SCRIPT_SHA256 = "c6d08fb43288cec1a4c56a46a980b744acbe09168030f43eb30336a9eb726256"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
@@ -1497,7 +1497,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "1acc299295372be01b253dbb5bc77d614fbc118ab47d51781cf15c48f3767759"
+ROUND6_SAFE_GATE_TEST_SHA256 = "d70cc0603c76d2ae87b60d1c11654f10602f7997ca4e898a9af250b0fb1bb545"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -9198,11 +9198,15 @@ def validate_round6_reproducibility_script(text: str, source: Path) -> None:
         raise ContractError(
             f"Round6 reproducibility sparse checkout differs from the workflow contract: {source}"
         )
+    clone_init_contract = 'git -C "$destination" init --quiet'
+    clone_fetch_contract = 'git -C "$destination" fetch --quiet'
+    sparse_checkout_contract = 'sparse-checkout set --no-cone'
+    source_checkout_contract = 'checkout --quiet --detach "$RELEASE_GIT_COMMIT"'
     independent_clone_contract = (
-        'git -C "$destination" init --quiet',
+        clone_init_contract,
         "local upload_pack='git -c uploadpack.allowFilter=true -c uploadpack.allowAnySHA1InWant=true upload-pack'",
         'config remote.origin.uploadpack "$upload_pack"',
-        'git -C "$destination" fetch --quiet',
+        clone_fetch_contract,
         '--filter=blob:none --no-tags origin "$fetch_target"',
         '[[ -d "$destination/.git" && ! -L "$destination/.git" ]]',
         'rev-parse --git-common-dir',
@@ -9211,8 +9215,8 @@ def validate_round6_reproducibility_script(text: str, source: Path) -> None:
         'config --get remote.origin.partialclonefilter',
         'config --get remote.origin.uploadpack',
         '"$destination"/.git/objects/pack/*.promisor',
-        'sparse-checkout set --no-cone',
-        'checkout --quiet --detach "$RELEASE_GIT_COMMIT"',
+        sparse_checkout_contract,
+        source_checkout_contract,
         'release_round6_safe_sparse_path "$path"',
     )
     if any(text.count(contract) != 1 for contract in independent_clone_contract):
@@ -9223,10 +9227,10 @@ def validate_round6_reproducibility_script(text: str, source: Path) -> None:
         raise ContractError(
             f"Round6 reproducibility must not share a linked or alternate Git object store: {source}"
         )
-    clone_init = text.index(independent_clone_contract[0])
-    clone_fetch = text.index(independent_clone_contract[3])
-    sparse_checkout = text.index(independent_clone_contract[12])
-    source_checkout = text.index(independent_clone_contract[13])
+    clone_init = text.index(clone_init_contract)
+    clone_fetch = text.index(clone_fetch_contract)
+    sparse_checkout = text.index(sparse_checkout_contract)
+    source_checkout = text.index(source_checkout_contract)
     if not clone_init < clone_fetch < sparse_checkout < source_checkout:
         raise ContractError(
             f"Round6 reproducibility must filter and sparsify before source checkout: {source}"

@@ -911,25 +911,50 @@ jobs:
     def test_reproducibility_independent_blobless_clone_is_locked(self):
         original, source = self.reproducibility_script()
         mutations = (
-            original.replace("--filter=blob:none", "--filter=blob:limit=1", 1),
-            original.replace(
-                '[[ ! -e "$destination/.git/objects/info/alternates" ]]',
-                '[[ -e "$destination/.git/objects/info/alternates" ]]',
-                1,
+            (
+                "blob filter",
+                original.replace("--filter=blob:none", "--filter=blob:limit=1", 1),
             ),
-            original.replace(
-                'git -C "$destination" init --quiet',
-                'git -C "$root" worktree add "$destination"',
-                1,
+            (
+                "alternates",
+                original.replace(
+                    '[[ ! -e "$destination/.git/objects/info/alternates" ]]',
+                    '[[ -e "$destination/.git/objects/info/alternates" ]]',
+                    1,
+                ),
+            ),
+            (
+                "linked worktree",
+                original.replace(
+                    'git -C "$destination" init --quiet',
+                    'git -C "$root" worktree add "$destination"',
+                    1,
+                ),
             ),
         )
-        for text in mutations:
-            with self.subTest(mutation=text):
+        for label, text in mutations:
+            with self.subTest(label=label):
                 self.assertNotEqual(text, original)
                 with self.assertRaisesRegex(
                     ContractError, "independent blobless|linked or alternate"
                 ):
                     validate_round6_reproducibility_script(text, source)
+
+    def test_reproducibility_independent_clone_order_is_locked(self):
+        original, source = self.reproducibility_script()
+        fetch = (
+            '  git -C "$destination" fetch --quiet '
+            '--filter=blob:none --no-tags origin "$fetch_target"'
+        )
+        checkout = (
+            '  git -C "$destination" checkout --quiet --detach '
+            '"$RELEASE_GIT_COMMIT"'
+        )
+        text = original.replace(f"{fetch}\n", "", 1)
+        text = text.replace(checkout, f"{checkout}\n{fetch}", 1)
+        self.assertNotEqual(text, original)
+        with self.assertRaisesRegex(ContractError, "filter and sparsify"):
+            validate_round6_reproducibility_script(text, source)
 
     def test_reproducibility_entry_mode_contract_is_locked(self):
         original, source = self.reproducibility_script()

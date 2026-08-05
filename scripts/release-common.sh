@@ -5,6 +5,7 @@
 RELEASE_ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 export LC_ALL=C
 export TZ=UTC
+readonly RELEASE_CYCLONEDX_MAIN_MODULE="github.com/yujianwudi/cyber-abuse-guard-next"
 
 # Every release helper addresses repositories explicitly with git -C. Clear
 # inherited repository-routing variables before any helper can create or
@@ -273,7 +274,7 @@ release_normalize_cyclonedx_sbom() {
   local input="$1"
   local output="$2"
   local timestamp="$3"
-  local module="github.com/yujianwudi/cyber-abuse-guard-next"
+  local module="$RELEASE_CYCLONEDX_MAIN_MODULE"
   local component_version component_base component_ref component_purl
   local generated_git_version_pattern old_ref allow_other_version=false
   local commit_property="cag:source:git-commit"
@@ -296,7 +297,9 @@ release_normalize_cyclonedx_sbom() {
   component_base="pkg:golang/$module"
   component_ref="${component_base}@${component_version}?type=module"
   component_purl="${component_ref}&goos=linux&goarch=amd64"
-  [[ "$RELEASE_BUILD_KIND" == development ]] && allow_other_version=true
+  if [[ "$RELEASE_BUILD_KIND" == development ]]; then
+    allow_other_version=true
+  fi
   old_ref="$(jq -er '.metadata.component["bom-ref"] | select(type == "string" and length > 0)' "$input")" || \
     release_die "CycloneDX generated main component reference is missing"
 
