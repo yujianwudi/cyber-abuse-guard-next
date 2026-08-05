@@ -194,6 +194,246 @@ class RunnerPureTests(unittest.TestCase):
             finally:
                 binding.close()
 
+    @unittest.skipUnless(os.name == "posix", "Linux private environment-file contract")
+    def test_ephemeral_mock_environment_is_private_and_removed(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            root.chmod(0o700)
+            expected = (
+                "CAG_MOCK_CONTROL_TOKEN=control-secret\n"
+                "CAG_MOCK_UPSTREAM_KEY=upstream-secret\n"
+            )
+            with run.ephemeral_mock_environment(
+                root, "control-secret", "upstream-secret"
+            ) as environment_file:
+                self.assertEqual(environment_file.name, ".mock-environment")
+                self.assertEqual(environment_file.read_text("utf-8"), expected)
+                info = environment_file.lstat()
+                self.assertEqual(info.st_mode & 0o777, 0o600)
+                self.assertEqual(info.st_nlink, 1)
+                result = run.run_process(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-c",
+                        "from pathlib import Path; import sys; print(Path(sys.argv[1]).read_text())",
+                        str(environment_file),
+                    ]
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected + "\n")
+            self.assertFalse((root / ".mock-environment").exists())
+
+            existing = root / ".mock-environment"
+            existing.write_text("preserve", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                with run.ephemeral_mock_environment(root, "control", "upstream"):
+                    self.fail("pre-existing environment file must not be opened")
+            self.assertEqual(existing.read_text("utf-8"), "preserve")
+
+            existing.unlink()
+            with self.assertRaisesRegex(run.AuditFailure, "cannot be represented"):
+                with run.ephemeral_mock_environment(root, "control\nleak", "upstream"):
+                    self.fail("invalid environment value must not be opened")
+            self.assertFalse(existing.exists())
+
+    @unittest.skipUnless(os.name == "posix", "Linux private environment-file contract")
+    def test_ephemeral_mock_environment_fails_closed_on_identity_mutation(self) -> None:
+        def mutate_replace(path: Path, root: Path) -> None:
+            path.rename(root / "original-moved")
+            path.write_text("replacement", encoding="utf-8")
+            path.chmod(0o600)
+
+        def mutate_hardlink(path: Path, root: Path) -> None:
+            os.link(path, root / "second-link")
+
+        def mutate_unlink(path: Path, root: Path) -> None:
+            del root
+            path.unlink()
+
+        def mutate_mode(path: Path, root: Path) -> None:
+            del root
+            path.chmod(0o640)
+
+        def mutate_content(path: Path, root: Path) -> None:
+            del root
+            path.write_text("tampered", encoding="utf-8")
+
+        variants = (
+            ("replace", mutate_replace, "changed before cleanup"),
+            ("hardlink", mutate_hardlink, "changed before cleanup"),
+            ("unlink", mutate_unlink, "disappeared before cleanup"),
+            ("mode", mutate_mode, "changed before cleanup"),
+            ("content", mutate_content, "changed before cleanup"),
+        )
+        for label, mutation, expected in variants:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as parent:
+                root = Path(parent)
+                root.chmod(0o700)
+                environment_file: Path | None = None
+                with self.assertRaisesRegex(run.AuditFailure, expected):
+                    with run.ephemeral_mock_environment(
+                        root, "control-secret", "upstream-secret"
+                    ) as current:
+                        environment_file = current
+                        mutation(current, root)
+                self.assertIsNotNone(environment_file)
+                if label == "replace":
+                    self.assertEqual(
+                        (root / ".mock-environment").read_text("utf-8"),
+                        "replacement",
+                    )
+                    self.assertTrue((root / "original-moved").is_file())
+                elif label == "hardlink":
+                    self.assertTrue((root / ".mock-environment").is_file())
+                    self.assertTrue((root / "second-link").is_file())
+                elif label == "unlink":
+                    self.assertFalse((root / ".mock-environment").exists())
+                else:
+                    self.assertTrue((root / ".mock-environment").is_file())
+
+    @unittest.skipUnless(os.name == "posix", "Linux private environment-file contract")
+    def test_owned_runtime_cleanup_removes_failed_env_file_and_internal_hardlink(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            runtime = Path(parent) / "runtime"
+            runtime.mkdir(mode=0o700)
+            with self.assertRaisesRegex(run.AuditFailure, "changed before cleanup"):
+                with run.ephemeral_mock_environment(
+                    runtime, "control-secret", "upstream-secret"
+                ) as environment_file:
+                    os.link(environment_file, runtime / "second-link")
+            self.assertEqual(run.remove_owned_tree(runtime), 2)
+            self.assertFalse(runtime.exists())
+
+    @unittest.skipUnless(os.name == "posix", "Linux private environment-file contract")
+    def test_mock_start_argv_never_contains_credentials_and_env_file_is_removed(self) -> None:
+        for docker_fails in (False, True):
+            with self.subTest(docker_fails=docker_fails), tempfile.TemporaryDirectory() as parent:
+                cold_root = Path(parent)
+                cold_root.chmod(0o700)
+                harness = object.__new__(run.Harness)
+                harness.config = {
+                    "identities": {
+                        "mock": {"image_ref": "example/mock@sha256:" + "1" * 64}
+                    }
+                }
+                harness.mock_name = "unit-mock"
+                harness.network_name = "unit-network"
+                harness.control_token = "control-secret"
+                harness.upstream_key = "upstream-secret"
+                harness.failure_stage = "initialization"
+                harness.common_container_args = mock.Mock(return_value=["run", "--detach"])
+                harness.docker = mock.Mock()
+                captured: dict[str, object] = {}
+
+                def docker_run(arguments: list[str], *, timeout: int = 60) -> object:
+                    del timeout
+                    captured["arguments"] = list(arguments)
+                    index = arguments.index("--env-file")
+                    environment_file = Path(arguments[index + 1])
+                    captured["path"] = environment_file
+                    captured["content"] = environment_file.read_text("utf-8")
+                    self.assertEqual(environment_file.lstat().st_mode & 0o777, 0o600)
+                    if docker_fails:
+                        raise run.AuditFailure("synthetic Docker failure")
+                    return object()
+
+                harness.docker.run.side_effect = docker_run
+
+                def after_docker(*args: object, **kwargs: object) -> str:
+                    del args, kwargs
+                    self.assertFalse(Path(captured["path"]).exists())
+                    raise run.AuditFailure("stop after Mock start")
+
+                with mock.patch.object(run, "container_ip", side_effect=after_docker):
+                    with self.assertRaises(run.AuditFailure):
+                        harness.start_cold(cold_root, "audit")
+
+                arguments = [str(value) for value in captured["arguments"]]
+                self.assertIn("--env-file", arguments)
+                self.assertNotIn("control-secret", "\n".join(arguments))
+                self.assertNotIn("upstream-secret", "\n".join(arguments))
+                self.assertEqual(
+                    captured["content"],
+                    "CAG_MOCK_CONTROL_TOKEN=control-secret\n"
+                    "CAG_MOCK_UPSTREAM_KEY=upstream-secret\n",
+                )
+                self.assertFalse((cold_root / ".mock-environment").exists())
+
+    def test_readiness_requires_a_clean_cag_candidate(self) -> None:
+        harness = object.__new__(run.Harness)
+        harness.cpa_url = "http://172.20.0.2:8317"
+        harness.management_key = "management"
+        harness.readiness_state_sha256 = None
+        harness.config = {
+            "identities": {
+                "cag": {"commit": "1" * 40},
+                "cpa": {
+                    "commit": "a88197f845c979132c8978ea223c6af05cc81536",
+                    "tag": "v7.2.116",
+                },
+            }
+        }
+        plugins = {
+            "plugins_enabled": True,
+            "plugins": [
+                {
+                    "id": "cyber-abuse-guard",
+                    "registered": True,
+                    "configured": True,
+                    "effective_enabled": True,
+                }
+            ],
+        }
+        status = {
+            "id": "cyber-abuse-guard",
+            "commit": "1" * 40,
+            "dirty": False,
+            "enabled": True,
+            "mode": "audit",
+            "enforcement_ready": True,
+            "operational_ready": True,
+            "audit_degraded": False,
+            "persistence_degraded": False,
+            "audit": {
+                "healthy": True,
+                "degraded": False,
+                "schema_version": 6,
+                "persistence_verified": True,
+            },
+            "raw_capture": {"enabled": False},
+        }
+        headers = {
+            "x-cpa-version": "v7.2.116",
+            "x-cpa-commit": "a88197f845c979132c8978ea223c6af05cc81536",
+        }
+        with mock.patch.object(
+            run,
+            "http_json",
+            side_effect=[(plugins, headers, 0.1), (status, headers, 0.1)],
+        ):
+            self.assertEqual(harness.wait_ready("audit"), status)
+
+        dirty_status = dict(status)
+        dirty_status["dirty"] = True
+        with (
+            mock.patch.object(
+                run,
+                "http_json",
+                side_effect=[
+                    (plugins, headers, 0.1),
+                    (dirty_status, headers, 0.1),
+                ],
+            ),
+            mock.patch.object(run.time, "monotonic", side_effect=[0.0, 0.0, 46.0]),
+            mock.patch.object(run.time, "sleep"),
+        ):
+            with self.assertRaisesRegex(
+                run.AuditFailure, "readiness did not converge for audit"
+            ):
+                harness.wait_ready("audit")
+        self.assertRegex(harness.readiness_state_sha256 or "", r"^[0-9a-f]{64}$")
+
     @unittest.skipUnless(os.name == "posix", "Linux proc-fd and Docker path contract")
     def test_docker_bind_source_uses_verified_normal_path(self) -> None:
         with tempfile.TemporaryDirectory() as parent:

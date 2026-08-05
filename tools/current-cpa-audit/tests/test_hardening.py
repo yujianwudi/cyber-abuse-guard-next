@@ -1234,6 +1234,8 @@ class RunnerFailureSafetyTests(unittest.TestCase):
             harness = mock.Mock()
             harness.execute.side_effect = primary
             harness.corpus_cleanup_completed = False
+            harness.failure_stage = "cpa_readiness"
+            harness.readiness_state_sha256 = "a" * 64
 
             with (
                 mock.patch.object(
@@ -1273,7 +1275,9 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                 )
             )[:16]
             self.assertEqual(failure["cleanup_error_id"], expected_cleanup_id)
+            self.assertEqual(failure["failure_stage"], "cpa_readiness")
             self.assertFalse(failure["machine_evidence_emitted"])
+            self.assertEqual(failure["state_sha256"], "a" * 64)
             self.assertEqual(failure["third_party_code_executions"], 0)
 
 

@@ -53,6 +53,41 @@ The container and its empty private directories were removed immediately. This
 is real runc/inspect compatibility evidence for the handoff shape, not a final
 candidate, CPA/CAG, semantic, performance, or side-effect PASS.
 
+PR head `30b613e82a1be97938dbfe974b98d4cb76a359a0` subsequently passed CI
+`31031462761`, Policy and Corpus Gate `31031462702`, and CodeQL `31031462510`.
+The downloaded merge-ref artifact bound commit
+`2be72ccd7f431344b4f6bb18811fa08949105121`, tree
+`4c09d2b1c50ddbbc211340136c9202cf7229abc8`, ZIP digest
+`7392a1dbd502f6c19922050077e319ce006130347ecc9f1012fd5e40e6e91da4`,
+and SO SHA-256
+`199a7617b1ae37237768b252a2c5bd2ffb292dfcef7ec84a8c9a7bd4d095b0e8`.
+Its real second-machine run reached CPA startup through the remediated bind and
+tmpfs checks, then failed closed at readiness with
+`error_id=2f0ba84bbf89fe0c`: the CI development SO reported `dirty=true`, while
+the formal audit requires a clean candidate. It emitted no machine evidence,
+executed no third-party code, removed all corpus text and labelled Docker
+resources, and left the business-container snapshot unchanged. Evidence is
+retained at `/opt/cag-audit-rt12-30b613e-20260805-1830`; it is not a PASS.
+
+The same execution showed that generated Mock credentials were present in the
+Docker argv recorded by sudo/systemd journal. The current working remediation
+keeps the clean-candidate readiness gate, changes the existing CI lane to
+produce and reproduce exact-merge `dirty=false` audit bytes, rejects any
+`dist/` entry outside eight fixed v0.16 base files, and uploads an exact
+nine-file set. The ninth file is a machine-readable manifest explicitly marked
+`UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE`; it binds the
+event/run, commit/tree, version, clean state, and every base-file SHA-256 and
+byte count. The reproducibility job validates that closed set and every digest
+before rebuilding. Mock credentials pass through a single-link mode-0600
+`--env-file` removed immediately after Docker CLI return. Failure records add
+only a low-cardinality stage and optional state digest, never a response body,
+credential, or corpus text.
+A separate real-Docker smoke on the second machine exercised both successful
+and expected-failure `--env-file` paths through the runner-PID proc-fd alias.
+It retained no env file or labelled container, and the unit journal contained
+zero occurrences of either Mock credential field name. This is a handoff
+compatibility result, not final-candidate machine evidence.
+
 The reviewed v7.2.113-to-v7.2.116 range retains C ABI 1, RPC schema 2, and all
 235 scoped plugin blobs byte-identically. It adds Home's at-most-once OAuth 401
 refresh/retry within the same logical request and changes Claude executor
@@ -69,10 +104,13 @@ cpa_v7.2.116_remote_git_tag_gate: NOT_COMPLETED_LOCAL_NETWORK / TWO_BOUNDED_TIME
 cpa_v7.2.116_exact_main_baseline_ci: PASS / EXACT_MAIN_ONLY / 21267e742b624b29a75bd3683fd6914f76c764b5
 cpa_v7.2.116_superseded_candidate_ci: PASS / 9782eaf9da37d466ffc0b644b052d3c842f7f1ca / SUPERSEDED
 cpa_v7.2.116_superseded_candidate_second_machine: FAIL_CLOSED / ERROR_32a64d93ec0f3ed9 / NO_MACHINE_EVIDENCE
-cpa_v7.2.116_round12_candidate_ci: PENDING_REMEDIATED_HEAD
+cpa_v7.2.116_prior_remediated_candidate_ci: PASS / 30b613e82a1be97938dbfe974b98d4cb76a359a0 / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
+cpa_v7.2.116_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / DIRTY_CANDIDATE_READINESS_MISMATCH / NO_MACHINE_EVIDENCE
+cpa_v7.2.116_round12_candidate_ci: PENDING_NEW_HEAD
 cpa_v7.2.116_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
+cpa_v7.2.116_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
 cpa_v7.2.116_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-cpa_v7.2.116_final_candidate_second_machine: PENDING_REMEDIATED_HEAD_EXECUTION
+cpa_v7.2.116_final_candidate_second_machine: PENDING_NEW_HEAD_EXECUTION
 cpa_v7.2.116_protected_host: NOT_PROVIDED
 cpa_v7.2.116_independent_attestation: NOT_PROVIDED
 cpa_v7.2.116_production_approval: NOT_PROVIDED
@@ -93,15 +131,15 @@ reviewed_repositories: 5
 reviewed_sources: 11
 reviewed_semantic_cases: 19
 source_policy_sha256: d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
-runner_bundle_sha256: 46ca04f8e39922f5023dd60082bea2ff96c79660118b46b57c20f749159fca6c
+runner_bundle_sha256: d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce2d43e99bb61ca
 audit_contract_sha256: 830d914f904cdc934bfa4b029ef2d069c01f1cf3e0ae489296a2f3dfc8877087
-run_source_sha256: 083f03dbe599434ae4b40300d90d792659e43dec734fb551421393b35cbc339b
+run_source_sha256: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
 machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f7cd9427
 ```
 
 | Working-tree check | Result and evidence boundary |
 |---|---|
-| Current CPA audit tool | **PASS**, Linux 68/68. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Evidence writes remain on the runner-PID fd path. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic create/bind or daemon-handoff intervals. No third-party repository code was executed by these unit tests. |
+| Current CPA audit tool | **PASS**, Linux 73/73. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic create/bind or daemon-handoff intervals. No third-party repository code was executed by these unit tests. |
 | Audit database capacity | **PASS**: subject-snapshot replacement streams bounded rows inside the transaction, measures tentative live pages, and rejects overflow without replacing prior state or deleting audit events. Committed event deletion, Raw Capture purge, and subject-state deletion remeasure capacity without evicting evidence outside the requested maintenance scope. |
 | Safe development inventory | **PASS**, `packages=20`, `classifier_entries=576`, `round12_entries=8`. |
 | Complete unit lane | **PASS** with exact Go 1.26.4 on Linux: the safe packages passed, the classifier then passed separately in 398.508 seconds under a constrained two-core WSL lane, and the counted-Mock module passed. This is functional development evidence only and is not a performance baseline. |
@@ -112,7 +150,7 @@ machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f
 | Historical 142-case Balanced benign corpus | **UNCHANGED FROM `main@21267e7`**: B028, B062, and B075 remain 3/142 historical false positives. The exact baseline rerun produced the same IDs, scores, and category; this is not a Round 12 regression and is not presented as zero global false positives. Round 12's named defensive critical controls remain complete non-blocks. |
 | Local race | **INCOMPLETE / NOT PASS**. The desktop tool session interrupted the WSL process after partial package output. No race failure was observed, but partial output is not accepted as evidence. |
 | Exact Go 1.26.4 race, CPA v7.2.116 compatibility, build/reproducibility, and long fuzz | **PENDING REMEDIATED-HEAD GITHUB CI**. The exact local Go 1.26.4 functional checks and superseded-head green runs do not satisfy these candidate-bound CI gates. |
-| RT12-05/06 second-machine run | **SUPERSEDED HEAD FAIL_CLOSED / REMEDIATED HEAD PENDING**. `9782eaf` failed before traffic because runc rejected the proc-fd bind source; it emitted no machine evidence. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
+| RT12-05/06 second-machine run | **TWO IMMUTABLE FAIL-CLOSED RECORDS / NEW HEAD PENDING**. `9782eaf` failed before traffic because runc rejected the proc-fd bind source. `30b613e` proved the normal bind handoff reached CPA startup, then rejected the CI dirty development SO at clean-candidate readiness. Neither emitted machine evidence; both removed corpus text and exact run-labelled resources. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
 
 The latest-head check on 2026-08-05 found four reviewed repositories unchanged
 and MDX advanced by two documentation-only commits to

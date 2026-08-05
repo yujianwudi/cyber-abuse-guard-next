@@ -60,15 +60,43 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   Source/Destination/RW/rprivate binds. `HostConfig.Tmpfs` must contain only the
   hardened `/tmp` contract; because Docker may omit tmpfs entries from
   `.Mounts`, zero or one matching `/tmp` entry is accepted there. Changed paths,
-  extra mounts, and volumes fail closed. The current runner bundle is
-  `46ca04f8e39922f5023dd60082bea2ff96c79660118b46b57c20f749159fca6c`;
+  extra mounts, and volumes fail closed.
+
+  PR head `30b613e82a1be97938dbfe974b98d4cb76a359a0` then passed CI
+  `31031462761`, Policy and Corpus Gate `31031462702`, and CodeQL
+  `31031462510`; its merge-ref artifact SO had SHA-256
+  `199a7617b1ae37237768b252a2c5bd2ffb292dfcef7ec84a8c9a7bd4d095b0e8`.
+  The real second-machine run proved that the normal bind/rprivate/tmpfs
+  remediation reached CPA startup, but failed closed at CAG readiness with
+  `error_id=2f0ba84bbf89fe0c`: CI had deliberately compiled `dirty=true` into
+  the development SO while the formal harness correctly requires a clean
+  candidate. It emitted no machine evidence, executed no third-party code,
+  removed all corpus text and labelled Docker resources, and left the business
+  container snapshot unchanged. The same run also exposed generated Mock
+  control credentials in the `sudo docker run` argv/journal.
+
+  CI now builds, Host-loads, uploads, and reproduces an exact-merge clean,
+  unreleased audit candidate instead of supplying dirty bytes to this harness.
+  It rejects any `dist/` entry outside the eight fixed v0.16 base files, seals
+  their SHA-256 and byte counts plus event/run/commit/tree identity into an
+  explicit `UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE`
+  manifest, uploads only the resulting nine named files, and rechecks that
+  closed set and every manifest hash before two-clean-clone reproduction.
+  Mock credentials move through a single-link mode-0600 `--env-file` below the
+  descriptor-bound cold directory and are identity-checked and removed as soon
+  as the Docker CLI returns; argv and final evidence contain no values. Failure
+  records now add only a low-cardinality stage and optional readiness-state
+  digest. A dedicated second-machine real-Docker smoke passed both successful
+  and expected-failure `--env-file` paths; it retained no file/container and
+  found zero credential-field mentions in the unit journal. The current runner bundle is
+  `d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce2d43e99bb61ca`;
   its `run.py` source is
-  `083f03dbe599434ae4b40300d90d792659e43dec734fb551421393b35cbc339b`.
-  Linux unit verification is 68/68 PASS. The diagnostic harness explicitly
+  `0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947`.
+  Linux unit verification is 73/73 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
-  remediated working tree still requires its own exact Go 1.26.4 candidate CI
-  and second-machine execution; no predecessor result is relabelled as PASS.
+  new working tree still requires its own exact Go 1.26.4 candidate CI and a
+  fresh second-machine execution; no predecessor result is relabelled as PASS.
 
 - Freeze the Round 12 evidence vocabulary and publication boundary. Exact
   baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI

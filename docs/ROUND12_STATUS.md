@@ -15,9 +15,9 @@ round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 round12_source_policy: APPROVED_EXACT_PINS / d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
-round12_audit_runner_bundle: 46ca04f8e39922f5023dd60082bea2ff96c79660118b46b57c20f749159fca6c
-round12_audit_run_source: 083f03dbe599434ae4b40300d90d792659e43dec734fb551421393b35cbc339b
-round12_local_audit_tool_tests: PASS / LINUX / 68_OF_68
+round12_audit_runner_bundle: d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce2d43e99bb61ca
+round12_audit_run_source: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
+round12_local_audit_tool_tests: PASS / LINUX / 73_OF_73
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
@@ -26,9 +26,15 @@ round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
 round12_superseded_pr_head: 9782eaf9da37d466ffc0b644b052d3c842f7f1ca
 round12_superseded_pr_head_engineering_ci: PASS / CI_31016759352 / POLICY_31016760807 / CODEQL_31016759262
 round12_superseded_pr_head_second_machine: FAIL_CLOSED / ERROR_32a64d93ec0f3ed9 / NO_MACHINE_EVIDENCE
-round12_working_candidate_engineering_ci: PENDING_REMEDIATED_HEAD
+round12_prior_remediated_pr_head: 30b613e82a1be97938dbfe974b98d4cb76a359a0
+round12_prior_remediated_merge_ref: 2be72ccd7f431344b4f6bb18811fa08949105121
+round12_prior_remediated_engineering_ci: PASS / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
+round12_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / DIRTY_CANDIDATE_READINESS_MISMATCH / NO_MACHINE_EVIDENCE
+round12_current_remediation: CLEAN_EXACT_MERGE_AUDIT_CANDIDATE / MOCK_ARGV_SECRET_REMOVED / FAILURE_STAGE_DIGEST_ONLY
+round12_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
+round12_working_candidate_engineering_ci: PENDING_NEW_HEAD
 round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-round12_final_candidate_second_machine: PENDING_REMEDIATED_HEAD_EXECUTION
+round12_final_candidate_second_machine: PENDING_NEW_HEAD_EXECUTION
 round12_protected_host: NOT_PROVIDED
 round12_independent_attestation: NOT_PROVIDED
 round12_production_approved: NOT_PROVIDED
@@ -51,12 +57,14 @@ The Round 12 implementation has passed its pre-final Linux development checks:
 - the Safe Gate mutation suite passed 209 tests with 91 explicitly retired
   workflow cases skipped, and its live contract closed three entrypoints,
   38 Make targets, and 47 scripts;
-- the current CPA audit harness passed 68/68 Linux tests, including the
+- the current CPA audit harness passed 73/73 Linux tests, including the
   concatenated-ZIP rejection, stopped-image Mock source verification,
   private-parent mode drift, symlink/ancestor/evidence/subdirectory replacement,
   normal-path Docker handoff, closed Source/Destination/RW/rprivate bind and
-  `/tmp` tmpfs contracts, and extra-volume rejection, with 11 reviewed source
-  pins and 19 semantic cases bound by the approved policy
+  `/tmp` tmpfs contracts, extra-volume rejection, clean-candidate readiness,
+  mode-0600 Mock `--env-file` lifecycle on Docker success/failure, and
+  credential-free Docker argv, with 11 reviewed source pins and 19 semantic
+  cases bound by the approved policy
   above; MDX latest HEAD is `7588d25d…` and its selected blobs are unchanged;
   this diagnostic harness does not claim same-UID bootstrap or daemon-handoff
   isolation;
@@ -66,6 +74,12 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   hardened `/tmp` in `HostConfig.Tmpfs` but omitted tmpfs from `.Mounts`. This
   closes the runc/inspect shape used by the remediation but is not a final
   candidate harness PASS;
+- a separate real-Docker second-machine smoke proved that `sudo docker run`
+  can read the mode-0600 Mock env file through the runner-PID proc-fd path. Both
+  the successful container start and expected Docker failure removed their
+  files and labelled containers; the unit journal contained zero Mock
+  credential-field mentions. This closes the CLI handoff shape only, not the
+  final candidate harness;
 - subject-snapshot replacement is transactionally capacity bounded without
   retaining a second full encoded snapshot or deleting audit evidence; explicit
   event deletion, Raw Capture purge, and subject deletion remeasure without
@@ -104,11 +118,43 @@ root_cause: Docker/runc rejected a proc-fd magic link as a bind-mount source
 retained_evidence_root: /opt/cag-audit-rt12-9782eaf-20260805-1615
 ```
 
-The current runner keeps all local evidence writes descriptor-bound but uses a
-fully identity-checked normal path for Docker bind sources, then revalidates the
-path and exact inspect mount contract immediately after start. This is a local
-remediation, not proof that the second-machine failure is closed; a new exact
-HEAD, artifact, and real Docker/runc run are required.
+The `30b613e` runner kept all local evidence writes descriptor-bound, used a
+fully identity-checked normal path for Docker bind sources, revalidated the path
+and exact inspect mount contract immediately after start, and reached CPA
+readiness on real Docker/runc. Its exact merge-ref input was
+`2be72ccd7f431344b4f6bb18811fa08949105121`; artifact ZIP digest
+`7392a1dbd502f6c19922050077e319ce006130347ecc9f1012fd5e40e6e91da4`
+and SO SHA-256
+`199a7617b1ae37237768b252a2c5bd2ffb292dfcef7ec84a8c9a7bd4d095b0e8`
+were independently rechecked. That run is also an immutable fail-closed record:
+
+```text
+candidate_head: 30b613e82a1be97938dbfe974b98d4cb76a359a0
+merge_ref: 2be72ccd7f431344b4f6bb18811fa08949105121
+result: FAIL_CLOSED / NOT_PASS
+error_id: 2f0ba84bbf89fe0c
+machine_evidence_emitted: false
+third_party_code_executions: 0
+private_corpus_text_removed: true
+labelled_docker_resources_removed: true
+business_container_snapshot_unchanged: true
+root_cause: CI development SO reported dirty=true while readiness requires a clean candidate
+retained_evidence_root: /opt/cag-audit-rt12-30b613e-20260805-1830
+```
+
+This run also proved that generated Mock credentials were present in
+`sudo docker run` argv and the persistent system journal. The current
+remediation keeps the clean readiness requirement, changes the existing CI lane
+to produce and reproduce an exact-merge `dirty=false` audit candidate, and
+fails closed unless `dist/` is exactly eight fixed v0.16 base files. It seals
+those files into a ninth `audit-candidate-manifest.json` marked
+`UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE`, with the workflow
+event/run, commit/tree, `dirty=false`, version, SHA-256, and byte counts. The
+consumer job rechecks the exact nine-file set and every digest before
+two-clean-clone reproduction. Mock credentials pass only through an
+identity-checked, immediately removed mode-0600 `--env-file`. A new exact HEAD,
+artifact, and new-path second-machine run are required; neither fail-closed
+record is relabelled as PASS.
 
 The supplied second-machine report is retained as an owner-run input diagnostic:
 
@@ -156,8 +202,8 @@ download, rollback, or support guarantee.
 `9782eaf` 的 CI、Policy Gate 和 CodeQL 也曾通过，但二号机正式 harness 因 runc
 拒绝 proc-fd bind source 而 fail closed：没有生成 `machine-evidence.json`，没有执行
 第三方仓库代码，私有 corpus 正文已经删除。当前 normal-path handoff 修复仅完成本地
-68/68 Linux 回归，新的精确 HEAD 门禁和二号机执行仍为
-`PENDING_REMEDIATED_HEAD_EXECUTION`。已有的 1,320 次传输执行报告只属于所有者运行
+73/73 Linux 回归，新的精确 HEAD 门禁和二号机执行仍为
+`PENDING_NEW_HEAD_EXECUTION`。已有的 1,320 次传输执行报告只属于所有者运行
 的输入诊断，不是独立证明。受保护 Host、独立证明、生产批准与 Release Ready 均为
 `NOT_PROVIDED`。本轮不创建 tag、RC 或 GitHub Release。
 

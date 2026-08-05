@@ -25,9 +25,10 @@ import sys
 import tempfile
 import time
 import traceback
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, NoReturn, Sequence
+from typing import Any, Iterable, Iterator, Mapping, NoReturn, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -131,6 +132,86 @@ def write_exclusive(path: Path, raw: bytes, mode: int = 0o600) -> None:
 
 def write_json(path: Path, value: Any) -> None:
     write_exclusive(path, canonical_bytes(value) + b"\n")
+
+
+@contextmanager
+def ephemeral_mock_environment(
+    directory: Path, control_token: str, upstream_key: str
+) -> Iterator[Path]:
+    """Expose Mock credentials to the Docker CLI without placing values in argv.
+
+    The file lives below the descriptor-bound runtime tree, is created with one
+    link and mode 0600, and is removed immediately after ``docker run`` returns.
+    Docker expands ``--env-file`` into the container configuration, so the
+    local rootful daemon remains in the trusted computing base.
+    """
+
+    values = {
+        "CAG_MOCK_CONTROL_TOKEN": control_token,
+        "CAG_MOCK_UPSTREAM_KEY": upstream_key,
+    }
+    for key, value in values.items():
+        if not value or any(marker in value for marker in ("\x00", "\r", "\n")):
+            fail(f"{key} cannot be represented in a Docker environment file")
+    raw = b"".join(
+        f"{key}={value}\n".encode("utf-8") for key, value in values.items()
+    )
+    path = directory / ".mock-environment"
+    write_exclusive(path, raw, mode=0o600)
+    expected = path.lstat()
+    expected_identity = (
+        expected.st_dev,
+        expected.st_ino,
+        expected.st_uid,
+        expected.st_gid,
+        stat.S_IMODE(expected.st_mode),
+        expected.st_nlink,
+        expected.st_size,
+    )
+    expected_sha256 = sha256_bytes(raw)
+    try:
+        if (
+            not stat.S_ISREG(expected.st_mode)
+            or stat.S_ISLNK(expected.st_mode)
+            or expected.st_nlink != 1
+            or stat.S_IMODE(expected.st_mode) != 0o600
+            or expected.st_size != len(raw)
+            or (
+                os.name == "posix"
+                and (expected.st_uid != os.getuid() or expected.st_gid != os.getgid())
+            )
+            or sha256_file(path) != expected_sha256
+        ):
+            fail("ephemeral Mock environment file identity is invalid")
+        yield path
+    finally:
+        try:
+            current = path.lstat()
+        except FileNotFoundError:
+            fail("ephemeral Mock environment file disappeared before cleanup")
+        current_identity = (
+            current.st_dev,
+            current.st_ino,
+            current.st_uid,
+            current.st_gid,
+            stat.S_IMODE(current.st_mode),
+            current.st_nlink,
+            current.st_size,
+        )
+        if (
+            not stat.S_ISREG(current.st_mode)
+            or stat.S_ISLNK(current.st_mode)
+            or current_identity != expected_identity
+            or sha256_file(path) != expected_sha256
+        ):
+            fail("ephemeral Mock environment file changed before cleanup")
+        path.unlink()
+        try:
+            path.lstat()
+        except FileNotFoundError:
+            pass
+        else:
+            fail("ephemeral Mock environment file remained after cleanup")
 
 
 def load_canonical(path: Path, label: str, maximum: int) -> tuple[dict[str, Any], bytes]:
@@ -967,6 +1048,8 @@ class Harness:
         self.corpus_cleanup_completed = False
         self.corpus_validated = False
         self.active_auth_dir: Path | None = None
+        self.failure_stage = "initialization"
+        self.readiness_state_sha256: str | None = None
         self.active_cpa_mounts: dict[
             str, tuple[Path, Path, bool, tuple[tuple[int, int], ...]]
         ] = {}
@@ -1430,23 +1513,26 @@ class Harness:
     def start_cold(self, cold_root: Path, initial_mode: str) -> None:
         mock = self.config["identities"]["mock"]
         mock_args = self.common_container_args("mock", self.mock_name)
-        mock_args.extend(
-            [
-                "--env",
-                f"CAG_MOCK_CONTROL_TOKEN={self.control_token}",
-                "--env",
-                f"CAG_MOCK_UPSTREAM_KEY={self.upstream_key}",
-                mock["image_ref"],
-                "--host",
-                "0.0.0.0",
-                "--port",
-                str(MOCK_PORT),
-            ]
-        )
-        self.docker.run(mock_args, timeout=60)
+        self.failure_stage = "mock_start"
+        with ephemeral_mock_environment(
+            cold_root, self.control_token, self.upstream_key
+        ) as environment_file:
+            mock_args.extend(
+                [
+                    "--env-file",
+                    str(environment_file),
+                    mock["image_ref"],
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    str(MOCK_PORT),
+                ]
+            )
+            self.docker.run(mock_args, timeout=60)
         self.mock_url = internal_base(
             container_ip(self.docker, self.mock_name, self.network_name), MOCK_PORT
         )
+        self.failure_stage = "mock_readiness"
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline:
             try:
@@ -1477,15 +1563,20 @@ class Harness:
                 "-local-model",
             ]
         )
+        self.failure_stage = "cpa_start"
         self.docker.run(cpa_args, timeout=60)
+        self.failure_stage = "cpa_mount_contract"
         self.verify_cpa_bind_mounts()
         self.cpa_url = internal_base(
             container_ip(self.docker, self.cpa_name, self.network_name), CPA_PORT
         )
+        self.failure_stage = "cpa_readiness"
         self.wait_ready(initial_mode)
+        self.failure_stage = "sandbox_contract"
         self.verify_sandbox()
         self.last_event_id = self.event_head_id()
         if not self.binary_verified:
+            self.failure_stage = "cpa_binary_identity"
             self.verify_image_binary()
 
     def verify_image_binary(self) -> None:
@@ -1571,11 +1662,13 @@ class Harness:
                     and commit_ok
                 )
                 if ready:
+                    self.readiness_state_sha256 = None
                     return status
                 last_digest = sha256_bytes(canonical_bytes({"plugins": plugins, "status": status}))
             except (AuditFailure, ContractError) as exc:
                 last_digest = sha256_bytes(str(exc).encode("utf-8"))
             time.sleep(0.25)
+        self.readiness_state_sha256 = last_digest or None
         fail(f"CPA/CAG readiness did not converge for {mode}; state_sha256={last_digest}")
 
     def reconfigure(self, mode: str) -> None:
@@ -2086,11 +2179,13 @@ class Harness:
         if not entries:
             fail(f"cold start {cold_start} has no planned executions")
         initial_mode = entries[0].mode
+        self.failure_stage = "cold_runtime_prepare"
         cold_root, runtime_hash = self.prepare_cold_runtime(cold_start, initial_mode)
         self.runtime_hashes.append(runtime_hash)
         started_at = now_iso()
         self.start_cold(cold_root, initial_mode)
         current_mode = initial_mode
+        self.failure_stage = "transport_matrix"
         cold_raw = bytearray()
         order: list[tuple[str, str, str, bool]] = []
         for index, entry in enumerate(entries, start=1):
@@ -2115,6 +2210,7 @@ class Harness:
                     ),
                     flush=True,
                 )
+        self.failure_stage = "cold_finish"
         cold = self.finish_cold(
             cold_root,
             started_at,
@@ -2244,6 +2340,7 @@ class Harness:
         business_before: list[dict[str, Any]] = []
         business_after: list[dict[str, Any]] = []
         try:
+            self.failure_stage = "static_inputs"
             self.verify_static_inputs()
             write_exclusive(self.evidence_dir / "corpus-manifest.json", self.manifest_raw)
             write_exclusive(self.evidence_dir / "run-config.json", self.config_raw)
@@ -2251,17 +2348,20 @@ class Harness:
             self.runtime_root.mkdir(mode=0o700)
             os.chmod(self.runtime_root, 0o700)
             self.open_results()
+            self.failure_stage = "network_create"
             self.create_network()
             ordinal_offset = 0
             for cold_start in range(1, self.cold_count + 1):
                 ordinal_offset += self.run_cold_start(cold_start, ordinal_offset)
             self.close_results()
+            self.failure_stage = "network_cleanup"
             self.cleanup.remove_network()
             cag_post = git_identity(Path(self.config["paths"]["cag_repository"]))
             require_git_tracked_clean(Path(self.config["paths"]["cag_repository"]))
             if cag_post != self.cag_pre:
                 fail("CAG source HEAD/tree moved during the audit")
             business_after = business_snapshot(self.docker, self.run_id)
+            self.failure_stage = "evidence_finalize"
             succeeded = True
         finally:
             cleanup_errors: list[str] = []
@@ -2410,6 +2510,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         if evidence_dir_created and evidence_binding is not None:
             failure_path = evidence_binding.bound_path / "failure.json"
             if not failure_path.exists():
+                failure_stage = getattr(harness, "failure_stage", None)
+                if (
+                    not isinstance(failure_stage, str)
+                    or re.fullmatch(r"[a-z][a-z0-9_]{2,63}", failure_stage) is None
+                ):
+                    failure_stage = "bootstrap"
+                state_sha256 = getattr(harness, "readiness_state_sha256", None)
+                if not isinstance(state_sha256, str) or re.fullmatch(
+                    r"[0-9a-f]{64}", state_sha256
+                ) is None:
+                    state_sha256 = None
                 write_json(
                     failure_path,
                     {
@@ -2418,6 +2529,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "failed_at": now_iso(),
                         "machine_evidence_emitted": False,
                         "cleanup_error_id": cleanup_error_id,
+                        "failure_stage": failure_stage,
+                        "state_sha256": state_sha256,
                         "third_party_code_executions": 0,
                         "traceback_sha256": sha256_bytes(
                             traceback.format_exc(limit=20).encode("utf-8")

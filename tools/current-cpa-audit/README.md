@@ -50,6 +50,13 @@ It does not approve a release or a production deployment.
   credentials, and proxy variables cleared. Both containers use a read-only
   root filesystem, `cap-drop=ALL`, an empty `cap-add`, `no-new-privileges`, bounded memory/PIDs,
   and restart policy `no`.
+- The generated Mock control and upstream credentials never appear as Docker
+  argument values. The runner writes them to a single-link mode-0600 file below
+  the descriptor-bound cold-start directory, gives `docker run` only an
+  `--env-file` path, and identity-checks and removes that file immediately when
+  the CLI returns, including on failure. Docker expands those values into the
+  container configuration, so root and Docker-daemon administrators remain in
+  the trusted computing base; final evidence and runner output never copy them.
 - Cleanup never calls a global prune and never removes images. It stops CPA and
   Mock gracefully, checkpoints SQLite, and removes only resources carrying the
   exact run label.
@@ -182,10 +189,15 @@ policy change and its exact bundle identity.
 
 Preload, do not pull during the audit:
 
-1. CPA v7.2.116 image by exact RepoDigest and image ID.
-2. The official v7.2.116 linux/amd64 asset and its published SHA-256.
-3. The exact CPA binary SHA-256 expected inside that image.
-4. A counted-Mock image built from this directory with a previously reviewed,
+1. The exact-merge clean CAG audit candidate from the successful CI artifact
+   named `cyber-abuse-guard-linux-amd64-audit-candidate`. Its metadata must bind
+   the selected merge commit/tree and report `dirty=false`; the runner rejects
+   dirty development bytes. This is still an unreleased diagnostic candidate,
+   not a release artifact.
+2. CPA v7.2.116 image by exact RepoDigest and image ID.
+3. The official v7.2.116 linux/amd64 asset and its published SHA-256.
+4. The exact CPA binary SHA-256 expected inside that image.
+5. A counted-Mock image built from this directory with a previously reviewed,
    digest-pinned Python base image.
 
 Example Mock build (replace both digests with reviewed values):
@@ -298,8 +310,10 @@ Pass conditions are closed:
 starts never inflates semantic/content counts.
 
 On any failure, `machine-evidence.json` is not emitted. `failure.json` contains
-only an error identifier and traceback digest. Cleanup and corpus-text removal
-still run. A failure file is not a PASS artifact.
+only an error identifier, a low-cardinality failure stage, an optional
+readiness-state digest, and a traceback digest. It contains no response body,
+credential, runtime configuration, or corpus text. Cleanup and corpus-text
+removal still run. A failure file is not a PASS artifact.
 
 ## 5. Validate final evidence
 
