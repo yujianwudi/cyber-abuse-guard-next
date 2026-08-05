@@ -917,26 +917,32 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                 if kind != "container" or name != "unit-run-mock":
                     raise AssertionError(f"unexpected Docker identity: {kind} {name}")
 
+        def mock_source_harness(
+            docker: MockImageDocker, directory: str
+        ) -> run.Harness:
+            harness = object.__new__(run.Harness)
+            harness.config = {
+                "identities": {
+                    "mock": {
+                        "image_id": image_id,
+                        "image_ref": image_ref,
+                        "source_sha256": expected_sha,
+                    }
+                }
+            }
+            harness.docker = docker
+            harness.evidence_dir = Path(directory)
+            harness.mock_name = "unit-run-mock"
+            harness.run_id = "unit-run"
+            return harness
+
         for source, should_pass in (
             (expected_source, True),
             (expected_source + b"\n# drift", False),
         ):
             with self.subTest(should_pass=should_pass), tempfile.TemporaryDirectory() as directory:
                 docker = MockImageDocker(source)
-                harness = object.__new__(run.Harness)
-                harness.config = {
-                    "identities": {
-                        "mock": {
-                            "image_id": image_id,
-                            "image_ref": image_ref,
-                            "source_sha256": expected_sha,
-                        }
-                    }
-                }
-                harness.docker = docker
-                harness.evidence_dir = Path(directory)
-                harness.mock_name = "unit-run-mock"
-                harness.run_id = "unit-run"
+                harness = mock_source_harness(docker, directory)
                 if should_pass:
                     harness.verify_mock_image_source()
                 else:
@@ -944,6 +950,27 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                         harness.verify_mock_image_source()
                 self.assertFalse(docker.created)
                 self.assertEqual([command[0] for command in docker.commands], ["create", "cp", "rm"])
+
+        class CleanupIdentityDriftDocker(MockImageDocker):
+            def __init__(self, source: bytes) -> None:
+                super().__init__(source)
+                self.inspect_calls = 0
+
+            def inspect(self, kind: str, name: str) -> dict[str, Any]:
+                value = super().inspect(kind, name)
+                self.inspect_calls += 1
+                if self.inspect_calls > 1:
+                    value["Config"]["Labels"][run.ROLE_LABEL] = "drifted"
+                return value
+
+        with tempfile.TemporaryDirectory() as directory:
+            docker = CleanupIdentityDriftDocker(expected_source)
+            harness = mock_source_harness(docker, directory)
+            with self.assertRaisesRegex(
+                run.AuditFailure, "refusing cleanup of an unbound Mock source verifier"
+            ):
+                harness.verify_mock_image_source()
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
         class ImageDocker:
             def inspect(self, kind: str, identity: str) -> dict[str, Any]:
@@ -1139,13 +1166,17 @@ class RunnerFailureSafetyTests(unittest.TestCase):
             existing.mkdir()
             marker = existing / "operator-owned.txt"
             marker.write_text("preserve", encoding="utf-8")
+            policy_raw = b"{}\n"
+            policy_sha256 = sha256_bytes(policy_raw)
             config = {
                 "paths": {
                     "corpus_manifest": str(root / "acquisition" / "corpus-manifest.json"),
                     "evidence_directory": str(existing),
-                }
+                },
+                "policy_sha256": policy_sha256,
             }
             source_manifest = manifest()
+            source_manifest["policy_sha256"] = policy_sha256
             with (
                 mock.patch.object(
                     run,
@@ -1160,11 +1191,20 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                 mock.patch.object(
                     run, "validate_corpus_manifest", return_value=source_manifest
                 ),
+                mock.patch.object(run, "read_regular_bytes", return_value=policy_raw),
+                mock.patch.object(run, "validate_policy", return_value={}),
+                mock.patch.object(run, "validate_manifest_policy"),
+                mock.patch.object(
+                    run.BoundEvidenceDirectory,
+                    "create",
+                    wraps=run.BoundEvidenceDirectory.create,
+                ) as create_evidence,
                 mock.patch.object(run, "remove_manifest_corpus", return_value=(0, False)),
                 mock.patch.object(run, "write_json") as write_json,
                 contextlib.redirect_stderr(io.StringIO()),
             ):
                 self.assertEqual(run.main(["--config", str(root / "config.json")]), 2)
+            create_evidence.assert_called_once_with(existing)
             write_json.assert_not_called()
             self.assertEqual([path.name for path in existing.iterdir()], [marker.name])
             self.assertEqual(marker.read_text("utf-8"), "preserve")

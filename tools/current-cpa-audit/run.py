@@ -1025,19 +1025,21 @@ class Harness:
             if sha256_file(target) != mock["source_sha256"]:
                 fail("counted-Mock source inside the selected image has the wrong SHA")
         finally:
-            if created and not self.docker.absent("container", self.mock_name):
-                container = self.docker.inspect("container", self.mock_name)
-                labels = (container.get("Config") or {}).get("Labels") or {}
-                if (
-                    labels.get(LABEL_KEY) != self.run_id
-                    or labels.get(ROLE_LABEL) != "mock-source-verifier"
-                    or (container.get("State") or {}).get("Running") is not False
-                ):
-                    fail("refusing cleanup of an unbound Mock source verifier")
-                self.docker.run(["rm", self.mock_name], timeout=30)
-                if not self.docker.absent("container", self.mock_name):
-                    fail("counted-Mock source verifier removal was not confirmed")
-            remove_owned_tree(extraction)
+            try:
+                if created and not self.docker.absent("container", self.mock_name):
+                    container = self.docker.inspect("container", self.mock_name)
+                    labels = (container.get("Config") or {}).get("Labels") or {}
+                    if (
+                        labels.get(LABEL_KEY) != self.run_id
+                        or labels.get(ROLE_LABEL) != "mock-source-verifier"
+                        or (container.get("State") or {}).get("Running") is not False
+                    ):
+                        fail("refusing cleanup of an unbound Mock source verifier")
+                    self.docker.run(["rm", self.mock_name], timeout=30)
+                    if not self.docker.absent("container", self.mock_name):
+                        fail("counted-Mock source verifier removal was not confirmed")
+            finally:
+                remove_owned_tree(extraction)
 
     def create_network(self) -> None:
         self.docker.run(

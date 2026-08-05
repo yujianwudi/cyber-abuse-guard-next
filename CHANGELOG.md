@@ -39,9 +39,9 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   private corpus text is removed after use. A final audit found and closed a
   concatenated-ZIP prefix bypass that Python's ZIP reader would otherwise
   silently rebase to the last archive. The current runner bundle is
-  `fb886a238acab50d2c90c3768e5ffd54a6318a15c80fbdc0b065098824b391fb`;
+  `4e81abac21cb2549ee9fd499299cc72bff0065ae6a861a5ced89d57f024ede88`;
   its `run.py` source is
-  `665ffba5e1a454973c39f62c68fa0186bf5aa956e48e5f4db00a1518f7083f6d`.
+  `386b752828f961863a09e51da52685bfe8ee62d8754b7ab718cb0e2c9244ae70`.
   Linux unit verification is 62/62 PASS. Before any counted-Mock code runs, the
   runner now verifies its exact Entrypoint and copies/hashes the stopped image's
   actual source bytes; after the runner opens the newly created private

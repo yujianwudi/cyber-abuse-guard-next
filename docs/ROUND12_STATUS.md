@@ -15,8 +15,8 @@ round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 round12_source_policy: APPROVED_EXACT_PINS / 14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97
-round12_audit_runner_bundle: fb886a238acab50d2c90c3768e5ffd54a6318a15c80fbdc0b065098824b391fb
-round12_audit_run_source: 665ffba5e1a454973c39f62c68fa0186bf5aa956e48e5f4db00a1518f7083f6d
+round12_audit_runner_bundle: 4e81abac21cb2549ee9fd499299cc72bff0065ae6a861a5ced89d57f024ede88
+round12_audit_run_source: 386b752828f961863a09e51da52685bfe8ee62d8754b7ab718cb0e2c9244ae70
 round12_local_audit_tool_tests: PASS / LINUX / 62_OF_62
 round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
