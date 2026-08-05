@@ -252,8 +252,19 @@ real mode-0700 directory beneath trusted, non-writable ancestors. Do not run any
 untrusted process under the runner UID during bootstrap or execution. The
 runner, the local rootful Docker daemon, and its CLI must share the host PID
 namespace so `/proc/<runner-pid>/fd/<evidence-fd>` resolves to the held evidence
-inode for `docker cp` and bind mounts. The runner itself creates only an internal
-bridge.
+inode for descriptor-bound writes and `docker cp`. Docker/runc does not accept a
+proc-fd magic link as a bind-mount source. Immediately before handing each of
+the five runtime directories to Docker, the runner therefore revalidates the
+saved device/inode identity of every real, non-symlink component in the normal
+absolute evidence path. Below the evidence root it also walks the held-fd and
+normal-path aliases component by component, requires matching device/inode and
+private real directories, continuously revalidates the evidence root and
+parent owner/mode, and gives Docker only the verified normal path. It repeats
+those identity checks after container start. Docker inspect must report exactly
+the five expected Source/Destination/RW/rprivate bind contracts and the one
+closed `/tmp` tmpfs contract; any other bind, volume, or non-bind mount fails
+closed. The dedicated-UID condition bounds the non-atomic daemon handoff. The
+runner itself creates only an internal bridge.
 
 ```bash
 python3 -B tools/current-cpa-audit/run.py \
@@ -319,15 +330,21 @@ do not access GitHub, Docker, a real Provider, or third-party code.
 
 The runner creates the evidence directory through an opened private parent,
 then binds it by device/inode and keeps the directory descriptor for the entire
-run. Top-level evidence, runtime state, Mock verification bytes, results,
+run. Top-level evidence, runtime-state writes, Mock verification bytes, results,
 cleanup, and failure records are addressed through that descriptor. A path
 replacement after binding therefore cannot redirect those writes and fails the
-identity recheck. Linux does not provide a syscall that atomically creates a
-directory and returns its new inode fd, so the short create-to-bind interval is
-not a same-UID isolation boundary; a hostile process sharing the runner UID is
-outside this diagnostic harness's threat model. Same-UID independent
-attestation requires a trusted different-UID collector or supervisor-provided
-fd and is not claimed here.
+identity recheck. The five Docker bind mounts use only the separately verified
+normal-path aliases described above because runc rejects proc-fd magic links as
+mount sources. The normal absolute ancestor chain is captured before evidence
+creation and revalidated before and after each daemon handoff; the held-fd and
+normal aliases below the evidence root must still identify the same private
+directories, and the private evidence root and parent owner/mode must not drift.
+Linux does not provide a syscall that atomically creates a
+directory and returns its new inode fd, so the short create-to-bind interval and
+the normal-path Docker handoff are not same-UID isolation boundaries; a hostile
+process sharing the runner UID is outside this diagnostic harness's threat
+model. Same-UID independent attestation requires a trusted different-UID
+collector or supervisor-provided fd and is not claimed here.
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover \

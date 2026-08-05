@@ -173,6 +173,37 @@ class BoundEvidenceDirectory:
             fail(f"evidence directory cannot be bound: {type(exc).__name__}")
         self._initialize(path, descriptor)
 
+    @staticmethod
+    def _absolute_components(path: Path) -> tuple[Path, ...]:
+        if not path.is_absolute() or not path.anchor:
+            fail("evidence directory must be an absolute path")
+        cursor = Path(path.anchor)
+        components = [cursor]
+        for part in path.parts[1:]:
+            if part in {"", ".", ".."}:
+                fail("evidence directory path has an unsafe component")
+            cursor /= part
+            components.append(cursor)
+        return tuple(components)
+
+    @classmethod
+    def _snapshot_path(cls, path: Path) -> tuple[tuple[int, int], ...]:
+        """Capture every real directory inode in one lexical absolute path."""
+
+        identity: list[tuple[int, int]] = []
+        for component in cls._absolute_components(path):
+            try:
+                info = component.lstat()
+            except OSError as exc:
+                fail(
+                    "evidence directory ancestor cannot be verified: "
+                    f"{type(exc).__name__}"
+                )
+            if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                fail("evidence directory ancestors must be real directories")
+            identity.append((info.st_dev, info.st_ino))
+        return tuple(identity)
+
     @classmethod
     def create(cls, path: Path) -> "BoundEvidenceDirectory":
         """Create and bind below a private parent for a dedicated-UID run.
@@ -186,6 +217,7 @@ class BoundEvidenceDirectory:
         flags = cls._flags()
         if path.name in {"", ".", ".."}:
             fail("evidence directory path has an unsafe final component")
+        parent_identity = cls._snapshot_path(path.parent)
         try:
             parent_descriptor = os.open(path.parent, flags)
         except OSError as exc:
@@ -193,8 +225,12 @@ class BoundEvidenceDirectory:
         descriptor = -1
         try:
             parent_info = os.fstat(parent_descriptor)
-            if not stat.S_ISDIR(parent_info.st_mode) or (
-                os.name == "posix" and parent_info.st_mode & 0o077
+            if (
+                not stat.S_ISDIR(parent_info.st_mode)
+                or (parent_info.st_dev, parent_info.st_ino) != parent_identity[-1]
+                or (
+                    os.name == "posix" and parent_info.st_mode & 0o077
+                )
             ):
                 fail("evidence directory parent must be a private real directory")
             try:
@@ -217,7 +253,13 @@ class BoundEvidenceDirectory:
             instance = cls.__new__(cls)
             owned_descriptor = descriptor
             descriptor = -1
-            instance._initialize(path, owned_descriptor, expected=created)
+            instance._initialize(
+                path,
+                owned_descriptor,
+                expected=created,
+                expected_path_identity=parent_identity
+                + ((created.st_dev, created.st_ino),),
+            )
             return instance
         finally:
             if descriptor >= 0:
@@ -230,6 +272,7 @@ class BoundEvidenceDirectory:
         descriptor: int,
         *,
         expected: os.stat_result | None = None,
+        expected_path_identity: tuple[tuple[int, int], ...] | None = None,
     ) -> None:
         self.descriptor = descriptor
         self.path = path
@@ -250,6 +293,26 @@ class BoundEvidenceDirectory:
             self.close()
             fail("evidence directory binding is not a private directory")
         try:
+            self.path_identity = self._snapshot_path(self.path)
+            if (
+                expected_path_identity is not None
+                and self.path_identity != expected_path_identity
+            ):
+                fail("evidence directory ancestors changed during creation")
+            parent = self.path.parent.lstat()
+            current = self.path.lstat()
+            self.parent_security = (
+                parent.st_uid,
+                parent.st_gid,
+                stat.S_IMODE(parent.st_mode),
+            )
+            self.path_security = (
+                current.st_uid,
+                current.st_gid,
+                stat.S_IMODE(current.st_mode),
+            )
+            if self.parent_security[2] & 0o077:
+                fail("evidence directory parent must remain private")
             self.verify_path()
         except BaseException:
             self.close()
@@ -257,16 +320,38 @@ class BoundEvidenceDirectory:
 
     def verify_path(self) -> None:
         try:
-            current = self.path.lstat()
             bound = os.fstat(self.descriptor)
-        except (FileNotFoundError, OSError) as exc:
+        except OSError as exc:
             fail(f"evidence directory identity cannot be revalidated: {type(exc).__name__}")
+        try:
+            current_identity = self._snapshot_path(self.path)
+        except AuditFailure:
+            fail("evidence directory identity changed during the audit")
         if (
-            stat.S_ISLNK(current.st_mode)
-            or not stat.S_ISDIR(current.st_mode)
-            or current.st_mode & 0o077
-            or (current.st_dev, current.st_ino) != (self.info.st_dev, self.info.st_ino)
+            current_identity != self.path_identity
+            or current_identity[-1] != (self.info.st_dev, self.info.st_ino)
             or (bound.st_dev, bound.st_ino) != (self.info.st_dev, self.info.st_ino)
+        ):
+            fail("evidence directory identity changed during the audit")
+        try:
+            parent = self.path.parent.lstat()
+            current = self.path.lstat()
+        except OSError:
+            fail("evidence directory identity changed during the audit")
+        if (
+            (
+                parent.st_uid,
+                parent.st_gid,
+                stat.S_IMODE(parent.st_mode),
+            )
+            != self.parent_security
+            or (
+                current.st_uid,
+                current.st_gid,
+                stat.S_IMODE(current.st_mode),
+            )
+            != self.path_security
+            or current.st_mode & 0o077
         ):
             fail("evidence directory identity changed during the audit")
 
@@ -839,14 +924,16 @@ class Harness:
         config_raw: bytes,
         manifest: dict[str, Any],
         manifest_raw: bytes,
-        evidence_dir: Path,
+        evidence_binding: BoundEvidenceDirectory,
         docker: Docker,
     ) -> None:
         self.config = config
         self.config_raw = config_raw
         self.manifest = manifest
         self.manifest_raw = manifest_raw
-        self.evidence_dir = evidence_dir
+        self.evidence_binding = evidence_binding
+        self.evidence_dir = evidence_binding.bound_path
+        self.host_evidence_dir = evidence_binding.path
         self.docker = docker
         self.run_id = config["run"]["run_id"]
         self.cold_count = config["run"]["cold_start_count"]
@@ -854,8 +941,8 @@ class Harness:
         self.cpa_name = f"{self.run_id}-cpa"
         self.mock_name = f"{self.run_id}-mock"
         self.network_name = f"{self.run_id}-net"
-        self.results_path = evidence_dir / "transport-results.jsonl"
-        self.runtime_root = evidence_dir / ".runtime"
+        self.results_path = self.evidence_dir / "transport-results.jsonl"
+        self.runtime_root = self.evidence_dir / ".runtime"
         self.corpus_root = Path(config["paths"]["corpus_manifest"]).parent
         self.cases = {case["id"]: case for case in manifest["semantic_cases"]}
         self.plan = build_execution_plan(manifest, self.seed, self.cold_count)
@@ -880,6 +967,9 @@ class Harness:
         self.corpus_cleanup_completed = False
         self.corpus_validated = False
         self.active_auth_dir: Path | None = None
+        self.active_cpa_mounts: dict[
+            str, tuple[Path, Path, bool, tuple[tuple[int, int], ...]]
+        ] = {}
 
     @property
     def management_headers(self) -> dict[str, str]:
@@ -1139,7 +1229,16 @@ class Harness:
         auth_dir = cold_root / "auth"
         audit_dir = cold_root / "audit"
         secret_dir = cold_root / "secrets"
-        for directory in (plugin_dir, config_dir, auth_dir, audit_dir, secret_dir):
+        for directory in (
+            cold_root,
+            cold_root / "plugins",
+            cold_root / "plugins" / "linux",
+            plugin_dir,
+            config_dir,
+            auth_dir,
+            audit_dir,
+            secret_dir,
+        ):
             directory.mkdir(parents=True, mode=0o700)
             os.chmod(directory, 0o700)
         cag_so = Path(self.config["paths"]["cag_so"])
@@ -1182,6 +1281,151 @@ class Harness:
         self.active_auth_dir = auth_dir
         return cold_root, runtime_hash
 
+    def docker_bind_source(
+        self,
+        bound_source: Path,
+        *,
+        expected_identity: tuple[tuple[int, int], ...] | None = None,
+    ) -> tuple[Path, tuple[tuple[int, int], ...]]:
+        """Map one descriptor-bound directory to its verified normal host path.
+
+        Docker/runc cannot use proc-fd magic links as bind-mount sources.  Local
+        writes stay below ``self.evidence_dir`` while the daemon receives the
+        corresponding normal path only after every component has been checked
+        to name the same real directory inode.  The dedicated-UID operator
+        contract excludes a hostile same-UID process during this handoff.
+        """
+
+        if (
+            self.evidence_dir != self.evidence_binding.bound_path
+            or self.host_evidence_dir != self.evidence_binding.path
+        ):
+            fail("Docker bind source binding contract is inconsistent")
+        self.evidence_binding.verify_path()
+        try:
+            relative = bound_source.relative_to(self.evidence_dir)
+        except ValueError:
+            fail("Docker bind source is outside the bound evidence directory")
+        if not relative.parts or any(part in {"", ".", ".."} for part in relative.parts):
+            fail("Docker bind source has an unsafe relative path")
+
+        bound_cursor = self.evidence_dir
+        host_cursor = self.host_evidence_dir
+        identity: list[tuple[int, int]] = []
+        for part in (None, *relative.parts):
+            if part is not None:
+                bound_cursor /= part
+                host_cursor /= part
+            try:
+                bound_info = bound_cursor.stat()
+                host_info = host_cursor.lstat()
+            except OSError as exc:
+                fail(f"Docker bind source cannot be verified: {type(exc).__name__}")
+            if (
+                stat.S_ISLNK(host_info.st_mode)
+                or not stat.S_ISDIR(host_info.st_mode)
+                or not stat.S_ISDIR(bound_info.st_mode)
+                or (bound_info.st_dev, bound_info.st_ino)
+                != (host_info.st_dev, host_info.st_ino)
+                or (os.name == "posix" and host_info.st_mode & 0o077)
+            ):
+                fail("Docker bind source is not the descriptor-bound private directory")
+            identity.append((host_info.st_dev, host_info.st_ino))
+        captured = tuple(identity)
+        if expected_identity is not None and captured != expected_identity:
+            fail("Docker bind source identity changed after daemon handoff")
+        return host_cursor, captured
+
+    def cpa_bind_mount_args(self, cold_root: Path) -> list[str]:
+        specifications = (
+            (cold_root / "plugins", "/cag/plugins", True),
+            (cold_root / "config", "/cag/config", True),
+            (cold_root / "auth", "/cag/auth", False),
+            (cold_root / "audit", "/cag/audit", False),
+            (cold_root / "secrets", "/cag/secrets", True),
+        )
+        arguments: list[str] = []
+        self.active_cpa_mounts = {}
+        for bound_source, destination, read_only in specifications:
+            host_source, identity = self.docker_bind_source(bound_source)
+            self.active_cpa_mounts[destination] = (
+                bound_source,
+                host_source,
+                read_only,
+                identity,
+            )
+            value = f"type=bind,src={host_source},dst={destination}"
+            if read_only:
+                value += ",readonly"
+            arguments.extend(["--mount", value])
+        return arguments
+
+    @staticmethod
+    def verify_tmpfs_contract(host_config: Mapping[str, Any]) -> None:
+        tmpfs = host_config.get("Tmpfs")
+        if not isinstance(tmpfs, dict) or set(tmpfs) != {"/tmp"}:
+            fail("container tmpfs destination set is not closed")
+        options = [value for value in str(tmpfs["/tmp"]).split(",") if value]
+        expected = {"rw", "noexec", "nosuid", "nodev", "size=64m"}
+        if len(options) != len(expected) or set(options) != expected:
+            fail("container tmpfs access or size contract drifted")
+
+    def verify_cpa_bind_mounts(self) -> None:
+        if set(self.active_cpa_mounts) != {
+            "/cag/plugins",
+            "/cag/config",
+            "/cag/auth",
+            "/cag/audit",
+            "/cag/secrets",
+        }:
+            fail("CPA bind-mount contract is incomplete")
+        info = self.docker.inspect("container", self.cpa_name)
+        host_config = info.get("HostConfig") or {}
+        if not isinstance(host_config, dict):
+            fail("CPA bind-mount inspection is invalid")
+        self.verify_tmpfs_contract(host_config)
+        mounts = info.get("Mounts")
+        if not isinstance(mounts, list):
+            fail("CPA bind-mount inspection is invalid")
+        observed: dict[str, Mapping[str, Any]] = {}
+        observed_tmpfs = 0
+        for item in mounts:
+            if not isinstance(item, dict):
+                fail("CPA bind-mount inspection is invalid")
+            if item.get("Type") != "bind":
+                if not (
+                    item.get("Type") == "tmpfs"
+                    and item.get("Destination") == "/tmp"
+                    and item.get("RW") is True
+                    and observed_tmpfs == 0
+                ):
+                    fail("CPA container has an unexpected non-bind mount")
+                observed_tmpfs += 1
+                continue
+            destination = str(item.get("Destination", ""))
+            if destination in observed:
+                fail("CPA bind-mount destinations are not unique")
+            observed[destination] = item
+        if observed_tmpfs != 1:
+            fail("CPA container tmpfs mount set is not closed")
+        if set(observed) != set(self.active_cpa_mounts):
+            fail("CPA bind-mount destination set is not closed")
+        for destination, (bound_source, expected_host, read_only, identity) in (
+            self.active_cpa_mounts.items()
+        ):
+            current_host, _ = self.docker_bind_source(
+                bound_source, expected_identity=identity
+            )
+            item = observed[destination]
+            if (
+                current_host != expected_host
+                or item.get("Type") != "bind"
+                or item.get("Source") != str(current_host)
+                or item.get("RW") is not (not read_only)
+                or item.get("Propagation") != "rprivate"
+            ):
+                fail("CPA bind-mount source, identity, or access mode drifted")
+
     def start_cold(self, cold_root: Path, initial_mode: str) -> None:
         mock = self.config["identities"]["mock"]
         mock_args = self.common_container_args("mock", self.mock_name)
@@ -1221,18 +1465,9 @@ class Harness:
 
         cpa = self.config["identities"]["cpa"]
         cpa_args = self.common_container_args("cpa", self.cpa_name)
+        cpa_args.extend(self.cpa_bind_mount_args(cold_root))
         cpa_args.extend(
             [
-                "--mount",
-                f"type=bind,src={cold_root / 'plugins'},dst=/cag/plugins,readonly",
-                "--mount",
-                f"type=bind,src={cold_root / 'config'},dst=/cag/config,readonly",
-                "--mount",
-                f"type=bind,src={cold_root / 'auth'},dst=/cag/auth",
-                "--mount",
-                f"type=bind,src={cold_root / 'audit'},dst=/cag/audit",
-                "--mount",
-                f"type=bind,src={cold_root / 'secrets'},dst=/cag/secrets,readonly",
                 "--env",
                 "CYBER_ABUSE_GUARD_HMAC_KEY_FILE=/cag/secrets/hmac.key",
                 cpa["image_ref"],
@@ -1242,6 +1477,7 @@ class Harness:
             ]
         )
         self.docker.run(cpa_args, timeout=60)
+        self.verify_cpa_bind_mounts()
         self.cpa_url = internal_base(
             container_ip(self.docker, self.cpa_name, self.network_name), CPA_PORT
         )
@@ -1367,6 +1603,7 @@ class Harness:
         restart = (host.get("RestartPolicy") or {}).get("Name", "")
         container_user = str(config.get("User", ""))
         expected_user = f"{os.getuid()}:{os.getgid()}"
+        self.verify_tmpfs_contract(host)
         if (
             info.get("Image") != image_id
             or labels.get(LABEL_KEY) != self.run_id
@@ -1388,6 +1625,8 @@ class Harness:
             or int(host.get("Memory") or 0) < 1
         ):
             fail(f"container security or identity contract failed: {role}")
+        if role == "cpa":
+            self.verify_cpa_bind_mounts()
         return {
             "cap_add": [str(value) for value in cap_add],
             "cap_drop": [str(value) for value in cap_drop],
@@ -2112,7 +2351,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config_raw,
             manifest,
             manifest_raw,
-            evidence_binding.bound_path,
+            evidence_binding,
             Docker(),
         )
         evidence = harness.execute(started_at)

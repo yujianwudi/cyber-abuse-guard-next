@@ -642,9 +642,17 @@ boundaries.
     a non-private evidence parent and keeps every later write on the opened
     directory descriptor, so post-bind path replacement is detected and cannot
     silently redirect those writes. The short create-to-bind interval, direct
-    access through `/proc/<pid>/fd`, and process control such as `ptrace` remain
-    available to a hostile process sharing the runner UID. Run the harness under
-    a dedicated non-root UID with no untrusted peer and trusted ancestors. A
-    stronger claim requires a different-UID trusted collector or an fd supplied
-    by a trusted supervisor; RT12-05/06 remains diagnostic and is not independent
-    attestation.
+    access through `/proc/<pid>/fd`, the verified normal-path handoff required
+    because Docker/runc rejects proc-fd bind-mount sources, and process control
+    such as `ptrace` remain available to a hostile process sharing the runner
+    UID. The runner snapshots and revalidates every real, non-symlink component
+    of the normal absolute evidence path; below the evidence root it also
+    requires each normal mount-source component to match the descriptor-bound
+    directory inode while the private evidence root and parent owner/mode remain
+    unchanged. It repeats those checks after start and closes Docker's observed
+    five-bind Source/Destination/RW/rprivate set plus the sole `/tmp` tmpfs,
+    rejecting other volumes and mounts. This is still not an atomic same-UID
+    boundary. Run the harness under a dedicated non-root UID with no untrusted
+    peer and trusted ancestors. A stronger claim requires a different-UID
+    trusted collector or an fd supplied by a trusted supervisor; RT12-05/06
+    remains diagnostic and is not independent attestation.

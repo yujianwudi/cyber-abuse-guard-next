@@ -42,19 +42,31 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   pending material cannot run, source drift requires a new human review, and
   private corpus text is removed after use. A final audit found and closed a
   concatenated-ZIP prefix bypass that Python's ZIP reader would otherwise
-  silently rebase to the last archive. The current runner bundle is
-  `7631984174c2d2690b3d33785c7346200ebb14b62454eb872355bcd3640f0fcb`;
+  silently rebase to the last archive. Superseded PR head
+  `9782eaf9da37d466ffc0b644b052d3c842f7f1ca` passed CI `31016759352`,
+  Policy and Corpus Gate `31016760807`, and CodeQL `31016759262`; Linux
+  artifact `8936474093` contained a plugin SO with SHA-256
+  `4fdd0914328b63f585187b970a0dc8f4501c3f6dece7819cd414d4fb3179a4ad`.
+  Its second-machine harness attempt then failed closed before any counted-Mock
+  request because Docker/runc rejected a `/proc/<pid>/fd/...` magic link as a
+  bind-mount source (`error_id=32a64d93ec0f3ed9`). It emitted no
+  `machine-evidence.json`, executed no third-party repository code, removed the
+  private corpus text, and is not a PASS.
+
+  The remediation keeps evidence/runtime/cleanup/failure writes on the held
+  directory descriptor but gives Docker only a normal path after checking the
+  complete absolute ancestor snapshot and every descriptor-bound subtree
+  identity. It rechecks the handoff after start and closes exactly five
+  Source/Destination/RW/rprivate binds plus one `/tmp` tmpfs; changed paths,
+  extra mounts, and volumes fail closed. The current runner bundle is
+  `c043a0f81523a6edbed357319fc8b8141f776e92071c287b2d360d0693ce3394`;
   its `run.py` source is
-  `386b752828f961863a09e51da52685bfe8ee62d8754b7ab718cb0e2c9244ae70`.
-  Linux unit verification is 62/62 PASS. Before any counted-Mock code runs, the
-  runner now verifies its exact Entrypoint and copies/hashes the stopped image's
-  actual source bytes; after the runner opens the newly created private
-  directory, all evidence writes stay bound to that inode. The diagnostic
-  harness explicitly excludes a hostile process sharing its dedicated UID
-  because Linux cannot atomically create a directory and return its new inode
-  fd. Exact Go 1.26.4 candidate CI and the
-  final-candidate second-machine run remain pending and are not relabelled as
-  PASS.
+  `9a8ff1f708a3a27b93c9d856993dc8aa5a85fa26d84a6c6ae788053d88caa740`.
+  Linux unit verification is 68/68 PASS. The diagnostic harness explicitly
+  excludes a hostile process sharing its dedicated UID because directory
+  creation and the daemon path handoff are not atomic same-UID boundaries. The
+  remediated working tree still requires its own exact Go 1.26.4 candidate CI
+  and second-machine execution; no predecessor result is relabelled as PASS.
 
 - Freeze the Round 12 evidence vocabulary and publication boundary. Exact
   baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI
@@ -62,8 +74,9 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   `30880739360`; those are exact-main engineering results only. The supplied
   1,320-transport second-machine report remains
   `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`; the
-  RT12-05/06 final-candidate run remains
-  `PENDING_FINAL_CANDIDATE_EXECUTION`. Protected Host, independent attestation,
+  superseded `9782eaf` RT12-05 attempt is `FAIL_CLOSED / NOT_PASS`, and the
+  remediated final-candidate run remains
+  `PENDING_REMEDIATED_HEAD_EXECUTION`. Protected Host, independent attestation,
   production approval, and release readiness remain `NOT_PROVIDED`. This round
   may merge a gated PR to `main` and does not create a tag, RC, plugin asset, or
   GitHub Release. The old repository and `v0.15` Release now return GitHub API

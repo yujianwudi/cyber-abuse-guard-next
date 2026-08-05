@@ -1098,7 +1098,8 @@ class RunnerFailureSafetyTests(unittest.TestCase):
             corpus = acquisition / "corpus"
             evidence_dir = root / "evidence"
             corpus.mkdir(parents=True)
-            evidence_dir.mkdir()
+            evidence_dir.mkdir(mode=0o700)
+            evidence_dir.chmod(0o700)
             payloads: dict[str, bytes] = {}
             for case in source_manifest["semantic_cases"]:
                 source = case["source"]
@@ -1129,12 +1130,14 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                 },
                 "run": {"cold_start_count": 3, "run_id": "unit-run", "seed": 1205},
             }
+            evidence_binding = run.BoundEvidenceDirectory(evidence_dir)
+            self.addCleanup(evidence_binding.close)
             harness = run.Harness(
                 config,
                 b"{}\n",
                 source_manifest,
                 canonical_bytes(source_manifest) + b"\n",
-                evidence_dir,
+                evidence_binding,
                 object(),  # The failure occurs before any Docker operation.
             )
 
