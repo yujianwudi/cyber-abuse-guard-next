@@ -610,7 +610,8 @@ CONSUMED_BOUNDARY_LINES = {
         "    cmd/*evaluation*|cmd/*holdout*|cmd/*consumed*|cmd/*private*|cmd/*blind*|cmd/*retired*|\\",
         "    docs/*consumed*|docs/*private*|docs/*blind*|docs/*retired*|\\",
         "    internal/classifier/*consumed*|internal/classifier/*private*|internal/classifier/*blind*|internal/classifier/*retired*|\\",
-        "    testdata/*evaluation*|testdata/*holdout*|testdata/*consumed*|testdata/*private*|testdata/*blind*|testdata/*retired*)",
+        "    testdata/*evaluation*|testdata/*holdout*|testdata/*consumed*|testdata/*private*|testdata/*blind*|testdata/*retired*|\\",
+        "    testdata/round9-independent-benign-v1/*|testdata/round9-independent-malicious-v1/*)",
     ),
     "scripts/package-source-release.sh": (
         "  ':(exclude,glob).round9-local-sandbox/**'",
@@ -725,7 +726,7 @@ CONSUMED_BOUNDARY_LINES = {
     ),
 }
 ROUND6_REPRODUCIBILITY_SCRIPT_SHA256 = (
-    "7a49d38a291c78e48a89b2d3573efc063d634a2a9f1d9b8d88c775993caf600a"
+    "7850bac3f274dcf80f21271bdec8afa0a0ac9583a52b95f2ce668b52e4663761"
 )
 ROUND6_REPRODUCIBILITY_ENTRY_MODE_CONTRACT = """reproducibility_mode="${ROUND6_REPRODUCIBILITY_MODE:-release}"
 case "$reproducibility_mode" in
@@ -768,7 +769,7 @@ ROUND6_REPRODUCIBILITY_CHECKSUMS_CONTRACT = (
     '        sbom.cdx.json >checksums.txt',
     '      sha256sum -c checksums.txt',
     'compare_artifact "checksums manifest" checksums.txt',
-    '  for relative in "$so" "$so.sha256" "$store_zip" build-metadata.json checksums.txt \\',
+    '  for relative in "$so" "$so.sha256" "$store_zip" build-metadata.json sbom.cdx.json \\',
 )
 BLOCKED_STEP_RUN_SHA256 = {
     ("admission", 0): "e687f6dfcf81b226a179502e0e078696ab8da5ed66797f30fe7cf19e59b83013",
@@ -1056,7 +1057,7 @@ CANDIDATE_ARTIFACTS = (
 )
 CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
-    "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
+    "release-candidate-contract-test.sh": "5454357a64a3f4515026c5ce8e57db06e5ba96a09d6fd11d0bb5e21361ab3563",
 }
 RC_RELEASE_SCRIPT_SHA256 = "c6d08fb43288cec1a4c56a46a980b744acbe09168030f43eb30336a9eb726256"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
@@ -1496,7 +1497,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "f61d5d494764a5f979a50f3eac136a34d7a0ca50e78803e77b2ee993c152d8a8"
+ROUND6_SAFE_GATE_TEST_SHA256 = "1acc299295372be01b253dbb5bc77d614fbc118ab47d51781cf15c48f3767759"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -9193,9 +9194,42 @@ def validate_round6_reproducibility_script(text: str, source: Path) -> None:
     patterns = tuple(
         re.findall(r"['\"]((?:/\*|!/[^'\"]+))['\"]", match.group("body"))
     )
-    if patterns != ROUND6_SPARSE_PATTERNS:
+    if patterns != ROUND9_SPARSE_PATTERNS:
         raise ContractError(
             f"Round6 reproducibility sparse checkout differs from the workflow contract: {source}"
+        )
+    independent_clone_contract = (
+        'git -C "$destination" init --quiet',
+        "local upload_pack='git -c uploadpack.allowFilter=true -c uploadpack.allowAnySHA1InWant=true upload-pack'",
+        'config remote.origin.uploadpack "$upload_pack"',
+        'git -C "$destination" fetch --quiet',
+        '--filter=blob:none --no-tags origin "$fetch_target"',
+        '[[ -d "$destination/.git" && ! -L "$destination/.git" ]]',
+        'rev-parse --git-common-dir',
+        '[[ ! -e "$destination/.git/objects/info/alternates" ]]',
+        'config --get remote.origin.promisor',
+        'config --get remote.origin.partialclonefilter',
+        'config --get remote.origin.uploadpack',
+        '"$destination"/.git/objects/pack/*.promisor',
+        'sparse-checkout set --no-cone',
+        'checkout --quiet --detach "$RELEASE_GIT_COMMIT"',
+        'release_round6_safe_sparse_path "$path"',
+    )
+    if any(text.count(contract) != 1 for contract in independent_clone_contract):
+        raise ContractError(
+            f"Round6 reproducibility must use the exact independent blobless clone contract: {source}"
+        )
+    if "worktree add" in text or "objects/info/alternates" not in text:
+        raise ContractError(
+            f"Round6 reproducibility must not share a linked or alternate Git object store: {source}"
+        )
+    clone_init = text.index(independent_clone_contract[0])
+    clone_fetch = text.index(independent_clone_contract[3])
+    sparse_checkout = text.index(independent_clone_contract[12])
+    source_checkout = text.index(independent_clone_contract[13])
+    if not clone_init < clone_fetch < sparse_checkout < source_checkout:
+        raise ContractError(
+            f"Round6 reproducibility must filter and sparsify before source checkout: {source}"
         )
     if text.count(ROUND6_REPRODUCIBILITY_ENTRY_MODE_CONTRACT) != 1:
         raise ContractError(

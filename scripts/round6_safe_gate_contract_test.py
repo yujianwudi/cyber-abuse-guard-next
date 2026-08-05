@@ -908,6 +908,29 @@ jobs:
         with self.assertRaisesRegex(ContractError, "differs from the workflow contract"):
             validate_round6_reproducibility_script(text, source)
 
+    def test_reproducibility_independent_blobless_clone_is_locked(self):
+        original, source = self.reproducibility_script()
+        mutations = (
+            original.replace("--filter=blob:none", "--filter=blob:limit=1", 1),
+            original.replace(
+                '[[ ! -e "$destination/.git/objects/info/alternates" ]]',
+                '[[ -e "$destination/.git/objects/info/alternates" ]]',
+                1,
+            ),
+            original.replace(
+                'git -C "$destination" init --quiet',
+                'git -C "$root" worktree add "$destination"',
+                1,
+            ),
+        )
+        for text in mutations:
+            with self.subTest(mutation=text):
+                self.assertNotEqual(text, original)
+                with self.assertRaisesRegex(
+                    ContractError, "independent blobless|linked or alternate"
+                ):
+                    validate_round6_reproducibility_script(text, source)
+
     def test_reproducibility_entry_mode_contract_is_locked(self):
         original, source = self.reproducibility_script()
         text = original.replace(
@@ -1865,7 +1888,7 @@ jobs:
             original.replace(
                 'compare_artifact "checksums manifest" checksums.txt\n', "", 1
             ),
-            original.replace(" build-metadata.json checksums.txt \\\n", " build-metadata.json \\\n", 1),
+            original.replace(" build-metadata.json sbom.cdx.json \\\n", " build-metadata.json \\\n", 1),
         )
         for text in mutations:
             self.assertNotEqual(text, original)

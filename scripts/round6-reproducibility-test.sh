@@ -36,15 +36,52 @@ work="$(mktemp -d)"
 clone_a="$work/source-a"
 clone_b="$work/source-b"
 cleanup() {
-  git -C "$root" worktree remove --force "$clone_a" >/dev/null 2>&1 || true
-  git -C "$root" worktree remove --force "$clone_b" >/dev/null 2>&1 || true
   rm -rf -- "$work"
 }
 trap cleanup EXIT
 
-round6_sparse_worktree() {
+round6_sparse_clone() {
   local destination="$1"
-  git -C "$root" worktree add --quiet --detach --no-checkout "$destination" "$RELEASE_GIT_COMMIT"
+  local fetch_target
+  local unsafe_index_entries status path
+  local upload_pack='git -c uploadpack.allowFilter=true -c uploadpack.allowAnySHA1InWant=true upload-pack'
+  local -a promisor_markers
+
+  mkdir -m 0700 -- "$destination"
+  git -C "$destination" init --quiet
+  git -C "$destination" remote add origin "$root"
+  git -C "$destination" config remote.origin.uploadpack "$upload_pack"
+  fetch_target="$RELEASE_GIT_COMMIT"
+  if [[ "$RELEASE_BUILD_KIND" == formal ]]; then
+    fetch_target="+refs/tags/v$RELEASE_SOURCE_VERSION:refs/tags/v$RELEASE_SOURCE_VERSION"
+  fi
+  git -C "$destination" fetch --quiet --filter=blob:none --no-tags origin "$fetch_target"
+  [[ "$(git -C "$destination" rev-parse 'FETCH_HEAD^{commit}')" == "$RELEASE_GIT_COMMIT" ]] || \
+    release_die "Round6 reproducibility clone fetched the wrong commit"
+  if [[ "$RELEASE_BUILD_KIND" == formal ]]; then
+    [[ "$(git -C "$destination" tag --list)" == "v$RELEASE_SOURCE_VERSION" ]] || \
+      release_die "Round6 formal reproducibility clone must contain only the exact release tag"
+    [[ "$(git -C "$destination" cat-file -t "refs/tags/v$RELEASE_SOURCE_VERSION")" == tag ]] || \
+      release_die "Round6 formal reproducibility clone requires the annotated release tag"
+  fi
+  [[ -d "$destination/.git" && ! -L "$destination/.git" ]] || \
+    release_die "Round6 reproducibility clone must use an independent Git directory"
+  [[ "$(git -C "$destination" rev-parse --git-common-dir)" == .git ]] || \
+    release_die "Round6 reproducibility clone must not use a linked common Git directory"
+  [[ ! -e "$destination/.git/objects/info/alternates" ]] || \
+    release_die "Round6 reproducibility clone must not share a local object database"
+  [[ "$(git -C "$destination" config --get remote.origin.promisor)" == true ]] || \
+    release_die "Round6 reproducibility clone must keep a promisor origin"
+  [[ "$(git -C "$destination" config --get remote.origin.partialclonefilter)" == blob:none ]] || \
+    release_die "Round6 reproducibility clone must enforce the blob:none filter"
+  [[ "$(git -C "$destination" config --get remote.origin.uploadpack)" == "$upload_pack" ]] || \
+    release_die "Round6 reproducibility clone must keep the filtering upload-pack contract"
+  shopt -s nullglob
+  promisor_markers=("$destination"/.git/objects/pack/*.promisor)
+  shopt -u nullglob
+  ((${#promisor_markers[@]} > 0)) || \
+    release_die "Round6 reproducibility clone did not retain a promisor pack marker"
+
   git -C "$destination" sparse-checkout set --no-cone \
     '/*' '!/.round9-local-sandbox/**' \
     '!/cmd/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*' '!/cmd/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*' '!/cmd/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*' '!/cmd/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*' '!/cmd/**/*[Bb][Ll][Ii][Nn][Dd]*' '!/cmd/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*' \
@@ -52,12 +89,25 @@ round6_sparse_worktree() {
     '!/docs/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*' '!/docs/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*' '!/docs/**/*[Bb][Ll][Ii][Nn][Dd]*' '!/docs/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*' \
     '!/internal/classifier/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*' '!/internal/classifier/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*' \
     '!/internal/classifier/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*' '!/internal/classifier/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*' '!/internal/classifier/**/*[Bb][Ll][Ii][Nn][Dd]*' '!/internal/classifier/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*' \
-    '!/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*' '!/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*' '!/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*' '!/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*' '!/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*' '!/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*'
-  git -C "$destination" checkout --quiet "$RELEASE_GIT_COMMIT"
+    '!/testdata/**/*[Ee][Vv][Aa][Ll][Uu][Aa][Tt][Ii][Oo][Nn]*' '!/testdata/**/*[Hh][Oo][Ll][Dd][Oo][Uu][Tt]*' \
+    '!/testdata/round9-independent-benign-v1/**' '!/testdata/round9-independent-malicious-v1/**' \
+    '!/testdata/**/*[Cc][Oo][Nn][Ss][Uu][Mm][Ee][Dd]*' '!/testdata/**/*[Pp][Rr][Ii][Vv][Aa][Tt][Ee]*' '!/testdata/**/*[Bb][Ll][Ii][Nn][Dd]*' '!/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*'
+  git -C "$destination" checkout --quiet --detach "$RELEASE_GIT_COMMIT"
+
+  unsafe_index_entries="$(git -C "$destination" ls-files -v | \
+    awk 'substr($0, 1, 1) == "S" || substr($0, 1, 1) ~ /[a-z]/')"
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    status="${entry:0:1}"
+    path="${entry:2}"
+    if [[ "$status" != S ]] || ! release_round6_safe_sparse_path "$path"; then
+      release_die "Round6 reproducibility clone contains an unapproved index flag or excluded path"
+    fi
+  done <<<"$unsafe_index_entries"
 }
 
-round6_sparse_worktree "$clone_a"
-round6_sparse_worktree "$clone_b"
+round6_sparse_clone "$clone_a"
+round6_sparse_clone "$clone_b"
 
 go_path="$(command -v "$go_bin")"
 cyclonedx_path="$(command -v "$cyclonedx")"
@@ -163,18 +213,18 @@ compare_artifact "shared object" "$so"
 compare_artifact "shared-object checksum" "$so.sha256"
 compare_artifact "CPA Store ZIP" "$store_zip"
 compare_artifact "build metadata" build-metadata.json
+compare_artifact "SBOM" sbom.cdx.json
 compare_artifact "checksums manifest" checksums.txt
 compare_artifact "ruleset manifest" ruleset-manifest.json
 compare_artifact "ruleset checksum" ruleset.sha256
-compare_artifact "SBOM" sbom.cdx.json
 if [[ "$RELEASE_BUILD_KIND" == formal ]]; then
   compare_artifact "audit bundle" "$bundle_zip"
 fi
 
 if [[ "$RELEASE_BUILD_KIND" == candidate || "$RELEASE_BUILD_KIND" == formal ]]; then
   root_dist="${DIST_DIR:-$root/dist}"
-  for relative in "$so" "$so.sha256" "$store_zip" build-metadata.json checksums.txt \
-    ruleset-manifest.json ruleset.sha256 sbom.cdx.json; do
+  for relative in "$so" "$so.sha256" "$store_zip" build-metadata.json sbom.cdx.json \
+    checksums.txt ruleset-manifest.json ruleset.sha256; do
     [[ -f "$root_dist/$relative" && ! -L "$root_dist/$relative" ]] || \
       release_die "$RELEASE_BUILD_KIND reproducibility requires the root artifact: $root_dist/$relative"
     compare_paths "root $RELEASE_BUILD_KIND $relative" "$root_dist/$relative" "$clone_a/dist/$relative"
@@ -192,5 +242,5 @@ if [[ "$RELEASE_BUILD_KIND" == candidate ]]; then
 elif [[ "$RELEASE_BUILD_KIND" == formal ]]; then
   echo "Round6 safe formal reproducibility passed and matches root/dist"
 else
-  echo "Round6 safe development reproducibility passed in two clean local clones"
+  echo "Round6 safe development reproducibility passed in two independent blobless sparse clones"
 fi

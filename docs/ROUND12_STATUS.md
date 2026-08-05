@@ -19,7 +19,7 @@ round12_audit_runner_bundle: d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce
 round12_audit_run_source: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
 round12_local_audit_tool_tests: PASS / LINUX / 73_OF_73
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
-round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
+round12_local_safe_gate: PASS / 210_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
 round12_local_go_race: INCOMPLETE_SESSION_INTERRUPTION / NOT_PASS / EXACT_CI_REQUIRED
 round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
@@ -31,6 +31,7 @@ round12_prior_remediated_merge_ref: 2be72ccd7f431344b4f6bb18811fa08949105121
 round12_prior_remediated_engineering_ci: PASS / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
 round12_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / DIRTY_CANDIDATE_READINESS_MISMATCH / NO_MACHINE_EVIDENCE
 round12_current_remediation: CLEAN_EXACT_MERGE_AUDIT_CANDIDATE / MOCK_ARGV_SECRET_REMOVED / FAILURE_STAGE_DIGEST_ONLY
+round12_sbom_repro_remediation: EXACT_IDENTITY_NORMALIZATION / TWO_INDEPENDENT_BLOBLESS_SPARSE_CLONES / LOCAL_CONTRACT_PASS / EXACT_CI_PENDING
 round12_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
 round12_working_candidate_engineering_ci: PENDING_NEW_HEAD
 round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
@@ -54,9 +55,14 @@ The Round 12 implementation has passed its pre-final Linux development checks:
 - format, diff, module verification, vet, fuzz seed, repository-secret,
   workflow, ShellCheck, script-contract, corpus, and release-document gates
   passed;
-- the Safe Gate mutation suite passed 209 tests with 91 explicitly retired
+- the Safe Gate mutation suite passed 210 tests with 91 explicitly retired
   workflow cases skipped, and its live contract closed three entrypoints,
   38 Make targets, and 47 scripts;
+- the CycloneDX main-component contract passed versioned/unversioned byte
+  identity, candidate/RC/formal/dirty-development identity, full commit/tree
+  property binding, malformed-graph rejection, and a synthetic independent
+  `blob:none` sparse-clone test in which the excluded restricted blob remained
+  absent before and after checkout;
 - the current CPA audit harness passed 73/73 Linux tests, including the
   concatenated-ZIP rejection, stopped-image Mock source verification,
   private-parent mode drift, symlink/ancestor/evidence/subdirectory replacement,

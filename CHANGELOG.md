@@ -5,7 +5,7 @@ current_classifier_policy_version: classifier-policy-v11
 current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 ```
 
-Source-tree status updated: 2026-08-05 (Asia/Shanghai)
+Source-tree status updated: 2026-08-06 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
 
@@ -97,6 +97,27 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   creation and the daemon path handoff are not atomic same-UID boundaries. The
   new working tree still requires its own exact Go 1.26.4 candidate CI and a
   fresh second-machine execution; no predecessor result is relabelled as PASS.
+
+  The first clean audit-candidate CI exposed a separate reproducibility defect:
+  `cyclonedx-gomod` could resolve the main-module pseudo-version in the root
+  checkout but silently omitted it in linked worktrees, so only the SBOM and
+  its enclosing checksum manifest differed. SBOM generation now fail-closed
+  normalizes the single main component to the source-derived candidate,
+  annotated RC, formal-tag, or explicitly dirty development identity; it also
+  records the full commit, tree, and build kind as CycloneDX properties and
+  rewrites every matching dependency reference atomically. Versioned and
+  unversioned generator inputs normalize byte-identically, while ambiguous
+  modules, duplicate roots, stale PURLs, conflicting reserved properties, and
+  malformed dependency graphs are rejected. Reproducibility now uses two
+  independent `blob:none` sparse clones with separate `.git` directories, no
+  alternates, a persistent filtering upload-pack for lazy public-blob fetches,
+  and both `round9-independent-*` paths excluded before checkout. A synthetic
+  restricted blob remains absent before and after sparse checkout. Candidate
+  and RC normalization also accepts a valid CycloneDX Go pseudo-version derived
+  from an ancestor formal tag only when its terminal revision matches the exact
+  current HEAD prefix; an otherwise identical version for another commit is
+  rejected. The new exact-merge GitHub run and second-machine evidence remain
+  pending.
 
 - Freeze the Round 12 evidence vocabulary and publication boundary. Exact
   baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI

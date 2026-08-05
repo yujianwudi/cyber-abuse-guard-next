@@ -6,7 +6,7 @@ root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 source "$root/scripts/release-common.sh"
 cyclonedx="${CYCLONEDX_GOMOD:-cyclonedx-gomod}"
 expected_tool_version="${CYCLONEDX_GOMOD_VERSION:-v1.9.0}"
-release_require_commands "$cyclonedx" git sed awk sha256sum sort date grep mkdir mktemp mv rm chmod
+release_require_commands "$cyclonedx" git sed awk sha256sum sort date grep jq mkdir mktemp mv rm chmod
 release_init
 
 tool_version="$($cyclonedx version 2>&1)"
@@ -29,8 +29,7 @@ fixed_timestamp="$(date -u -d "@$RELEASE_SOURCE_DATE_EPOCH" '+%Y-%m-%dT%H:%M:%SZ
   SOURCE_DATE_EPOCH="$RELEASE_SOURCE_DATE_EPOCH" \
     "$cyclonedx" mod -json -noserial -output-version 1.6 -output "$raw" .
 )
-sed -E "s/(\"timestamp\"[[:space:]]*:[[:space:]]*\")[^\"]+(\")/\1$fixed_timestamp\2/" \
-  "$raw" >"$normalized"
+release_normalize_cyclonedx_sbom "$raw" "$normalized" "$fixed_timestamp"
 
 grep -Fq '"bomFormat": "CycloneDX"' "$normalized"
 grep -Fq '"specVersion": "1.6"' "$normalized"

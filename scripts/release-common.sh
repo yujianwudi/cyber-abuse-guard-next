@@ -92,7 +92,8 @@ release_round6_safe_sparse_path() {
     docs/*consumed*|docs/*private*|docs/*blind*|docs/*retired*|\
     internal/classifier/*evaluation*|internal/classifier/*holdout*|\
     internal/classifier/*consumed*|internal/classifier/*private*|internal/classifier/*blind*|internal/classifier/*retired*|\
-    testdata/*evaluation*|testdata/*holdout*|testdata/*consumed*|testdata/*private*|testdata/*blind*|testdata/*retired*)
+    testdata/*evaluation*|testdata/*holdout*|testdata/*consumed*|testdata/*private*|testdata/*blind*|testdata/*retired*|\
+    testdata/round9-independent-benign-v1/*|testdata/round9-independent-malicious-v1/*)
       return 0
       ;;
     *)
@@ -238,6 +239,171 @@ release_init() {
   export RELEASE_BUILD_KIND
   export RELEASE_RULESET_SHA256 RELEASE_CLASSIFIER_POLICY_VERSION RELEASE_CLASSIFIER_POLICY_SHA256
   export RELEASE_STREAMING_SCANNER RELEASE_SOURCE_DATE_EPOCH
+}
+
+release_cyclonedx_component_version() {
+  local commit_timestamp
+  commit_timestamp="$(date -u -d "@$RELEASE_SOURCE_DATE_EPOCH" '+%Y%m%d%H%M%S')"
+  case "$RELEASE_BUILD_KIND" in
+    candidate)
+      printf 'v0.0.0-%s-%s\n' "$commit_timestamp" "${RELEASE_GIT_COMMIT:0:12}"
+      ;;
+    formal)
+      printf 'v%s\n' "$RELEASE_SOURCE_VERSION"
+      ;;
+    rc)
+      printf '%s\n' "$RELEASE_RC_TAG"
+      ;;
+    development)
+      printf 'v%s.%s\n' "$RELEASE_ARTIFACT_VERSION" "${RELEASE_GIT_COMMIT:0:12}"
+      ;;
+    *)
+      release_die "cannot derive CycloneDX identity for unknown build kind"
+      ;;
+  esac
+}
+
+# cyclonedx-gomod v1.9.0 treats main-module version discovery as optional and
+# silently omits it when go-git cannot traverse a linked-worktree common object
+# directory. Canonicalize the generated main component from release_init's
+# exact source identity so root and independent sparse builds cannot diverge or
+# accidentally claim a formal version. Dependency components remain entirely
+# generator-owned.
+release_normalize_cyclonedx_sbom() {
+  local input="$1"
+  local output="$2"
+  local timestamp="$3"
+  local module="github.com/yujianwudi/cyber-abuse-guard-next"
+  local component_version component_base component_ref component_purl
+  local generated_git_version_pattern old_ref allow_other_version=false
+  local commit_property="cag:source:git-commit"
+  local tree_property="cag:source:git-tree"
+  local kind_property="cag:build:kind"
+
+  release_require_commands jq date
+  [[ -f "$input" && ! -L "$input" ]] || \
+    release_die "CycloneDX normalization input must be a regular non-symlink file"
+  [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || \
+    release_die "CycloneDX normalization timestamp is invalid"
+
+  component_version="$(release_cyclonedx_component_version)"
+  # cyclonedx-gomod may derive its pseudo-version from an older formal tag and
+  # uses Git author time rather than release_init's committer epoch. Accept
+  # only the pinned Go pseudo-version shape whose terminal revision is the
+  # exact current HEAD prefix; the authoritative build-kind identity still
+  # replaces it below.
+  generated_git_version_pattern="^v[0-9]+[.][0-9]+[.][0-9]+-([0-9A-Za-z.-]+[.])?[0-9]{14}-${RELEASE_GIT_COMMIT:0:12}([+][0-9A-Za-z.-]+)?$"
+  component_base="pkg:golang/$module"
+  component_ref="${component_base}@${component_version}?type=module"
+  component_purl="${component_ref}&goos=linux&goarch=amd64"
+  [[ "$RELEASE_BUILD_KIND" == development ]] && allow_other_version=true
+  old_ref="$(jq -er '.metadata.component["bom-ref"] | select(type == "string" and length > 0)' "$input")" || \
+    release_die "CycloneDX generated main component reference is missing"
+
+  if ! jq -S -e \
+    --arg timestamp "$timestamp" \
+    --arg module "$module" \
+    --arg base "$component_base" \
+    --arg version "$component_version" \
+    --arg generated_git_version_pattern "$generated_git_version_pattern" \
+    --arg ref "$component_ref" \
+    --arg purl "$component_purl" \
+    --arg commit "$RELEASE_GIT_COMMIT" \
+    --arg tree "$RELEASE_GIT_TREE" \
+    --arg kind "$RELEASE_BUILD_KIND" \
+    --arg commit_property "$commit_property" \
+    --arg tree_property "$tree_property" \
+    --arg kind_property "$kind_property" \
+    --argjson allow_other_version "$allow_other_version" \
+    '(.metadata.component["bom-ref"]) as $old_ref |
+     (.metadata.component.version // null) as $old_version |
+     ($base + "?type=module") as $unversioned_ref |
+     ((.metadata.component.properties // [])) as $properties |
+     if (
+       .bomFormat == "CycloneDX" and .specVersion == "1.6" and
+       (.metadata | type) == "object" and
+       (.metadata.component | type) == "object" and
+       .metadata.component.type == "application" and
+       .metadata.component.name == $module and
+       (.metadata.component.purl | type) == "string" and
+       (
+         ($old_version == null and $old_ref == $unversioned_ref) or
+         (
+           $old_version != null and ($old_version | type) == "string" and
+           ($old_version | length) > 0 and
+           (
+             $old_version == $version or
+             ($old_version | test($generated_git_version_pattern)) or
+             ($allow_other_version and
+               ($old_version | test("^v[0-9]+[.][0-9]+([.][0-9]+)?([-+][0-9A-Za-z.-]+)?$")))
+           ) and
+           $old_ref == ($base + "@" + $old_version + "?type=module")
+         )
+       ) and
+       .metadata.component.purl == ($old_ref + "&goos=linux&goarch=amd64") and
+       (.components | type) == "array" and
+       ([.components[] | select(type == "object" and .name == $module)] | length) == 0 and
+       (.dependencies | type) == "array" and
+       all(.dependencies[];
+         type == "object" and (.ref | type) == "string" and
+         ((has("dependsOn") | not) or
+           ((.dependsOn | type) == "array" and all(.dependsOn[]; type == "string")))) and
+       ([.dependencies[] | select(.ref == $old_ref)] | length) == 1 and
+       ($old_ref == $ref or ([.dependencies[] | select(.ref == $ref)] | length) == 0) and
+       ($properties | type) == "array" and
+       all($properties[]; type == "object" and (.name | type) == "string") and
+       ([$properties[] |
+         select(.name == $commit_property or .name == $tree_property or
+           .name == $kind_property)] | length) == 0
+     ) then
+       .metadata.timestamp = $timestamp |
+       .metadata.component.version = $version |
+       .metadata.component["bom-ref"] = $ref |
+       .metadata.component.purl = $purl |
+       .metadata.component.properties = ($properties + [
+         {name: $commit_property, value: $commit},
+         {name: $tree_property, value: $tree},
+         {name: $kind_property, value: $kind}
+       ]) |
+       .dependencies |= map(
+         (if .ref == $old_ref then .ref = $ref else . end) |
+         (if has("dependsOn") then
+            .dependsOn |= map(if . == $old_ref then $ref else . end)
+          else . end)
+       )
+     else
+       error("generated CycloneDX main component identity is ambiguous")
+     end' \
+    "$input" >"$output"; then
+    release_die "failed to normalize the exact CycloneDX main component identity"
+  fi
+
+  jq -e \
+    --arg version "$component_version" \
+    --arg ref "$component_ref" \
+    --arg purl "$component_purl" \
+    --arg old_ref "$old_ref" \
+    --arg commit "$RELEASE_GIT_COMMIT" \
+    --arg tree "$RELEASE_GIT_TREE" \
+    --arg kind "$RELEASE_BUILD_KIND" \
+    --arg commit_property "$commit_property" \
+    --arg tree_property "$tree_property" \
+    --arg kind_property "$kind_property" \
+    '.metadata.component.version == $version and
+     .metadata.component["bom-ref"] == $ref and
+     .metadata.component.purl == $purl and
+     ([.metadata.component.properties[] |
+       select(.name == $commit_property and .value == $commit)] | length) == 1 and
+     ([.metadata.component.properties[] |
+       select(.name == $tree_property and .value == $tree)] | length) == 1 and
+     ([.metadata.component.properties[] |
+       select(.name == $kind_property and .value == $kind)] | length) == 1 and
+     ([.dependencies[] | select(.ref == $ref)] | length) == 1 and
+     ($old_ref == $ref or
+       (([.dependencies[] | select(.ref == $old_ref)] | length) == 0 and
+        ([.dependencies[] | .dependsOn[]? | select(. == $old_ref)] | length) == 0))' \
+    "$output" >/dev/null || \
+    release_die "normalized CycloneDX main component identity did not verify"
 }
 
 release_assert_tag() {
