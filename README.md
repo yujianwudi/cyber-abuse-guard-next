@@ -138,7 +138,7 @@ is not sent to a public classifier.
 | Scanner identity | `streaming-scanner-v1` |
 | Classifier policy | Current working-source snapshot: `classifier-policy-v11` / `f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`; Round 12 changes role/streaming defensive-owner behavior as well as the CPA-bound source identity. Exact-commit GitHub and final-candidate second-machine binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
-| Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, Raw Capture remains default-off, and `audit.max_db_mb` is enforced after each bounded write batch with raw-first cleanup, explicit capacity status, and audit-write rejection that does not change classification |
+| Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, Raw Capture remains default-off, and `audit.max_db_mb` is enforced after each bounded write batch and inside subject-snapshot replacement transactions, with raw-first cleanup, explicit capacity status, and storage-write rejection that does not change classification |
 | Code review | Automated review is advisory; no independent approval is claimed |
 
 ### Frozen CPA v7.2.113 remediation and active v7.2.116 compatibility delta

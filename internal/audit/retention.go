@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math"
 )
@@ -56,10 +57,6 @@ func (s *Store) cleanup(ctx context.Context) error {
 		}
 	}
 
-	if err := s.enforceCapacity(ctx); err != nil {
-		return err
-	}
-
 	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
 		return fmt.Errorf("audit: WAL checkpoint: %w", err)
 	}
@@ -84,6 +81,32 @@ func (s *Store) enforceCapacity(ctx context.Context) error {
 	}
 	s.capacityMu.Lock()
 	err := s.enforceCapacityLocked(ctx)
+	s.capacityMu.Unlock()
+	if err != nil {
+		s.report(err)
+	}
+	return err
+}
+
+// remeasureCapacity refreshes and latches the hard-cap state without deleting
+// any rows. It is used after committed maintenance where automatic eviction of
+// unrelated audit evidence would violate the operation's scope.
+func (s *Store) remeasureCapacity(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return ErrUnavailable
+	}
+	s.capacityMu.Lock()
+	used, err := s.liveDatabaseBytes(ctx)
+	if err != nil {
+		err = s.capacityFailure(ErrCapacityCheckFailed, false)
+	} else {
+		s.setCapacityMeasurement(used)
+		if used > s.cfg.MaxBytes {
+			err = s.capacityFailure(ErrCapacityExceeded, true)
+		} else {
+			s.clearCapacityFailure()
+		}
+	}
 	s.capacityMu.Unlock()
 	if err != nil {
 		s.report(err)
@@ -202,15 +225,23 @@ func (s *Store) clearCapacityFailure() {
 }
 
 func (s *Store) liveDatabaseBytes(ctx context.Context) (int64, error) {
-	pageCount, err := pragmaInt64(ctx, s, "PRAGMA page_count")
+	return liveDatabaseBytesFrom(ctx, s.db)
+}
+
+type sqliteQueryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func liveDatabaseBytesFrom(ctx context.Context, queryer sqliteQueryRower) (int64, error) {
+	pageCount, err := pragmaInt64(ctx, queryer, "PRAGMA page_count")
 	if err != nil {
 		return 0, err
 	}
-	freePages, err := pragmaInt64(ctx, s, "PRAGMA freelist_count")
+	freePages, err := pragmaInt64(ctx, queryer, "PRAGMA freelist_count")
 	if err != nil {
 		return 0, err
 	}
-	pageSize, err := pragmaInt64(ctx, s, "PRAGMA page_size")
+	pageSize, err := pragmaInt64(ctx, queryer, "PRAGMA page_size")
 	if err != nil {
 		return 0, err
 	}
@@ -224,9 +255,9 @@ func (s *Store) liveDatabaseBytes(ctx context.Context) (int64, error) {
 	return livePages * pageSize, nil
 }
 
-func pragmaInt64(ctx context.Context, s *Store, statement string) (int64, error) {
+func pragmaInt64(ctx context.Context, queryer sqliteQueryRower, statement string) (int64, error) {
 	var value int64
-	if err := s.db.QueryRowContext(ctx, statement).Scan(&value); err != nil {
+	if err := queryer.QueryRowContext(ctx, statement).Scan(&value); err != nil {
 		return 0, ErrCapacityCheckFailed
 	}
 	if value < 0 {

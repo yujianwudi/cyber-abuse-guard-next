@@ -635,3 +635,16 @@ boundaries.
     conservative behavior requires a reproducible safe fixture plus fuzz and
     Host evidence because a broad relaxation could restore complete-allow
     bypasses.
+
+63. **The diagnostic CPA runner does not provide same-UID evidence
+    attestation.** Linux has no ordinary syscall that atomically creates a
+    directory and returns an fd for that newly created inode. The runner rejects
+    a non-private evidence parent and keeps every later write on the opened
+    directory descriptor, so post-bind path replacement is detected and cannot
+    silently redirect those writes. The short create-to-bind interval, direct
+    access through `/proc/<pid>/fd`, and process control such as `ptrace` remain
+    available to a hostile process sharing the runner UID. Run the harness under
+    a dedicated non-root UID with no untrusted peer and trusted ancestors. A
+    stronger claim requires a different-UID trusted collector or an fd supplied
+    by a trusted supervisor; RT12-05/06 remains diagnostic and is not independent
+    attestation.

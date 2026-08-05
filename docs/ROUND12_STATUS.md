@@ -15,10 +15,11 @@ round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 round12_source_policy: APPROVED_EXACT_PINS / 14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97
-round12_audit_runner_bundle: 90978e3ee06b108735fe6d4dbd79b33cc55eed01a14ba8d7c01b2b3b828383f3
-round12_local_audit_tool_tests: PASS / LINUX / 57_OF_57
+round12_audit_runner_bundle: fb886a238acab50d2c90c3768e5ffd54a6318a15c80fbdc0b065098824b391fb
+round12_audit_run_source: 665ffba5e1a454973c39f62c68fa0186bf5aa956e48e5f4db00a1518f7083f6d
+round12_local_audit_tool_tests: PASS / LINUX / 62_OF_62
 round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
-round12_local_go_unit: PASS / GO1.26.0_DEVELOPMENT_EVIDENCE_ONLY
+round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
 round12_local_go_race: INCOMPLETE_SESSION_INTERRUPTION / NOT_PASS / EXACT_CI_REQUIRED
 round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
 round12_working_candidate_engineering_ci: PENDING_FINAL_CANDIDATE
@@ -39,19 +40,25 @@ legacy_v0.15_support: SUSPENDED
 The Round 12 implementation has passed its pre-final Linux development checks:
 
 - the complete safe package, classifier, and counted-Mock unit lanes passed
-  under the locally available Go 1.26.0 toolchain;
+  under the exact Go 1.26.4 Linux toolchain;
 - format, diff, module verification, vet, fuzz seed, repository-secret,
   workflow, ShellCheck, script-contract, corpus, and release-document gates
   passed;
 - the Safe Gate mutation suite passed 209 tests with 91 explicitly retired
   workflow cases skipped, and its live contract closed three entrypoints,
   38 Make targets, and 47 scripts;
-- the current CPA audit harness passed 57/57 Linux tests, including the
-  concatenated-ZIP rejection regression, with 11 reviewed source pins and 19
-  semantic cases bound by the approved policy above.
+- the current CPA audit harness passed 62/62 Linux tests, including the
+  concatenated-ZIP rejection, stopped-image Mock source verification, and
+  private-parent and post-bind evidence-directory identity regressions, with 11
+  reviewed source pins and 19 semantic cases bound by the approved policy
+  above; this diagnostic harness does not claim same-UID bootstrap isolation;
+- subject-snapshot replacement is transactionally capacity bounded without
+  retaining a second full encoded snapshot or deleting audit evidence; explicit
+  event deletion, Raw Capture purge, and subject deletion remeasure without
+  evicting rows outside the requested maintenance scope.
 
-These are working-tree development results, not exact Go 1.26.4 candidate CI
-or second-machine evidence. The local race attempt was interrupted by the tool
+These are working-tree development results, not final-candidate CI or
+second-machine evidence. The local race attempt was interrupted by the tool
 session and is explicitly `NOT_PASS`; it must complete in the required GitHub
 lane.
 
@@ -80,7 +87,7 @@ pending and no `SECOND-MACHINE DIAGNOSTIC PASS` is claimed for Round 12.
 
 - The final candidate must obtain its own five required GitHub checks.
 - Exact Go 1.26.4 race, CPA compatibility, build, reproducibility, and bounded
-  fuzz results must come from that candidate's GitHub jobs; local Go 1.26.0
+  CI fuzz results must come from that candidate's GitHub jobs; local functional
   development evidence does not replace them.
 - RT12-05/06 must run against the final candidate on CPA
   `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536` and close the functional,

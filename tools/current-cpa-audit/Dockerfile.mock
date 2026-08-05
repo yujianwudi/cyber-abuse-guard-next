@@ -8,4 +8,4 @@ LABEL io.cyber-abuse-guard.mock-contract="cag-current-cpa-counted-mock/v1" \
 COPY --chmod=0555 counted_mock.py /opt/cag-audit/counted_mock.py
 
 USER 65532:65532
-ENTRYPOINT ["python3", "-B", "/opt/cag-audit/counted_mock.py"]
+ENTRYPOINT ["python3", "-I", "-S", "-B", "/opt/cag-audit/counted_mock.py"]

@@ -202,6 +202,10 @@ docker build --pull=false \
 
 The runner requires a real `name@sha256:...` RepoDigest for both images and
 uses `docker run --pull never`. A local tag without RepoDigest is rejected.
+Before starting the Mock, it also requires the exact image Entrypoint, creates a
+stopped network-none verifier container, copies `/opt/cag-audit/counted_mock.py`
+without executing it, and hashes those actual bytes against the reviewed source
+identity. Image labels alone are never accepted as proof of the Mock payload.
 Publish/load the Mock through the authorized private audit registry before
 disconnecting external network access.
 
@@ -243,7 +247,13 @@ SHAs, and a bundle SHA over the operational file-name-to-SHA map.
 Disable external networking on the host as appropriate, while preserving the
 local Docker socket. Invoke the runner as a dedicated non-root user with
 passwordless `sudo -n docker`; UID/GID 0 is rejected and the exact numeric
-container user is recorded. The runner itself creates only an internal bridge.
+container user is recorded. The evidence directory's existing parent must be a
+real mode-0700 directory beneath trusted, non-writable ancestors. Do not run any
+untrusted process under the runner UID during bootstrap or execution. The
+runner, the local rootful Docker daemon, and its CLI must share the host PID
+namespace so `/proc/<runner-pid>/fd/<evidence-fd>` resolves to the held evidence
+inode for `docker cp` and bind mounts. The runner itself creates only an internal
+bridge.
 
 ```bash
 python3 -B tools/current-cpa-audit/run.py \
@@ -306,6 +316,30 @@ contract; every object has `additionalProperties: false`.
 
 These tests use generated inert fixtures and a loopback counted-Mock only. They
 do not access GitHub, Docker, a real Provider, or third-party code.
+
+The runner creates the evidence directory through an opened private parent,
+then binds it by device/inode and keeps the directory descriptor for the entire
+run. Top-level evidence, runtime state, Mock verification bytes, results,
+cleanup, and failure records are addressed through that descriptor. A path
+replacement after binding therefore cannot redirect those writes and fails the
+identity recheck. Linux does not provide a syscall that atomically creates a
+directory and returns its new inode fd, so the short create-to-bind interval is
+not a same-UID isolation boundary; a hostile process sharing the runner UID is
+outside this diagnostic harness's threat model. Same-UID independent
+attestation requires a trusted different-UID collector or supervisor-provided
+fd and is not claimed here.
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest discover \
+  -s ./tools/current-cpa-audit/tests -p 'test_*.py'
+python3 -B -m py_compile \
+  tools/current-cpa-audit/acquire.py \
+  tools/current-cpa-audit/audit_contract.py \
+  tools/current-cpa-audit/counted_mock.py \
+  tools/current-cpa-audit/make_run_config.py \
+  tools/current-cpa-audit/run.py \
+  tools/current-cpa-audit/validate.py
+```
 
 ```powershell
 $env:PYTHONDONTWRITEBYTECODE='1'

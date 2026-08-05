@@ -109,9 +109,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             manifest = load_json_file(args.manifest, "corpus manifest")
             bind_policy(validate_corpus_manifest(manifest))
             evidence = load_json_file(args.evidence, "machine evidence")
+            if not isinstance(evidence, dict):
+                raise ContractError("machine evidence must be a JSON object")
+            identities = evidence.get("identities")
+            if not isinstance(identities, dict):
+                raise ContractError("machine evidence.identities must be a JSON object")
             from run import runner_identities
 
-            if evidence.get("identities", {}).get("runner") != runner_identities():
+            if identities.get("runner") != runner_identities():
                 raise ContractError("machine evidence runner identity does not match this bundle")
             validated = validate_machine_evidence(manifest, evidence, args.results)
             declared_manifest = args.evidence.parent / validated["corpus"]["manifest_path"]

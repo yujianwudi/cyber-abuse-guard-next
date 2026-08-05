@@ -101,7 +101,7 @@ class AcquisitionSecurityTests(unittest.TestCase):
     def test_zip_rejects_concatenated_archive_prefix(self) -> None:
         hidden_archive = archive_bytes(["hidden.md"])
         reviewed_archive = archive_bytes(["only.md"])
-        with self.assertRaises(ContractError):
+        with self.assertRaisesRegex(ContractError, "prefix"):
             acquire.extract_single_markdown_zip(
                 hidden_archive + reviewed_archive, "only.md", 1024
             )

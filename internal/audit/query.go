@@ -273,9 +273,10 @@ func (s *Store) Delete(ctx context.Context, query Query) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("audit: count deleted events: %w", err)
 	}
-	if capacityErr := s.enforceCapacity(ctx); capacityErr != nil {
-		return deleted, capacityErr
-	}
+	// The requested deletion is already committed. Capacity enforcement latches
+	// any residual condition into Status; do not report completed maintenance as
+	// if it were rolled back.
+	_ = s.remeasureCapacity(ctx)
 	return deleted, nil
 }
 

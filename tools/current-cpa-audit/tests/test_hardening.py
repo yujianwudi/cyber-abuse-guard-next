@@ -825,8 +825,157 @@ class ClosedContractRegressionTests(unittest.TestCase):
         )
         self.assertEqual(parsed.run_config, Path("run-config.json"))
 
+    def test_evidence_cli_rejects_non_object_without_traceback(self) -> None:
+        cases = (
+            ([], "machine evidence must be a JSON object"),
+            (
+                {"identities": []},
+                "machine evidence.identities must be a JSON object",
+            ),
+        )
+        for evidence, expected in cases:
+            with self.subTest(expected=expected):
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        validator_cli,
+                        "load_json_file",
+                        side_effect=[{"placeholder": True}, evidence],
+                    ),
+                    mock.patch.object(
+                        validator_cli, "validate_corpus_manifest", return_value={}
+                    ),
+                    mock.patch.object(validator_cli, "bind_policy"),
+                    contextlib.redirect_stderr(stderr),
+                ):
+                    result = validator_cli.main(
+                        [
+                            "evidence",
+                            "--manifest",
+                            "manifest.json",
+                            "--evidence",
+                            "machine-evidence.json",
+                            "--results",
+                            "results.jsonl",
+                            "--run-config",
+                            "run-config.json",
+                        ]
+                    )
+                self.assertEqual(result, 2)
+                self.assertIn(expected, stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+
 
 class RunnerFailureSafetyTests(unittest.TestCase):
+    def test_mock_image_source_is_verified_before_execution(self) -> None:
+        expected_source = (TOOL / "counted_mock.py").read_bytes()
+        expected_sha = sha256_bytes(expected_source)
+        image_id = "sha256:" + "b" * 64
+        image_ref = "registry.example/mock@sha256:" + "8" * 64
+
+        class MockImageDocker:
+            def __init__(self, source: bytes) -> None:
+                self.source = source
+                self.created = False
+                self.commands: list[list[str]] = []
+
+            def absent(self, kind: str, name: str) -> bool:
+                self.assert_container(kind, name)
+                return not self.created
+
+            def inspect(self, kind: str, name: str) -> dict[str, Any]:
+                self.assert_container(kind, name)
+                return {
+                    "Config": {
+                        "Labels": {
+                            run.LABEL_KEY: "unit-run",
+                            run.ROLE_LABEL: "mock-source-verifier",
+                        }
+                    },
+                    "HostConfig": {"NetworkMode": "none"},
+                    "Image": image_id,
+                    "State": {"Running": False},
+                }
+
+            def run(
+                self, args: list[str], *, timeout: int, check: bool = True
+            ) -> types.SimpleNamespace:
+                del timeout, check
+                self.commands.append(list(args))
+                if args[0] == "create":
+                    self.created = True
+                elif args[0] == "cp":
+                    Path(args[-1]).write_bytes(self.source)
+                elif args[0] == "rm":
+                    self.created = False
+                else:  # pragma: no cover - the fake is deliberately closed
+                    raise AssertionError(f"unexpected Docker command: {args}")
+                return types.SimpleNamespace(returncode=0)
+
+            @staticmethod
+            def assert_container(kind: str, name: str) -> None:
+                if kind != "container" or name != "unit-run-mock":
+                    raise AssertionError(f"unexpected Docker identity: {kind} {name}")
+
+        for source, should_pass in (
+            (expected_source, True),
+            (expected_source + b"\n# drift", False),
+        ):
+            with self.subTest(should_pass=should_pass), tempfile.TemporaryDirectory() as directory:
+                docker = MockImageDocker(source)
+                harness = object.__new__(run.Harness)
+                harness.config = {
+                    "identities": {
+                        "mock": {
+                            "image_id": image_id,
+                            "image_ref": image_ref,
+                            "source_sha256": expected_sha,
+                        }
+                    }
+                }
+                harness.docker = docker
+                harness.evidence_dir = Path(directory)
+                harness.mock_name = "unit-run-mock"
+                harness.run_id = "unit-run"
+                if should_pass:
+                    harness.verify_mock_image_source()
+                else:
+                    with self.assertRaises(run.AuditFailure):
+                        harness.verify_mock_image_source()
+                self.assertFalse(docker.created)
+                self.assertEqual([command[0] for command in docker.commands], ["create", "cp", "rm"])
+
+        class ImageDocker:
+            def inspect(self, kind: str, identity: str) -> dict[str, Any]:
+                self.kind = kind
+                self.identity = identity
+                return {
+                    "Architecture": "amd64",
+                    "Config": {
+                        "Cmd": None,
+                        "Entrypoint": ["python3", "/wrong.py"],
+                        "Labels": {
+                            "io.cyber-abuse-guard.mock-contract": run.MOCK_CONTRACT,
+                            "io.cyber-abuse-guard.mock-source-sha256": expected_sha,
+                        },
+                    },
+                    "Id": image_id,
+                    "Os": "linux",
+                    "RepoDigests": [image_ref],
+                }
+
+        with self.assertRaises(run.AuditFailure):
+            run.image_identity(
+                ImageDocker(),
+                {
+                    "image_id": image_id,
+                    "image_ref": image_ref,
+                    "repo_digest": image_ref,
+                    "source_sha256": expected_sha,
+                },
+                "mock",
+            )
+
     def test_emergency_cleanup_reports_uninspectable_residual_resources(self) -> None:
         class ResidualDocker:
             def __init__(self) -> None:

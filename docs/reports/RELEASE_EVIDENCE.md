@@ -1019,11 +1019,11 @@ production_approval: NOT_GRANTED
 stable_v0.16: NOT_RELEASED
 ```
 
-## Current Round 9 source-tree identity footer
+## Historical Round 9 source-tree identity footer
 
-This footer supersedes the current-tense identity for release-document
-validation without rewriting the retained Round 8 evidence above. It is a
-development contract only; classifier final source freeze, exact-main CI,
+This footer superseded the then-current identity for historical
+release-document validation without rewriting the retained Round 8 evidence
+above. It is a development contract only; classifier final source freeze, exact-main CI,
 counted-Mock Host evidence, independent audit, tag, and GitHub prerelease are
 not provided by this source-tree record.
 

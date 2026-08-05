@@ -29,7 +29,8 @@ class SchemaTests(unittest.TestCase):
 
         def visit(value: Any, location: str) -> None:
             if isinstance(value, dict):
-                if value.get("type") == "object" and value.get("additionalProperties") is not False:
+                declares_object = value.get("type") == "object" or "properties" in value
+                if declares_object and value.get("additionalProperties") is not False:
                     open_objects.append(location)
                 for key, child in value.items():
                     visit(child, f"{location}/{key}")

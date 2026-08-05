@@ -40,6 +40,9 @@ unbounded copy of every prompt.
   oldest previews before ordinary events. If it cannot recover below the cap,
   later audit/capture writes are rejected and status becomes degraded; the
   request classification/disposition is not changed by that storage failure.
+  Subject-state replacement uses a transactional live-page preflight and rolls
+  back on overflow rather than allowing subject data to trigger evidence
+  eviction; deleting subject state remeasures the gate immediately.
 - Lifetime: `ttl_hours`, default 72 and allowed range 1..87600. When capture is
   enabled it may not exceed `audit.retention_days * 24`.
 - Storage: the ordinary block event and optional preview enter the shared queue

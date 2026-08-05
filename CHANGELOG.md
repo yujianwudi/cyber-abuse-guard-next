@@ -13,7 +13,13 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   acceptance or a release. SQLite audit writes now enforce the configured live
   page ceiling after bounded write batches, purge Raw Capture before ordinary
   events, reject further audit writes when capacity cannot be recovered, and
-  expose low-cardinality capacity state. Management and RPC request limits are
+  expose low-cardinality capacity state. Subject snapshots now preflight live
+  pages inside their replacement transaction and roll back on overflow instead
+  of evicting audit evidence; rows are encoded and inserted one at a time rather
+  than retaining a second full snapshot copy. Committed event deletion, Raw
+  Capture purge, and subject deletion only remeasure the gate and never evict
+  evidence outside the requested maintenance scope.
+  Management and RPC request limits are
   fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
   `X-API-Key` values resolve to a deterministic conflict identity. The
   classifier advances to `classifier-policy-v11` /
@@ -33,8 +39,16 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   private corpus text is removed after use. A final audit found and closed a
   concatenated-ZIP prefix bypass that Python's ZIP reader would otherwise
   silently rebase to the last archive. The current runner bundle is
-  `90978e3ee06b108735fe6d4dbd79b33cc55eed01a14ba8d7c01b2b3b828383f3`;
-  Linux unit verification is 57/57 PASS. Exact Go 1.26.4 candidate CI and the
+  `fb886a238acab50d2c90c3768e5ffd54a6318a15c80fbdc0b065098824b391fb`;
+  its `run.py` source is
+  `665ffba5e1a454973c39f62c68fa0186bf5aa956e48e5f4db00a1518f7083f6d`.
+  Linux unit verification is 62/62 PASS. Before any counted-Mock code runs, the
+  runner now verifies its exact Entrypoint and copies/hashes the stopped image's
+  actual source bytes; after the runner opens the newly created private
+  directory, all evidence writes stay bound to that inode. The diagnostic
+  harness explicitly excludes a hostile process sharing its dedicated UID
+  because Linux cannot atomically create a directory and return its new inode
+  fd. Exact Go 1.26.4 candidate CI and the
   final-candidate second-machine run remain pending and are not relabelled as
   PASS.
 

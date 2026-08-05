@@ -27,7 +27,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, NoReturn, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -71,6 +71,8 @@ LABEL_KEY = "cag.current-cpa-audit.run"
 ROLE_LABEL = "cag.current-cpa-audit.role"
 CPA_PORT = 8317
 MOCK_PORT = 18080
+MOCK_SOURCE_PATH = "/opt/cag-audit/counted_mock.py"
+MOCK_ENTRYPOINT = ["python3", "-I", "-S", "-B", MOCK_SOURCE_PATH]
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
@@ -105,7 +107,7 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise AuditFailure(message)
 
 
@@ -150,6 +152,129 @@ def require_private_directory(path: Path, label: str) -> None:
         fail(f"{label} must be a real directory")
     if os.name == "posix" and info.st_mode & 0o077:
         fail(f"{label} must be mode-0700 or stricter")
+
+
+class BoundEvidenceDirectory:
+    """Keep evidence writes pinned to one inode after the directory is bound."""
+
+    @staticmethod
+    def _flags() -> int:
+        if not hasattr(os, "O_DIRECTORY") or not hasattr(os, "O_NOFOLLOW"):
+            fail("the evidence directory binding requires Linux openat semantics")
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        if hasattr(os, "O_CLOEXEC"):
+            flags |= os.O_CLOEXEC
+        return flags
+
+    def __init__(self, path: Path) -> None:
+        try:
+            descriptor = os.open(path, self._flags())
+        except OSError as exc:
+            fail(f"evidence directory cannot be bound: {type(exc).__name__}")
+        self._initialize(path, descriptor)
+
+    @classmethod
+    def create(cls, path: Path) -> "BoundEvidenceDirectory":
+        """Create and bind below a private parent for a dedicated-UID run.
+
+        Linux has no syscall that atomically creates a directory and returns an
+        fd for that new inode.  The operator contract therefore excludes an
+        untrusted process sharing the runner UID during bootstrap and execution.
+        The descriptor binding detects path replacement after the child is open.
+        """
+
+        flags = cls._flags()
+        if path.name in {"", ".", ".."}:
+            fail("evidence directory path has an unsafe final component")
+        try:
+            parent_descriptor = os.open(path.parent, flags)
+        except OSError as exc:
+            fail(f"evidence directory parent cannot be bound: {type(exc).__name__}")
+        descriptor = -1
+        try:
+            parent_info = os.fstat(parent_descriptor)
+            if not stat.S_ISDIR(parent_info.st_mode) or (
+                os.name == "posix" and parent_info.st_mode & 0o077
+            ):
+                fail("evidence directory parent must be a private real directory")
+            try:
+                os.mkdir(path.name, mode=0o700, dir_fd=parent_descriptor)
+            except FileExistsError:
+                fail("evidence directory must be a new path")
+            except OSError as exc:
+                fail(f"evidence directory cannot be created: {type(exc).__name__}")
+            created = os.stat(
+                path.name, dir_fd=parent_descriptor, follow_symlinks=False
+            )
+            descriptor = os.open(path.name, flags, dir_fd=parent_descriptor)
+            opened = os.fstat(descriptor)
+            if (
+                not stat.S_ISDIR(created.st_mode)
+                or (created.st_dev, created.st_ino) != (opened.st_dev, opened.st_ino)
+            ):
+                fail("evidence directory changed between creation and binding")
+            os.fchmod(descriptor, 0o700)
+            instance = cls.__new__(cls)
+            owned_descriptor = descriptor
+            descriptor = -1
+            instance._initialize(path, owned_descriptor, expected=created)
+            return instance
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            os.close(parent_descriptor)
+
+    def _initialize(
+        self,
+        path: Path,
+        descriptor: int,
+        *,
+        expected: os.stat_result | None = None,
+    ) -> None:
+        self.descriptor = descriptor
+        self.path = path
+        self.info = os.fstat(self.descriptor)
+        # Use the runner's numeric PID rather than /proc/self: paths below this
+        # directory are also passed to the separate sudo/docker client and the
+        # local rootful daemon, whose /proc/self refers to a different process.
+        self.bound_path = Path(f"/proc/{os.getpid()}/fd/{self.descriptor}")
+        if (
+            not stat.S_ISDIR(self.info.st_mode)
+            or self.info.st_mode & 0o077
+            or (
+                expected is not None
+                and (expected.st_dev, expected.st_ino)
+                != (self.info.st_dev, self.info.st_ino)
+            )
+        ):
+            self.close()
+            fail("evidence directory binding is not a private directory")
+        try:
+            self.verify_path()
+        except BaseException:
+            self.close()
+            raise
+
+    def verify_path(self) -> None:
+        try:
+            current = self.path.lstat()
+            bound = os.fstat(self.descriptor)
+        except (FileNotFoundError, OSError) as exc:
+            fail(f"evidence directory identity cannot be revalidated: {type(exc).__name__}")
+        if (
+            stat.S_ISLNK(current.st_mode)
+            or not stat.S_ISDIR(current.st_mode)
+            or current.st_mode & 0o077
+            or (current.st_dev, current.st_ino) != (self.info.st_dev, self.info.st_ino)
+            or (bound.st_dev, bound.st_ino) != (self.info.st_dev, self.info.st_ino)
+        ):
+            fail("evidence directory identity changed during the audit")
+
+    def close(self) -> None:
+        descriptor = getattr(self, "descriptor", -1)
+        if descriptor >= 0:
+            os.close(descriptor)
+            self.descriptor = -1
 
 
 def remove_owned_tree(path: Path) -> int:
@@ -454,6 +579,12 @@ def image_identity(docker: Docker, expected: Mapping[str, Any], role: str) -> di
             != expected["source_sha256"]
         ):
             fail("counted-Mock image labels do not bind its source contract")
+        image_config = info.get("Config") or {}
+        if (
+            image_config.get("Entrypoint") != MOCK_ENTRYPOINT
+            or image_config.get("Cmd") not in (None, [])
+        ):
+            fail("counted-Mock image entrypoint does not execute the reviewed source")
     return info
 
 
@@ -841,6 +972,72 @@ class Harness:
         ):
             if not self.docker.absent(kind, name):
                 fail(f"pre-existing audit resource name refused: {kind} {name}")
+        self.verify_mock_image_source()
+
+    def verify_mock_image_source(self) -> None:
+        """Copy and hash the stopped image payload before any Mock code runs."""
+
+        mock = self.config["identities"]["mock"]
+        extraction = Path(
+            tempfile.mkdtemp(prefix="mock-source-verify-", dir=self.evidence_dir)
+        )
+        os.chmod(extraction, 0o700)
+        target = extraction / "counted_mock.py"
+        created = False
+        try:
+            self.docker.run(
+                [
+                    "create",
+                    "--pull",
+                    "never",
+                    "--name",
+                    self.mock_name,
+                    "--network",
+                    "none",
+                    "--label",
+                    f"{LABEL_KEY}={self.run_id}",
+                    "--label",
+                    f"{ROLE_LABEL}=mock-source-verifier",
+                    "--entrypoint",
+                    "/bin/false",
+                    mock["image_ref"],
+                ],
+                timeout=60,
+            )
+            created = True
+            container = self.docker.inspect("container", self.mock_name)
+            labels = (container.get("Config") or {}).get("Labels") or {}
+            if (
+                container.get("Image") != mock["image_id"]
+                or (container.get("State") or {}).get("Running") is not False
+                or (container.get("HostConfig") or {}).get("NetworkMode") != "none"
+                or labels.get(LABEL_KEY) != self.run_id
+                or labels.get(ROLE_LABEL) != "mock-source-verifier"
+            ):
+                fail("counted-Mock source verifier container identity is invalid")
+            self.docker.run(
+                ["cp", f"{self.mock_name}:{MOCK_SOURCE_PATH}", str(target)],
+                timeout=60,
+            )
+            regular_file_info(
+                target, "counted-Mock image source", require_single_link=True
+            )
+            if sha256_file(target) != mock["source_sha256"]:
+                fail("counted-Mock source inside the selected image has the wrong SHA")
+        finally:
+            if created and not self.docker.absent("container", self.mock_name):
+                container = self.docker.inspect("container", self.mock_name)
+                labels = (container.get("Config") or {}).get("Labels") or {}
+                if (
+                    labels.get(LABEL_KEY) != self.run_id
+                    or labels.get(ROLE_LABEL) != "mock-source-verifier"
+                    or (container.get("State") or {}).get("Running") is not False
+                ):
+                    fail("refusing cleanup of an unbound Mock source verifier")
+                self.docker.run(["rm", self.mock_name], timeout=30)
+                if not self.docker.absent("container", self.mock_name):
+                    fail("counted-Mock source verifier removal was not confirmed")
+            remove_owned_tree(extraction)
 
     def create_network(self) -> None:
         self.docker.run(
@@ -1327,9 +1524,7 @@ class Harness:
         observed: list[Any] = []
         while time.monotonic() < deadline:
             observed = self.usage_queue()
-            if expected_allow and observed:
-                break
-            if not expected_allow and observed:
+            if observed:
                 break
             time.sleep(0.05)
         return len(observed)
@@ -1880,6 +2075,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     started_at = now_iso()
     evidence_dir: Path | None = None
     evidence_dir_created = False
+    evidence_binding: BoundEvidenceDirectory | None = None
     cleanup_manifest: tuple[dict[str, Any], Path] | None = None
     harness: Harness | None = None
     try:
@@ -1907,20 +2103,18 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         validate_manifest_policy(manifest, policy, require_approved=True)
         evidence_dir = Path(config["paths"]["evidence_directory"])
-        if evidence_dir.exists() or evidence_dir.is_symlink():
-            fail("evidence directory must be a new path")
-        parent = evidence_dir.parent
-        try:
-            parent_info = parent.lstat()
-        except FileNotFoundError:
-            fail("evidence directory parent must already exist")
-        if stat.S_ISLNK(parent_info.st_mode) or not stat.S_ISDIR(parent_info.st_mode):
-            fail("evidence directory parent must be a real directory")
-        evidence_dir.mkdir(mode=0o700)
+        evidence_binding = BoundEvidenceDirectory.create(evidence_dir)
         evidence_dir_created = True
-        os.chmod(evidence_dir, 0o700)
-        harness = Harness(config, config_raw, manifest, manifest_raw, evidence_dir, Docker())
+        harness = Harness(
+            config,
+            config_raw,
+            manifest,
+            manifest_raw,
+            evidence_binding.bound_path,
+            Docker(),
+        )
         evidence = harness.execute(started_at)
+        evidence_binding.verify_path()
         print(
             json.dumps(
                 {
@@ -1958,8 +2152,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             cleanup_error_id = sha256_bytes(
                 canonical_bytes(unique_cleanup_error_ids)
             )[:16]
-        if evidence_dir_created and evidence_dir is not None and evidence_dir.is_dir():
-            failure_path = evidence_dir / "failure.json"
+        if evidence_binding is not None:
+            try:
+                evidence_binding.verify_path()
+            except BaseException as cleanup_exc:
+                cleanup_error_ids.append(
+                    sha256_bytes(str(cleanup_exc).encode("utf-8"))[:16]
+                )
+                unique_cleanup_error_ids = sorted(set(cleanup_error_ids))
+                cleanup_error_id = (
+                    unique_cleanup_error_ids[0]
+                    if len(unique_cleanup_error_ids) == 1
+                    else sha256_bytes(canonical_bytes(unique_cleanup_error_ids))[:16]
+                )
+        if evidence_dir_created and evidence_binding is not None:
+            failure_path = evidence_binding.bound_path / "failure.json"
             if not failure_path.exists():
                 write_json(
                     failure_path,
@@ -1977,6 +2184,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
         print(f"AUDIT FAILED CLOSED: error_id={error_id}", file=sys.stderr)
         return 2
+    finally:
+        if evidence_binding is not None:
+            evidence_binding.close()
 
 
 if __name__ == "__main__":

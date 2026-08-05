@@ -223,6 +223,8 @@ def manifest() -> dict[str, Any]:
 
 def _event(expected: str, mode: str, request_hash: str, ordinal: int, malicious: bool) -> dict[str, Any] | None:
     if expected != "allow":
+        if expected != "block_malicious_text":
+            raise AssertionError(f"fixture only models malicious blocks, not {expected}")
         return {
             "action": "block",
             "category": "credential_theft",

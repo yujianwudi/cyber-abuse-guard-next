@@ -69,22 +69,25 @@ reviewed_repositories: 5
 reviewed_sources: 11
 reviewed_semantic_cases: 19
 source_policy_sha256: 14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97
-runner_bundle_sha256: 90978e3ee06b108735fe6d4dbd79b33cc55eed01a14ba8d7c01b2b3b828383f3
-audit_contract_sha256: 8397ab682a2e4666812b06c9ba07654820db85c47212cb4555f83e6121ec4972
+runner_bundle_sha256: fb886a238acab50d2c90c3768e5ffd54a6318a15c80fbdc0b065098824b391fb
+audit_contract_sha256: 830d914f904cdc934bfa4b029ef2d069c01f1cf3e0ae489296a2f3dfc8877087
+run_source_sha256: 665ffba5e1a454973c39f62c68fa0186bf5aa956e48e5f4db00a1518f7083f6d
+machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f7cd9427
 ```
 
 | Working-tree check | Result and evidence boundary |
 |---|---|
-| Current CPA audit tool | **PASS**, Linux 57/57. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, and concatenated-ZIP prefix rejection. No third-party repository code was executed. |
+| Current CPA audit tool | **PASS**, Linux 62/62. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, a private evidence parent, post-bind evidence-root device/inode checks, and independent-process visibility of the runner-PID fd path used by local rootful Docker. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic directory create-to-bind interval. No third-party repository code was executed. |
+| Audit database capacity | **PASS**: subject-snapshot replacement streams bounded rows inside the transaction, measures tentative live pages, and rejects overflow without replacing prior state or deleting audit events. Committed event deletion, Raw Capture purge, and subject-state deletion remeasure capacity without evicting evidence outside the requested maintenance scope. |
 | Safe development inventory | **PASS**, `packages=20`, `classifier_entries=576`, `round12_entries=8`. |
-| Complete unit lane | **PASS** with the locally available Go 1.26.0: all safe packages, classifier, and counted-Mock module passed; classifier and plugin each completed in about 165 seconds. This is development evidence only. |
+| Complete unit lane | **PASS** with exact Go 1.26.4 on Linux: the safe packages passed, the classifier then passed separately in 398.508 seconds under a constrained two-core WSL lane, and the counted-Mock module passed. This is functional development evidence only and is not a performance baseline. |
 | Format/diff/module/vet | **PASS** on Linux; all root and integration module sums verified and the closed package set passed vet. |
 | Script and policy contracts | **PASS**: repository secret scan, actionlint, ShellCheck, Host/evaluation contracts, current audit tool tests, production-health isolation, Store archive, HMAC generation, and Safe Gate all passed. Safe Gate ran 209 tests with 91 retired-workflow skips and closed 3 entrypoints, 38 Make targets, and 47 scripts. |
 | Release-document consistency | **PASS**, including all negative mutation fixtures, for version 0.16 and the exact current classifier identity. |
-| Fuzz seeds and repository corpora | **PASS**: extract/classifier/config fuzz seeds, Balanced corpus contract, development public-jailbreak corpus, Round 9 corpus contract, and public corpus v13 gates. |
+| Fuzz seeds and repository corpora | **PASS**: extract/classifier/config fuzz seeds, bounded one-second classifier/extract/audit fuzz runs, Balanced corpus contract, development public-jailbreak corpus, Round 9 corpus contract, and public corpus v13 gates. |
 | Historical 142-case Balanced benign corpus | **UNCHANGED FROM `main@21267e7`**: B028, B062, and B075 remain 3/142 historical false positives. The exact baseline rerun produced the same IDs, scores, and category; this is not a Round 12 regression and is not presented as zero global false positives. Round 12's named defensive critical controls remain complete non-blocks. |
 | Local race | **INCOMPLETE / NOT PASS**. The desktop tool session interrupted the WSL process after partial package output. No race failure was observed, but partial output is not accepted as evidence. |
-| Exact Go 1.26.4 race, CPA v7.2.116 compatibility, build/reproducibility, and long fuzz | **PENDING FINAL-CANDIDATE GITHUB CI**. The local WSL toolchain is Go 1.26.0 and cannot satisfy these exact gates. |
+| Exact Go 1.26.4 race, CPA v7.2.116 compatibility, build/reproducibility, and long fuzz | **PENDING FINAL-CANDIDATE GITHUB CI**. The exact local Go 1.26.4 functional checks do not satisfy these candidate-bound CI gates. |
 | RT12-05/06 second-machine run | **PENDING FINAL-CANDIDATE EXECUTION**. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
 
 The audit tool's final ZIP regression closes a review-boundary flaw found

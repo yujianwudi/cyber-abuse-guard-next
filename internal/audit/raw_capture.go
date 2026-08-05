@@ -445,9 +445,10 @@ func (s *Store) PurgeRawCaptures(ctx context.Context) (int64, error) {
 	if err != nil {
 		return deleted, err
 	}
-	if capacityErr := s.enforceCapacity(ctx); capacityErr != nil {
-		return deleted, capacityErr
-	}
+	// The purge is already committed. A residual capacity condition remains
+	// visible through Status without turning successful sensitive-data removal
+	// into a misleading operation failure.
+	_ = s.remeasureCapacity(ctx)
 	return deleted, nil
 }
 

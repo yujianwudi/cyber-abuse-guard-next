@@ -93,7 +93,7 @@
       ],
       "properties": {
         "artifact_status": {"const": "candidate"},
-        "manifest_path": {"type": "string", "pattern": "^[^/\\\\][^\\\\]*$"},
+        "manifest_path": {"type": "string", "pattern": "^(?!.*(^|/)\\.\\.(/|$))[^/\\\\][^\\\\]*$"},
         "manifest_sha256": {"$ref": "#/$defs/sha256"},
         "policy_review_status": {"const": "approved"},
         "repository_count": {"const": 5},
@@ -208,7 +208,7 @@
           "prefixItems": [{"const": "chat"}, {"const": "responses"}],
           "items": false
         },
-        "results_path": {"type": "string", "pattern": "^[^/\\\\][^\\\\]*$"},
+        "results_path": {"type": "string", "pattern": "^(?!.*(^|/)\\.\\.(/|$))[^/\\\\][^\\\\]*$"},
         "results_sha256": {"$ref": "#/$defs/sha256"},
         "streams": {
           "type": "array",

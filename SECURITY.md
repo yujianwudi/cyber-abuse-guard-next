@@ -11,7 +11,7 @@ current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66d
 |---|---|---|
 | `v0.15` | **UNAVAILABLE**. The previously documented repository and Release returned GitHub API `404` on 2026-08-04; original bytes and digests are not currently reachable from the documented URLs | **SUPPORT SUSPENDED** until a verifiable read-only repository or signed immutable archive is restored |
 | Source `0.16` / Round 12 working tree | Linux amd64 development source pinned to Go 1.26.4 and CPA v7.2.116. Exact baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` has engineering CI only; the final-candidate CI and second-machine run remain pending, while protected Host, independent attestation, production approval, and release readiness are `NOT_PROVIDED` | Reports are accepted, but source development is not a supported release or production authorization |
-| `v0.16-rc.1` / `v0.16-rc.2` / failed `v0.16-rc.3` identities | Immutable historical candidate and incident evidence; they are not current Round 9 output and must not be overwritten or republished | Historical only; not production-supported |
+| `v0.16-rc.1` / `v0.16-rc.2` / failed `v0.16-rc.3` / uncreated `v0.16-rc.4` identities | Immutable historical candidate and incident evidence; they are not current Round 12 output and must not be overwritten or republished | Historical only; not production-supported |
 | Earlier versions | Historical or development evidence | Unsupported |
 
 There is currently no downloadable release with active security support. The

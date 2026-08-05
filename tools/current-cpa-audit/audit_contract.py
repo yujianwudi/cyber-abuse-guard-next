@@ -17,7 +17,7 @@ import stat
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Iterator, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, NoReturn, Sequence
 
 
 CORPUS_SCHEMA = "cag-current-cpa-corpus/v2"
@@ -144,7 +144,7 @@ class ContractError(RuntimeError):
     """Raised whenever a closed audit contract is not satisfied."""
 
 
-def fail(message: str) -> None:
+def fail(message: str) -> NoReturn:
     raise ContractError(message)
 
 
@@ -1597,7 +1597,7 @@ def validate_allow_response(
             return False, False
         valid = all(
             event is None and isinstance(chunk, dict) and chunk.get("object") == "chat.completion.chunk" and chunk.get("model") == model
-            for (event, _), chunk in zip(frames[:-1], chunks)
+            for (event, _), chunk in zip(frames[:-1], chunks, strict=True)
         )
         choices = chunks[-1].get("choices") if chunks and isinstance(chunks[-1], dict) else None
         final = choices[0] if isinstance(choices, list) and len(choices) == 1 else None

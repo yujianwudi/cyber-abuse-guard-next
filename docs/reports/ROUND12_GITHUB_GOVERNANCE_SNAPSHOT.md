@@ -90,6 +90,23 @@ The final candidate PR must still prove that all five required contexts execute
 successfully under the effective settings. Runner retirement remains open until
 the authorized second-machine work is complete.
 
+At `2026-08-04T17:30:00Z`, the owner also enabled administrator enforcement on
+the `main` branch protection rule and read the effective rule back through the
+REST API:
+
+```text
+main_protection_strict: true
+main_admin_enforcement: true
+main_required_check_count: 5
+main_required_approvals: 0
+```
+
+This closes the administrator-bypass gap present in the initial observation:
+the sole maintainer must now satisfy the same five required contexts and cannot
+use administrator status to merge a failing or pending candidate. Zero required
+approvals remains the explicit single-maintainer anti-deadlock setting and does
+not claim independent review.
+
 ## Development and policy artifact retention
 
 The checked-in workflows currently declare these finite retention periods:

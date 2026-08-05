@@ -688,7 +688,13 @@ writer batch of at most 64 queue items, the Store measures
 the oldest Raw Capture rows first and then the oldest ordinary audit events in
 bounded deletion batches. If the fixed schema, a query failure, or bounded
 cleanup cannot restore the cap, later audit/capture writes are rejected while
-classification continues. Authenticated status and statistics expose
+classification continues. Subject risk snapshots are never automatically
+deleted to make room: replacement is measured inside its SQLite transaction
+and rolled back with `ErrCapacityExceeded` before commit, preserving both the
+prior risk state and audit evidence. Explicit subject-state deletion commits
+first and immediately remeasures so an inherited oversized snapshot can clear
+the gate without waiting for the periodic cleanup tick. Authenticated status
+and statistics expose
 `current_live_bytes`, `configured_max_bytes`,
 `capacity_measurement_available`, `over_limit`, `capacity_cleanup_runs`,
 `capacity_cleanup_deleted`, and `capacity_rejected`; capacity errors use only

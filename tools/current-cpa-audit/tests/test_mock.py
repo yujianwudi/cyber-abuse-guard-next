@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import http.client
 import json
 import sys
@@ -32,7 +33,6 @@ class CountedMockTests(unittest.TestCase):
     def request(
         self, method: str, path: str, body: dict | None = None, token: str | None = None
     ) -> tuple[int, bytes, dict[str, str]]:
-        connection = http.client.HTTPConnection(self.host, self.port, timeout=3)
         headers: dict[str, str] = {}
         raw = None
         if token is not None:
@@ -41,13 +41,16 @@ class CountedMockTests(unittest.TestCase):
             raw = json.dumps(body, separators=(",", ":")).encode("utf-8")
             headers["Content-Type"] = "application/json"
             headers["Content-Length"] = str(len(raw))
-        connection.request(method, path, body=raw, headers=headers)
-        response = connection.getresponse()
-        payload = response.read()
-        response_headers = {key.lower(): value for key, value in response.getheaders()}
-        status = response.status
-        connection.close()
-        return status, payload, response_headers
+        with contextlib.closing(
+            http.client.HTTPConnection(self.host, self.port, timeout=3)
+        ) as connection:
+            connection.request(method, path, body=raw, headers=headers)
+            response = connection.getresponse()
+            payload = response.read()
+            response_headers = {
+                key.lower(): value for key, value in response.getheaders()
+            }
+            return response.status, payload, response_headers
 
     def test_health_and_control_are_separate(self) -> None:
         status, raw, _ = self.request("GET", "/healthz")

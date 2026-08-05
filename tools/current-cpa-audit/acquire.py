@@ -175,7 +175,8 @@ class GitHubClient:
 
 def git_blob_sha1(raw: bytes) -> str:
     prefix = b"blob " + str(len(raw)).encode("ascii") + b"\x00"
-    return hashlib.sha1(prefix + raw).hexdigest()
+    # Git blob identity is defined with SHA-1; this is not a security digest.
+    return hashlib.sha1(prefix + raw, usedforsecurity=False).hexdigest()
 
 
 def safe_file_name(repository_key: str, source_path: str) -> str:

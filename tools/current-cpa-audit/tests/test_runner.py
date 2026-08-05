@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 TOOL = HERE.parent
@@ -24,6 +26,12 @@ class RunnerPureTests(unittest.TestCase):
         self.assertIn('data_dir": "/cag/audit"', raw)
         for marker in ("api.openai.com", "oauth", "provider.example"):
             self.assertNotIn(marker, raw.lower())
+        dockerfile = (TOOL / "Dockerfile.mock").read_text("utf-8")
+        self.assertIn(
+            'ENTRYPOINT ["python3", "-I", "-S", "-B", '
+            '"/opt/cag-audit/counted_mock.py"]',
+            dockerfile,
+        )
 
     def test_internal_target_rejects_loopback_and_non_rfc1918(self) -> None:
         self.assertEqual(run.internal_base("172.20.0.2", 8317), "http://172.20.0.2:8317")
@@ -54,6 +62,83 @@ class RunnerPureTests(unittest.TestCase):
             self.assertEqual(run.remove_owned_tree(owned), 1)
             self.assertFalse(owned.exists())
             self.assertTrue(Path(parent).exists())
+
+    def test_evidence_directory_binding_rejects_path_replacement(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            evidence = root / "evidence"
+            moved = root / "moved"
+            binding = run.BoundEvidenceDirectory.create(evidence)
+            try:
+                evidence.rename(moved)
+                evidence.mkdir(mode=0o700)
+                with self.assertRaises(run.AuditFailure):
+                    binding.verify_path()
+                run.write_exclusive(binding.bound_path / "bound-canary", b"bound")
+                self.assertTrue((moved / "bound-canary").is_file())
+                self.assertFalse((evidence / "bound-canary").exists())
+            finally:
+                binding.close()
+
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            evidence = root / "evidence"
+            moved = root / "moved-before-bind"
+            original_open = run.os.open
+
+            def replace_before_child_open(
+                path: object, flags: int, *args: object, **kwargs: object
+            ) -> int:
+                if path == "evidence" and kwargs.get("dir_fd") is not None:
+                    evidence.rename(moved)
+                    evidence.mkdir(mode=0o700)
+                return original_open(path, flags, *args, **kwargs)
+
+            with mock.patch.object(run.os, "open", side_effect=replace_before_child_open):
+                with self.assertRaises(run.AuditFailure):
+                    run.BoundEvidenceDirectory.create(evidence)
+
+    @unittest.skipUnless(os.name == "posix", "Linux permission contract")
+    def test_evidence_directory_binding_rejects_nonprivate_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            evidence = root / "evidence"
+            root.chmod(0o770)
+            try:
+                with self.assertRaisesRegex(
+                    run.AuditFailure, "parent must be a private real directory"
+                ):
+                    run.BoundEvidenceDirectory.create(evidence)
+                self.assertFalse(evidence.exists())
+            finally:
+                root.chmod(0o700)
+
+    @unittest.skipUnless(os.name == "posix", "Linux proc-fd contract")
+    def test_evidence_bound_path_is_visible_to_an_independent_process(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            evidence = Path(parent) / "evidence"
+            binding = run.BoundEvidenceDirectory.create(evidence)
+            try:
+                result = run.run_process(
+                    [
+                        sys.executable,
+                        "-I",
+                        "-c",
+                        (
+                            "from pathlib import Path; import sys; "
+                            "Path(sys.argv[1], 'external-canary').write_text("
+                            "'external', encoding='utf-8')"
+                        ),
+                        str(binding.bound_path),
+                    ]
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    (evidence / "external-canary").read_text("utf-8"), "external"
+                )
+                binding.verify_path()
+            finally:
+                binding.close()
 
     def test_validated_corpus_cleanup_removes_nerv_text_and_retains_no_body(self) -> None:
         value = manifest()
@@ -90,6 +175,7 @@ class RunnerPureTests(unittest.TestCase):
             self.assertEqual(removed, value["source_count"])
             self.assertFalse(retained)
             self.assertFalse(corpus.exists())
+            self.assertTrue(root.exists())
             self.assertNotIn(canary, canonical_bytes(value))
 
 
