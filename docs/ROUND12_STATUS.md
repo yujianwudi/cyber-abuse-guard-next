@@ -15,9 +15,10 @@ round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
 round12_source_policy: APPROVED_EXACT_PINS / d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
-round12_audit_runner_bundle: c043a0f81523a6edbed357319fc8b8141f776e92071c287b2d360d0693ce3394
-round12_audit_run_source: 9a8ff1f708a3a27b93c9d856993dc8aa5a85fa26d84a6c6ae788053d88caa740
+round12_audit_runner_bundle: 46ca04f8e39922f5023dd60082bea2ff96c79660118b46b57c20f749159fca6c
+round12_audit_run_source: 083f03dbe599434ae4b40300d90d792659e43dec734fb551421393b35cbc339b
 round12_local_audit_tool_tests: PASS / LINUX / 68_OF_68
+round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
 round12_local_go_race: INCOMPLETE_SESSION_INTERRUPTION / NOT_PASS / EXACT_CI_REQUIRED
@@ -59,6 +60,12 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   above; MDX latest HEAD is `7588d25d…` and its selected blobs are unchanged;
   this diagnostic harness does not claim same-UID bootstrap or daemon-handoff
   isolation;
+- a uniquely named, network-none second-machine Docker preflight successfully
+  started the pinned Python image with the normal bind source. Inspect returned
+  the exact source, `RW=false`, and `Propagation=rprivate`; it returned the
+  hardened `/tmp` in `HostConfig.Tmpfs` but omitted tmpfs from `.Mounts`. This
+  closes the runc/inspect shape used by the remediation but is not a final
+  candidate harness PASS;
 - subject-snapshot replacement is transactionally capacity bounded without
   retaining a second full encoded snapshot or deleting audit evidence; explicit
   event deletion, Raw Capture purge, and subject deletion remeasure without

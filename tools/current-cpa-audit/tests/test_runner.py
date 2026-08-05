@@ -288,14 +288,12 @@ class RunnerPureTests(unittest.TestCase):
                             "Type": "bind",
                         }
                     )
-                mounts.append(
-                    {
-                        "Destination": "/tmp",
-                        "RW": True,
-                        "Source": "",
-                        "Type": "tmpfs",
-                    }
-                )
+                tmpfs_mount = {
+                    "Destination": "/tmp",
+                    "RW": True,
+                    "Source": "",
+                    "Type": "tmpfs",
+                }
                 def set_inspect(
                     values: list[dict[str, object]],
                     tmpfs_options: str = "rw,noexec,nosuid,nodev,size=64m",
@@ -306,6 +304,8 @@ class RunnerPureTests(unittest.TestCase):
                     }
 
                 set_inspect(mounts)
+                harness.verify_cpa_bind_mounts()
+                set_inspect([*mounts, dict(tmpfs_mount)])
                 harness.verify_cpa_bind_mounts()
 
                 variants: list[tuple[str, list[dict[str, object]], str]] = []
@@ -388,16 +388,8 @@ class RunnerPureTests(unittest.TestCase):
                     ("unexpected volume", wrong_type, "unexpected non-bind mount")
                 )
 
-                variants.append(
-                    (
-                        "missing tmpfs",
-                        [dict(item) for item in mounts[:-1]],
-                        "tmpfs mount set is not closed",
-                    )
-                )
-
                 duplicate_tmpfs = [dict(item) for item in mounts]
-                duplicate_tmpfs.append(dict(mounts[-1]))
+                duplicate_tmpfs.extend([dict(tmpfs_mount), dict(tmpfs_mount)])
                 variants.append(
                     (
                         "duplicate tmpfs",
@@ -417,6 +409,30 @@ class RunnerPureTests(unittest.TestCase):
                     run.AuditFailure, "tmpfs access or size contract drifted"
                 ):
                     harness.verify_cpa_bind_mounts()
+
+                invalid_host_configs: list[tuple[str, dict[str, object]]] = [
+                    ("missing HostConfig tmpfs", {}),
+                    ("non-object HostConfig tmpfs", {"Tmpfs": []}),
+                    (
+                        "extra HostConfig tmpfs destination",
+                        {
+                            "Tmpfs": {
+                                "/tmp": "rw,noexec,nosuid,nodev,size=64m",
+                                "/unexpected": "rw,size=1m",
+                            }
+                        },
+                    ),
+                ]
+                for label, invalid_host_config in invalid_host_configs:
+                    with self.subTest(label=label):
+                        harness.docker.inspect.return_value = {
+                            "HostConfig": invalid_host_config,
+                            "Mounts": mounts,
+                        }
+                        with self.assertRaisesRegex(
+                            run.AuditFailure, "tmpfs destination set is not closed"
+                        ):
+                            harness.verify_cpa_bind_mounts()
 
                 auth = evidence / ".runtime" / "cold-1" / "auth"
                 moved_auth = evidence / ".runtime" / "cold-1" / "moved-auth"

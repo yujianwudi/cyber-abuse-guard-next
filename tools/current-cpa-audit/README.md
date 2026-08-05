@@ -261,10 +261,12 @@ normal-path aliases component by component, requires matching device/inode and
 private real directories, continuously revalidates the evidence root and
 parent owner/mode, and gives Docker only the verified normal path. It repeats
 those identity checks after container start. Docker inspect must report exactly
-the five expected Source/Destination/RW/rprivate bind contracts and the one
-closed `/tmp` tmpfs contract; any other bind, volume, or non-bind mount fails
-closed. The dedicated-UID condition bounds the non-atomic daemon handoff. The
-runner itself creates only an internal bridge.
+the five expected Source/Destination/RW/rprivate bind contracts, while
+`HostConfig.Tmpfs` must contain only the hardened `/tmp` contract. Docker
+versions may omit tmpfs entries from `.Mounts`; the runner therefore accepts
+zero or one matching `/tmp` entry there and rejects every other bind, volume,
+or non-bind mount. The dedicated-UID condition bounds the non-atomic daemon
+handoff. The runner itself creates only an internal bridge.
 
 ```bash
 python3 -B tools/current-cpa-audit/run.py \

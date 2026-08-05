@@ -44,6 +44,15 @@ removed. The failed evidence is retained at
 `/opt/cag-audit-rt12-9782eaf-20260805-1615`; it is not a PASS and is not
 overwritten by the local remediation.
 
+A separate, uniquely named, `--network none` second-machine Docker preflight
+then started the pinned Python image successfully with a normal host bind path.
+Inspect reported that bind with the exact source, `RW=false`, and
+`Propagation=rprivate`; `HostConfig.Tmpfs` contained exactly
+`/tmp=rw,noexec,nosuid,nodev,size=64m`, while `.Mounts` omitted the tmpfs entry.
+The container and its empty private directories were removed immediately. This
+is real runc/inspect compatibility evidence for the handoff shape, not a final
+candidate, CPA/CAG, semantic, performance, or side-effect PASS.
+
 The reviewed v7.2.113-to-v7.2.116 range retains C ABI 1, RPC schema 2, and all
 235 scoped plugin blobs byte-identically. It adds Home's at-most-once OAuth 401
 refresh/retry within the same logical request and changes Claude executor
@@ -61,6 +70,7 @@ cpa_v7.2.116_exact_main_baseline_ci: PASS / EXACT_MAIN_ONLY / 21267e742b624b29a7
 cpa_v7.2.116_superseded_candidate_ci: PASS / 9782eaf9da37d466ffc0b644b052d3c842f7f1ca / SUPERSEDED
 cpa_v7.2.116_superseded_candidate_second_machine: FAIL_CLOSED / ERROR_32a64d93ec0f3ed9 / NO_MACHINE_EVIDENCE
 cpa_v7.2.116_round12_candidate_ci: PENDING_REMEDIATED_HEAD
+cpa_v7.2.116_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 cpa_v7.2.116_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
 cpa_v7.2.116_final_candidate_second_machine: PENDING_REMEDIATED_HEAD_EXECUTION
 cpa_v7.2.116_protected_host: NOT_PROVIDED
@@ -83,15 +93,15 @@ reviewed_repositories: 5
 reviewed_sources: 11
 reviewed_semantic_cases: 19
 source_policy_sha256: d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
-runner_bundle_sha256: c043a0f81523a6edbed357319fc8b8141f776e92071c287b2d360d0693ce3394
+runner_bundle_sha256: 46ca04f8e39922f5023dd60082bea2ff96c79660118b46b57c20f749159fca6c
 audit_contract_sha256: 830d914f904cdc934bfa4b029ef2d069c01f1cf3e0ae489296a2f3dfc8877087
-run_source_sha256: 9a8ff1f708a3a27b93c9d856993dc8aa5a85fa26d84a6c6ae788053d88caa740
+run_source_sha256: 083f03dbe599434ae4b40300d90d792659e43dec734fb551421393b35cbc339b
 machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f7cd9427
 ```
 
 | Working-tree check | Result and evidence boundary |
 |---|---|
-| Current CPA audit tool | **PASS**, Linux 68/68. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, exact Source/Destination/RW/rprivate closure for five binds, a unique `/tmp` tmpfs, and rejection of extra binds/volumes/non-bind mounts. Evidence writes remain on the runner-PID fd path. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic create/bind or daemon-handoff intervals. No third-party repository code was executed by these unit tests. |
+| Current CPA audit tool | **PASS**, Linux 68/68. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Evidence writes remain on the runner-PID fd path. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic create/bind or daemon-handoff intervals. No third-party repository code was executed by these unit tests. |
 | Audit database capacity | **PASS**: subject-snapshot replacement streams bounded rows inside the transaction, measures tentative live pages, and rejects overflow without replacing prior state or deleting audit events. Committed event deletion, Raw Capture purge, and subject-state deletion remeasure capacity without evicting evidence outside the requested maintenance scope. |
 | Safe development inventory | **PASS**, `packages=20`, `classifier_entries=576`, `round12_entries=8`. |
 | Complete unit lane | **PASS** with exact Go 1.26.4 on Linux: the safe packages passed, the classifier then passed separately in 398.508 seconds under a constrained two-core WSL lane, and the counted-Mock module passed. This is functional development evidence only and is not a performance baseline. |

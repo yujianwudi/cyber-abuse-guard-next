@@ -1388,6 +1388,9 @@ class Harness:
         if not isinstance(mounts, list):
             fail("CPA bind-mount inspection is invalid")
         observed: dict[str, Mapping[str, Any]] = {}
+        # HostConfig.Tmpfs is the authoritative closed tmpfs contract. Docker
+        # versions differ on whether that tmpfs is repeated in Mounts, so allow
+        # it to be absent there or present once with the same destination/RW.
         observed_tmpfs = 0
         for item in mounts:
             if not isinstance(item, dict):
@@ -1406,8 +1409,6 @@ class Harness:
             if destination in observed:
                 fail("CPA bind-mount destinations are not unique")
             observed[destination] = item
-        if observed_tmpfs != 1:
-            fail("CPA container tmpfs mount set is not closed")
         if set(observed) != set(self.active_cpa_mounts):
             fail("CPA bind-mount destination set is not closed")
         for destination, (bound_source, expected_host, read_only, identity) in (

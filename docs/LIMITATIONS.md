@@ -650,8 +650,9 @@ boundaries.
     requires each normal mount-source component to match the descriptor-bound
     directory inode while the private evidence root and parent owner/mode remain
     unchanged. It repeats those checks after start and closes Docker's observed
-    five-bind Source/Destination/RW/rprivate set plus the sole `/tmp` tmpfs,
-    rejecting other volumes and mounts. This is still not an atomic same-UID
+    five-bind Source/Destination/RW/rprivate set. `HostConfig.Tmpfs` must contain
+    only the hardened `/tmp` contract; `.Mounts` may omit it or repeat it once,
+    and other volumes or mounts are rejected. This is still not an atomic same-UID
     boundary. Run the harness under a dedicated non-root UID with no untrusted
     peer and trusted ancestors. A stronger claim requires a different-UID
     trusted collector or an fd supplied by a trusted supervisor; RT12-05/06

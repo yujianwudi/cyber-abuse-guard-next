@@ -57,11 +57,13 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
   directory descriptor but gives Docker only a normal path after checking the
   complete absolute ancestor snapshot and every descriptor-bound subtree
   identity. It rechecks the handoff after start and closes exactly five
-  Source/Destination/RW/rprivate binds plus one `/tmp` tmpfs; changed paths,
+  Source/Destination/RW/rprivate binds. `HostConfig.Tmpfs` must contain only the
+  hardened `/tmp` contract; because Docker may omit tmpfs entries from
+  `.Mounts`, zero or one matching `/tmp` entry is accepted there. Changed paths,
   extra mounts, and volumes fail closed. The current runner bundle is
-  `c043a0f81523a6edbed357319fc8b8141f776e92071c287b2d360d0693ce3394`;
+  `46ca04f8e39922f5023dd60082bea2ff96c79660118b46b57c20f749159fca6c`;
   its `run.py` source is
-  `9a8ff1f708a3a27b93c9d856993dc8aa5a85fa26d84a6c6ae788053d88caa740`.
+  `083f03dbe599434ae4b40300d90d792659e43dec734fb551421393b35cbc339b`.
   Linux unit verification is 68/68 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
