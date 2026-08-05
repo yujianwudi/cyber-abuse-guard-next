@@ -81,7 +81,7 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-04; source drift fails.
+  five-repository source identities reviewed on 2026-08-05; source drift fails.
 - `audit_contract.py` — closed corpus, run-config, result, and machine-evidence
   validators. Unknown or missing fields fail.
 - `counted_mock.py` and `Dockerfile.mock` — body-discarding upstream with

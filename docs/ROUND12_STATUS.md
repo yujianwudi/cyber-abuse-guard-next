@@ -14,8 +14,8 @@ round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
 round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
-round12_source_policy: APPROVED_EXACT_PINS / 14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97
-round12_audit_runner_bundle: 4e81abac21cb2549ee9fd499299cc72bff0065ae6a861a5ced89d57f024ede88
+round12_source_policy: APPROVED_EXACT_PINS / d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
+round12_audit_runner_bundle: 7631984174c2d2690b3d33785c7346200ebb14b62454eb872355bcd3640f0fcb
 round12_audit_run_source: 386b752828f961863a09e51da52685bfe8ee62d8754b7ab718cb0e2c9244ae70
 round12_local_audit_tool_tests: PASS / LINUX / 62_OF_62
 round12_local_safe_gate: PASS / 209_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
@@ -51,7 +51,8 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   concatenated-ZIP rejection, stopped-image Mock source verification, and
   private-parent and post-bind evidence-directory identity regressions, with 11
   reviewed source pins and 19 semantic cases bound by the approved policy
-  above; this diagnostic harness does not claim same-UID bootstrap isolation;
+  above; MDX latest HEAD is `7588d25d…` and its selected blobs are unchanged;
+  this diagnostic harness does not claim same-UID bootstrap isolation;
 - subject-snapshot replacement is transactionally capacity bounded without
   retaining a second full encoded snapshot or deleting audit evidence; explicit
   event deletion, Raw Capture purge, and subject deletion remeasure without

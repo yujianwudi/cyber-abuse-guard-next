@@ -68,8 +68,8 @@ The current approved five-repository source policy and runner identities are:
 reviewed_repositories: 5
 reviewed_sources: 11
 reviewed_semantic_cases: 19
-source_policy_sha256: 14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97
-runner_bundle_sha256: 4e81abac21cb2549ee9fd499299cc72bff0065ae6a861a5ced89d57f024ede88
+source_policy_sha256: d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
+runner_bundle_sha256: 7631984174c2d2690b3d33785c7346200ebb14b62454eb872355bcd3640f0fcb
 audit_contract_sha256: 830d914f904cdc934bfa4b029ef2d069c01f1cf3e0ae489296a2f3dfc8877087
 run_source_sha256: 386b752828f961863a09e51da52685bfe8ee62d8754b7ab718cb0e2c9244ae70
 machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f7cd9427
@@ -89,6 +89,14 @@ machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f
 | Local race | **INCOMPLETE / NOT PASS**. The desktop tool session interrupted the WSL process after partial package output. No race failure was observed, but partial output is not accepted as evidence. |
 | Exact Go 1.26.4 race, CPA v7.2.116 compatibility, build/reproducibility, and long fuzz | **PENDING FINAL-CANDIDATE GITHUB CI**. The exact local Go 1.26.4 functional checks do not satisfy these candidate-bound CI gates. |
 | RT12-05/06 second-machine run | **PENDING FINAL-CANDIDATE EXECUTION**. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
+
+The latest-head check on 2026-08-05 found four reviewed repositories unchanged
+and MDX advanced by two documentation-only commits to
+`7588d25d8cb67f88a75d168fcb6ca8fc357bc492`. The only changed paths are
+`README.md` and `README_EN.md`; both selected MDX blobs retain their reviewed
+Git blob and content hashes. The policy therefore updates the repository
+commit/tree binding without changing either selected payload or its semantic
+labels.
 
 The audit tool's final ZIP regression closes a review-boundary flaw found
 during the pre-final read-only audit: two complete ZIP archives could be

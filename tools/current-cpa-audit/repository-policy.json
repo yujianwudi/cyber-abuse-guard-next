@@ -7,7 +7,7 @@
   "max_blob_bytes": 2097152,
   "reviewer": {
     "identity": "Codex Round 12 exact-source review",
-    "reviewed_at": "2026-08-04T13:53:19.173Z",
+    "reviewed_at": "2026-08-05T14:27:09.300Z",
     "status": "approved"
   },
   "repositories": [
@@ -267,10 +267,10 @@
           "archive_member": "gpt-5.6-sol-unrestricted-v42.md",
           "reviewed_source": {
             "blob_sha1": "3845b884e875b1230209fa84044a95b95c937179",
-            "commit": "62dc8a596f9d747c1315217939908499cec21739",
+            "commit": "7588d25d8cb67f88a75d168fcb6ca8fc357bc492",
             "source_sha256": "11f0515be89943a7244d07b625a497b04dde07a51ba26e41df583a0acc145a09",
             "text_sha256": "7e5f3268fd55f491ad01ebf7e0ff844f55094b9e529585415634aeb4b32b9157",
-            "tree": "570e746ea43a6242042ee7ea467b41e4accc6df6"
+            "tree": "1de7995bff490dfd98536cb144ab475f38341c12"
           },
           "semantic_cases": [
             {
@@ -309,10 +309,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "2dc38f8a63f8cee67f956e746f90a6bcedab7efa",
-            "commit": "62dc8a596f9d747c1315217939908499cec21739",
+            "commit": "7588d25d8cb67f88a75d168fcb6ca8fc357bc492",
             "source_sha256": "f11776d2c037bbf05a54310265fb78fb6f423312842a6afd0afe24111b370534",
             "text_sha256": "f11776d2c037bbf05a54310265fb78fb6f423312842a6afd0afe24111b370534",
-            "tree": "570e746ea43a6242042ee7ea467b41e4accc6df6"
+            "tree": "1de7995bff490dfd98536cb144ab475f38341c12"
           },
           "semantic_cases": [
             {

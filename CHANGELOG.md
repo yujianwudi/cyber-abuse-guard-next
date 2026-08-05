@@ -33,13 +33,17 @@ Source-tree status updated: 2026-08-05 (Asia/Shanghai)
 - Add the closed `tools/current-cpa-audit` RT12-05 harness. The approved policy
   binds 11 reviewed paths across the five fixed repositories to exact
   commit/tree/blob/raw/text identities and 19 semantic cases; policy SHA-256 is
-  `14da58806760262908240593c176c8bdf1f2216df7f23de71bd172e8e6b48d97`.
+  `d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89`.
+  The MDX repository pin advances to latest HEAD
+  `7588d25d8cb67f88a75d168fcb6ca8fc357bc492`; its two selected source blobs
+  remain byte-identical, while the intervening commits change only README and
+  README_EN project warnings.
   Acquisition and cleanup are device/inode, SHA, size, and link-count bound;
   pending material cannot run, source drift requires a new human review, and
   private corpus text is removed after use. A final audit found and closed a
   concatenated-ZIP prefix bypass that Python's ZIP reader would otherwise
   silently rebase to the last archive. The current runner bundle is
-  `4e81abac21cb2549ee9fd499299cc72bff0065ae6a861a5ced89d57f024ede88`;
+  `7631984174c2d2690b3d33785c7346200ebb14b62454eb872355bcd3640f0fcb`;
   its `run.py` source is
   `386b752828f961863a09e51da52685bfe8ee62d8754b7ab718cb0e2c9244ae70`.
   Linux unit verification is 62/62 PASS. Before any counted-Mock code runs, the
