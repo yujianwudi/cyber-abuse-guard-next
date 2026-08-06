@@ -33,11 +33,13 @@ Source-tree status updated: 2026-08-06 (Asia/Shanghai)
 - Add the closed `tools/current-cpa-audit` RT12-05 harness. The approved policy
   binds 11 reviewed paths across the five fixed repositories to exact
   commit/tree/blob/raw/text identities and 19 semantic cases; policy SHA-256 is
-  `d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89`.
+  `9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225`.
   The MDX repository pin advances to latest HEAD
-  `7588d25d8cb67f88a75d168fcb6ca8fc357bc492`; its two selected source blobs
-  remain byte-identical, while the intervening commits change only README and
-  README_EN project warnings.
+  `77e7a649903f9556f2d7bfa0223fa99e123aad52`: the current single-member
+  `gpt-5.6-sol-unrestricted-v45.zip` replaces the v42 path moved into the
+  historical directory, while the selected safety-evaluation document remains
+  byte-identical. The replacement archive and extracted Markdown are reviewed
+  and bound to their new blob/raw/text hashes.
   Acquisition and cleanup are device/inode, SHA, size, and link-count bound;
   pending material cannot run, source drift requires a new human review, and
   private corpus text is removed after use. A final audit found and closed a
@@ -89,10 +91,10 @@ Source-tree status updated: 2026-08-06 (Asia/Shanghai)
   digest. A dedicated second-machine real-Docker smoke passed both successful
   and expected-failure `--env-file` paths; it retained no file/container and
   found zero credential-field mentions in the unit journal. The current runner bundle is
-  `d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce2d43e99bb61ca`;
+  `1f2e5163a96efb13f23c713b25a91b7b73874b194286e4383b66e24e402ad0a2`;
   its `run.py` source is
   `0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947`.
-  Linux unit verification is 73/73 PASS. The diagnostic harness explicitly
+  Linux unit verification is 74/74 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
   new working tree still requires its own exact Go 1.26.4 candidate CI and a

@@ -130,16 +130,16 @@ The current approved five-repository source policy and runner identities are:
 reviewed_repositories: 5
 reviewed_sources: 11
 reviewed_semantic_cases: 19
-source_policy_sha256: d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
-runner_bundle_sha256: d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce2d43e99bb61ca
-audit_contract_sha256: 830d914f904cdc934bfa4b029ef2d069c01f1cf3e0ae489296a2f3dfc8877087
+source_policy_sha256: 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
+runner_bundle_sha256: 1f2e5163a96efb13f23c713b25a91b7b73874b194286e4383b66e24e402ad0a2
+audit_contract_sha256: d725d772d37fc183fc8e57f857a4c630223c1cf3bf1a8dd9de8c950d1c6d1a7b
 run_source_sha256: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
 machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f7cd9427
 ```
 
 | Working-tree check | Result and evidence boundary |
 |---|---|
-| Current CPA audit tool | **PASS**, Linux 73/73. Includes pending/approved review separation, exact source pins, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic create/bind or daemon-handoff intervals. No third-party repository code was executed by these unit tests. |
+| Current CPA audit tool | **PASS**, Linux 74/74. Includes pending/approved review separation, exact source pins, the distinct `audit_malicious_text` disposition and `audit_eligible_malicious_text` decision-kind contract, hardlink/directory-swap/rename cleanup, closed evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. The runner uses a dedicated UID and does not claim protection from a hostile process sharing that UID during the non-atomic create/bind or daemon-handoff intervals. No third-party repository code was executed by these unit tests. |
 | Audit database capacity | **PASS**: subject-snapshot replacement streams bounded rows inside the transaction, measures tentative live pages, and rejects overflow without replacing prior state or deleting audit events. Committed event deletion, Raw Capture purge, and subject-state deletion remeasure capacity without evicting evidence outside the requested maintenance scope. |
 | Safe development inventory | **PASS**, `packages=20`, `classifier_entries=576`, `round12_entries=8`. |
 | Complete unit lane | **PASS** with exact Go 1.26.4 on Linux: the safe packages passed, the classifier then passed separately in 398.508 seconds under a constrained two-core WSL lane, and the counted-Mock module passed. This is functional development evidence only and is not a performance baseline. |
@@ -150,15 +150,17 @@ machine_schema_sha256: a30a2f6c710eb80a4c8be582e69cc38652c1cfd9e31f0a5087ac2510f
 | Historical 142-case Balanced benign corpus | **UNCHANGED FROM `main@21267e7`**: B028, B062, and B075 remain 3/142 historical false positives. The exact baseline rerun produced the same IDs, scores, and category; this is not a Round 12 regression and is not presented as zero global false positives. Round 12's named defensive critical controls remain complete non-blocks. |
 | Local race | **INCOMPLETE / NOT PASS**. The desktop tool session interrupted the WSL process after partial package output. No race failure was observed, but partial output is not accepted as evidence. |
 | Exact Go 1.26.4 race, CPA v7.2.116 compatibility, build/reproducibility, and long fuzz | **PENDING REMEDIATED-HEAD GITHUB CI**. The exact local Go 1.26.4 functional checks and superseded-head green runs do not satisfy these candidate-bound CI gates. |
-| RT12-05/06 second-machine run | **TWO IMMUTABLE FAIL-CLOSED RECORDS / NEW HEAD PENDING**. `9782eaf` failed before traffic because runc rejected the proc-fd bind source. `30b613e` proved the normal bind handoff reached CPA startup, then rejected the CI dirty development SO at clean-candidate readiness. Neither emitted machine evidence; both removed corpus text and exact run-labelled resources. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
+| RT12-05/06 second-machine run | **FOUR IMMUTABLE FAIL-CLOSED RECORDS / NEW HEAD PENDING**. `9782eaf` failed before traffic because runc rejected the proc-fd bind source. `30b613e` reached CPA startup, then rejected the CI dirty development SO at clean-candidate readiness. `cc6e9f2` reached its first transport and exposed the audit disposition/decision-kind harness drift, with zero third-party execution and complete labelled cleanup. `e624eea` passed all exact-SHA GitHub gates but acquisition then rejected MDX current-head drift before runner startup. None emitted machine evidence; runner attempts removed corpus text and exact run-labelled resources. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
 
-The latest-head check on 2026-08-05 found four reviewed repositories unchanged
-and MDX advanced by two documentation-only commits to
-`7588d25d8cb67f88a75d168fcb6ca8fc357bc492`. The only changed paths are
-`README.md` and `README_EN.md`; both selected MDX blobs retain their reviewed
-Git blob and content hashes. The policy therefore updates the repository
-commit/tree binding without changing either selected payload or its semantic
-labels.
+The latest-head check on 2026-08-06 found four reviewed repositories unchanged
+and MDX advanced to
+`77e7a649903f9556f2d7bfa0223fa99e123aad52`. That commit moves v42 into the
+historical directory and adds the current single-member
+`gpt-5.6-sol-unrestricted-v45.zip`. The v45 archive and extracted Markdown were
+reviewed as inert text and receive new blob/raw/text identities; the selected
+safety-evaluation document remains byte-identical. The policy preserves its
+three MDX semantic labels while updating the exact current path and repository
+commit/tree binding.
 
 The audit tool's final ZIP regression closes a review-boundary flaw found
 during the pre-final read-only audit: two complete ZIP archives could be

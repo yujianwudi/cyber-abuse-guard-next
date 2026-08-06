@@ -80,7 +80,7 @@ FIXED_SOURCE_PATHS: dict[str, frozenset[str]] = {
     ),
     "keysmith": frozenset({"SECURITY.md", "examples/gpt-unrestricted.md"}),
     "mdx": frozenset(
-        {"docs/gpt-5.6-sol-safety-eval.md", "gpt-5.6-sol-unrestricted-v42.zip"}
+        {"docs/gpt-5.6-sol-safety-eval.md", "gpt-5.6-sol-unrestricted-v45.zip"}
     ),
     "nerv": frozenset({"README.md", "docs/README.md", "docs/README_CN.md"}),
 }
@@ -1194,7 +1194,7 @@ def validate_corpus_manifest(value: Any, corpus_root: Path | None = None) -> dic
                 fail(f"{label}.source corpus digest changed")
             validate_inert_text(raw_text, f"{label}.source corpus file", info.st_size)
 
-    if zip_sources != {("mdx", "gpt-5.6-sol-unrestricted-v42.zip")}:
+    if zip_sources != {("mdx", "gpt-5.6-sol-unrestricted-v45.zip")}:
         fail("corpus manifest must contain the exact one allowlisted Markdown ZIP source")
     if represented_repositories != set(FIXED_REPOSITORIES):
         fail("corpus manifest must include semantic cases from all fixed repositories")

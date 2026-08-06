@@ -14,10 +14,10 @@ round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
 round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
-round12_source_policy: APPROVED_EXACT_PINS / d457374f193db13fd43422104f760997c935de057ae3add7a0faf56a5260ad89
-round12_audit_runner_bundle: d4a75665d0488095e0db6610190fd79fddf0f8458ea580329ce2d43e99bb61ca
+round12_source_policy: APPROVED_EXACT_PINS / 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
+round12_audit_runner_bundle: 1f2e5163a96efb13f23c713b25a91b7b73874b194286e4383b66e24e402ad0a2
 round12_audit_run_source: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
-round12_local_audit_tool_tests: PASS / LINUX / 73_OF_73
+round12_local_audit_tool_tests: PASS / LINUX / 74_OF_74
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 round12_local_safe_gate: PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
@@ -30,12 +30,12 @@ round12_prior_remediated_pr_head: 30b613e82a1be97938dbfe974b98d4cb76a359a0
 round12_prior_remediated_merge_ref: 2be72ccd7f431344b4f6bb18811fa08949105121
 round12_prior_remediated_engineering_ci: PASS / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
 round12_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / DIRTY_CANDIDATE_READINESS_MISMATCH / NO_MACHINE_EVIDENCE
-round12_current_remediation: CLEAN_EXACT_MERGE_AUDIT_CANDIDATE / MOCK_ARGV_SECRET_REMOVED / FAILURE_STAGE_DIGEST_ONLY
+round12_current_remediation: AUDIT_DISPOSITION_KIND_SPLIT / MDX_V45_CURRENT_HEAD_REVIEW / CLEAN_EXACT_MERGE_CANDIDATE_REQUIRED
 round12_sbom_repro_remediation: EXACT_IDENTITY_NORMALIZATION / TWO_INDEPENDENT_BLOBLESS_SPARSE_CLONES / LOCAL_CONTRACT_PASS / EXACT_CI_PENDING
 round12_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
 round12_working_candidate_engineering_ci: PENDING_NEW_HEAD
 round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-round12_final_candidate_second_machine: PENDING_NEW_HEAD_EXECUTION
+round12_final_candidate_second_machine: FAIL_CLOSED_SOURCE_DRIFT_ON_E624EEA / MDX_V45_REVIEWED / PENDING_NEW_HEAD_EXECUTION
 round12_protected_host: NOT_PROVIDED
 round12_independent_attestation: NOT_PROVIDED
 round12_production_approved: NOT_PROVIDED
@@ -63,15 +63,16 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   property binding, malformed-graph rejection, and a synthetic independent
   `blob:none` sparse-clone test in which the excluded restricted blob remained
   absent before and after checkout;
-- the current CPA audit harness passed 73/73 Linux tests, including the
+- the current CPA audit harness passed 74/74 Linux tests, including the
   concatenated-ZIP rejection, stopped-image Mock source verification,
   private-parent mode drift, symlink/ancestor/evidence/subdirectory replacement,
   normal-path Docker handoff, closed Source/Destination/RW/rprivate bind and
   `/tmp` tmpfs contracts, extra-volume rejection, clean-candidate readiness,
   mode-0600 Mock `--env-file` lifecycle on Docker success/failure, and
   credential-free Docker argv, with 11 reviewed source pins and 19 semantic
-  cases bound by the approved policy
-  above; MDX latest HEAD is `7588d25d…` and its selected blobs are unchanged;
+  cases bound by the approved policy above; MDX latest HEAD is `77e7a649…`, the
+  current v45 single-member archive has newly reviewed blob/raw/text identities,
+  and the selected safety-evaluation document is byte-identical;
   this diagnostic harness does not claim same-UID bootstrap or daemon-handoff
   isolation;
 - a uniquely named, network-none second-machine Docker preflight successfully
@@ -208,7 +209,7 @@ download, rollback, or support guarantee.
 `9782eaf` 的 CI、Policy Gate 和 CodeQL 也曾通过，但二号机正式 harness 因 runc
 拒绝 proc-fd bind source 而 fail closed：没有生成 `machine-evidence.json`，没有执行
 第三方仓库代码，私有 corpus 正文已经删除。当前 normal-path handoff 修复仅完成本地
-73/73 Linux 回归，新的精确 HEAD 门禁和二号机执行仍为
+74/74 Linux 回归，新的精确 HEAD 门禁和二号机执行仍为
 `PENDING_NEW_HEAD_EXECUTION`。已有的 1,320 次传输执行报告只属于所有者运行
 的输入诊断，不是独立证明。受保护 Host、独立证明、生产批准与 Release Ready 均为
 `NOT_PROVIDED`。本轮不创建 tag、RC 或 GitHub Release。

@@ -38,7 +38,7 @@ class ContractTests(unittest.TestCase):
             validated["reviewer"],
             {
                 "identity": "Codex Round 12 exact-source review",
-                "reviewed_at": "2026-08-05T14:27:09.300Z",
+                "reviewed_at": "2026-08-06T01:19:51.256Z",
                 "status": "approved",
             },
         )

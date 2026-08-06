@@ -480,7 +480,7 @@ def validate_policy(value: Any, *, require_approved: bool = False) -> dict[str, 
             fail(f"{label}.paths does not match the fixed reviewed path set")
     if zip_count != 1:
         fail("source policy must allowlist exactly one Markdown ZIP")
-    if zip_sources != {("mdx", "gpt-5.6-sol-unrestricted-v42.zip")}:
+    if zip_sources != {("mdx", "gpt-5.6-sol-unrestricted-v45.zip")}:
         fail("source policy Markdown ZIP identity is not the fixed MDX archive")
     if repo_keys != set(FIXED_REPOSITORIES) or repo_slugs != set(FIXED_REPOSITORIES.values()):
         fail("source policy does not contain the exact fixed repositories")
