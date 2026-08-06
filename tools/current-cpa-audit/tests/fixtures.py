@@ -242,7 +242,7 @@ def _event(expected: str, mode: str, request_hash: str, ordinal: int, malicious:
             "action": "audit",
             "category": "credential_theft",
             "coverage": "complete",
-            "decision": "audit_eligible_malicious_text",
+            "decision": "audit_malicious_text",
             "decision_kind": "audit_eligible_malicious_text",
             "explanation_schema": "decision-explanation-v2",
             "id": f"event-{ordinal}",

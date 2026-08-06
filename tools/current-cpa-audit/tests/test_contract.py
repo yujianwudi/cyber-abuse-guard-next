@@ -173,6 +173,30 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 validate_result(blocked, cases, "mutated block")
 
+    def test_audit_malicious_event_preserves_disposition_kind_split(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source_manifest, _, results = evidence_files(Path(directory))
+            cases = {case["id"]: case for case in source_manifest["semantic_cases"]}
+            rows = [json.loads(line) for line in results.read_text("utf-8").splitlines()]
+            audited = next(
+                row
+                for row in rows
+                if row["mode"] == "audit"
+                and row["expected_action"] == "allow"
+                and row["audit_event"] is not None
+            )
+            self.assertEqual(audited["audit_event"]["decision"], "audit_malicious_text")
+            self.assertEqual(
+                audited["audit_event"]["decision_kind"],
+                "audit_eligible_malicious_text",
+            )
+            validate_result(audited, cases, "audited malicious allow")
+
+            drifted = copy.deepcopy(audited)
+            drifted["audit_event"]["decision"] = "audit_eligible_malicious_text"
+            with self.assertRaisesRegex(ContractError, "paired Audit semantic event"):
+                validate_result(drifted, cases, "drifted audited malicious allow")
+
     def test_result_extra_field_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             source_manifest, _, results = evidence_files(Path(directory))

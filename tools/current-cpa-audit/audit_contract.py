@@ -1825,7 +1825,7 @@ def validate_result(value: Any, cases: Mapping[str, Mapping[str, Any]], label: s
             if (
                 event is None
                 or event["action"] != "audit"
-                or event["decision"] != "audit_eligible_malicious_text"
+                or event["decision"] != "audit_malicious_text"
                 or event["decision_kind"] != "audit_eligible_malicious_text"
                 or event["coverage"] != "complete"
                 or event["incomplete_reason"] is not None
