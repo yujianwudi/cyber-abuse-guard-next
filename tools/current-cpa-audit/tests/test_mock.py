@@ -3,17 +3,19 @@ from __future__ import annotations
 import contextlib
 import http.client
 import json
+import socket
 import sys
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 TOOL = HERE.parent
 sys.path.insert(0, str(TOOL))
 
 from audit_contract import validate_allow_response
-from counted_mock import AuditServer, CONTRACT, MODEL
+from counted_mock import AuditServer, CONTRACT, Handler, MODEL, SOCKET_TIMEOUT_SECONDS
 
 
 class CountedMockTests(unittest.TestCase):
@@ -83,6 +85,23 @@ class CountedMockTests(unittest.TestCase):
         self.assertEqual(
             json.loads(raw), {"schema": CONTRACT, "auth": 0, "mock": 1, "provider": 0}
         )
+
+    def test_incomplete_request_body_hits_socket_timeout(self) -> None:
+        self.assertEqual(Handler.timeout, SOCKET_TIMEOUT_SECONDS)
+        request = (
+            b"POST /v1/chat/completions HTTP/1.1\r\n"
+            b"Host: localhost\r\n"
+            + ("Authorization: Bearer " + self.upstream + "\r\n").encode("ascii")
+            + b"Content-Type: application/json\r\n"
+            b"Content-Length: 100\r\n"
+            b"\r\n"
+            b"{"
+        )
+        with mock.patch.object(Handler, "timeout", 0.05):
+            with socket.create_connection((self.host, self.port), timeout=1) as client:
+                client.settimeout(1)
+                client.sendall(request)
+                self.assertEqual(client.recv(1), b"")
 
     def test_stream_contracts_terminate(self) -> None:
         for protocol, path, body in (

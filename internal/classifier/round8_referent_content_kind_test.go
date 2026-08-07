@@ -653,12 +653,6 @@ func TestRound8OverflowLedgerUsesRealRiskAndPhysicalOrder(t *testing.T) {
 				directive:             true,
 				precedingOwnerEvicted: true,
 			},
-			"incomplete": {
-				directive:             true,
-				precedingOwnerEvicted: true,
-				affirmativePotential:  true,
-				proofIncomplete:       true,
-			},
 		} {
 			t.Run(name, func(t *testing.T) {
 				state := profiledCurrentReferentScope{
@@ -668,6 +662,20 @@ func TestRound8OverflowLedgerUsesRealRiskAndPhysicalOrder(t *testing.T) {
 					t.Fatalf("dead %s tombstone retained scope potential: %+v", name, state)
 				}
 			})
+		}
+		uncertain := profiledCurrentReferentScope{
+			units: []profiledCurrentReferentUnit{
+				{
+					directive:             true,
+					precedingOwnerEvicted: true,
+					affirmativePotential:  true,
+					proofIncomplete:       true,
+				},
+				carrier,
+			},
+		}
+		if !profiledCurrentReferentScopeHasPotential(guard, &uncertain) {
+			t.Fatal("incomplete tombstone silently discarded a possible following act")
 		}
 
 		session, err := guard.NewScanSession(
@@ -730,8 +738,9 @@ func TestRound8OverflowLedgerUsesRealRiskAndPhysicalOrder(t *testing.T) {
 			},
 		}
 		flushSession.flushProfiledCurrentReferentState(&flushState)
-		if flushSession.coverage.State != CoverageComplete {
-			t.Fatalf("dead incomplete tombstone changed flush coverage: %+v", flushSession.coverage)
+		if flushSession.coverage.State != CoverageUnavailable ||
+			flushSession.coverage.Reason != CoverageReasonClassifierWindow {
+			t.Fatalf("uncertain incomplete tombstone did not fail closed: %+v", flushSession.coverage)
 		}
 	})
 

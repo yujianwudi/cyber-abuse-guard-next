@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ from audit_contract import (
     CPA_TAG,
     MOCK_CONTRACT,
     RUN_CONFIG_SCHEMA,
+    BoundCorpus,
     ContractError,
     build_execution_plan,
     load_json_file,
@@ -30,6 +32,90 @@ from fixtures import approved_policy, evidence_files, manifest
 
 
 class ContractTests(unittest.TestCase):
+    @staticmethod
+    def closed_bound_corpus(root: Path) -> BoundCorpus:
+        bound = object.__new__(BoundCorpus)
+        bound.root = root
+        bound.label = "closed test corpus"
+        bound.root_fd = None
+        bound.corpus_fd = None
+        bound.uses_dir_fd = True
+        root_info = root.stat()
+        bound.root_identity = (root_info.st_dev, root_info.st_ino)
+        bound.corpus_identity = (0, 0)
+        return bound
+
+    def test_bound_corpus_closed_descriptor_state_fails_explicitly(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            bound = self.closed_bound_corpus(Path(directory))
+            operations = {
+                "open": lambda: bound.write("corpus/sample.txt", b"sample"),
+                "read": lambda: bound.read("corpus/sample.txt", "sample", 6),
+                "unlink": lambda: bound.unlink_source("corpus/sample.txt", 6, "0" * 64),
+            }
+            for name, operation in operations.items():
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    ContractError, "bound corpus descriptor is unavailable"
+                ):
+                    operation()
+            root_operations = {
+                "identity": bound.identity_problems,
+                "finish_cleanup": bound.finish_cleanup,
+            }
+            for name, operation in root_operations.items():
+                with self.subTest(name=name), self.assertRaisesRegex(
+                    ContractError, "bound root descriptor is unavailable"
+                ):
+                    operation()
+
+    def test_bound_corpus_descriptor_guards_survive_optimized_python(self) -> None:
+        script = """
+import sys
+from pathlib import Path
+
+sys.path.insert(0, sys.argv[1])
+from audit_contract import BoundCorpus, ContractError
+
+bound = object.__new__(BoundCorpus)
+bound.root = Path.cwd()
+bound.label = "optimized test corpus"
+bound.root_fd = None
+bound.corpus_fd = None
+bound.uses_dir_fd = True
+root_info = bound.root.stat()
+bound.root_identity = (root_info.st_dev, root_info.st_ino)
+bound.corpus_identity = (0, 0)
+operations = (
+    lambda: bound.write("corpus/sample.txt", b"sample"),
+    lambda: bound.read("corpus/sample.txt", "sample", 6),
+    lambda: bound.unlink_source("corpus/sample.txt", 6, "0" * 64),
+)
+for operation in operations:
+    try:
+        operation()
+    except ContractError:
+        continue
+    raise SystemExit("closed descriptor operation did not fail explicitly")
+for operation in (bound.identity_problems, bound.finish_cleanup):
+    try:
+        operation()
+    except ContractError:
+        continue
+    raise SystemExit("closed root descriptor operation did not fail explicitly")
+"""
+        completed = subprocess.run(
+            [sys.executable, "-O", "-c", script, str(TOOL)],
+            cwd=TOOL,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            msg=f"stdout={completed.stdout!r} stderr={completed.stderr!r}",
+        )
+
     def test_repository_policy_is_exact_and_closed(self) -> None:
         policy = load_json_file(TOOL / "repository-policy.json", "policy")
         validated = acquire.validate_policy(policy, require_approved=True)

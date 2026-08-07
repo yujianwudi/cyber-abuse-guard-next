@@ -552,7 +552,7 @@ func (c *Classifier) profiledOuterDefensiveOwnerSegmentIndexes(
 			var raw strings.Builder
 			raw.Grow(totalBytes)
 			for index := start; index < end; index++ {
-				raw.WriteString(segments[index].Text)
+				raw.WriteString(profiledOuterDefensiveOwnerUnitText(segments[index]))
 			}
 			if c.isRawInertQuotedSafetyReview(raw.String()) {
 				laterActivation, laterProofComplete :=
@@ -787,30 +787,52 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 				best = candidate
 			}
 		}
-		activeGroup, complete := c.profiledActiveMetaControlGroup(segments, group)
-		if !complete {
-			carrierProofUnavailable = true
-			continue
-		}
-		activeGroup = profiledGroupWithoutCarrierIndexes(
-			activeGroup, outerDefensiveOmissions, nil,
+		activeGroup := profiledGroupWithoutCarrierIndexes(
+			group, outerDefensiveOmissions, nil,
 		)
 		activeGroup = profiledGroupWithoutDirectCompactionApplications(activeGroup)
 		if !activeGroup.activeDirective || len(activeGroup.parts) < 2 {
 			continue
 		}
-		candidate := c.classifyProfiledGroupWithPolicy(activeGroup, mode, thresholds, policy)
-		if !standaloneMetaControlResult(candidate) ||
-			!resultHasEligibleBlockingCandidate(candidate, thresholds) {
+		activeRuns, complete := c.profiledActiveMetaControlRuns(segments, activeGroup)
+		if !complete {
+			carrierProofUnavailable = true
 			continue
 		}
-		candidate = withRoleAwareFindingOrigin(
-			candidate, FindingOriginUserContent, mode, thresholds,
-		)
-		c.annotateProfiledResult(&candidate, activeGroup.refs, false, policy, mode, thresholds)
-		truncated = truncated || candidate.Truncated
-		if roleResultBetter(candidate, best) {
-			best = candidate
+		for _, run := range activeRuns {
+			// Classify the already-proved carrier source in isolation. The anchor
+			// grants authority but cannot add a META family, while unrelated
+			// same-scope directives cannot dilute or promote the carrier winner.
+			candidate := c.classifyWithPolicy(
+				[]string{run.source}, mode, thresholds, policy, false,
+			)
+			if !standaloneMetaControlResult(candidate) ||
+				!resultHasEligibleBlockingCandidate(candidate, thresholds) {
+				continue
+			}
+			candidate = withRoleAwareFindingOrigin(
+				candidate, FindingOriginUserContent, mode, thresholds,
+			)
+			c.annotateProfiledResult(
+				&candidate, mergeProfiledLocalUnits(run.carrier, run.anchor),
+				false, policy, mode, thresholds,
+			)
+			markResultReferentActivated(&candidate, true, true, mode, thresholds)
+			bindResultCandidateReferentAnchor(&candidate, run.anchor, true, mode, thresholds)
+			if candidate.DecisionExplanation != nil {
+				candidate.DecisionExplanation.CurrentTurnEvidence = true
+				candidate.DecisionExplanation.CrossSegmentComposition = true
+				candidate.DecisionExplanation.ReferentLinkUsed = true
+				candidate.DecisionExplanation.EvidenceSegmentCount = 2
+			}
+			if !resultHasEligibleMaliciousWinner(candidate, thresholds) ||
+				!candidate.CandidateIdentityBlockingProofComplete() {
+				continue
+			}
+			truncated = truncated || candidate.Truncated
+			if roleResultBetter(candidate, best) {
+				best = candidate
+			}
 		}
 	}
 	for index := 0; index < len(segments); {
@@ -1089,8 +1111,20 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 		}
 		for _, currentReferent := range currentReferents {
 			anchor := currentReferent.anchor
-			if carrier, localOwner := c.selectProfiledCurrentCarrier(segments, currentReferent.group, anchor); localOwner {
-				if len(carrier.refs) != 0 {
+			carriers, localOwner, localProofComplete :=
+				c.selectProfiledCurrentCarriers(
+					segments, currentReferent.group, anchor,
+					currentReferent.activation, currentReferent.activationProof,
+				)
+			if !localProofComplete {
+				pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
+				continue
+			}
+			if localOwner {
+				for _, carrier := range carriers {
+					if len(carrier.refs) == 0 {
+						continue
+					}
 					referent := c.classifyWithPolicy(carrier.parts, mode, thresholds, policy, false)
 					truncated = truncated || referent.Truncated
 					if referent.FindingConfidence != FindingNone {
@@ -1136,7 +1170,9 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 						}
 					}
 				}
-			} else if referent, _, claimed, ok, complete :=
+				continue
+			}
+			if referent, _, claimed, ok, complete :=
 				c.nearestProfiledHistoricalToolReferent(segments, anchor, mode, thresholds, policy); claimed {
 				if !complete {
 					return c.profiledProofUnavailableResult(mode, thresholds, policy)
@@ -2079,34 +2115,94 @@ func buildProfiledCurrentMetaControlGroups(segments []extract.Segment) []profile
 	return filtered
 }
 
-func (c *Classifier) profiledActiveMetaControlGroup(
+type profiledActiveMetaControlRun struct {
+	carrier profiledSegmentRef
+	anchor  profiledSegmentRef
+	source  string
+}
+
+// profiledActiveMetaControlRuns proves each carrier/owner pair independently.
+// One active carrier must never borrow a family from a sibling carrier, and a
+// second valid pair must not make the entire same-scope batch ambiguous.
+func (c *Classifier) profiledActiveMetaControlRuns(
 	segments []extract.Segment,
 	group profiledSegmentGroup,
-) (profiledSegmentGroup, bool) {
-	active := profiledSegmentGroup{
-		refs:            make([]profiledSegmentRef, 0, len(group.refs)),
-		parts:           make([]string, 0, len(group.parts)),
-		activeDirective: group.activeDirective,
+) ([]profiledActiveMetaControlRun, bool) {
+	if c == nil || len(group.refs) == 0 || len(group.refs) != len(group.parts) {
+		return nil, true
 	}
+	eligibleIndexes := make(map[int]struct{}, len(group.refs))
 	for _, ref := range group.refs {
-		if profiledReferentCarrierKind(ref.segment.ContentKind) {
-			if owner, localOwner := c.profiledSelfContainedCarrierRunLocalOwner(
-				segments, ref.index, ref.index+1,
-			); localOwner {
-				disposition, complete := c.profiledCarrierLocalOwnerDisposition(owner.segment)
-				if !complete {
-					return profiledSegmentGroup{}, false
-				}
-				if disposition == quotedReviewContinuationInert ||
-					disposition == quotedReviewContinuationCancelled {
-					continue
-				}
-			}
-		}
-		active.refs = append(active.refs, ref)
-		active.parts = append(active.parts, ref.segment.Text)
+		eligibleIndexes[ref.index] = struct{}{}
 	}
-	return active, true
+	runs := make([]profiledActiveMetaControlRun, 0, 1)
+	for _, ref := range group.refs {
+		if !profiledReferentCarrierKind(ref.segment.ContentKind) {
+			continue
+		}
+		owner, disposition, localOwner, complete :=
+			c.profiledCarrierExplicitActivationLocalOwner(segments, ref.index)
+		if !complete {
+			return nil, false
+		}
+		if !localOwner || disposition != quotedReviewContinuationActive {
+			continue
+		}
+		if _, allowed := eligibleIndexes[owner.index]; !allowed {
+			continue
+		}
+		body, bodyComplete := profiledExplicitActivationCarrierBody(ref.segment)
+		if !bodyComplete {
+			continue
+		}
+		source, sourceComplete := c.profiledExplicitActivationMetaSource(body)
+		if !sourceComplete {
+			continue
+		}
+		runs = append(runs, profiledActiveMetaControlRun{
+			carrier: ref,
+			anchor:  owner,
+			source:  source,
+		})
+	}
+	return runs, true
+}
+
+// profiledExplicitActivationMetaSource proves that one selected carrier already
+// contains a complete active META composition before its owner is added to the
+// profiled group. Nested quoted documentation is masked, while every admitted
+// family must remain in the carrier's active source. The owner grants authority
+// only and sibling carriers cannot combine partial V45 predicates.
+func (c *Classifier) profiledExplicitActivationMetaSource(body string) (string, bool) {
+	if c == nil || strings.TrimSpace(body) == "" {
+		return "", false
+	}
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{body}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return "", false
+	}
+	normalized := string(views.standardRunes)
+	source, complete := metaOverrideV45QuoteMaskedText(normalized)
+	if !complete || strings.TrimSpace(source) == "" {
+		return "", false
+	}
+	signals := c.metaOverrideSignalsForText(source)
+	defer putClassifierSignalBuffer(signals)
+	if !c.metaOverrideSignalsHaveActiveControlComposition(
+		signals,
+		metaOverrideBoundedRefusalSuppression(source),
+		metaOverrideV45ValidatedFamilies(source),
+	) {
+		return "", false
+	}
+	// `source` is already normalized and may contain the internal hard-boundary
+	// sentinel. It must not be fed through normalization a second time because
+	// user-supplied U+FDD0 is deliberately rewritten as invalid input. Restore a
+	// public line boundary before the ordinary classifier owns this local copy.
+	source = strings.ReplaceAll(source, compactHardBoundaryText, "\n")
+	return strings.TrimSpace(source), true
 }
 
 type profiledDirectCompactionRun struct {
@@ -3533,6 +3629,66 @@ func profiledClosedFenceBodyOrText(text string) string {
 	return strings.Join(lines[1:len(lines)-1], "\n")
 }
 
+// profiledExplicitActivationFenceBody accepts exactly one closed fenced body.
+// Multiple adjacent fences may be emitted as one provider segment; treating the
+// first opener and final closer as one carrier would let the final carrier's
+// owner activate earlier inert material. Ambiguous/nested fence structure stays
+// quoted and cannot enter the source-specific META reactivation path.
+func profiledExplicitActivationFenceBody(text string) (string, bool) {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	if len(lines) < 3 {
+		return "", false
+	}
+	marker, count, ok := profiledFenceMarkerLine(strings.TrimSuffix(lines[0], "\r"))
+	if !ok || !profiledClosingFenceLine(
+		strings.TrimSuffix(lines[len(lines)-1], "\r"), marker, count,
+	) {
+		return "", false
+	}
+	for _, line := range lines[1 : len(lines)-1] {
+		if profiledClosingFenceLine(strings.TrimSuffix(line, "\r"), marker, count) {
+			return "", false
+		}
+	}
+	body := strings.Join(lines[1:len(lines)-1], "\n")
+	return body, strings.TrimSpace(body) != ""
+}
+
+// profiledExplicitActivationCarrierBody accepts either one exact closed fence
+// or an extractor-proven self-contained carrier whose Text is already the fence
+// body. A text that begins like a fence but lacks one exact close is malformed,
+// not body-only, and remains inert.
+func profiledExplicitActivationCarrierBody(segment extract.Segment) (string, bool) {
+	if !profiledSelfContainedCarrierKind(segment.ContentKind) ||
+		strings.TrimSpace(segment.Text) == "" {
+		return "", false
+	}
+	if body, closed := profiledExplicitActivationFenceBody(segment.Text); closed {
+		return body, true
+	}
+	lines := strings.Split(strings.TrimSpace(segment.Text), "\n")
+	if len(lines) != 0 {
+		if _, _, fenced := profiledFenceMarkerLine(strings.TrimSuffix(lines[0], "\r")); fenced {
+			return "", false
+		}
+	}
+	return segment.Text, true
+}
+
+// profiledOuterDefensiveOwnerUnitText removes one extractor-preserved fenced
+// delimiter only for reconstructing an already bounded outer quotation. This
+// lets a <sample> owner govern an inner code block without treating the nested
+// Markdown fence as a second peer quotation. Classification still receives the
+// original carrier bytes; malformed or multiple fences are never rewritten.
+func profiledOuterDefensiveOwnerUnitText(segment extract.Segment) string {
+	if profiledReferentCarrierKind(segment.ContentKind) {
+		if body, closed := profiledExplicitActivationFenceBody(segment.Text); closed {
+			return body + "\n"
+		}
+	}
+	return segment.Text
+}
+
 // profiledNormalizedReconstructedCore returns the exact normalized clause
 // space used when a stripped fenced body is classified. Rebinding evidence
 // against the original profiled field must use that same space; raw fenced
@@ -3714,6 +3870,256 @@ func (c *Classifier) profiledCarrierLocalOwnerRunDisposition(
 	}
 }
 
+type profiledCarrierActivationDirection uint8
+
+const (
+	profiledCarrierActivationNone      profiledCarrierActivationDirection = 0
+	profiledCarrierActivationPrevious  profiledCarrierActivationDirection = 1 << 0
+	profiledCarrierActivationFollowing profiledCarrierActivationDirection = 1 << 1
+)
+
+func (direction profiledCarrierActivationDirection) has(
+	candidate profiledCarrierActivationDirection,
+) bool {
+	return direction&candidate != 0
+}
+
+func profiledCarrierActivationDirectionMatches(
+	direction profiledCarrierActivationDirection,
+	carrierIndex int,
+	ownerIndex int,
+) bool {
+	return carrierIndex < ownerIndex && direction.has(profiledCarrierActivationPrevious) ||
+		carrierIndex > ownerIndex && direction.has(profiledCarrierActivationFollowing)
+}
+
+func profiledCarrierActivationIntentDirection(intent string) profiledCarrierActivationDirection {
+	intent = strings.ToLower(strings.TrimSpace(intent))
+	if intent == "apply the following operating instructions now" {
+		return profiledCarrierActivationFollowing
+	}
+	// These four entries are direct implementation requests, not carrier
+	// referents. Every later entry in the specific continuation table names a
+	// preceding object/request/payload or an established terse anaphor.
+	switch intent {
+	case "give working code", "provide working code", "provide code", "provide operational steps":
+		return profiledCarrierActivationNone
+	}
+	for _, candidate := range quotedReviewSpecificContinuationIntents {
+		if intent == candidate {
+			return profiledCarrierActivationPrevious
+		}
+	}
+	return profiledCarrierActivationNone
+}
+
+// profiledCarrierExplicitActivationOwner recognizes only the dedicated
+// carrier-referent grammar. Generic implementation starts (for example,
+// "Use Python") may remain ordinary directives, but cannot grant authority to
+// an adjacent fenced META carrier. The returned direction is retained for
+// cancelled and inert owners so local selection cannot jump across the carrier.
+type profiledCarrierActivationOwnerState struct {
+	previous  quotedReviewContinuationDisposition
+	following quotedReviewContinuationDisposition
+}
+
+func (state profiledCarrierActivationOwnerState) disposition(
+	direction profiledCarrierActivationDirection,
+) quotedReviewContinuationDisposition {
+	switch direction {
+	case profiledCarrierActivationPrevious:
+		return state.previous
+	case profiledCarrierActivationFollowing:
+		return state.following
+	default:
+		return quotedReviewContinuationNone
+	}
+}
+
+func (state *profiledCarrierActivationOwnerState) set(
+	direction profiledCarrierActivationDirection,
+	disposition quotedReviewContinuationDisposition,
+) {
+	if state == nil {
+		return
+	}
+	if direction.has(profiledCarrierActivationPrevious) {
+		state.previous = disposition
+	}
+	if direction.has(profiledCarrierActivationFollowing) {
+		state.following = disposition
+	}
+}
+
+func (state profiledCarrierActivationOwnerState) directions(
+	disposition quotedReviewContinuationDisposition,
+) profiledCarrierActivationDirection {
+	directions := profiledCarrierActivationNone
+	if state.previous == disposition {
+		directions |= profiledCarrierActivationPrevious
+	}
+	if state.following == disposition {
+		directions |= profiledCarrierActivationFollowing
+	}
+	return directions
+}
+
+func (c *Classifier) profiledCarrierExplicitActivationOwnerState(
+	owner extract.Segment,
+) (profiledCarrierActivationOwnerState, bool) {
+	state := profiledCarrierActivationOwnerState{}
+	if c == nil || !profiledContentActiveDirective(owner.ContentKind) ||
+		strings.TrimSpace(owner.Text) == "" {
+		return state, true
+	}
+	ownerDisposition, complete := c.profiledCarrierLocalOwnerDisposition(owner)
+	if !complete {
+		return state, false
+	}
+	allIntents := make([]string, 0,
+		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(c.implementationStarts))
+	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
+	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
+	allIntents = append(allIntents, c.implementationStarts...)
+	decisions, complete := profiledPartContinuationDecisions(c, owner.Text, allIntents)
+	if !complete {
+		return state, false
+	}
+	observedDirections := profiledCarrierActivationNone
+	activeDirections := profiledCarrierActivationNone
+	cancelledDirections := profiledCarrierActivationNone
+	cancellations := make([]quotedReviewContinuationDecision, 0, 2)
+	for _, decision := range decisions {
+		direction := profiledCarrierActivationIntentDirection(decision.intent)
+		switch decision.disposition {
+		case quotedReviewContinuationCancelled:
+			if !decision.alternative {
+				cancellations = append(cancellations, decision)
+				if direction != profiledCarrierActivationNone {
+					observedDirections |= direction
+					cancelledDirections |= direction
+				}
+			}
+		case quotedReviewContinuationActive:
+			if direction == profiledCarrierActivationNone {
+				continue
+			}
+			observedDirections |= direction
+			cancelled := false
+			for _, cancellation := range cancellations {
+				if quotedReviewContinuationIntentsEquivalent(decision.intent, cancellation.intent) {
+					cancelled = true
+					break
+				}
+			}
+			if !cancelled {
+				activeDirections |= direction
+			} else {
+				cancelledDirections |= direction
+			}
+		case quotedReviewContinuationInert:
+			if direction != profiledCarrierActivationNone {
+				observedDirections |= direction
+			}
+		}
+	}
+	for _, direction := range []profiledCarrierActivationDirection{
+		profiledCarrierActivationPrevious,
+		profiledCarrierActivationFollowing,
+	} {
+		disposition := quotedReviewContinuationNone
+		switch ownerDisposition {
+		case quotedReviewContinuationActive:
+			switch {
+			case activeDirections.has(direction):
+				disposition = quotedReviewContinuationActive
+			case cancelledDirections.has(direction):
+				disposition = quotedReviewContinuationCancelled
+			}
+		case quotedReviewContinuationCancelled:
+			if observedDirections.has(direction) {
+				disposition = quotedReviewContinuationCancelled
+			}
+		case quotedReviewContinuationInert:
+			if observedDirections.has(direction) {
+				disposition = quotedReviewContinuationInert
+			}
+		}
+		state.set(direction, disposition)
+	}
+	return state, true
+}
+
+func (c *Classifier) profiledCarrierExplicitActivationOwner(
+	owner extract.Segment,
+) (profiledCarrierActivationDirection, quotedReviewContinuationDisposition, bool) {
+	state, complete := c.profiledCarrierExplicitActivationOwnerState(owner)
+	if !complete {
+		return profiledCarrierActivationNone, quotedReviewContinuationNone, false
+	}
+	for _, disposition := range []quotedReviewContinuationDisposition{
+		quotedReviewContinuationActive,
+		quotedReviewContinuationCancelled,
+		quotedReviewContinuationInert,
+	} {
+		if directions := state.directions(disposition); directions != profiledCarrierActivationNone {
+			return directions, disposition, true
+		}
+	}
+	return profiledCarrierActivationNone, quotedReviewContinuationNone, true
+}
+
+func (c *Classifier) profiledCarrierExplicitActivationLocalOwner(
+	segments []extract.Segment,
+	carrierIndex int,
+) (profiledSegmentRef, quotedReviewContinuationDisposition, bool, bool) {
+	if c == nil || carrierIndex < 0 || carrierIndex >= len(segments) {
+		return profiledSegmentRef{}, quotedReviewContinuationNone, false, true
+	}
+	carrier := segments[carrierIndex]
+	before, beforeOK := nearestProfiledCurrentScopeUnit(segments, carrier, carrierIndex, -1)
+	after, afterOK := nearestProfiledCurrentScopeUnit(segments, carrier, carrierIndex, 1)
+	evaluate := func(owner profiledSegmentRef, ok bool) (quotedReviewContinuationDisposition, bool) {
+		if !ok || owner.segment.ScopeID != carrier.ScopeID ||
+			owner.segment.TurnIndex != carrier.TurnIndex || !owner.segment.IsCurrentTurn ||
+			!trustedUserContentSegment(owner.segment) {
+			return quotedReviewContinuationNone, true
+		}
+		state, complete := c.profiledCarrierExplicitActivationOwnerState(owner.segment)
+		if !complete {
+			return quotedReviewContinuationNone, false
+		}
+		direction := profiledCarrierActivationFollowing
+		if carrierIndex < owner.index {
+			direction = profiledCarrierActivationPrevious
+		}
+		return state.disposition(direction), true
+	}
+	beforeDisposition, beforeComplete := evaluate(before, beforeOK)
+	afterDisposition, afterComplete := evaluate(after, afterOK)
+	if !beforeComplete || !afterComplete {
+		return profiledSegmentRef{}, quotedReviewContinuationNone, false, false
+	}
+	// Preserve the established local-owner precedence after filtering by exact
+	// referent direction. A newer activation/cancellation wins; a trailing review
+	// remains additive and does not erase a valid preceding activation.
+	if afterDisposition == quotedReviewContinuationActive ||
+		afterDisposition == quotedReviewContinuationCancelled {
+		return after, afterDisposition, true, true
+	}
+	if beforeDisposition == quotedReviewContinuationActive {
+		return before, beforeDisposition, true, true
+	}
+	if afterDisposition == quotedReviewContinuationInert {
+		return after, afterDisposition, true, true
+	}
+	if beforeDisposition == quotedReviewContinuationCancelled ||
+		beforeDisposition == quotedReviewContinuationInert {
+		return before, beforeDisposition, true, true
+	}
+	return profiledSegmentRef{}, quotedReviewContinuationNone, false, true
+}
+
 func (c *Classifier) profiledCarrierLocalOwnerDisposition(
 	owner extract.Segment,
 ) (quotedReviewContinuationDisposition, bool) {
@@ -3787,8 +4193,10 @@ func profiledContentActiveDirective(kind extract.ContentKind) bool {
 }
 
 type profiledCurrentReferent struct {
-	group  profiledSegmentGroup
-	anchor profiledSegmentRef
+	group           profiledSegmentGroup
+	anchor          profiledSegmentRef
+	activation      profiledCarrierActivationOwnerState
+	activationProof bool
 }
 
 func affirmativeCurrentReferents(
@@ -3807,14 +4215,16 @@ func affirmativeCurrentReferents(
 		if !trustedUserContentSegment(segment) || !segment.IsCurrentTurn || !group.activeDirective {
 			continue
 		}
-		partIndexes, complete := affirmativeProfiledPartIndexes(c, group.parts)
+		parts, complete := affirmativeProfiledParts(c, group.parts)
 		if !complete {
 			return nil, false
 		}
-		for _, partIndex := range partIndexes {
+		for _, part := range parts {
 			referents = append(referents, profiledCurrentReferent{
-				group:  group,
-				anchor: group.refs[partIndex],
+				group:           group,
+				anchor:          group.refs[part.index],
+				activation:      part.activation,
+				activationProof: true,
 			})
 		}
 	}
@@ -3844,6 +4254,28 @@ func latestAffirmativeProfiledPartIndex(c *Classifier, parts []string) (int, boo
 // cancellations. Multiple independent "Execute it" anchors are not implicit
 // cancellations of one another; each must bind to its own nearest local owner.
 func affirmativeProfiledPartIndexes(c *Classifier, parts []string) ([]int, bool) {
+	affirmative, complete := affirmativeProfiledParts(c, parts)
+	if !complete {
+		return nil, false
+	}
+	indexes := make([]int, 0, len(affirmative))
+	for _, part := range affirmative {
+		indexes = append(indexes, part.index)
+	}
+	return indexes, true
+}
+
+type profiledAffirmativePart struct {
+	index      int
+	activation profiledCarrierActivationOwnerState
+}
+
+// affirmativeProfiledParts returns each surviving physical speech-act anchor
+// together with its post-cancellation directional state. A later cancellation
+// may revoke only one family/direction while another act in the same owner
+// remains active; callers must not reparse the original owner and resurrect the
+// cancelled slot.
+func affirmativeProfiledParts(c *Classifier, parts []string) ([]profiledAffirmativePart, bool) {
 	if c == nil || len(parts) == 0 {
 		return nil, true
 	}
@@ -3853,7 +4285,7 @@ func affirmativeProfiledPartIndexes(c *Classifier, parts []string) ([]int, bool)
 	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
 	allIntents = append(allIntents, c.implementationStarts...)
 	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
-	indexes := make([]int, 0, len(parts))
+	affirmative := make([]profiledAffirmativePart, 0, len(parts))
 	for index := len(parts) - 1; index >= 0; index-- {
 		decisions, complete := profiledPartContinuationDecisions(c, parts[index], allIntents)
 		if !complete {
@@ -3863,7 +4295,25 @@ func affirmativeProfiledPartIndexes(c *Classifier, parts []string) ([]int, bool)
 			return nil, false
 		}
 		activePart := false
+		type directionFacts struct {
+			active    bool
+			cancelled bool
+			inert     bool
+		}
+		previous := directionFacts{}
+		following := directionFacts{}
+		factsFor := func(direction profiledCarrierActivationDirection) *directionFacts {
+			switch direction {
+			case profiledCarrierActivationPrevious:
+				return &previous
+			case profiledCarrierActivationFollowing:
+				return &following
+			default:
+				return nil
+			}
+		}
 		for _, decision := range decisions {
+			direction := profiledCarrierActivationIntentDirection(decision.intent)
 			switch decision.disposition {
 			case quotedReviewContinuationActive:
 				cancelled := false
@@ -3875,23 +4325,52 @@ func affirmativeProfiledPartIndexes(c *Classifier, parts []string) ([]int, bool)
 				}
 				if !cancelled {
 					activePart = true
+					if facts := factsFor(direction); facts != nil {
+						facts.active = true
+					}
+				} else if facts := factsFor(direction); facts != nil {
+					facts.cancelled = true
 				}
 			case quotedReviewContinuationCancelled:
 				if !decision.alternative {
 					cancellations = append(cancellations, decision)
+					if facts := factsFor(direction); facts != nil {
+						facts.cancelled = true
+					}
+				}
+			case quotedReviewContinuationInert:
+				if facts := factsFor(direction); facts != nil {
+					facts.inert = true
 				}
 			}
 		}
 		if activePart {
-			indexes = append(indexes, index)
+			state := profiledCarrierActivationOwnerState{}
+			dispositionFor := func(facts directionFacts) quotedReviewContinuationDisposition {
+				disposition := quotedReviewContinuationNone
+				switch {
+				case facts.active:
+					disposition = quotedReviewContinuationActive
+				case facts.cancelled:
+					disposition = quotedReviewContinuationCancelled
+				case facts.inert:
+					disposition = quotedReviewContinuationInert
+				}
+				return disposition
+			}
+			state.previous = dispositionFor(previous)
+			state.following = dispositionFor(following)
+			affirmative = append(affirmative, profiledAffirmativePart{
+				index: index, activation: state,
+			})
 		}
 	}
 	// The scan above is newest-to-oldest. Return physical order so callers that
 	// ask for the latest index can take the final element deterministically.
-	for left, right := 0, len(indexes)-1; left < right; left, right = left+1, right-1 {
-		indexes[left], indexes[right] = indexes[right], indexes[left]
+	for left, right := 0, len(affirmative)-1; left < right; left, right = left+1, right-1 {
+		affirmative[left], affirmative[right] = affirmative[right], affirmative[left]
 	}
-	return indexes, true
+	return affirmative, true
 }
 
 func profiledPartContinuationDecisions(
@@ -4237,41 +4716,99 @@ func profiledRuleDirectiveIntents(c *Classifier) []string {
 	return uniqueSorted(intents)
 }
 
-// selectProfiledCurrentCarrier applies a bounded nearest/local tie rule. The
-// first non-empty unit on either side of the affirmative anchor is the only
-// eligible local owner; when both sides exist, the preceding unit wins as the
-// conventional anaphoric referent. A nearby benign carrier therefore
-// terminates both farther malicious carriers and historical fallback. Any
-// nearby non-carrier is a locality barrier rather than a transparent bridge.
-// Exactly one carrier is returned and classified.
-func (c *Classifier) selectProfiledCurrentCarrier(
+// selectProfiledCurrentCarriers applies a bounded nearest/local direction rule.
+// Established terse previous referents retain their historical adjacent/tie
+// behavior. An explicit following act selects only the following side, while
+// one owner containing two independent active acts returns both exact sides.
+// Cancellation or review of one direction remains a locality claim and cannot
+// be compressed away by an active act in the other direction. Any selected
+// non-carrier is a barrier rather than a transparent bridge.
+func (c *Classifier) selectProfiledCurrentCarriers(
 	segments []extract.Segment,
 	currentReferent profiledSegmentGroup,
 	anchor profiledSegmentRef,
-) (profiledSegmentGroup, bool) {
+	activation profiledCarrierActivationOwnerState,
+	activationProof bool,
+) ([]profiledSegmentGroup, bool, bool) {
 	if c == nil || len(currentReferent.refs) == 0 {
-		return profiledSegmentGroup{}, false
+		return nil, false, true
 	}
 	owner := anchor.segment
 	if owner.ScopeID == 0 || !owner.IsCurrentTurn || !trustedUserContentSegment(owner) {
-		return profiledSegmentGroup{}, false
+		return nil, false, true
 	}
 	before, beforeOK := nearestProfiledCurrentScopeUnit(segments, owner, anchor.index, -1)
 	after, afterOK := nearestProfiledCurrentScopeUnit(segments, owner, anchor.index, 1)
-	var selected profiledSegmentRef
-	switch {
-	case beforeOK && afterOK:
-		selected = before
-	case beforeOK:
-		selected = before
-	case afterOK:
-		selected = after
-	default:
-		return profiledSegmentGroup{}, false
+	if !activationProof {
+		var complete bool
+		activation, complete = c.profiledCarrierExplicitActivationOwnerState(owner)
+		if !complete {
+			return nil, false, false
+		}
 	}
+	selected := make([]profiledSegmentRef, 0, 2)
+	localOwner := false
+	appendSelected := func(ref profiledSegmentRef, ok bool) {
+		if !ok {
+			return
+		}
+		for _, existing := range selected {
+			if existing.index == ref.index {
+				return
+			}
+		}
+		selected = append(selected, ref)
+	}
+	previousActive := activation.previous == quotedReviewContinuationActive
+	followingActive := activation.following == quotedReviewContinuationActive
+	switch {
+	case previousActive && followingActive:
+		localOwner = true
+		appendSelected(before, beforeOK)
+		appendSelected(after, afterOK)
+	case followingActive:
+		// A forward act claims its slot even when the named following unit is
+		// absent. Never fall back to preceding history.
+		localOwner = true
+		appendSelected(after, afterOK)
+	case previousActive && activation.following != quotedReviewContinuationNone:
+		// A cancelled or inert following act remains an exact local barrier. If
+		// the active previous referent is absent, it must not fall through to the
+		// explicitly non-active following carrier.
+		localOwner = true
+		appendSelected(before, beforeOK)
+	default:
+		switch {
+		case beforeOK:
+			localOwner = true
+			appendSelected(before, true)
+		case afterOK:
+			// Preserve legacy "Execute it" dual-neighbor compatibility when no
+			// explicit following disposition exists.
+			localOwner = true
+			appendSelected(after, true)
+		}
+	}
+	if !localOwner {
+		return nil, false, true
+	}
+	carriers := make([]profiledSegmentGroup, 0, len(selected))
+	for _, selected := range selected {
+		carrier, ok := c.profiledCurrentCarrierGroup(owner, selected)
+		if ok {
+			carriers = append(carriers, carrier)
+		}
+	}
+	return carriers, true, true
+}
+
+func (c *Classifier) profiledCurrentCarrierGroup(
+	owner extract.Segment,
+	selected profiledSegmentRef,
+) (profiledSegmentGroup, bool) {
 	if selected.segment.ScopeID != owner.ScopeID || selected.segment.TurnIndex != owner.TurnIndex ||
 		!selected.segment.IsCurrentTurn || !trustedUserContentSegment(selected.segment) {
-		return profiledSegmentGroup{}, true
+		return profiledSegmentGroup{}, false
 	}
 	parts := []string{selected.segment.Text}
 	if !profiledReferentCarrierKind(selected.segment.ContentKind) {
@@ -4283,11 +4820,11 @@ func (c *Classifier) selectProfiledCurrentCarrier(
 		case extract.ContentKindNaturalLanguageDirective, extract.ContentKindUnknown:
 			quoted, inert := c.rawInertQuotedSafetyReviewReferent(selected.segment.Text)
 			if !inert {
-				return profiledSegmentGroup{}, true
+				return profiledSegmentGroup{}, false
 			}
 			parts = []string{quoted}
 		default:
-			return profiledSegmentGroup{}, true
+			return profiledSegmentGroup{}, false
 		}
 	} else {
 		parts[0] = profiledClosedFenceBodyOrText(selected.segment.Text)
@@ -4356,28 +4893,37 @@ func (c *Classifier) classifyProfiledCurrentDirectCarriers(
 			continue
 		}
 		anchor := directive.refs[anchorIndex]
-		carrier, localOwner := c.selectProfiledCurrentCarrier(segments, directive, anchor)
-		if !localOwner || len(carrier.refs) != 1 || !profiledDirectCarrierKind(carrier.refs[0].segment.ContentKind) {
+		carriers, localOwner, localProofComplete := c.selectProfiledCurrentCarriers(
+			segments, directive, anchor, profiledCarrierActivationOwnerState{}, false,
+		)
+		if !localProofComplete {
+			return nil, false
+		}
+		if !localOwner {
 			continue
 		}
-		combined := mergeProfiledLocalUnits(anchor, carrier.refs[0])
-		// The natural-language speech act owns the adjacent code/config carrier
-		// regardless of whether that carrier was emitted immediately before or
-		// after it. Classify the semantic relation in anchor-first order while
-		// retaining physical order in the ownership refs used for audit metadata.
-		parts := []string{anchor.segment.Text, carrier.refs[0].segment.Text}
-		candidate := c.classifyWithPolicy(parts, mode, thresholds, policy, false)
-		if candidate.Truncated {
+		for _, carrier := range carriers {
+			if len(carrier.refs) != 1 || !profiledDirectCarrierKind(carrier.refs[0].segment.ContentKind) {
+				continue
+			}
+			combined := mergeProfiledLocalUnits(anchor, carrier.refs[0])
+			// The natural-language speech act owns each explicitly named adjacent
+			// code/config carrier. Classify in anchor-first semantic order while
+			// retaining physical order in the ownership refs used for audit metadata.
+			parts := []string{anchor.segment.Text, carrier.refs[0].segment.Text}
+			candidate := c.classifyWithPolicy(parts, mode, thresholds, policy, false)
+			if candidate.Truncated {
+				results = append(results, candidate)
+				continue
+			}
+			candidate = withRoleAwareFindingOrigin(candidate, FindingOriginUserContent, mode, thresholds)
+			c.annotateProfiledResult(&candidate, combined, false, policy, mode, thresholds)
+			markResultDirectCarrierActivated(&candidate, true, true, mode, thresholds)
+			if !resultHasEligibleMaliciousWinner(candidate, thresholds) || candidate.FindingConfidence == FindingNone {
+				continue
+			}
 			results = append(results, candidate)
-			continue
 		}
-		candidate = withRoleAwareFindingOrigin(candidate, FindingOriginUserContent, mode, thresholds)
-		c.annotateProfiledResult(&candidate, combined, false, policy, mode, thresholds)
-		markResultDirectCarrierActivated(&candidate, true, true, mode, thresholds)
-		if !resultHasEligibleMaliciousWinner(candidate, thresholds) || candidate.FindingConfidence == FindingNone {
-			continue
-		}
-		results = append(results, candidate)
 	}
 	return results, true
 }
@@ -4393,21 +4939,12 @@ func (c *Classifier) profiledCurrentDirectCarrierPossible(
 		}
 		before, beforeOK := nearestProfiledCurrentScopeUnit(segments, owner, anchor.index, -1)
 		after, afterOK := nearestProfiledCurrentScopeUnit(segments, owner, anchor.index, 1)
-		var selected profiledSegmentRef
-		switch {
-		case beforeOK:
-			// Match selectProfiledCurrentCarrier's deterministic tie rule: when
-			// both sides exist, the preceding unit owns the anaphoric relation.
-			selected = before
-		case afterOK:
-			selected = after
-		default:
-			continue
-		}
-		segment := selected.segment
-		if segment.ScopeID == owner.ScopeID && segment.TurnIndex == owner.TurnIndex &&
-			segment.IsCurrentTurn && trustedUserContentSegment(segment) &&
-			profiledDirectCarrierKind(segment.ContentKind) {
+		// This is only a cheap possibility gate. Direction, cancellation, scope,
+		// and exact ownership are proved later for the small set of affirmative
+		// anchors. Looking at both adjacent slots keeps forward carriers reachable
+		// without allocating continuation-decision state on the many-parts path.
+		if beforeOK && profiledDirectCarrierKind(before.segment.ContentKind) ||
+			afterOK && profiledDirectCarrierKind(after.segment.ContentKind) {
 			return true
 		}
 	}
@@ -4615,6 +5152,8 @@ func (c *Classifier) profiledSyntheticMetaControlOwner(
 	}
 	var owner profiledSegmentRef
 	ownerSet := false
+	var carrierSource profiledSegmentRef
+	carrierSourceSet := false
 	for _, ref := range refs {
 		segment := ref.segment
 		if !trustedUserContentSegment(segment) || !segment.IsCurrentTurn ||
@@ -4636,6 +5175,17 @@ func (c *Classifier) profiledSyntheticMetaControlOwner(
 		if !profiledReferentCarrierKind(segment.ContentKind) {
 			return profiledSegmentRef{}, false
 		}
+		if carrierSourceSet {
+			// Synthetic META has no physical offsets. More than one carrier would
+			// make the family source ambiguous even when the surrounding scope has
+			// one active directive.
+			return profiledSegmentRef{}, false
+		}
+		carrierSource = ref
+		carrierSourceSet = true
+	}
+	if carrierSourceSet {
+		return carrierSource, ownerSet
 	}
 	return owner, ownerSet
 }

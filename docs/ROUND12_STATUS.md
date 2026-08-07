@@ -8,20 +8,23 @@ Round 12 working tree.
 
 <!-- round12-status:start -->
 ```text
-round12_status: REMEDIATION_IMPLEMENTED / REVALIDATION_PENDING / ACCEPTANCE_INCOMPLETE / NO_RELEASE
+round12_status: LOCAL_REVALIDATION_PASS / EXACT_CANDIDATE_GATES_PENDING / ACCEPTANCE_INCOMPLETE / NO_RELEASE
 round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
 round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
 round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
-round12_classifier_policy: classifier-policy-v11 / f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+round12_classifier_policy: classifier-policy-v12 / cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 round12_source_policy: APPROVED_EXACT_PINS / 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
 round12_audit_runner_bundle: 1f2e5163a96efb13f23c713b25a91b7b73874b194286e4383b66e24e402ad0a2
 round12_audit_run_source: 0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947
-round12_local_audit_tool_tests: PASS / LINUX / 74_OF_74
+round12_local_audit_tool_tests: PASS / LINUX / 137_OF_137
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 round12_local_safe_gate: PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
-round12_local_go_unit: PASS / GO1.26.4_LINUX_DEVELOPMENT_EVIDENCE_ONLY
-round12_local_go_race: INCOMPLETE_SESSION_INTERRUPTION / NOT_PASS / EXACT_CI_REQUIRED
+round12_local_go_unit: PASS / GO1.26.4_LINUX / 312.21_SECONDS / DEVELOPMENT_EVIDENCE_ONLY
+round12_local_go_race: PASS / GO1.26.4_LINUX_AMD64 / 961.918_SECONDS / DEVELOPMENT_EVIDENCE_ONLY / EXACT_CI_REQUIRED
+round12_local_coderabbit: INITIAL_REVIEW_12_ISSUES / 6_MAJOR_6_MINOR / ALL_REMEDIATED / EXACT_COMMIT_FOLLOWUP_PENDING
+round12_host_performance_contract: PASS / SIX_SOURCE_TOOL_CLOSURE / WARM_CADENCE_3601_TO_3602 / REQUEST_OUTCOME_CONSERVATION
+round12_candidate_manifest_gate: PASS / CLEAN_EXACT_EIGHT_FILE_CI_SEAL / TRACKED_AND_UNTRACKED_CLEAN
 round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
 round12_superseded_pr_head: 9782eaf9da37d466ffc0b644b052d3c842f7f1ca
 round12_superseded_pr_head_engineering_ci: PASS / CI_31016759352 / POLICY_31016760807 / CODEQL_31016759262
@@ -30,7 +33,7 @@ round12_prior_remediated_pr_head: 30b613e82a1be97938dbfe974b98d4cb76a359a0
 round12_prior_remediated_merge_ref: 2be72ccd7f431344b4f6bb18811fa08949105121
 round12_prior_remediated_engineering_ci: PASS / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
 round12_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / DIRTY_CANDIDATE_READINESS_MISMATCH / NO_MACHINE_EVIDENCE
-round12_current_remediation: AUDIT_DISPOSITION_KIND_SPLIT / MDX_V45_CURRENT_HEAD_REVIEW / CLEAN_EXACT_MERGE_CANDIDATE_REQUIRED
+round12_current_remediation: MDX_V45_CLASSIFIER / HOST_PERFORMANCE_FALSE_PASS_CLOSURE / CI_CANDIDATE_BINDING / CLEAN_EXACT_MERGE_CANDIDATE_REQUIRED
 round12_sbom_repro_remediation: EXACT_IDENTITY_NORMALIZATION / TWO_INDEPENDENT_BLOBLESS_SPARSE_CLONES / LOCAL_CONTRACT_PASS / EXACT_CI_PENDING
 round12_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
 round12_working_candidate_engineering_ci: PENDING_NEW_HEAD
@@ -63,13 +66,18 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   property binding, malformed-graph rejection, and a synthetic independent
   `blob:none` sparse-clone test in which the excluded restricted blob remained
   absent before and after checkout;
-- the current CPA audit harness passed 74/74 Linux tests, including the
+- the current CPA audit harness passed 137/137 Linux tests, including the
   concatenated-ZIP rejection, stopped-image Mock source verification,
   private-parent mode drift, symlink/ancestor/evidence/subdirectory replacement,
   normal-path Docker handoff, closed Source/Destination/RW/rprivate bind and
   `/tmp` tmpfs contracts, extra-volume rejection, clean-candidate readiness,
   mode-0600 Mock `--env-file` lifecycle on Docker success/failure, and
-  credential-free Docker argv, with 11 reviewed source pins and 19 semantic
+  credential-free Docker argv, Host A/B tool-identity closure over
+  `acquire.py`, `audit_contract.py`, the Host schema/source, `run.py`, and
+  `validate.py`, 3,601-3,602-row warm-lane cadence enforcement, request-outcome
+  conservation, clean eight-file CI candidate binding, explicit descriptor
+  guards under optimized Python, and a finite counted-Mock idle timeout, with
+  11 reviewed source pins and 19 semantic
   cases bound by the approved policy above; MDX latest HEAD is `77e7a649…`, the
   current v45 single-member archive has newly reviewed blob/raw/text identities,
   and the selected safety-evaluation document is byte-identical;
@@ -93,9 +101,11 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   evicting rows outside the requested maintenance scope.
 
 These are working-tree development results, not remediated-candidate CI or
-second-machine evidence. The local race attempt was interrupted by the tool
-session and is explicitly `NOT_PASS`; it must complete in the required GitHub
-lane.
+second-machine evidence. After the local CodeRabbit remediation, the exact Go
+1.26.4 Linux race lane completed in 961.918 seconds with exit code 0 and no data
+race, panic, or timeout. It remains
+development evidence only; the new candidate must still pass the required
+GitHub lane on its exact commit.
 
 Exact baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed the five
 required GitHub engineering contexts through CI run `30880739397`, Policy and
@@ -208,8 +218,9 @@ download, rollback, or support guarantee.
 已经通过，但结果只绑定该精确提交，不能转移到后续工作树或 PR。旧 PR 候选
 `9782eaf` 的 CI、Policy Gate 和 CodeQL 也曾通过，但二号机正式 harness 因 runc
 拒绝 proc-fd bind source 而 fail closed：没有生成 `machine-evidence.json`，没有执行
-第三方仓库代码，私有 corpus 正文已经删除。当前 normal-path handoff 修复仅完成本地
-74/74 Linux 回归，新的精确 HEAD 门禁和二号机执行仍为
+第三方仓库代码，私有 corpus 正文已经删除。当前 normal-path handoff 修复已完成本地
+137/137 Linux 审计工具回归、312.21 秒 unit 和 961.918 秒 Go 1.26.4 race；新的精确
+HEAD 门禁和二号机执行仍为
 `PENDING_NEW_HEAD_EXECUTION`。已有的 1,320 次传输执行报告只属于所有者运行
 的输入诊断，不是独立证明。受保护 Host、独立证明、生产批准与 Release Ready 均为
 `NOT_PROVIDED`。本轮不创建 tag、RC 或 GitHub Release。

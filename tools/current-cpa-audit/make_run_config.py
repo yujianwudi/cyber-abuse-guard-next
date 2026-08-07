@@ -26,6 +26,7 @@ from audit_contract import (
     validate_manifest_policy,
     validate_run_config,
 )
+from host_performance import validate_candidate_manifest
 
 
 ROOT = Path(__file__).resolve().parent
@@ -75,7 +76,7 @@ def require_git_clean(repository: Path) -> None:
             str(repository),
             "status",
             "--porcelain=v1",
-            "--untracked-files=no",
+            "--untracked-files=all",
         ],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
@@ -88,7 +89,31 @@ def require_git_clean(repository: Path) -> None:
         env=environment,
     )
     if result.returncode != 0 or result.stdout:
-        raise RuntimeError("CAG repository has tracked working-tree drift")
+        raise RuntimeError("CAG repository has tracked or untracked working-tree drift")
+
+
+def validated_cag_candidate(
+    repository: Path, cag_so: Path, candidate_manifest: Path
+) -> dict[str, str]:
+    """Bind local CAG bytes to one exact, clean CI audit candidate."""
+
+    require_git_clean(repository)
+    identity = {
+        "commit": git_id(repository, "HEAD^{commit}"),
+        "so_sha256": sha256_file(cag_so),
+        "tree": git_id(repository, "HEAD^{tree}"),
+    }
+    candidate_raw = read_regular_bytes(
+        candidate_manifest, "CI audit candidate manifest", 2 * 1024 * 1024
+    )
+    candidate_value = load_json_bytes(candidate_raw, "CI audit candidate manifest")
+    candidate = validate_candidate_manifest(candidate_value, identity)
+    artifact_name = f"cyber-abuse-guard-v{candidate['version']}.so"
+    if cag_so.name != artifact_name:
+        raise RuntimeError(
+            "selected CAG SO filename does not match the CI audit candidate artifact_name"
+        )
+    return identity
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -101,6 +126,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--evidence-directory", type=Path, required=True)
     parser.add_argument("--cag-repository", type=Path, required=True)
     parser.add_argument("--cag-so", type=Path, required=True)
+    parser.add_argument("--candidate-manifest", type=Path, required=True)
     parser.add_argument("--cpa-official-asset", type=Path, required=True)
     parser.add_argument(
         "--cpa-official-asset-sha256",
@@ -139,8 +165,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise RuntimeError("corpus candidate was not acquired with this approved policy")
         validate_manifest_policy(manifest_value, policy_value, require_approved=True)
         cag_repository = args.cag_repository.resolve(strict=True)
-        require_git_clean(cag_repository)
         cag_so = args.cag_so.resolve(strict=True)
+        candidate_manifest = args.candidate_manifest.resolve(strict=True)
+        cag_identity = validated_cag_candidate(
+            cag_repository, cag_so, candidate_manifest
+        )
         asset = args.cpa_official_asset.resolve(strict=True)
         if sha256_file(asset) != args.cpa_official_asset_sha256:
             raise RuntimeError("CPA official asset does not match the published SHA-256")
@@ -149,11 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = {
             "corpus_manifest_sha256": sha256_file(manifest),
             "identities": {
-                "cag": {
-                    "commit": git_id(cag_repository, "HEAD^{commit}"),
-                    "so_sha256": sha256_file(cag_so),
-                    "tree": git_id(cag_repository, "HEAD^{tree}"),
-                },
+                "cag": cag_identity,
                 "cpa": {
                     "binary_path": args.cpa_binary_path,
                     "binary_sha256": args.cpa_binary_sha256,

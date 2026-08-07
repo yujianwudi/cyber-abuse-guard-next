@@ -527,6 +527,18 @@ class BoundCorpus:
                 finally:
                     setattr(self, field, None)
 
+    def _root_descriptor(self) -> int:
+        descriptor = self.root_fd
+        if descriptor is None:
+            fail(f"{self.label} bound root descriptor is unavailable")
+        return descriptor
+
+    def _corpus_descriptor(self) -> int:
+        descriptor = self.corpus_fd
+        if descriptor is None:
+            fail(f"{self.label} bound corpus descriptor is unavailable")
+        return descriptor
+
     def _basename(self, relative: str, label: str) -> str:
         normalized = require_safe_relative(relative, label, "corpus")
         parts = PurePosixPath(normalized).parts
@@ -550,14 +562,15 @@ class BoundCorpus:
         ) != self.root_identity:
             problems.append("acquisition_root_identity_drifted")
         if self.uses_dir_fd:
-            assert self.root_fd is not None and self.corpus_fd is not None
+            root_fd = self._root_descriptor()
+            corpus_fd = self._corpus_descriptor()
             try:
                 named_corpus = os.stat(
-                    "corpus", dir_fd=self.root_fd, follow_symlinks=False
+                    "corpus", dir_fd=root_fd, follow_symlinks=False
                 )
             except (FileNotFoundError, OSError):
                 named_corpus = None
-            held_corpus = os.fstat(self.corpus_fd)
+            held_corpus = os.fstat(corpus_fd)
             if require_named_corpus:
                 if named_corpus is None or not self._same_file(named_corpus, held_corpus):
                     problems.append("corpus_directory_identity_drifted")
@@ -589,11 +602,11 @@ class BoundCorpus:
                 flags |= os.O_NOFOLLOW
             descriptor = os.open(path, flags, mode)
         else:
-            assert self.corpus_fd is not None
+            corpus_fd = self._corpus_descriptor()
             flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
             flags |= getattr(os, "O_CLOEXEC", 0)
             flags |= getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(name, flags, mode, dir_fd=self.corpus_fd)
+            descriptor = os.open(name, flags, mode, dir_fd=corpus_fd)
         try:
             with os.fdopen(descriptor, "wb", closefd=False) as output:
                 output.write(raw)
@@ -607,8 +620,11 @@ class BoundCorpus:
             if hasattr(os, "fchmod"):
                 os.fchmod(descriptor, mode)
             if self.uses_dir_fd:
-                assert self.corpus_fd is not None
-                named = os.stat(name, dir_fd=self.corpus_fd, follow_symlinks=False)
+                named = os.stat(
+                    name,
+                    dir_fd=self._corpus_descriptor(),
+                    follow_symlinks=False,
+                )
             else:
                 named = (self.root / relative).lstat()
             after = os.fstat(descriptor)
@@ -630,11 +646,11 @@ class BoundCorpus:
                 maximum,
                 require_single_link=True,
             )
-        assert self.corpus_fd is not None
+        corpus_fd = self._corpus_descriptor()
         flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
         flags |= getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(name, flags, dir_fd=self.corpus_fd)
+            descriptor = os.open(name, flags, dir_fd=corpus_fd)
         except (FileNotFoundError, OSError) as exc:
             fail(f"{label} cannot be opened relative to the bound corpus: {type(exc).__name__}")
         try:
@@ -647,7 +663,7 @@ class BoundCorpus:
                 raw = handle.read(maximum + 1)
             after = os.fstat(descriptor)
             try:
-                named = os.stat(name, dir_fd=self.corpus_fd, follow_symlinks=False)
+                named = os.stat(name, dir_fd=corpus_fd, follow_symlinks=False)
             except (FileNotFoundError, OSError):
                 fail(f"{label} disappeared during bound read")
             if (
@@ -693,11 +709,11 @@ class BoundCorpus:
                 return False, [f"content_identity:{relative}"]
             return unlink_corpus_file(self.root / relative, relative)
 
-        assert self.corpus_fd is not None
+        corpus_fd = self._corpus_descriptor()
         flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
         flags |= getattr(os, "O_NOFOLLOW", 0)
         try:
-            descriptor = os.open(name, flags, dir_fd=self.corpus_fd)
+            descriptor = os.open(name, flags, dir_fd=corpus_fd)
         except FileNotFoundError:
             return False, [f"missing_before_unlink:{relative}"]
         except OSError as exc:
@@ -716,7 +732,7 @@ class BoundCorpus:
                 return False, [f"content_identity:{relative}"]
             after_read = os.fstat(descriptor)
             try:
-                named = os.stat(name, dir_fd=self.corpus_fd, follow_symlinks=False)
+                named = os.stat(name, dir_fd=corpus_fd, follow_symlinks=False)
             except (FileNotFoundError, OSError):
                 return False, [f"missing_before_unlink:{relative}"]
             if (
@@ -726,7 +742,7 @@ class BoundCorpus:
             ):
                 return False, [f"replaced_before_unlink:{relative}"]
             try:
-                os.unlink(name, dir_fd=self.corpus_fd)
+                os.unlink(name, dir_fd=corpus_fd)
             except OSError as exc:
                 return False, [f"unlink_{type(exc).__name__}:{relative}"]
             remaining_links = os.fstat(descriptor).st_nlink
@@ -740,16 +756,17 @@ class BoundCorpus:
         problems = self.identity_problems()
         corpus_removed = False
         if self.uses_dir_fd:
-            assert self.root_fd is not None and self.corpus_fd is not None
+            root_fd = self._root_descriptor()
+            corpus_fd = self._corpus_descriptor()
             try:
-                remaining = os.listdir(self.corpus_fd)
+                remaining = os.listdir(corpus_fd)
             except OSError as exc:
                 return problems + [f"list_{type(exc).__name__}:corpus"]
             if remaining:
                 problems.append("unexpected_entries")
             if not remaining and "corpus_directory_identity_drifted" not in problems:
                 try:
-                    os.rmdir("corpus", dir_fd=self.root_fd)
+                    os.rmdir("corpus", dir_fd=root_fd)
                     corpus_removed = True
                 except OSError as exc:
                     problems.append(f"rmdir_{type(exc).__name__}:corpus")

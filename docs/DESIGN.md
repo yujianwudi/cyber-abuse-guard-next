@@ -1,8 +1,8 @@
 # CPA Cyber Abuse Guard v0.16 Round 12 Design
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
 ## Scope, release state, and invariants
@@ -510,7 +510,7 @@ These mechanisms remain stateless across independent API calls and do not
 attest to local instruction-file integrity.
 
 Ruleset `1.0.10` identifies the embedded YAML assets only. The complete
-code-level behavior is separately identified as `classifier-policy-v11`; its
+code-level behavior is separately identified as `classifier-policy-v12`; its
 exact SHA-256 is the canonical current identity in this document's prologue and
 `internal/classifier/policy_identity.go`.
 Its tested source list binds the classifier, matcher, normalizer, role logic,
@@ -1015,7 +1015,7 @@ SSE stream with terminal frames; returning successful chunks would force HTTP
 ## Build identity and release reproducibility
 
 Builds link immutable version, full commit SHA, ruleset version/hash,
-`classifier-policy-v11` and its exact policy SHA-256, streaming-scanner identity,
+`classifier-policy-v12` and its exact policy SHA-256, streaming-scanner identity,
 and dirty state. Build metadata and the verifier bind
 these identities. Candidate mode requires a clean worktree, exact expected
 commit/tree, the commit timestamp, an absent stable `v0.16` tag, and forbids

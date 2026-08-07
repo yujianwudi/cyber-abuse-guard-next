@@ -1,8 +1,8 @@
 # Known Limitations — v0.16 Round 12 development source
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
 Last updated: 2026-08-04 (Asia/Shanghai)
@@ -354,8 +354,8 @@ boundaries.
 
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The active source-line identity is
-    `classifier-policy-v11` / SHA-256
-`f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`,
+    `classifier-policy-v12` / SHA-256
+`cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1`,
     and remains pending until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical

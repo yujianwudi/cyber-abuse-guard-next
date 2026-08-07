@@ -200,11 +200,13 @@
       "properties": {
         "modes": {
           "type": "array",
+          "minItems": 3,
           "prefixItems": [{"const": "audit"}, {"const": "balanced"}, {"const": "strict"}],
           "items": false
         },
         "protocols": {
           "type": "array",
+          "minItems": 2,
           "prefixItems": [{"const": "chat"}, {"const": "responses"}],
           "items": false
         },
@@ -212,6 +214,7 @@
         "results_sha256": {"$ref": "#/$defs/sha256"},
         "streams": {
           "type": "array",
+          "minItems": 2,
           "prefixItems": [{"const": false}, {"const": true}],
           "items": false
         },

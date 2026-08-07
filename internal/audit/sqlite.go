@@ -880,7 +880,8 @@ func (s *Store) finishWork(item workItem, err error) bool {
 }
 
 // Status returns an operational snapshot. Counters remain lock-free; the
-// bounded migration-backup inventory is serialized with explicit cleanup so a
+// configured capacity shares the capacity gate lock, and the bounded
+// migration-backup inventory is serialized with explicit cleanup so a
 // management response never reports a transient hidden-backup state.
 func (s *Store) Status() Status {
 	if s == nil {
@@ -893,6 +894,9 @@ func (s *Store) Status() Status {
 	s.migrationBackupMu.Lock()
 	migrationBackups, backupErr := InspectMigrationBackups(s.cfg.Path)
 	s.migrationBackupMu.Unlock()
+	s.capacityMu.Lock()
+	configuredMaxBytes := s.cfg.MaxBytes
+	s.capacityMu.Unlock()
 	degraded := s.degraded.Load() || backupErr != nil
 	if backupErr != nil && lastError == "" {
 		lastError = MigrationBackupInventoryWarning
@@ -923,7 +927,7 @@ func (s *Store) Status() Status {
 		RawCapturePrepareMaxUS:       s.rawPrepareMaxUS.Load(),
 		CleanupDeleted:               s.cleaned.Load(),
 		CurrentLiveBytes:             s.currentLiveBytes.Load(),
-		ConfiguredMaxBytes:           s.cfg.MaxBytes,
+		ConfiguredMaxBytes:           configuredMaxBytes,
 		CapacityMeasurementAvailable: s.capacityMeasured.Load(),
 		OverLimit:                    s.overLimit.Load(),
 		CapacityCleanupRuns:          s.capacityCleanupRuns.Load(),

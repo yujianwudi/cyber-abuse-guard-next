@@ -197,6 +197,8 @@ type classificationSignalFacts struct {
 	semanticAgencies         []bool
 	semanticCoreEvidence     []uint8
 	harmConflict             bool
+	v45RefusalValidated      bool
+	v45CompletionValidated   bool
 }
 
 type quotedReviewFollowUpProof struct {
@@ -400,6 +402,17 @@ func New(set *rules.RuleSet) (*Classifier, error) {
 			return nil, compileErr
 		}
 		*metaTargets[index] = signalID
+	}
+	v45Targets := []*int{
+		&c.metaOverride.v45RefusalSuppression,
+		&c.metaOverride.v45DirectCompletion,
+	}
+	for index, terms := range metaOverrideV45TermGroups() {
+		signalID, compileErr := compileGroup(terms, fmt.Sprintf("meta override v45 source signal %d", index+1))
+		if compileErr != nil {
+			return nil, compileErr
+		}
+		*v45Targets[index] = signalID
 	}
 	for _, category := range classifierCategoryOrder {
 		profile, ok := set.Semantics[category]
@@ -729,6 +742,7 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 			[][]bool{metaTailSignals}, metaTailText, metaContext,
 			metaTailWindowComplete && !truncated,
 			allowExtendedGeneratedAgentWindow,
+			metaOverrideV45Validation{},
 		)
 		if (assessment.controlPlaneBlock && !bestMeta.controlPlaneBlock) ||
 			(assessment.controlPlaneBlock == bestMeta.controlPlaneBlock &&
@@ -968,6 +982,8 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		(previousInertQuotedSafetyReview && !quotedReviewImplementationFollowUp)
 	if capture != nil {
 		capture.harmConflict = false
+		capture.v45RefusalValidated = false
+		capture.v45CompletionValidated = false
 		if cap(capture.signals) < c.signalCount {
 			capture.signals = make([]bool, c.signalCount)
 		} else {
@@ -1001,6 +1017,9 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 		if partCount > 0 {
 			copy(capture.signals, currentSignals)
 			capture.harmConflict = hasExplicitHarmConflict(currentText)
+			c.captureMetaOverrideV45Facts(
+				currentText, allowExtendedGeneratedAgentWindow, capture,
+			)
 			needsIntentAnalysis := false
 			for _, rule := range c.rules {
 				if currentSignals[rule.intent] {
@@ -3372,7 +3391,25 @@ func (c *Classifier) streamingRiskPotential(facts classificationSignalFacts, pol
 			)
 		}
 	}
-	assessment.meta = c.assessMetaOverride([][]bool{signals}, "\ue000", ContextFlags{}, false, false)
+	assessment.meta = c.assessMetaOverride(
+		[][]bool{signals}, "\ue000", ContextFlags{}, false, false,
+		metaOverrideV45Validation{
+			refusal:    facts.v45RefusalValidated,
+			completion: facts.v45CompletionValidated,
+		},
+	)
+	// Source-specific V45 clauses require their original text for polarity and
+	// clause ownership.  Once streaming has discarded that text, two independently
+	// validated clause facts plus the compiled unrestricted-mode signal are only a
+	// positive upper bound: they can require incomplete inspection, but they must
+	// never manufacture a complete malicious classification.
+	if facts.v45RefusalValidated && facts.v45CompletionValidated &&
+		signalMatched(signals, c.metaOverride.unrestrictedMode) {
+		assessment.meta.controlPlaneBlock = true
+		if assessment.meta.score < thresholds.HardBlock {
+			assessment.meta.score = thresholds.HardBlock
+		}
+	}
 
 	for _, category := range classifierCategoryOrder {
 		ruleIndexes := c.categoryRules[category]
@@ -3987,9 +4024,10 @@ var quotedReviewSpecificContinuationIntents = []string{
 	"run the payload", "run this payload", "run that payload", "run the output", "run this output", "run that output",
 	"deploy it", "deploy that", "deploy the quoted request", "deploy quoted request",
 	"deploy the payload", "deploy this payload", "deploy that payload", "deploy the output", "deploy this output", "deploy that output",
-	"install and activate it", "install and activate that", "install and activate the above skill", "install and activate this skill",
+	"install and activate it", "install and activate that", "install and activate the above skill", "install and activate the skill above", "install and activate this skill",
 	"install and activate the quoted skill", "install and activate the preceding skill",
-	"execute the default workflow above", "follow the default workflow above", "run the default workflow above",
+	"execute the default workflow above", "execute its default workflow", "follow the default workflow above", "run the default workflow above",
+	"apply the following operating instructions now",
 	"build it", "build that", "build the quoted request", "build quoted request",
 	"build the payload", "build this payload", "build that payload", "build the output", "build this output", "build that output",
 	"operationalize it", "operationalize that", "operationalize the above", "operationalize the request", "operationalize the quoted request", "operationalize quoted request",
@@ -4300,10 +4338,20 @@ func quotedReviewOverflowClauseHasActive(
 func quotedReviewContinuationIntentsEquivalent(first, second string) bool {
 	firstFamily := quotedReviewContinuationIntentFamily(first)
 	secondFamily := quotedReviewContinuationIntentFamily(second)
-	if firstFamily == "referential" || secondFamily == "referential" {
-		return true
+	familyEquivalent := firstFamily == "referential" || secondFamily == "referential" ||
+		firstFamily != "" && firstFamily == secondFamily
+	if !familyEquivalent {
+		return false
 	}
-	return firstFamily != "" && firstFamily == secondFamily
+	// A cancellation is scoped to the carrier slot it names. Preserve legacy
+	// family matching when either intent has no explicit slot, but never let a
+	// same-family "following" prohibition erase an independent "above" act (or
+	// vice versa).
+	firstDirection := profiledCarrierActivationIntentDirection(first)
+	secondDirection := profiledCarrierActivationIntentDirection(second)
+	return firstDirection == profiledCarrierActivationNone ||
+		secondDirection == profiledCarrierActivationNone ||
+		firstDirection&secondDirection != 0
 }
 
 func quotedReviewContinuationIntentFamily(intent string) string {

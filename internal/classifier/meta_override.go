@@ -9,6 +9,12 @@ import (
 const metaOverrideRuleID = "META-OVERRIDE-001"
 
 const (
+	metaOverrideV45RefusalLiteral      = "refusal, fallback, no-op, promise"
+	metaOverrideV45RefusalContinuation = "or clarification has zero completed state"
+	metaOverrideV45CompletionLiteral   = "execute every requested verb through its verified result in this response"
+)
+
+const (
 	maxMetaOverrideDirectControlWindowBytes       = 8 << 10
 	maxMetaOverrideGeneratedAgentWindowBytes      = 12 << 10
 	maxMetaOverrideDirectControlWindowQuotedSpans = 64
@@ -30,6 +36,8 @@ type compiledMetaOverrideSignals struct {
 	persistentInjection   int
 	personaTakeover       int
 	agenticEscalation     int
+	v45RefusalSuppression int
+	v45DirectCompletion   int
 }
 
 type metaOverrideAssessment struct {
@@ -37,6 +45,23 @@ type metaOverrideAssessment struct {
 	evidence          []Evidence
 	controlPlaneBlock bool
 	defensiveAnalysis bool
+}
+
+// metaOverrideV45Validation carries only source-specific clause facts.  The
+// facts are set while the bounded original text is still present, after quote
+// ownership and polarity have been checked.  They intentionally contain no
+// prompt bytes and may therefore be ORed by the streaming aggregator.
+type metaOverrideV45Validation struct {
+	refusal    bool
+	completion bool
+}
+
+func (validation *metaOverrideV45Validation) merge(other metaOverrideV45Validation) {
+	if validation == nil {
+		return
+	}
+	validation.refusal = validation.refusal || other.refusal
+	validation.completion = validation.completion || other.completion
 }
 
 func (c *Classifier) hasMetaOverrideSignal(signals []bool) bool {
@@ -54,7 +79,16 @@ func (c *Classifier) hasMetaOverrideSignal(signals []bool) bool {
 		signalMatched(signals, c.metaOverride.benchmarkCoercion) ||
 		signalMatched(signals, c.metaOverride.persistentInjection) ||
 		signalMatched(signals, c.metaOverride.personaTakeover) ||
-		signalMatched(signals, c.metaOverride.agenticEscalation)
+		signalMatched(signals, c.metaOverride.agenticEscalation) ||
+		signalMatched(signals, c.metaOverride.v45RefusalSuppression) ||
+		signalMatched(signals, c.metaOverride.v45DirectCompletion)
+}
+
+func metaOverrideV45TermGroups() []rules.Terms {
+	return []rules.Terms{
+		{EN: []string{metaOverrideV45RefusalLiteral}},
+		{EN: []string{metaOverrideV45CompletionLiteral}},
+	}
 }
 
 func metaOverrideTermGroups() []rules.Terms {
@@ -236,14 +270,23 @@ func metaOverrideTermGroups() []rules.Terms {
 	}
 }
 
-func (c *Classifier) assessMetaOverride(signalSets [][]bool, text string, context ContextFlags, allowDefensiveDeduction, allowExtendedGeneratedAgentWindow bool) metaOverrideAssessment {
+func (c *Classifier) assessMetaOverride(
+	signalSets [][]bool,
+	text string,
+	context ContextFlags,
+	allowDefensiveDeduction bool,
+	allowExtendedGeneratedAgentWindow bool,
+	validatedV45 metaOverrideV45Validation,
+) metaOverrideAssessment {
 	if c == nil || len(signalSets) == 0 {
 		return metaOverrideAssessment{}
 	}
 
+	carrierText := text
 	semanticRefusalSuppression := false
 	activeControlText, activeControlComplete := metaOverrideActiveControlText(text)
 	directControlOwner := false
+	referencedV45Carrier := false
 	var directControlSignals []bool
 	if metaOverrideDirectCompactionApplication(text) {
 		// Compaction carriers are an explicit current-user referent operation: the
@@ -259,6 +302,7 @@ func (c *Classifier) assessMetaOverride(signalSets [][]bool, text string, contex
 			activeControlText = outside
 			activeControlComplete = true
 			directControlOwner = true
+			referencedV45Carrier = true
 			// The wrapper proves an explicit referent to the quoted custom
 			// instructions, so the bounded semantic family may be taken from that
 			// same referenced carrier. Other direct-control paths below compute the
@@ -271,7 +315,10 @@ func (c *Classifier) assessMetaOverride(signalSets [][]bool, text string, contex
 		!metaOverrideDirectControlAnalyticalConflict(activeControlText) {
 		directControlSignals = c.metaOverrideSignalsForText(activeControlText)
 		candidateSemanticRefusal := metaOverrideBoundedRefusalSuppression(activeControlText)
-		if c.metaOverrideSignalsHaveActiveControlComposition(directControlSignals, candidateSemanticRefusal) {
+		candidateV45 := metaOverrideV45ValidatedFamilies(activeControlText)
+		if c.metaOverrideSignalsHaveActiveControlComposition(
+			directControlSignals, candidateSemanticRefusal, candidateV45,
+		) {
 			directControlOwner = true
 			semanticRefusalSuppression = candidateSemanticRefusal
 			signalSets = [][]bool{directControlSignals}
@@ -303,6 +350,15 @@ func (c *Classifier) assessMetaOverride(signalSets [][]bool, text string, contex
 	if directControlSignals != nil {
 		defer putClassifierSignalBuffer(directControlSignals)
 	}
+	v45Validation := metaOverrideV45ValidationForCarrier(carrierText, referencedV45Carrier)
+	if directControlOwner && !referencedV45Carrier &&
+		(!v45Validation.refusal || !v45Validation.completion) {
+		// A quote-dense document can exceed the global masking budget while its
+		// bounded leading owner remains fully proved.  In that narrow case the
+		// selected leading text is authoritative and contains no borrowed payload.
+		v45Validation.merge(metaOverrideV45ValidatedFamilies(activeControlText))
+	}
+	v45Validation.merge(validatedV45)
 	matched := func(signalID int) bool {
 		for _, signals := range signalSets {
 			if signalMatched(signals, signalID) {
@@ -318,7 +374,9 @@ func (c *Classifier) assessMetaOverride(signalSets [][]bool, text string, contex
 	}
 	hierarchy := matched(c.metaOverride.hierarchy)
 	mode := matched(c.metaOverride.unrestrictedMode)
-	completion := matched(c.metaOverride.directCompletion)
+	completion := matched(c.metaOverride.directCompletion) ||
+		matched(c.metaOverride.v45DirectCompletion) &&
+			v45Validation.completion
 	laundering := matched(c.metaOverride.scopeLaundering)
 	outputControl := matched(c.metaOverride.outputControl)
 	disclosure := matched(c.metaOverride.secretDisclosure)
@@ -328,6 +386,8 @@ func (c *Classifier) assessMetaOverride(signalSets [][]bool, text string, contex
 	personaTakeover := matched(c.metaOverride.personaTakeover)
 	agenticEscalation := matched(c.metaOverride.agenticEscalation)
 	refusal := matched(c.metaOverride.refusalSuppression) ||
+		matched(c.metaOverride.v45RefusalSuppression) &&
+			v45Validation.refusal ||
 		semanticRefusalSuppression && (mode || completion || agenticEscalation)
 	families := []family{
 		{hierarchy, metaOverrideRuleID + ":hierarchy"},
@@ -466,16 +526,21 @@ func (c *Classifier) metaOverrideSignalsForText(text string) []bool {
 func (c *Classifier) metaOverrideSignalsHaveActiveControlComposition(
 	signals []bool,
 	semanticRefusalSuppression bool,
+	v45Validation metaOverrideV45Validation,
 ) bool {
 	hierarchy := signalMatched(signals, c.metaOverride.hierarchy)
 	mode := signalMatched(signals, c.metaOverride.unrestrictedMode)
-	completion := signalMatched(signals, c.metaOverride.directCompletion)
+	completion := signalMatched(signals, c.metaOverride.directCompletion) ||
+		signalMatched(signals, c.metaOverride.v45DirectCompletion) &&
+			v45Validation.completion
 	laundering := signalMatched(signals, c.metaOverride.scopeLaundering)
 	outputControl := signalMatched(signals, c.metaOverride.outputControl)
 	negativeAuthorization := signalMatched(signals, c.metaOverride.negativeAuthorization)
 	personaTakeover := signalMatched(signals, c.metaOverride.personaTakeover)
 	agenticEscalation := signalMatched(signals, c.metaOverride.agenticEscalation)
 	refusal := signalMatched(signals, c.metaOverride.refusalSuppression) ||
+		signalMatched(signals, c.metaOverride.v45RefusalSuppression) &&
+			v45Validation.refusal ||
 		semanticRefusalSuppression && (mode || completion || agenticEscalation)
 
 	familyCount := 0
@@ -543,12 +608,253 @@ func (c *Classifier) metaOverrideLeadingDirectControlCandidate(
 		}
 		signals := c.metaOverrideSignalsForText(active)
 		semanticRefusalSuppression := metaOverrideBoundedRefusalSuppression(active)
-		if c.metaOverrideSignalsHaveActiveControlComposition(signals, semanticRefusalSuppression) {
+		v45Validation := metaOverrideV45ValidatedFamilies(active)
+		if c.metaOverrideSignalsHaveActiveControlComposition(signals, semanticRefusalSuppression, v45Validation) {
 			return active, signals, true
 		}
 		putClassifierSignalBuffer(signals)
 	}
 	return "", nil, false
+}
+
+func (c *Classifier) captureMetaOverrideV45Facts(
+	text string,
+	allowExtendedGeneratedAgentWindow bool,
+	capture *classificationSignalFacts,
+) {
+	if c == nil || capture == nil {
+		return
+	}
+	capture.v45RefusalValidated = false
+	capture.v45CompletionValidated = false
+	if !signalMatched(capture.signals, c.metaOverride.v45RefusalSuppression) &&
+		!signalMatched(capture.signals, c.metaOverride.v45DirectCompletion) {
+		return
+	}
+	validation := metaOverrideV45ValidationForCarrier(
+		text, metaOverrideV45ReferencedCarrier(text),
+	)
+	if !validation.refusal || !validation.completion {
+		// If the full carrier exceeded only the global quote budget, the existing
+		// leading-owner proof can still select a complete quote-masked prefix.  It
+		// is deliberately unavailable to ordinary, quoted, or non-leading text.
+		boundaryLimits := metaOverrideDirectControlWindowBoundaries[:]
+		maxWindowBytes := maxMetaOverrideDirectControlWindowBytes
+		maxDirectiveClauses := maxMetaOverrideDirectiveClauses
+		if metaOverrideGeneratedAgentInstructionsApplication(text) {
+			boundaryLimits = metaOverrideGeneratedAgentWindowBoundaries[:]
+			if allowExtendedGeneratedAgentWindow {
+				maxWindowBytes = maxMetaOverrideGeneratedAgentWindowBytes
+				maxDirectiveClauses = maxMetaOverrideRefusalClauses
+			}
+		}
+		for _, boundaryLimit := range boundaryLimits {
+			active, complete := metaOverrideLeadingDirectControlText(
+				text, boundaryLimit, maxWindowBytes, maxDirectiveClauses,
+			)
+			if !complete {
+				continue
+			}
+			validation.merge(metaOverrideV45ValidatedFamilies(active))
+			break
+		}
+	}
+	capture.v45RefusalValidated = validation.refusal
+	capture.v45CompletionValidated = validation.completion
+}
+
+func metaOverrideV45ReferencedCarrier(text string) bool {
+	if !metaOverrideDirectCompactionApplication(text) {
+		return false
+	}
+	outside, complete := metaOverrideActiveControlTextWithQuoteLimit(
+		text, maxMetaOverrideDirectControlWindowQuotedSpans,
+	)
+	return complete && metaOverrideDirectCompactionApplication(outside)
+}
+
+func metaOverrideV45ValidationForCarrier(
+	text string,
+	referencedCarrier bool,
+) metaOverrideV45Validation {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return metaOverrideV45Validation{}
+	}
+	if referencedCarrier {
+		// The unquoted compaction wrapper has already proved an explicit referent
+		// to this exact quoted payload.  No other path may borrow quoted families.
+		return metaOverrideV45ValidatedFamilies(text)
+	}
+	outside, complete := metaOverrideV45QuoteMaskedText(text)
+	if !complete {
+		return metaOverrideV45Validation{}
+	}
+	return metaOverrideV45ValidatedFamilies(outside)
+}
+
+// metaOverrideV45QuoteMaskedText performs only quote ownership proof.  Unlike
+// metaOverrideActiveControlText it does not build a whole-document clause table;
+// the source-specific validator below scans clauses once with constant state, so
+// a long but fully inspected carrier cannot erase an early validated fact.
+func metaOverrideV45QuoteMaskedText(text string) (string, bool) {
+	spans, complete := metaOverrideQuotedSpansWithLimit(text, maxMetaOverrideQuotedSpans)
+	if !complete {
+		return "", false
+	}
+	if len(spans) == 0 {
+		if span, ok := metaOverrideImplicitSampleSpan(text); ok {
+			spans = append(spans, span)
+		}
+	}
+	return strings.TrimSpace(metaOverrideMaskQuotedSpans(text, spans)), true
+}
+
+// metaOverrideV45ValidatedFamilies recognizes only the reviewed source clauses.
+// It is a single bounded O(n) scan with no clause slice proportional to input
+// length.  Added prose, descriptive framing, and direct negation therefore do
+// not inherit a source-specific family merely because they contain the literal.
+func metaOverrideV45ValidatedFamilies(text string) metaOverrideV45Validation {
+	validation, _ := metaOverrideV45FamiliesAtBoundary(text, true)
+	return validation
+}
+
+// metaOverrideV45FamiliesAtBoundary returns both committed facts and a final
+// clause whose polarity still depends on unseen following text. Complete batch
+// input commits that tail. A non-final physical streaming window must retain it
+// as pending because the next clause may be an explicit postfix cancellation.
+func metaOverrideV45FamiliesAtBoundary(
+	text string,
+	commitTail bool,
+) (metaOverrideV45Validation, metaOverrideV45Validation) {
+	text = strings.ToLower(strings.TrimSpace(text))
+	validation := metaOverrideV45Validation{}
+	previousClause := ""
+	clauseBeforePrevious := ""
+	pendingRefusal := false
+	pendingCompletion := false
+	boundaryBefore := rune(0)
+	start := 0
+	consume := func(raw string, currentBoundary rune) {
+		clause := strings.TrimSpace(raw)
+		if clause == "" {
+			return
+		}
+		if pendingRefusal {
+			if !metaOverrideV45PostfixCancellation(clause) {
+				validation.refusal = true
+			}
+			pendingRefusal = false
+		}
+		if pendingCompletion {
+			if !metaOverrideV45PostfixCancellation(clause) {
+				validation.completion = true
+			}
+			pendingCompletion = false
+		}
+		refusalHead := strings.TrimSpace(strings.TrimSuffix(previousClause, ","))
+		if refusalHead == metaOverrideV45RefusalLiteral &&
+			clause == metaOverrideV45RefusalContinuation &&
+			metaOverrideV45RefusalContinuationBoundary(currentBoundary) &&
+			!metaOverrideV45LeadingCancellation(clauseBeforePrevious) {
+			pendingRefusal = true
+		}
+		if metaOverrideV45CompletionClauseActive(clause) &&
+			!metaOverrideV45LeadingCancellation(previousClause) {
+			pendingCompletion = true
+		}
+		clauseBeforePrevious = previousClause
+		previousClause = clause
+	}
+	for index, r := range text {
+		boundaryRune, width, boundary := metaOverrideDirectiveBoundaryAt(text, index, r)
+		if !boundary {
+			continue
+		}
+		if strings.TrimSpace(text[start:index]) != "" {
+			consume(text[start:index], boundaryBefore)
+			boundaryBefore = boundaryRune
+		} else if boundaryBefore == 0 || !metaOverrideSplitAssociationBoundary(boundaryRune) {
+			boundaryBefore = boundaryRune
+		}
+		start = index + width
+	}
+	consume(text[start:], boundaryBefore)
+	pending := metaOverrideV45Validation{
+		refusal:    pendingRefusal,
+		completion: pendingCompletion,
+	}
+	if commitTail {
+		validation.merge(pending)
+		pending = metaOverrideV45Validation{}
+	}
+	return validation, pending
+}
+
+func metaOverrideV45PhysicalWindowPending(text string) (metaOverrideV45Validation, bool) {
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{text}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return metaOverrideV45Validation{}, false
+	}
+	source, complete := metaOverrideV45QuoteMaskedText(string(views.standardRunes))
+	if !complete {
+		return metaOverrideV45Validation{}, false
+	}
+	_, pending := metaOverrideV45FamiliesAtBoundary(source, false)
+	return pending, true
+}
+
+func metaOverrideV45RefusalContinuationBoundary(boundary rune) bool {
+	switch boundary {
+	case '\n', '\r', compactHardBoundary:
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideV45LeadingCancellation(clause string) bool {
+	clause = strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(clause)))
+	if clause == "" || metaOverrideHasDoubleNegatedInertDirective(clause) ||
+		hasNegationReversalFraming(clause) {
+		return false
+	}
+	return containsAnyLiteral(clause,
+		"do not apply the following", "do not adopt the following",
+		"do not follow the following",
+		"do not execute the following", "do not use the following",
+		"ignore the following", "disregard the following",
+		"prohibits adopting the following", "prohibits using the following",
+		"forbids adopting the following", "forbids using the following",
+		"the following statement is false", "the following rule is false",
+		"the following is not active", "the following does not apply",
+		"for analysis only", "for review only", "as an inert example",
+		"analyze the following unsafe", "review the following unsafe",
+	)
+}
+
+func metaOverrideV45PostfixCancellation(clause string) bool {
+	clause = strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(clause)))
+	if clause == "" || metaOverrideHasDoubleNegatedInertDirective(clause) ||
+		hasNegationReversalFraming(clause) {
+		return false
+	}
+	return containsAnyLiteral(clause,
+		"this statement does not apply", "that statement does not apply",
+		"the preceding statement does not apply", "the preceding rule does not apply",
+		"this assertion is false", "that assertion is false", "the preceding assertion is false",
+		"this requirement is not active", "the preceding requirement is not active",
+		"do not apply it", "do not follow it", "do not execute it", "do not use it",
+		"ignore the preceding", "disregard the preceding", "treat it as inert",
+		"the preceding is for analysis only", "the preceding is for review only",
+	)
+}
+
+func metaOverrideV45CompletionClauseActive(clause string) bool {
+	clause = strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(clause)))
+	return clause == metaOverrideV45CompletionLiteral
 }
 
 func metaOverrideDirectControlAnalyticalConflict(text string) bool {
@@ -940,7 +1246,8 @@ func isDirectSecretDisclosureRequest(text string) bool {
 
 func lastMetaOverrideLiteralIndex(text string) int {
 	last := -1
-	for _, group := range metaOverrideTermGroups() {
+	groups := append(metaOverrideTermGroups(), metaOverrideV45TermGroups()...)
+	for _, group := range groups {
 		for _, values := range [][]string{group.ZH, group.EN} {
 			if index := lastLiteralIndex(text, values); index > last {
 				last = index
@@ -952,7 +1259,8 @@ func lastMetaOverrideLiteralIndex(text string) int {
 
 func firstMetaOverrideLiteralIndex(text string) int {
 	first := -1
-	for _, group := range metaOverrideTermGroups() {
+	groups := append(metaOverrideTermGroups(), metaOverrideV45TermGroups()...)
+	for _, group := range groups {
 		for _, values := range [][]string{group.ZH, group.EN} {
 			for _, value := range values {
 				if index := strings.Index(text, value); index >= 0 && (first < 0 || index < first) {

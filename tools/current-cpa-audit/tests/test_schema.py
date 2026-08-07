@@ -10,6 +10,11 @@ HERE = Path(__file__).resolve().parent
 TOOL = HERE.parent
 sys.path.insert(0, str(TOOL))
 
+try:
+    from jsonschema import Draft202012Validator
+except ImportError:  # pragma: no cover - optional local schema verifier
+    Draft202012Validator = None  # type: ignore[assignment]
+
 
 class SchemaTests(unittest.TestCase):
     def test_machine_schema_is_valid_json_and_every_object_is_closed(self) -> None:
@@ -40,6 +45,37 @@ class SchemaTests(unittest.TestCase):
 
         visit(schema, "$")
         self.assertEqual(open_objects, [])
+
+    def test_transport_tuple_arrays_declare_their_exact_minimum_lengths(self) -> None:
+        schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
+        properties = schema["$defs"]["transport"]["properties"]
+        self.assertEqual(properties["modes"]["minItems"], 3)
+        self.assertEqual(properties["protocols"]["minItems"], 2)
+        self.assertEqual(properties["streams"]["minItems"], 2)
+
+    @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
+    def test_transport_tuple_arrays_reject_truncated_prefixes(self) -> None:
+        schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
+        Draft202012Validator.check_schema(schema)
+        transport_schema = {
+            "$schema": schema["$schema"],
+            "$defs": schema["$defs"],
+            **schema["$defs"]["transport"],
+        }
+        validator = Draft202012Validator(transport_schema)
+        transport = {
+            "modes": ["audit", "balanced", "strict"],
+            "protocols": ["chat", "responses"],
+            "results_path": "transport-results.jsonl",
+            "results_sha256": "a" * 64,
+            "streams": [False, True],
+            "transport_executions": 684,
+        }
+        self.assertTrue(validator.is_valid(transport))
+        for field in ("modes", "protocols", "streams"):
+            truncated = {**transport, field: transport[field][:-1]}
+            with self.subTest(field=field):
+                self.assertFalse(validator.is_valid(truncated))
 
     def test_schema_documents_required_fail_closed_gates(self) -> None:
         raw = (TOOL / "machine-evidence.schema.json").read_text("utf-8")

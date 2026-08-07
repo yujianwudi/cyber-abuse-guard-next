@@ -1,0 +1,631 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyber-abuse-guard.invalid/schemas/current-cpa-host-performance-evidence-v1.json",
+  "title": "CAG current CPA host performance evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "artifacts",
+    "baseline_eligibility",
+    "claim_boundary",
+    "comparisons",
+    "completed_at",
+    "container_security",
+    "gates",
+    "identities",
+    "matrix",
+    "metrics",
+    "plan",
+    "schema",
+    "started_at",
+    "status",
+    "warm_rss_60m"
+  ],
+  "properties": {
+    "schema": {"const": "cag-current-cpa-host-performance-evidence/v1"},
+    "claim_boundary": {"const": "SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION"},
+    "status": {"enum": ["PASS", "FAIL", "DIAGNOSTIC_NOT_BASELINE"]},
+    "started_at": {"$ref": "#/$defs/timestamp"},
+    "completed_at": {"$ref": "#/$defs/timestamp"},
+    "artifacts": {"$ref": "#/$defs/artifact_bindings"},
+    "container_security": {"$ref": "#/$defs/container_security"},
+    "identities": {"$ref": "#/$defs/identities"},
+    "plan": {"$ref": "#/$defs/plan"},
+    "baseline_eligibility": {"$ref": "#/$defs/baseline_eligibility"},
+    "matrix": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/matrix_cell"}
+    },
+    "comparisons": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {"$ref": "#/$defs/comparison_1"},
+        {"$ref": "#/$defs/comparison_4"},
+        {"$ref": "#/$defs/comparison_8"},
+        {"$ref": "#/$defs/comparison_16"}
+      ],
+      "items": false
+    },
+    "warm_rss_60m": {"$ref": "#/$defs/warm_rss_60m"},
+    "metrics": {"$ref": "#/$defs/metrics"},
+    "gates": {"$ref": "#/$defs/gates"}
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+      "minLength": 20,
+      "maxLength": 64
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "sha1": {
+      "type": "string",
+      "pattern": "^(?!0{40}$)[0-9a-f]{40}$"
+    },
+    "image_id": {
+      "type": "string",
+      "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "repo_digest": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._/-]+@sha256:(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "artifact_bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acquire_sha256",
+        "audit_contract_sha256",
+        "bundle_sha256",
+        "candidate_manifest_sha256",
+        "config_sha256",
+        "host_performance_schema_sha256",
+        "host_performance_source_sha256",
+        "measurements_sha256",
+        "run_config_sha256",
+        "run_sha256",
+        "validator_sha256",
+        "workload_manifest_sha256"
+      ],
+      "properties": {
+        "acquire_sha256": {"$ref": "#/$defs/sha256"},
+        "audit_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "bundle_sha256": {"$ref": "#/$defs/sha256"},
+        "candidate_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "config_sha256": {"$ref": "#/$defs/sha256"},
+        "host_performance_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "host_performance_source_sha256": {"$ref": "#/$defs/sha256"},
+        "measurements_sha256": {"$ref": "#/$defs/sha256"},
+        "run_config_sha256": {"$ref": "#/$defs/sha256"},
+        "run_sha256": {"$ref": "#/$defs/sha256"},
+        "validator_sha256": {"$ref": "#/$defs/sha256"},
+        "workload_manifest_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "container_security_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["no_new_privileges", "pids_limit"],
+      "properties": {
+        "no_new_privileges": {"const": true},
+        "pids_limit": {"type": "integer", "minimum": 1}
+      }
+    },
+    "container_security": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpa_only", "cpa_cag", "mock"],
+      "properties": {
+        "cpa_only": {"$ref": "#/$defs/container_security_value"},
+        "cpa_cag": {"$ref": "#/$defs/container_security_value"},
+        "mock": {"$ref": "#/$defs/container_security_value"}
+      }
+    },
+    "cag_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "so_sha256", "tree"],
+      "properties": {
+        "commit": {"$ref": "#/$defs/sha1"},
+        "so_sha256": {"$ref": "#/$defs/sha256"},
+        "tree": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "candidate_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_name",
+        "artifact_sha256",
+        "commit",
+        "dirty",
+        "manifest_sha256",
+        "run_attempt",
+        "run_id",
+        "schema",
+        "status",
+        "tree",
+        "version"
+      ],
+      "properties": {
+        "artifact_name": {"type": "string", "pattern": "^cyber-abuse-guard-v[^/\\\\]+\\.so$", "maxLength": 256},
+        "artifact_sha256": {"$ref": "#/$defs/sha256"},
+        "commit": {"$ref": "#/$defs/sha1"},
+        "dirty": {"const": false},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "run_attempt": {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 20},
+        "run_id": {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 32},
+        "schema": {"const": "cyber-abuse-guard.audit-candidate-manifest.v1"},
+        "status": {"const": "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE"},
+        "tree": {"$ref": "#/$defs/sha1"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][0-9A-Za-z.-]+)?$", "maxLength": 64}
+      }
+    },
+    "cpa_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "binary_path",
+        "binary_sha256",
+        "commit",
+        "image_id",
+        "official_asset_name",
+        "official_asset_sha256",
+        "repo_digest",
+        "tag"
+      ],
+      "properties": {
+        "binary_path": {"type": "string", "pattern": "^/[^\\r\\n]*$"},
+        "binary_sha256": {"$ref": "#/$defs/sha256"},
+        "commit": {"const": "a88197f845c979132c8978ea223c6af05cc81536"},
+        "image_id": {"$ref": "#/$defs/image_id"},
+        "official_asset_name": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^/\\\\]+$"},
+        "official_asset_sha256": {"$ref": "#/$defs/sha256"},
+        "repo_digest": {"$ref": "#/$defs/repo_digest"},
+        "tag": {"const": "v7.2.116"}
+      }
+    },
+    "host_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["architecture", "boot_id_sha256", "logical_cpu_count", "machine_id_sha256", "platform", "runner_uid"],
+      "properties": {
+        "architecture": {"enum": ["amd64", "x86_64"]},
+        "boot_id_sha256": {"$ref": "#/$defs/sha256"},
+        "logical_cpu_count": {"type": "integer", "minimum": 1},
+        "machine_id_sha256": {"$ref": "#/$defs/sha256"},
+        "platform": {"const": "linux/amd64"},
+        "runner_uid": {"type": "integer", "minimum": 1}
+      }
+    },
+    "mock_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "image_id", "repo_digest", "source_sha256"],
+      "properties": {
+        "contract": {"const": "cag-current-cpa-counted-mock/v1"},
+        "image_id": {"$ref": "#/$defs/image_id"},
+        "repo_digest": {"$ref": "#/$defs/repo_digest"},
+        "source_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cag", "candidate", "cpa", "host", "mock"],
+      "properties": {
+        "cag": {"$ref": "#/$defs/cag_identity"},
+        "candidate": {"$ref": "#/$defs/candidate_identity"},
+        "cpa": {"$ref": "#/$defs/cpa_identity"},
+        "host": {"$ref": "#/$defs/host_identity"},
+        "mock": {"$ref": "#/$defs/mock_identity"}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arms",
+        "concurrencies",
+        "measurement_seconds",
+        "min_success_samples_per_cell",
+        "paired_repetitions",
+        "queue_sample_interval_ms",
+        "resource_sample_interval_ms",
+        "seed",
+        "warm_rss_concurrency",
+        "warm_rss_duration_seconds",
+        "warm_rss_sample_interval_seconds",
+        "warmup_seconds"
+      ],
+      "properties": {
+        "arms": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [{"const": "cpa_only"}, {"const": "cpa_cag"}],
+          "items": false
+        },
+        "concurrencies": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "prefixItems": [{"const": 1}, {"const": 4}, {"const": 8}, {"const": 16}],
+          "items": false
+        },
+        "measurement_seconds": {"type": "integer", "minimum": 120},
+        "min_success_samples_per_cell": {"type": "integer", "minimum": 1000},
+        "paired_repetitions": {"type": "integer", "minimum": 3, "maximum": 10},
+        "queue_sample_interval_ms": {"const": 100},
+        "resource_sample_interval_ms": {"const": 1000},
+        "seed": {"type": "integer", "minimum": 0},
+        "warm_rss_concurrency": {"const": 16},
+        "warm_rss_duration_seconds": {"const": 3600},
+        "warm_rss_sample_interval_seconds": {"const": 1},
+        "warmup_seconds": {"type": "integer", "minimum": 30}
+      }
+    },
+    "baseline_eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "background_cpu_p95_percent",
+        "background_cpu_rolling_60s_peak_percent",
+        "eligible",
+        "measurement_host_cpu_p95_percent",
+        "measurement_inactive_cpa_cpu_p95_percent",
+        "measurement_residual_cpu_p95_percent",
+        "measurement_residual_cpu_rolling_60s_peak_percent",
+        "measurement_steal_cpu_p95_percent",
+        "reason_codes",
+        "sample_count",
+        "status",
+        "steal_cpu_p95_percent",
+        "sustained_high_cpu_interference",
+        "sustained_measurement_cpu_interference"
+      ],
+      "properties": {
+        "background_cpu_p95_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "background_cpu_rolling_60s_peak_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "eligible": {"type": "boolean"},
+        "measurement_host_cpu_p95_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "measurement_inactive_cpa_cpu_p95_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "measurement_residual_cpu_p95_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "measurement_residual_cpu_rolling_60s_peak_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "measurement_steal_cpu_p95_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "reason_codes": {
+          "type": "array",
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "sustained_high_cpu_interference",
+              "sustained_measurement_cpu_interference"
+            ]
+          }
+        },
+        "sample_count": {"type": "integer", "minimum": 300},
+        "status": {"enum": ["BASELINE_ELIGIBLE", "DIAGNOSTIC_NOT_BASELINE"]},
+        "steal_cpu_p95_percent": {"type": "number", "minimum": 0, "maximum": 100},
+        "sustained_high_cpu_interference": {"type": "boolean"},
+        "sustained_measurement_cpu_interference": {"type": "boolean"}
+      }
+    },
+    "matrix_cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arm",
+        "audit_queue_capacity",
+        "audit_queue_peak_depth",
+        "audit_queue_peak_ratio",
+        "concurrency",
+        "cpu_p95_percent",
+        "cpu_peak_percent",
+        "latency_p50_ms",
+        "latency_p95_ms",
+        "latency_p99_ms",
+        "mock_auth_delta",
+        "mock_mock_delta",
+        "mock_provider_delta",
+        "phase",
+        "rss_p95_mib",
+        "rss_peak_mib",
+        "sample_count",
+        "total_elapsed_seconds",
+        "throughput_rps",
+        "workload"
+      ],
+      "properties": {
+        "arm": {"enum": ["cpa_only", "cpa_cag"]},
+        "audit_queue_capacity": {"type": ["integer", "null"], "minimum": 1},
+        "audit_queue_peak_depth": {"type": ["integer", "null"], "minimum": 0},
+        "audit_queue_peak_ratio": {"type": ["number", "null"], "minimum": 0},
+        "concurrency": {"enum": [1, 4, 8, 16]},
+        "cpu_p95_percent": {"type": "number", "minimum": 0},
+        "cpu_peak_percent": {"type": "number", "minimum": 0},
+        "latency_p50_ms": {"type": "number", "minimum": 0},
+        "latency_p95_ms": {"type": "number", "minimum": 0},
+        "latency_p99_ms": {"type": "number", "minimum": 0},
+        "mock_auth_delta": {"type": "integer", "minimum": 0},
+        "mock_mock_delta": {"type": "integer", "minimum": 0},
+        "mock_provider_delta": {"type": "integer", "minimum": 0},
+        "phase": {"enum": ["paired_ab", "absolute"]},
+        "rss_p95_mib": {"type": "number", "minimum": 0},
+        "rss_peak_mib": {"type": "number", "minimum": 0},
+        "sample_count": {"type": "integer", "minimum": 1},
+        "total_elapsed_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "throughput_rps": {"type": "number", "minimum": 0},
+        "workload": {
+          "enum": [
+            "fixed_workload",
+            "ordinary",
+            "five_repository_activation",
+            "public"
+          ]
+        }
+      }
+    },
+    "comparison_1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "cpa_cag_p99_ms", "cpa_cag_throughput_rps", "cpa_only_p99_ms", "cpa_only_throughput_rps", "fixed_workload_p99_regression_percent", "host_throughput_vs_cpa_only"],
+      "properties": {
+        "concurrency": {"const": 1},
+        "cpa_cag_p99_ms": {"type": "number", "minimum": 0},
+        "cpa_cag_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_p99_ms": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "fixed_workload_p99_regression_percent": {"type": "number"},
+        "host_throughput_vs_cpa_only": {"type": "number", "minimum": 0}
+      }
+    },
+    "comparison_4": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "cpa_cag_p99_ms", "cpa_cag_throughput_rps", "cpa_only_p99_ms", "cpa_only_throughput_rps", "fixed_workload_p99_regression_percent", "host_throughput_vs_cpa_only"],
+      "properties": {
+        "concurrency": {"const": 4},
+        "cpa_cag_p99_ms": {"type": "number", "minimum": 0},
+        "cpa_cag_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_p99_ms": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "fixed_workload_p99_regression_percent": {"type": "number"},
+        "host_throughput_vs_cpa_only": {"type": "number", "minimum": 0}
+      }
+    },
+    "comparison_8": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "cpa_cag_p99_ms", "cpa_cag_throughput_rps", "cpa_only_p99_ms", "cpa_only_throughput_rps", "fixed_workload_p99_regression_percent", "host_throughput_vs_cpa_only"],
+      "properties": {
+        "concurrency": {"const": 8},
+        "cpa_cag_p99_ms": {"type": "number", "minimum": 0},
+        "cpa_cag_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_p99_ms": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "fixed_workload_p99_regression_percent": {"type": "number"},
+        "host_throughput_vs_cpa_only": {"type": "number", "minimum": 0}
+      }
+    },
+    "comparison_16": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "cpa_cag_p99_ms", "cpa_cag_throughput_rps", "cpa_only_p99_ms", "cpa_only_throughput_rps", "fixed_workload_p99_regression_percent", "host_throughput_vs_cpa_only"],
+      "properties": {
+        "concurrency": {"const": 16},
+        "cpa_cag_p99_ms": {"type": "number", "minimum": 0},
+        "cpa_cag_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_p99_ms": {"type": "number", "exclusiveMinimum": 0},
+        "cpa_only_throughput_rps": {"type": "number", "exclusiveMinimum": 0},
+        "fixed_workload_p99_regression_percent": {"type": "number"},
+        "host_throughput_vs_cpa_only": {"type": "number", "minimum": 0}
+      }
+    },
+    "warm_rss_60m": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "arm",
+        "concurrency",
+        "duration_seconds",
+        "first_window_median_mib",
+        "last_window_median_mib",
+        "mock_auth_delta",
+        "mock_mock_delta",
+        "mock_provider_delta",
+        "peak_rss_mib",
+        "sample_count",
+        "warm_rss_growth_60m_mib"
+      ],
+      "properties": {
+        "arm": {"const": "cpa_cag"},
+        "concurrency": {"const": 16},
+        "duration_seconds": {"const": 3600},
+        "first_window_median_mib": {"type": "number", "minimum": 0},
+        "last_window_median_mib": {"type": "number", "minimum": 0},
+        "mock_auth_delta": {"type": "integer", "minimum": 0},
+        "mock_mock_delta": {"type": "integer", "minimum": 0},
+        "mock_provider_delta": {"type": "integer", "minimum": 0},
+        "peak_rss_mib": {"type": "number", "minimum": 0},
+        "sample_count": {"type": "integer", "minimum": 3601, "maximum": 3602},
+        "warm_rss_growth_60m_mib": {"type": "number"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_queue_peak_ratio",
+        "five_repository_activation_p95_ms",
+        "fixed_workload_p99_regression_percent",
+        "host_throughput_vs_cpa_only",
+        "ordinary_p95_ms",
+        "public_p95_ms",
+        "public_p99_ms",
+        "restart_oom_panic",
+        "unexpected_http_or_infra_errors",
+        "warm_rss_growth_60m_mib"
+      ],
+      "properties": {
+        "audit_queue_peak_ratio": {"type": "number", "minimum": 0},
+        "five_repository_activation_p95_ms": {"type": "number", "minimum": 0},
+        "fixed_workload_p99_regression_percent": {"type": "number"},
+        "host_throughput_vs_cpa_only": {"type": "number", "minimum": 0},
+        "ordinary_p95_ms": {"type": "number", "minimum": 0},
+        "public_p95_ms": {"type": "number", "minimum": 0},
+        "public_p99_ms": {"type": "number", "minimum": 0},
+        "restart_oom_panic": {"type": "integer", "minimum": 0},
+        "unexpected_http_or_infra_errors": {"type": "integer", "minimum": 0},
+        "warm_rss_growth_60m_mib": {"type": "number"}
+      }
+    },
+    "gate_status": {"enum": ["PASS", "FAIL"]},
+    "gate_ordinary_p95_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 10},
+        "observed": {"type": "number", "minimum": 0},
+        "operator": {"const": "<="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_five_repository_activation_p95_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 250},
+        "observed": {"type": "number", "minimum": 0},
+        "operator": {"const": "<="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_public_p95_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 150},
+        "observed": {"type": "number", "minimum": 0},
+        "operator": {"const": "<="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_public_p99_ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 300},
+        "observed": {"type": "number", "minimum": 0},
+        "operator": {"const": "<="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_fixed_workload_p99_regression_percent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 10},
+        "observed": {"type": "number"},
+        "operator": {"const": "<="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_host_throughput_vs_cpa_only": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 0.9},
+        "observed": {"type": "number", "minimum": 0},
+        "operator": {"const": ">="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_audit_queue_peak_ratio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 0.8},
+        "observed": {"type": "number", "minimum": 0},
+        "operator": {"const": "<"},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_warm_rss_growth_60m_mib": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 64},
+        "observed": {"type": "number"},
+        "operator": {"const": "<="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_unexpected_http_or_infra_errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 0},
+        "observed": {"type": "integer", "minimum": 0},
+        "operator": {"const": "="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gate_restart_oom_panic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["limit", "observed", "operator", "status"],
+      "properties": {
+        "limit": {"const": 0},
+        "observed": {"type": "integer", "minimum": 0},
+        "operator": {"const": "="},
+        "status": {"$ref": "#/$defs/gate_status"}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_queue_peak_ratio",
+        "five_repository_activation_p95_ms",
+        "fixed_workload_p99_regression_percent",
+        "host_throughput_vs_cpa_only",
+        "ordinary_p95_ms",
+        "public_p95_ms",
+        "public_p99_ms",
+        "restart_oom_panic",
+        "unexpected_http_or_infra_errors",
+        "warm_rss_growth_60m_mib"
+      ],
+      "properties": {
+        "audit_queue_peak_ratio": {"$ref": "#/$defs/gate_audit_queue_peak_ratio"},
+        "five_repository_activation_p95_ms": {"$ref": "#/$defs/gate_five_repository_activation_p95_ms"},
+        "fixed_workload_p99_regression_percent": {"$ref": "#/$defs/gate_fixed_workload_p99_regression_percent"},
+        "host_throughput_vs_cpa_only": {"$ref": "#/$defs/gate_host_throughput_vs_cpa_only"},
+        "ordinary_p95_ms": {"$ref": "#/$defs/gate_ordinary_p95_ms"},
+        "public_p95_ms": {"$ref": "#/$defs/gate_public_p95_ms"},
+        "public_p99_ms": {"$ref": "#/$defs/gate_public_p99_ms"},
+        "restart_oom_panic": {"$ref": "#/$defs/gate_restart_oom_panic"},
+        "unexpected_http_or_infra_errors": {"$ref": "#/$defs/gate_unexpected_http_or_infra_errors"},
+        "warm_rss_growth_60m_mib": {"$ref": "#/$defs/gate_warm_rss_growth_60m_mib"}
+      }
+    }
+  }
+}

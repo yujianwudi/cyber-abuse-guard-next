@@ -492,3 +492,41 @@ func TestCapacityMeasurementFailureUsesLowCardinalityError(t *testing.T) {
 	}
 	_ = store.Discard()
 }
+
+func TestStatusSynchronizesConfiguredMaxBytesWithCapacityUpdates(t *testing.T) {
+	store := &Store{
+		cfg: Config{
+			Path:     filepath.Join(t.TempDir(), "status-capacity-lock.db"),
+			MaxBytes: 1,
+		},
+		queueSlots: make(chan struct{}, 1),
+	}
+	store.lastErr.Store("")
+
+	store.capacityMu.Lock()
+	result := make(chan Status, 1)
+	go func() {
+		result <- store.Status()
+	}()
+
+	for value := int64(2); value <= 50; value++ {
+		store.cfg.MaxBytes = value
+		select {
+		case <-result:
+			store.capacityMu.Unlock()
+			t.Fatal("Status returned while the configured capacity was being updated")
+		default:
+		}
+		time.Sleep(time.Millisecond)
+	}
+	want := store.cfg.MaxBytes
+	store.capacityMu.Unlock()
+	select {
+	case status := <-result:
+		if status.ConfiguredMaxBytes != want {
+			t.Fatalf("configured max bytes = %d, want %d", status.ConfiguredMaxBytes, want)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Status did not resume after the capacity update completed")
+	}
+}

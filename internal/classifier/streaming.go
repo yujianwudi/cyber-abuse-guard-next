@@ -332,16 +332,23 @@ type streamingFieldSummary struct {
 	quotedFollowUp                  bool
 	quotedFollowUpInert             bool
 	quotedProofComplete             bool
-	hasHistoricalWindowCandidate    bool
-	hasText                         bool
-	profiledReferentPotential       bool
-	profiledReferentProofIncomplete bool
-	profiledOverflowNeutral         bool
-	profiledCarrierResult           Result
-	profiledCarrierProofComplete    bool
-	profiledDefensiveQuoteSignals   inertQuotedSafetyReviewFrameSignals
-	independentActivation           Result
-	hasIndependentActivation        bool
+	profiledActivationOwnerState    profiledCarrierActivationOwnerState
+	profiledActivationOwnerStateSet bool
+	// profiledActivationOwnerCanonical contains only fixed classifier vocabulary,
+	// never request bytes. It preserves every surviving explicit intent family
+	// and direction when the raw field exceeds the 512-byte summary bound. This
+	// separate content-free proof is capped by maxCompactIntentProofBytes.
+	profiledActivationOwnerCanonical string
+	hasHistoricalWindowCandidate     bool
+	hasText                          bool
+	profiledReferentPotential        bool
+	profiledReferentProofIncomplete  bool
+	profiledOverflowNeutral          bool
+	profiledCarrierResult            Result
+	profiledCarrierProofComplete     bool
+	profiledDefensiveQuoteSignals    inertQuotedSafetyReviewFrameSignals
+	independentActivation            Result
+	hasIndependentActivation         bool
 }
 
 type profiledCurrentReferentScopeKey struct {
@@ -366,6 +373,8 @@ type profiledCurrentReferentUnit struct {
 	defensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
 	independentActivation bool
 	outerDefensiveOwned   bool
+	activationOwnerState  profiledCarrierActivationOwnerState
+	activationOwnerSet    bool
 }
 
 type profiledOverflowIntentKind uint8
@@ -416,11 +425,20 @@ type profiledCurrentReferentScope struct {
 // field. ScanSession's untrustedRiskFacts may merge these facts only across
 // consecutive unknown-role, content-provenance fields; role and provenance
 // boundaries clear that session aggregate.
+const (
+	streamingControlPlanePersistent = iota
+	streamingControlPlaneHierarchy
+	streamingControlPlaneRefusal
+	streamingControlPlaneMode
+	streamingControlPlaneV45Completion
+	streamingControlPlaneIngredientCount
+)
+
 type streamingFieldRiskFacts struct {
 	facts                     classificationSignalFacts
 	riskIngredients           []bool
 	riskContributions         int
-	controlPlaneIngredients   [4]bool
+	controlPlaneIngredients   [streamingControlPlaneIngredientCount]bool
 	controlPlaneContributions int
 	windowBlocked             bool
 }
@@ -452,7 +470,9 @@ func (facts *streamingFieldRiskFacts) mergeWindow(c *Classifier, window classifi
 		facts.riskIngredients = make([]bool, c.signalCount)
 	}
 	novelRisk := c.mergeStreamingRiskIngredients(facts.riskIngredients, window.signals)
-	controlPlaneNovel := mergeStreamingControlPlaneIngredients(&facts.controlPlaneIngredients, c, window.signals)
+	controlPlaneNovel := mergeStreamingControlPlaneIngredients(
+		&facts.controlPlaneIngredients, c, window,
+	)
 	for signalID, matched := range window.signals {
 		facts.facts.signals[signalID] = facts.facts.signals[signalID] || matched
 	}
@@ -487,6 +507,8 @@ func (facts *streamingFieldRiskFacts) mergeWindow(c *Classifier, window classifi
 	}
 	newHarmConflict := window.harmConflict && !facts.facts.harmConflict
 	facts.facts.harmConflict = facts.facts.harmConflict || window.harmConflict
+	facts.facts.v45RefusalValidated = facts.facts.v45RefusalValidated || window.v45RefusalValidated
+	facts.facts.v45CompletionValidated = facts.facts.v45CompletionValidated || window.v45CompletionValidated
 	if (novelRisk || newHarmConflict) && facts.riskContributions < 2 {
 		facts.riskContributions++
 	}
@@ -496,19 +518,25 @@ func (facts *streamingFieldRiskFacts) mergeWindow(c *Classifier, window classifi
 	facts.windowBlocked = facts.windowBlocked || resultIsEligibleBlockAction(result)
 }
 
-func mergeStreamingControlPlaneIngredients(destination *[4]bool, c *Classifier, source []bool) bool {
-	if destination == nil || c == nil || len(source) != c.signalCount {
+func mergeStreamingControlPlaneIngredients(
+	destination *[streamingControlPlaneIngredientCount]bool,
+	c *Classifier,
+	source classificationSignalFacts,
+) bool {
+	if destination == nil || c == nil || len(source.signals) != c.signalCount {
 		return false
 	}
-	signalIDs := [4]int{
-		c.metaOverride.persistentInjection,
-		c.metaOverride.hierarchy,
-		c.metaOverride.refusalSuppression,
-		c.metaOverride.unrestrictedMode,
+	matched := [streamingControlPlaneIngredientCount]bool{
+		streamingControlPlanePersistent: signalMatched(source.signals, c.metaOverride.persistentInjection),
+		streamingControlPlaneHierarchy:  signalMatched(source.signals, c.metaOverride.hierarchy),
+		streamingControlPlaneRefusal: signalMatched(source.signals, c.metaOverride.refusalSuppression) ||
+			source.v45RefusalValidated,
+		streamingControlPlaneMode:          signalMatched(source.signals, c.metaOverride.unrestrictedMode),
+		streamingControlPlaneV45Completion: source.v45CompletionValidated,
 	}
 	added := false
-	for index, signalID := range signalIDs {
-		if signalMatched(source, signalID) && !destination[index] {
+	for index, present := range matched {
+		if present && !destination[index] {
 			destination[index] = true
 			added = true
 		}
@@ -564,6 +592,8 @@ func (facts *streamingFieldRiskFacts) merge(other *streamingFieldRiskFacts) {
 	}
 	newHarmConflict := other.facts.harmConflict && !facts.facts.harmConflict
 	facts.facts.harmConflict = facts.facts.harmConflict || other.facts.harmConflict
+	facts.facts.v45RefusalValidated = facts.facts.v45RefusalValidated || other.facts.v45RefusalValidated
+	facts.facts.v45CompletionValidated = facts.facts.v45CompletionValidated || other.facts.v45CompletionValidated
 	controlPlaneNovel := false
 	for index, matched := range other.controlPlaneIngredients {
 		if matched && !facts.controlPlaneIngredients[index] {
@@ -603,8 +633,10 @@ func (facts *streamingFieldRiskFacts) reset() {
 	clear(facts.facts.semanticAgencies)
 	clear(facts.facts.semanticCoreEvidence)
 	clear(facts.riskIngredients)
-	facts.controlPlaneIngredients = [4]bool{}
+	facts.controlPlaneIngredients = [streamingControlPlaneIngredientCount]bool{}
 	facts.facts.harmConflict = false
+	facts.facts.v45RefusalValidated = false
+	facts.facts.v45CompletionValidated = false
 	facts.riskContributions = 0
 	facts.controlPlaneContributions = 0
 	facts.windowBlocked = false
@@ -1089,7 +1121,7 @@ func (s *ScanSession) flushFullWindow(field *streamingField) bool {
 		s.setCoverage(CoverageUnavailable, CoverageReasonNormalizationCarry)
 		return false
 	}
-	if !s.classifyWindow(field, field.buffer[:end]) {
+	if !s.classifyWindow(field, field.buffer[:end], false) {
 		return false
 	}
 	desiredCut := end - s.overlap
@@ -1126,7 +1158,7 @@ func (s *ScanSession) finishField(field *streamingField) {
 		completeQuotedReferent, _ = s.classifier.rawInertQuotedSafetyReviewReferent(string(field.buffer))
 	}
 	if field.newBytes > 0 || (field.totalBytes > 0 && !field.hasBest) {
-		if !s.classifyWindow(field, field.buffer) {
+		if !s.classifyWindow(field, field.buffer, true) {
 			return
 		}
 	}
@@ -1178,9 +1210,10 @@ func (s *ScanSession) finishField(field *streamingField) {
 	if profiledActionable && (ordinaryCandidate || controlPlaneCandidate) {
 		aggregatePotential := s.classifier.streamingRiskPotential(field.riskFacts.facts, s.policy, s.thresholds)
 		persistentControlProofUnavailable := currentTrustedUser && controlPlaneCandidate &&
-			field.riskFacts.controlPlaneIngredients[0] &&
-			(field.riskFacts.controlPlaneIngredients[1] || field.riskFacts.controlPlaneIngredients[2] ||
-				field.riskFacts.controlPlaneIngredients[3])
+			field.riskFacts.controlPlaneIngredients[streamingControlPlanePersistent] &&
+			(field.riskFacts.controlPlaneIngredients[streamingControlPlaneHierarchy] ||
+				field.riskFacts.controlPlaneIngredients[streamingControlPlaneRefusal] ||
+				field.riskFacts.controlPlaneIngredients[streamingControlPlaneMode])
 		ordinaryIncomplete := ordinaryCandidate &&
 			aggregatePotential.ordinaryRequiresIncompleteInspection(s.mode, s.thresholds)
 		// Request-local non-user carriers keep standalone prompt-control wrappers
@@ -1412,6 +1445,25 @@ func (s *ScanSession) finishField(field *streamingField) {
 			if !summary.quotedProofComplete {
 				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
 				return
+			}
+			if profiledField && profiledStreamingCurrentReferentDirective(fieldSegment) {
+				owner := fieldSegment
+				owner.Text = rawField
+				activation, complete := s.classifier.profiledCarrierExplicitActivationOwnerState(owner)
+				if !complete {
+					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					return
+				}
+				canonical, canonicalComplete := profiledStreamingCanonicalActivationOwnerText(
+					s.classifier, owner, activation,
+				)
+				if !canonicalComplete {
+					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					return
+				}
+				summary.profiledActivationOwnerState = activation
+				summary.profiledActivationOwnerStateSet = true
+				summary.profiledActivationOwnerCanonical = canonical
 			}
 		}
 		if completeQuotedReferent != "" || rawField != "" && mayContainQuotedReview {
@@ -3497,11 +3549,16 @@ func profiledCurrentReferentScopeHasPotential(
 		if !unit.directive {
 			continue
 		}
-		if unit.precedingOwnerEvicted {
-			// The anchor's semantic owner has already left the bounded window.
-			// Anchor-first locality prevents it from rebinding to a following
-			// carrier or falling back to history, so it is dead capacity state.
-			continue
+		if unit.precedingOwnerEvicted && unit.complete {
+			// The tombstone terminates only a previous/history binding. Preserve a
+			// separately proved following act; it still owns the retained next unit.
+			activation, complete := profiledStreamingCarrierActivationOwnerState(classifier, unit)
+			if !complete {
+				return true
+			}
+			if activation.following != quotedReviewContinuationActive {
+				continue
+			}
 		}
 		if !unit.complete {
 			hasIncompleteDirective = true
@@ -3540,7 +3597,9 @@ func (s *ScanSession) profiledStreamingCurrentReferentUnit(
 		// FieldID identifies the open field lifecycle but is not required to be
 		// numerically monotonic. Use a session-owned ordinal for physical order,
 		// cancellation precedence, and local pair reconstruction.
-		ref: profiledSegmentRef{index: ordinal, segment: segment},
+		ref:                  profiledSegmentRef{index: ordinal, segment: segment},
+		activationOwnerState: current.profiledActivationOwnerState,
+		activationOwnerSet:   current.profiledActivationOwnerStateSet,
 	}
 	if current.hasIndependentActivation {
 		// The exact active-operation island has already passed quote,
@@ -3591,7 +3650,9 @@ func (s *ScanSession) profiledStreamingCurrentReferentUnit(
 		// The canonical marker is sufficient for cancellation/locality handling
 		// and never stores any user-provided bytes.
 		unit.complete = true
-		if current.quotedFollowUp && !current.quotedFollowUpInert {
+		if current.profiledActivationOwnerCanonical != "" {
+			unit.text = current.profiledActivationOwnerCanonical
+		} else if current.quotedFollowUp && !current.quotedFollowUpInert {
 			unit.text = profiledCanonicalAffirmativeReferent
 		}
 		unit.ref.segment.Text = unit.text
@@ -3660,6 +3721,302 @@ func (s *ScanSession) profiledCurrentReferentCarrierCandidate(
 		return batch.classify([]string{carrier.text}, false)
 	}
 	return candidate, true
+}
+
+// profiledCurrentReferentActivationCandidate is used only after the bounded
+// current-user referent pipeline has selected this carrier as the nearest local
+// referent of an affirmative activation. A complete fenced field normally keeps
+// its quote-masked Result. Source-specific META families intentionally disappear
+// from that inert view, so a neutral candidate may be rebuilt from the closed
+// fence body after its exact active owner is proved. The owner supplies authority
+// only; every META signal family must be complete in the body itself. No other
+// carrier or owner path receives this exception.
+func (s *ScanSession) profiledCurrentReferentActivationCandidate(
+	batch *roleClassificationBatch,
+	carrier profiledCurrentReferentUnit,
+	anchor profiledCurrentReferentUnit,
+) (Result, bool) {
+	candidate, ok := s.profiledCurrentReferentCarrierCandidate(batch, carrier)
+	if !ok {
+		return candidate, ok
+	}
+	if !carrier.complete || !anchor.complete || carrier.outerDefensiveOwned ||
+		!profiledSelfContainedCarrierKind(carrier.ref.segment.ContentKind) ||
+		carrier.text == "" || anchor.text == "" {
+		return candidate, true
+	}
+	activation, proofComplete := profiledStreamingCarrierActivationOwnerState(
+		s.classifier, anchor,
+	)
+	if !proofComplete {
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return Result{}, false
+	}
+	direction := profiledCarrierActivationFollowing
+	if carrier.ref.index < anchor.ref.index {
+		direction = profiledCarrierActivationPrevious
+	}
+	if activation.disposition(direction) != quotedReviewContinuationActive {
+		return candidate, true
+	}
+	carrierSegment := carrier.ref.segment
+	carrierSegment.Text = carrier.text
+	carrierBody, bodyComplete := profiledExplicitActivationCarrierBody(carrierSegment)
+	if !bodyComplete {
+		return candidate, true
+	}
+	carrierSource, sourceComplete := s.classifier.profiledExplicitActivationMetaSource(carrierBody)
+	if !sourceComplete {
+		return candidate, true
+	}
+	reactivatedCandidate, ok := batch.classify([]string{carrierSource}, false)
+	if !ok || !standaloneMetaControlResult(reactivatedCandidate) ||
+		!resultHasEligibleBlockingCandidate(reactivatedCandidate, s.thresholds) {
+		return candidate, ok
+	}
+	return reactivatedCandidate, true
+}
+
+// profiledCurrentReferentAnnotatedActivationCandidate applies the exact
+// eligibility and identity transformations shared by retained and overflow
+// carrier/owner pairs. Keeping one path prevents an evicted ordinary carrier
+// from remaining intentionally inert while the retained equivalent blocks.
+func (s *ScanSession) profiledCurrentReferentAnnotatedActivationCandidate(
+	batch *roleClassificationBatch,
+	carrier profiledCurrentReferentUnit,
+	anchor profiledCurrentReferentUnit,
+) (Result, bool) {
+	candidate, ok := s.profiledCurrentReferentActivationCandidate(batch, carrier, anchor)
+	if !ok {
+		return candidate, false
+	}
+	annotationRefs := []profiledSegmentRef{carrier.ref}
+	if standaloneMetaControlResult(candidate) &&
+		resultHasEligibleBlockingCandidate(candidate, s.thresholds) {
+		annotationRefs = mergeProfiledLocalUnits(carrier.ref, anchor.ref)
+	}
+	candidate = withRoleAwareFindingOrigin(
+		candidate, FindingOriginUserContent, s.mode, s.thresholds,
+	)
+	s.classifier.annotateProfiledResult(
+		&candidate, annotationRefs, false, s.policy, s.mode, s.thresholds,
+	)
+	markResultReferentActivated(&candidate, true, true, s.mode, s.thresholds)
+	bindResultCandidateReferentAnchor(&candidate, anchor.ref, true, s.mode, s.thresholds)
+	return candidate, true
+}
+
+func profiledStreamingOverflowPairDirectionActive(
+	classifier *Classifier,
+	carrier profiledCurrentReferentUnit,
+	anchor profiledCurrentReferentUnit,
+) (bool, bool) {
+	activation, complete := profiledStreamingCarrierActivationOwnerState(classifier, anchor)
+	if !complete {
+		return false, false
+	}
+	if carrier.ref.index < anchor.ref.index {
+		switch activation.previous {
+		case quotedReviewContinuationActive:
+			return true, true
+		case quotedReviewContinuationCancelled, quotedReviewContinuationInert:
+			return false, true
+		}
+		// An explicit following disposition owns only its forward slot. A
+		// direction-free legacy speech act may still use the nearest predecessor.
+		return activation.following == quotedReviewContinuationNone, true
+	}
+	switch activation.following {
+	case quotedReviewContinuationActive:
+		return true, true
+	case quotedReviewContinuationCancelled, quotedReviewContinuationInert:
+		return false, true
+	}
+	// Legacy previous-style referents may fall forward only when no preceding
+	// semantic owner existed. A tombstone proves that such an owner was evicted.
+	return !anchor.precedingOwnerEvicted, true
+}
+
+func profiledStreamingOverflowPairActiveDecisions(
+	classifier *Classifier,
+	carrier profiledCurrentReferentUnit,
+	anchor profiledCurrentReferentUnit,
+	decisions []quotedReviewContinuationDecision,
+) ([]quotedReviewContinuationDecision, bool) {
+	directionActive, complete := profiledStreamingOverflowPairDirectionActive(
+		classifier, carrier, anchor,
+	)
+	if !complete || !directionActive {
+		return nil, complete
+	}
+	activation, complete := profiledStreamingCarrierActivationOwnerState(classifier, anchor)
+	if !complete {
+		return nil, false
+	}
+	targetDirection := profiledCarrierActivationFollowing
+	if carrier.ref.index < anchor.ref.index {
+		targetDirection = profiledCarrierActivationPrevious
+	}
+	exactDirectionalOwner := activation.disposition(targetDirection) == quotedReviewContinuationActive
+	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
+	active := make([]quotedReviewContinuationDecision, 0, len(decisions))
+	for _, decision := range decisions {
+		switch decision.disposition {
+		case quotedReviewContinuationCancelled:
+			if !decision.alternative {
+				cancellations = append(cancellations, decision)
+			}
+		case quotedReviewContinuationActive:
+			cancelled := false
+			for _, cancellation := range cancellations {
+				if quotedReviewContinuationIntentsEquivalent(decision.intent, cancellation.intent) {
+					cancelled = true
+					break
+				}
+			}
+			if cancelled {
+				continue
+			}
+			direction := profiledCarrierActivationIntentDirection(decision.intent)
+			if exactDirectionalOwner {
+				if direction != profiledCarrierActivationNone && direction != targetDirection {
+					continue
+				}
+				if direction == profiledCarrierActivationNone &&
+					targetDirection == profiledCarrierActivationFollowing &&
+					anchor.precedingOwnerEvicted {
+					// The tombstone proves the direction-free act belonged to the
+					// evicted predecessor. Only the explicit following act may own the
+					// retained forward carrier.
+					continue
+				}
+			}
+			active = append(active, decision)
+		}
+	}
+	return active, true
+}
+
+func profiledStreamingCarrierActivationOwnerState(
+	classifier *Classifier,
+	unit profiledCurrentReferentUnit,
+) (profiledCarrierActivationOwnerState, bool) {
+	if unit.activationOwnerSet {
+		return unit.activationOwnerState, true
+	}
+	if classifier == nil {
+		return profiledCarrierActivationOwnerState{}, true
+	}
+	return classifier.profiledCarrierExplicitActivationOwnerState(unit.ref.segment)
+}
+
+// profiledStreamingCanonicalActivationOwnerText reconstructs a bounded marker
+// exclusively from the classifier's static continuation vocabulary. It never
+// copies owner text. Every surviving explicit family/direction remains present
+// so a later cancellation is evaluated exactly as it is in batch mode.
+func profiledStreamingCanonicalActivationOwnerText(
+	classifier *Classifier,
+	owner extract.Segment,
+	activation profiledCarrierActivationOwnerState,
+) (string, bool) {
+	if classifier == nil {
+		return "", true
+	}
+	requiresDirectionalMarker := activation.previous == quotedReviewContinuationActive ||
+		activation.following == quotedReviewContinuationActive
+	allIntents := make([]string, 0,
+		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(classifier.implementationStarts))
+	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
+	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
+	allIntents = append(allIntents, classifier.implementationStarts...)
+	decisions, complete := profiledPartContinuationDecisions(classifier, owner.Text, allIntents)
+	if !complete {
+		return "", false
+	}
+	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
+	type canonicalIntent struct {
+		family    string
+		direction profiledCarrierActivationDirection
+		intent    string
+	}
+	canonical := make([]canonicalIntent, 0, 4)
+	for _, decision := range decisions {
+		direction := profiledCarrierActivationIntentDirection(decision.intent)
+		switch decision.disposition {
+		case quotedReviewContinuationCancelled:
+			if !decision.alternative {
+				cancellations = append(cancellations, decision)
+			}
+		case quotedReviewContinuationActive:
+			if direction != profiledCarrierActivationNone &&
+				activation.disposition(direction) != quotedReviewContinuationActive {
+				continue
+			}
+			cancelled := false
+			for _, cancellation := range cancellations {
+				if quotedReviewContinuationIntentsEquivalent(decision.intent, cancellation.intent) {
+					cancelled = true
+					break
+				}
+			}
+			if cancelled {
+				continue
+			}
+			fixed := ""
+			for _, candidate := range allIntents {
+				if decision.intent == candidate {
+					fixed = candidate
+					break
+				}
+			}
+			if fixed == "" {
+				// Every decision must originate in classifier-owned fixed vocabulary.
+				// Fail closed if that parser invariant ever changes.
+				return "", false
+			}
+			family := quotedReviewContinuationIntentFamily(fixed)
+			duplicate := false
+			for index := range canonical {
+				existing := &canonical[index]
+				// Collapse only a concrete family in the same direction. The
+				// referential family remains its own item: it is a cancellation
+				// wildcard, and merging it with another family would change what a
+				// later family-specific prohibition can revoke.
+				if existing.family == family && existing.direction == direction {
+					if len(fixed) < len(existing.intent) ||
+						len(fixed) == len(existing.intent) && fixed < existing.intent {
+						existing.intent = fixed
+					}
+					duplicate = true
+					break
+				}
+			}
+			if !duplicate {
+				canonical = append(canonical, canonicalIntent{
+					family: family, direction: direction, intent: fixed,
+				})
+			}
+		}
+	}
+	if len(canonical) == 0 {
+		return "", !requiresDirectionalMarker
+	}
+	var marker strings.Builder
+	for index, canonicalIntent := range canonical {
+		intent := canonicalIntent.intent
+		additional := len(intent)
+		if index != 0 {
+			additional += len(". ")
+		}
+		if marker.Len()+additional > maxCompactIntentProofBytes {
+			return "", false
+		}
+		if index != 0 {
+			marker.WriteString(". ")
+		}
+		marker.WriteString(intent)
+	}
+	return marker.String(), true
 }
 
 func finalizeProfiledDefensiveQuoteOverflowRun(state *profiledCurrentReferentScope) {
@@ -3803,29 +4160,49 @@ func (s *ScanSession) recordProfiledOverflowPair(
 	case first.carrier && second.directive:
 		carrier, anchor = first, second
 	case first.directive && second.carrier:
-		if first.precedingOwnerEvicted {
-			return
-		}
 		carrier, anchor = second, first
 	default:
 		return
 	}
 	if !carrier.complete || !anchor.complete {
+		activePotential := anchor.affirmativePotential || anchor.proofIncomplete ||
+			profiledStreamingUnitDirectRulePotential(s.classifier, anchor)
+		if anchor.complete {
+			affirmative, complete := profiledStreamingUnitIntentDecisions(s.classifier, anchor, false)
+			if !complete {
+				state.overflowReferentRisk = true
+				return
+			}
+			activePotential = profiledOverflowDecisionsHaveActiveIntent(affirmative) ||
+				profiledStreamingUnitDirectRulePotential(s.classifier, anchor)
+			if activePotential {
+				directionActive, directionComplete := profiledStreamingOverflowPairDirectionActive(
+					s.classifier, carrier, anchor,
+				)
+				if !directionComplete {
+					state.overflowReferentRisk = true
+					return
+				}
+				if !directionActive {
+					return
+				}
+			}
+		}
+		if anchor.overflowNeutral || !activePotential {
+			return
+		}
 		if carrier.carrierProofComplete || carrier.complete {
-			candidate, ok := s.profiledCurrentReferentCarrierCandidate(
+			candidate, ok := s.profiledCurrentReferentAnnotatedActivationCandidate(
 				&roleClassificationBatch{session: s}, carrier,
+				anchor,
 			)
-			if !ok || !profiledSelfContainedCarrierCandidate(candidate, s.thresholds) {
+			if !ok || !resultHasEligibleMaliciousWinner(candidate, s.thresholds) ||
+				candidate.FindingConfidence == FindingNone ||
+				!candidate.CandidateIdentityBlockingProofComplete() {
 				return
 			}
 		}
-		if anchor.overflowNeutral {
-			return
-		}
-		if anchor.affirmativePotential || anchor.proofIncomplete ||
-			profiledStreamingUnitDirectRulePotential(s.classifier, anchor) {
-			state.overflowReferentRisk = true
-		}
+		state.overflowReferentRisk = true
 		return
 	}
 
@@ -3835,14 +4212,26 @@ func (s *ScanSession) recordProfiledOverflowPair(
 		return
 	}
 	if profiledOverflowDecisionsHaveActiveIntent(affirmative) {
+		pairDecisions, directionComplete := profiledStreamingOverflowPairActiveDecisions(
+			s.classifier, carrier, anchor, affirmative,
+		)
+		if !directionComplete {
+			state.overflowReferentRisk = true
+			return
+		}
+		if len(pairDecisions) == 0 {
+			return
+		}
 		batch := &roleClassificationBatch{session: s}
-		candidate, ok := s.profiledCurrentReferentCarrierCandidate(batch, carrier)
+		candidate, ok := s.profiledCurrentReferentAnnotatedActivationCandidate(batch, carrier, anchor)
 		if !ok {
 			return
 		}
-		if resultHasEligibleMaliciousWinner(candidate, s.thresholds) {
+		if resultHasEligibleMaliciousWinner(candidate, s.thresholds) &&
+			candidate.FindingConfidence != FindingNone &&
+			candidate.CandidateIdentityBlockingProofComplete() {
 			s.addProfiledOverflowActiveIntents(
-				state, profiledOverflowAffirmative, anchor, affirmative,
+				state, profiledOverflowAffirmative, anchor, pairDecisions,
 			)
 		}
 	}
@@ -3917,6 +4306,12 @@ func profiledStreamingUnitIntentDecisions(
 	return profiledPartContinuationDecisions(classifier, unit.text, allIntents)
 }
 
+func profiledOverflowIntentSameIdentity(first, second string) bool {
+	return quotedReviewContinuationIntentFamily(first) == quotedReviewContinuationIntentFamily(second) &&
+		profiledCarrierActivationIntentDirection(first) ==
+			profiledCarrierActivationIntentDirection(second)
+}
+
 func (s *ScanSession) addProfiledOverflowActiveIntents(
 	state *profiledCurrentReferentScope,
 	kind profiledOverflowIntentKind,
@@ -3947,8 +4342,9 @@ func (s *ScanSession) addProfiledOverflowActiveIntents(
 			for index := range state.overflowIntents {
 				existing := &state.overflowIntents[index]
 				if existing.kind == kind &&
-					quotedReviewContinuationIntentsEquivalent(existing.intent, decision.intent) {
-					// One bounded item represents an equivalent intent family. Keep
+					profiledOverflowIntentSameIdentity(existing.intent, decision.intent) {
+					// One bounded item represents one concrete family/direction. Keep
+					// referential wildcard intents separate from concrete families, and
 					// the newest activation order so an older cancellation cannot
 					// revoke a later explicit reactivation.
 					if existing.anchorIndex < anchor.ref.index {
@@ -4112,11 +4508,19 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 		if !unit.directive {
 			continue
 		}
-		if unit.precedingOwnerEvicted {
-			// The lost preceding owner permanently terminates this anchor's
-			// locality. It cannot become incomplete coverage merely because the
-			// bounded state is now being flushed.
-			continue
+		if unit.precedingOwnerEvicted && unit.complete {
+			// The tombstone terminates only a previous/history binding. A complete
+			// explicit following act remains independently actionable against the
+			// retained next unit and must still enter the bounded directive proof.
+			activation, complete := profiledStreamingCarrierActivationOwnerState(s.classifier, unit)
+			if !complete {
+				hasIncompleteDirective = true
+				hasAffirmativePotential = true
+				continue
+			}
+			if activation.following != quotedReviewContinuationActive {
+				continue
+			}
 		}
 		if !unit.complete {
 			hasIncompleteDirective = true
@@ -4144,7 +4548,7 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	if s.coverage.State != CoverageComplete {
 		return
 	}
-	partIndexes, proofComplete := affirmativeProfiledPartIndexes(s.classifier, directiveParts)
+	affirmativeParts, proofComplete := affirmativeProfiledParts(s.classifier, directiveParts)
 	if !proofComplete {
 		if hasLocalCarrier || s.profiledHistoricalHasResult {
 			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
@@ -4155,58 +4559,123 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	if s.coverage.State != CoverageComplete {
 		return
 	}
-	if len(partIndexes) == 0 {
+	if len(affirmativeParts) == 0 {
 		return
 	}
 
 	batch := &roleClassificationBatch{session: s}
-	for _, partIndex := range partIndexes {
+	for _, part := range affirmativeParts {
+		partIndex := part.index
 		if partIndex < 0 || partIndex >= len(directiveUnits) {
 			continue
 		}
 		anchorIndex := directiveUnits[partIndex]
 		anchor := state.units[anchorIndex]
-		neighborIndex, localOwner := selectProfiledStreamingCurrentNeighbor(state, anchorIndex)
-		if localOwner {
-			if neighborIndex < 0 || neighborIndex >= len(state.units) {
-				// An evicted preceding owner still terminates locality; it simply
-				// has no retained text to classify.
-				continue
-			}
-			neighbor := state.units[neighborIndex]
-			if !neighbor.carrier {
-				// The nearest same-scope semantic unit owns this anchor even when
-				// it is benign or not a carrier. Do not jump to history.
-				continue
-			}
-			carrier := neighbor
-			if !carrier.complete {
+		activation := part.activation
+		// A privacy-safe long-owner marker contains only surviving active fixed
+		// intents. Preserve saved cancelled/inert slots as locality barriers, but
+		// never restore a saved active slot that a later field cancellation removed.
+		savedActivation, savedComplete := profiledStreamingCarrierActivationOwnerState(
+			s.classifier, anchor,
+		)
+		if !savedComplete {
+			if hasLocalCarrier || s.profiledHistoricalHasResult {
 				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			}
+			return
+		}
+		if activation.previous == quotedReviewContinuationNone &&
+			(savedActivation.previous == quotedReviewContinuationCancelled ||
+				savedActivation.previous == quotedReviewContinuationInert) {
+			activation.previous = savedActivation.previous
+		}
+		if activation.following == quotedReviewContinuationNone &&
+			(savedActivation.following == quotedReviewContinuationCancelled ||
+				savedActivation.following == quotedReviewContinuationInert) {
+			activation.following = savedActivation.following
+		}
+		neighborIndexes := make([]int, 0, 2)
+		appendNeighbor := func(index int, owner bool) {
+			if !owner {
 				return
 			}
-			candidate, ok := s.profiledCurrentReferentCarrierCandidate(batch, carrier)
-			if !ok {
-				return
+			for _, existing := range neighborIndexes {
+				if existing == index {
+					return
+				}
 			}
-			candidate = withRoleAwareFindingOrigin(
-				candidate, FindingOriginUserContent, s.mode, s.thresholds,
+			neighborIndexes = append(neighborIndexes, index)
+		}
+		previousActive := activation.previous == quotedReviewContinuationActive
+		followingActive := activation.following == quotedReviewContinuationActive
+		localOwner := false
+		switch {
+		case previousActive && followingActive:
+			// Each explicit act owns its own local slot. A tombstoned previous
+			// carrier does not erase the independent retained following act.
+			localOwner = true
+			previousIndex, previousOwner := selectProfiledStreamingCurrentNeighborDirection(
+				state, anchorIndex, profiledCarrierActivationPrevious,
 			)
-			s.classifier.annotateProfiledResult(
-				&candidate, []profiledSegmentRef{carrier.ref}, false, s.policy, s.mode, s.thresholds,
+			appendNeighbor(previousIndex, previousOwner)
+			followingIndex, followingOwner := selectProfiledStreamingCurrentNeighborDirection(
+				state, anchorIndex, profiledCarrierActivationFollowing,
 			)
-			markResultReferentActivated(&candidate, true, true, s.mode, s.thresholds)
-			bindResultCandidateReferentAnchor(&candidate, anchor.ref, true, s.mode, s.thresholds)
-			if !resultHasEligibleMaliciousWinner(candidate, s.thresholds) ||
-				candidate.FindingConfidence == FindingNone {
-				continue
+			appendNeighbor(followingIndex, followingOwner)
+		case followingActive:
+			followingIndex, followingOwner := selectProfiledStreamingCurrentNeighborDirection(
+				state, anchorIndex, profiledCarrierActivationFollowing,
+			)
+			localOwner = followingOwner
+			appendNeighbor(followingIndex, followingOwner)
+		case previousActive && activation.following != quotedReviewContinuationNone:
+			previousIndex, previousOwner := selectProfiledStreamingCurrentNeighborDirection(
+				state, anchorIndex, profiledCarrierActivationPrevious,
+			)
+			// The explicit non-active following disposition remains a barrier even
+			// when the named previous carrier is absent.
+			localOwner = true
+			appendNeighbor(previousIndex, previousOwner)
+		default:
+			neighborIndex, owner := selectProfiledStreamingCurrentNeighbor(state, anchorIndex)
+			localOwner = owner
+			appendNeighbor(neighborIndex, owner)
+		}
+		if localOwner {
+			for _, neighborIndex := range neighborIndexes {
+				if neighborIndex < 0 || neighborIndex >= len(state.units) {
+					// An evicted preceding owner still terminates locality; it simply
+					// has no retained text to classify.
+					continue
+				}
+				neighbor := state.units[neighborIndex]
+				if !neighbor.carrier {
+					// The nearest same-scope semantic unit owns this anchor even when
+					// it is benign or not a carrier. Do not jump to history.
+					continue
+				}
+				carrier := neighbor
+				if !carrier.complete {
+					s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+					return
+				}
+				candidate, ok := s.profiledCurrentReferentAnnotatedActivationCandidate(batch, carrier, anchor)
+				if !ok {
+					return
+				}
+				if !resultHasEligibleMaliciousWinner(candidate, s.thresholds) ||
+					candidate.FindingConfidence == FindingNone ||
+					!candidate.CandidateIdentityBlockingProofComplete() {
+					continue
+				}
+				if candidate.DecisionExplanation != nil {
+					candidate.DecisionExplanation.CurrentTurnEvidence = true
+					candidate.DecisionExplanation.CrossSegmentComposition = true
+					candidate.DecisionExplanation.ReferentLinkUsed = true
+					candidate.DecisionExplanation.EvidenceSegmentCount = 2
+				}
+				s.consider(candidate, FindingOriginUserContent)
 			}
-			if candidate.DecisionExplanation != nil {
-				candidate.DecisionExplanation.CurrentTurnEvidence = true
-				candidate.DecisionExplanation.CrossSegmentComposition = true
-				candidate.DecisionExplanation.ReferentLinkUsed = true
-				candidate.DecisionExplanation.EvidenceSegmentCount = 2
-			}
-			s.consider(candidate, FindingOriginUserContent)
 			continue
 		}
 
@@ -4480,6 +4949,33 @@ func selectProfiledStreamingCurrentNeighbor(
 	}
 }
 
+func selectProfiledStreamingCurrentNeighborDirection(
+	state *profiledCurrentReferentScope,
+	anchorIndex int,
+	direction profiledCarrierActivationDirection,
+) (int, bool) {
+	if state == nil || anchorIndex < 0 || anchorIndex >= len(state.units) {
+		return -1, false
+	}
+	switch direction {
+	case profiledCarrierActivationPrevious:
+		if state.units[anchorIndex].precedingOwnerEvicted {
+			return -1, true
+		}
+		if previous := anchorIndex - 1; previous >= 0 {
+			return previous, true
+		}
+	case profiledCarrierActivationFollowing:
+		if next := anchorIndex + 1; next < len(state.units) {
+			return next, true
+		}
+		// A forward-only speech act owns the local slot even when the named
+		// following unit is absent. It must not fall back to preceding history.
+		return -1, true
+	}
+	return -1, false
+}
+
 // markProfiledOuterDefensiveOwnerFields carries a successful whole-field quote
 // proof into the later carrier/referent passes. Without this marker the exact
 // reconstruction below can recognize a valid defensive wrapper, yet an
@@ -4529,7 +5025,9 @@ func (s *ScanSession) markProfiledOuterDefensiveOwnerFields(
 			var raw strings.Builder
 			raw.Grow(totalBytes)
 			for index := start; index < end; index++ {
-				raw.WriteString(state.units[index].text)
+				segment := state.units[index].ref.segment
+				segment.Text = state.units[index].text
+				raw.WriteString(profiledOuterDefensiveOwnerUnitText(segment))
 			}
 			if s.classifier.isRawInertQuotedSafetyReview(raw.String()) {
 				laterActivation, laterProofComplete :=
@@ -5811,7 +6309,11 @@ type streamingRoleWindowDecision struct {
 	tailSafetyScoped bool
 }
 
-func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
+func (s *ScanSession) classifyWindow(
+	field *streamingField,
+	text []byte,
+	logicalFieldEnd bool,
+) bool {
 	if len(text) == 0 {
 		return true
 	}
@@ -5921,6 +6423,39 @@ func (s *ScanSession) classifyWindow(field *streamingField, text []byte) bool {
 			normalizedDefensiveQuoteSignalsOut,
 			normalizedQuotedFollowUpProofOut,
 		)
+		if compactPrefixBytes != 0 {
+			// compactCarry is matcher state reconstructed from discarded bytes.  It
+			// may preserve raw literal matching, but source-specific clause facts must
+			// be rebound to the exact physical window before they are merged.
+			if signalMatched(field.windowFacts.signals, s.classifier.metaOverride.v45RefusalSuppression) ||
+				signalMatched(field.windowFacts.signals, s.classifier.metaOverride.v45DirectCompletion) {
+				physicalViews := normalizeParts([]string{physicalWindowText})
+				s.classifier.captureMetaOverrideV45Facts(
+					string(physicalViews.standardRunes),
+					profiledTrustedCurrentUserNaturalLanguageDirective(
+						s.profiledStreamingRequestSegment(streamingSegmentForField(field, physicalWindowText)),
+					),
+					&field.windowFacts,
+				)
+				putNormalizedRuneBuffer(physicalViews.standardRunes, physicalViews.storageUsed)
+			} else {
+				field.windowFacts.v45RefusalValidated = false
+				field.windowFacts.v45CompletionValidated = false
+			}
+		}
+		if !logicalFieldEnd && !provisional && standaloneMetaControlResult(result) &&
+			resultHasEligibleMaliciousWinner(result, s.thresholds) &&
+			(field.windowFacts.v45RefusalValidated || field.windowFacts.v45CompletionValidated) {
+			pending, complete := metaOverrideV45PhysicalWindowPending(physicalWindowText)
+			if !complete || pending.refusal || pending.completion {
+				// The source-specific family ended at a physical window boundary.
+				// Until the next clause is visible, a postfix cancellation can still
+				// revoke it. Do not persist the provisional winner; fail closed with
+				// neutral classifier-window coverage instead.
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return false
+			}
+		}
 		recoverySegment := segment
 		recoveryInputExact := compactPrefixBytes == 0
 		var recoveredActivation Result
@@ -7315,6 +7850,8 @@ func (s *ScanSession) clearActive() {
 	clear(s.active.windowFacts.semanticAgencies)
 	clear(s.active.windowFacts.semanticCoreEvidence)
 	s.active.windowFacts.harmConflict = false
+	s.active.windowFacts.v45RefusalValidated = false
+	s.active.windowFacts.v45CompletionValidated = false
 	s.active = nil
 }
 

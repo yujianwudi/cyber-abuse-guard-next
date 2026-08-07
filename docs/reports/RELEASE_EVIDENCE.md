@@ -1,8 +1,8 @@
 # v0.16 release evidence — CPA v7.2.116 active target plus frozen history
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
 Last updated: 2026-08-04 (Asia/Shanghai)

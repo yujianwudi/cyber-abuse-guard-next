@@ -293,6 +293,25 @@ class RunnerPureTests(unittest.TestCase):
                     self.assertTrue((root / ".mock-environment").is_file())
 
     @unittest.skipUnless(os.name == "posix", "Linux private environment-file contract")
+    def test_ephemeral_mock_cleanup_does_not_replace_body_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            root.chmod(0o700)
+            with self.assertRaisesRegex(RuntimeError, "primary body failure") as raised:
+                with run.ephemeral_mock_environment(
+                    root, "control-secret", "upstream-secret"
+                ) as environment_file:
+                    environment_file.unlink()
+                    raise RuntimeError("primary body failure")
+            self.assertTrue(
+                any(
+                    "cleanup also failed" in note
+                    and "disappeared before cleanup" in note
+                    for note in getattr(raised.exception, "__notes__", ())
+                )
+            )
+
+    @unittest.skipUnless(os.name == "posix", "Linux private environment-file contract")
     def test_owned_runtime_cleanup_removes_failed_env_file_and_internal_hardlink(self) -> None:
         with tempfile.TemporaryDirectory() as parent:
             runtime = Path(parent) / "runtime"

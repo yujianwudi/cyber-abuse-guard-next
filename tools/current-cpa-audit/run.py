@@ -169,49 +169,62 @@ def ephemeral_mock_environment(
         expected.st_size,
     )
     expected_sha256 = sha256_bytes(raw)
+    primary_error: BaseException | None = None
     try:
-        if (
-            not stat.S_ISREG(expected.st_mode)
-            or stat.S_ISLNK(expected.st_mode)
-            or expected.st_nlink != 1
-            or stat.S_IMODE(expected.st_mode) != 0o600
-            or expected.st_size != len(raw)
-            or (
-                os.name == "posix"
-                and (expected.st_uid != os.getuid() or expected.st_gid != os.getgid())
-            )
-            or sha256_file(path) != expected_sha256
-        ):
-            fail("ephemeral Mock environment file identity is invalid")
-        yield path
+        try:
+            if (
+                not stat.S_ISREG(expected.st_mode)
+                or stat.S_ISLNK(expected.st_mode)
+                or expected.st_nlink != 1
+                or stat.S_IMODE(expected.st_mode) != 0o600
+                or expected.st_size != len(raw)
+                or (
+                    os.name == "posix"
+                    and (expected.st_uid != os.getuid() or expected.st_gid != os.getgid())
+                )
+                or sha256_file(path) != expected_sha256
+            ):
+                fail("ephemeral Mock environment file identity is invalid")
+            yield path
+        except BaseException as error:
+            primary_error = error
+            raise
     finally:
         try:
-            current = path.lstat()
-        except FileNotFoundError:
-            fail("ephemeral Mock environment file disappeared before cleanup")
-        current_identity = (
-            current.st_dev,
-            current.st_ino,
-            current.st_uid,
-            current.st_gid,
-            stat.S_IMODE(current.st_mode),
-            current.st_nlink,
-            current.st_size,
-        )
-        if (
-            not stat.S_ISREG(current.st_mode)
-            or stat.S_ISLNK(current.st_mode)
-            or current_identity != expected_identity
-            or sha256_file(path) != expected_sha256
-        ):
-            fail("ephemeral Mock environment file changed before cleanup")
-        path.unlink()
-        try:
-            path.lstat()
-        except FileNotFoundError:
-            pass
-        else:
-            fail("ephemeral Mock environment file remained after cleanup")
+            try:
+                current = path.lstat()
+            except FileNotFoundError:
+                fail("ephemeral Mock environment file disappeared before cleanup")
+            current_identity = (
+                current.st_dev,
+                current.st_ino,
+                current.st_uid,
+                current.st_gid,
+                stat.S_IMODE(current.st_mode),
+                current.st_nlink,
+                current.st_size,
+            )
+            if (
+                not stat.S_ISREG(current.st_mode)
+                or stat.S_ISLNK(current.st_mode)
+                or current_identity != expected_identity
+                or sha256_file(path) != expected_sha256
+            ):
+                fail("ephemeral Mock environment file changed before cleanup")
+            path.unlink()
+            try:
+                path.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                fail("ephemeral Mock environment file remained after cleanup")
+        except Exception as cleanup_error:
+            if primary_error is None:
+                raise
+            primary_error.add_note(
+                "ephemeral Mock environment cleanup also failed: "
+                f"{type(cleanup_error).__name__}: {cleanup_error}"
+            )
 
 
 def load_canonical(path: Path, label: str, maximum: int) -> tuple[dict[str, Any], bytes]:

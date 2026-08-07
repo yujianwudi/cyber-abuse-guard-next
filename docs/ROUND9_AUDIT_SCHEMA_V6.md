@@ -1,8 +1,8 @@
 # Round 9 audit schema v6
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
 This document defines the durable audit contract introduced for Round 9. It is

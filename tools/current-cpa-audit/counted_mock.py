@@ -20,6 +20,7 @@ from typing import Any, Sequence
 CONTRACT = "cag-current-cpa-counted-mock/v1"
 MAX_BODY = 16 * 1024 * 1024
 MODEL = "current-cpa-audit-model"
+SOCKET_TIMEOUT_SECONDS = 30.0
 
 
 def compact_json(value: Any) -> bytes:
@@ -75,6 +76,7 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "cag-counted-mock/1"
     sys_version = ""
+    timeout = SOCKET_TIMEOUT_SECONDS
 
     @property
     def audit_server(self) -> AuditServer:

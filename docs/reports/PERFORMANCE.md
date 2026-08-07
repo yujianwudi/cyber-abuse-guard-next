@@ -1,11 +1,11 @@
 # Performance Report — Round 10 source status and historical development evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
-Last updated: 2026-08-01 (Asia/Shanghai)
+Last updated: 2026-08-08 (Asia/Shanghai)
 
 ## Round 10 bounded Linux concurrency runner
 
@@ -97,7 +97,7 @@ The 2026-07-31 local WSL run used Linux amd64, Go 1.26.4, 20 logical CPUs,
 `GOMAXPROCS=20`, commit `08bbc34c18f70f203b15e2a364d857e2c1fed376`, and an
 explicitly recorded **dirty** Round 10 worktree. The command completed in
 17.506 seconds and wrote `/tmp/cag-round10-performance-final.json`. This run
-predates the current policy-v10 identity and is retained without rebinding.
+predates the frozen policy-v10 identity below and is retained without rebinding.
 These values are development self-check evidence only:
 
 | Audit-disabled workload | p95 ms at c=1/4/8/16 | p99 ms at c=1/4/8/16 | throughput req/s at c=1/4/8/16 | Checked worst gate |
@@ -178,7 +178,7 @@ reproducible Linux
 
 | Current and historical evidence | Status |
 |---|---|
-| Current policy-v10 repository-local performance | **LOCAL SOURCE/SURROGATE PASS; HOST AND EXTERNAL EVIDENCE NOT PROVIDED.** `make round6-benchmark` and the Go 1.26.4-only `make round10-performance` gate passed. The latest Round 10 runner recorded ordinary p95 `2.589708 ms`, five-repository surrogate p95 `112.310521 ms`, Codex-all surrogate p95 `49.690010 ms`, public p95/p99 `9.306253/9.847559 ms`, and SQLite c=16 p95 `1.169612 ms`, with zero failures and zero recovered panics. The JSON path is `/tmp/cyber-abuse-guard-round10-performance.json`. No CPA Host/container, fixed-workload p99 baseline, protected 4,424-request run, exact commit, or independent performance result is inferred. |
+| Historical policy-v10 repository-local performance | **HISTORICAL LOCAL SOURCE/SURROGATE PASS; HOST AND EXTERNAL EVIDENCE NOT PROVIDED.** `make round6-benchmark` and the Go 1.26.4-only `make round10-performance` gate passed for the frozen policy-v10 source. The latest Round 10 runner recorded ordinary p95 `2.589708 ms`, five-repository surrogate p95 `112.310521 ms`, Codex-all surrogate p95 `49.690010 ms`, public p95/p99 `9.306253/9.847559 ms`, and SQLite c=16 p95 `1.169612 ms`, with zero failures and zero recovered panics. The JSON path is `/tmp/cyber-abuse-guard-round10-performance.json`. No current policy-v12, CPA Host/container, fixed-workload p99 baseline, protected 4,424-request run, exact commit, or independent performance result is inferred. |
 | Frozen CPA v7.2.104 / `e7a00b02d7e0e4ca837204cfed476b4f371f599facbf546e342362370111ec14` performance acceptance | **HISTORICAL LOCAL LINUX SOURCE-ONLY PASS.** Isolated `make round6-benchmark` passed under WSL Ubuntu 26.04 / Linux amd64 / Go 1.26.4. Classifier P50/P95/P99 were `328.852/412.093/558.688 us`; candidate-rich/near-budget were `35.943486/16.983200 ms/op`; long META was `113.071336 ms/op`; the 1,024-unique-prohibition boundary was `80.469498 ms/op`. The 1 MiB profiled defensive-quote path measured `198.164561-211.251020 ms/op`, below the external `<250 ms/op` target. No current v7.2.113, CPA Host, exact-commit CI, or independent performance PASS is inferred. |
 | Historical `150c25e6...` / `e0cbc975...` engineering and audit result | **ENGINEERING CI PASS / SECURITY AUDIT FAIL BLOCKED.** Exact-HEAD CI run `30353591705` passed, but the Tencent Cloud #2 isolated audit found 287 complete malicious fail-open cases, 36 malicious incomplete 403 cases, and 2 complete benign false positives. No performance acceptance is inferred for either that identity or the current tree. |
 | Historical `1a64639c...` / `f9529ada...` classifier gate | **HISTORICAL SOURCE-ONLY PASS.** The isolated classifier gate passed with P95 `1.5067 ms` against `<2 ms`, and the directive-overflow boundary reached at most `153.72 ms` against `<175 ms`. The complete `make round6-benchmark` recipe remained pending; this PASS is bound only to `1a64639c0bac7a157d8201c1593bd68cf6e7fe11` and `f9529ada85dee7e35267c70da54aa74e266e88b4ed2703924f352c2cb0cb4333`. |

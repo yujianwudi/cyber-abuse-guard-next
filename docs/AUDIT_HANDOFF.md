@@ -1,16 +1,16 @@
 # 审计交接说明 — CPA Cyber Abuse Guard v0.16 Round 12 当前边界与历史证据
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
 ## 2026-08-04 Round 12 / CPA v7.2.116 当前交接边界
 
 The active source/compile target is now CPA
 `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
-with classifier source identity `classifier-policy-v11` /
-`f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`.
+with classifier source identity `classifier-policy-v12` /
+`cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1`.
 Round 12 changes classifier role/streaming semantics as well as the exact CPA
 module pin, so both the policy version and digest changed. No v7.2.113 Round 9
 result or earlier `classifier-policy-v10` result transfers to this source tree.

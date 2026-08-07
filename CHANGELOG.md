@@ -1,11 +1,11 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v11
-current_classifier_policy_sha256: f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
 ```
 
-Source-tree status updated: 2026-08-06 (Asia/Shanghai)
+Source-tree status updated: 2026-08-08 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
 
@@ -22,8 +22,8 @@ Source-tree status updated: 2026-08-06 (Asia/Shanghai)
   Management and RPC request limits are
   fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
   `X-API-Key` values resolve to a deterministic conflict identity. The
-  classifier advances to `classifier-policy-v11` /
-  `f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`:
+  classifier advances to `classifier-policy-v12` /
+  `cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1`:
   an outer defensive owner suppresses only its own inert carrier, and a later
   explicit activation must be in the same scope and a distinct logical field;
   missing paths or exhausted proof budgets remain incomplete rather than
@@ -94,11 +94,26 @@ Source-tree status updated: 2026-08-06 (Asia/Shanghai)
   `1f2e5163a96efb13f23c713b25a91b7b73874b194286e4383b66e24e402ad0a2`;
   its `run.py` source is
   `0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947`.
-  Linux unit verification is 74/74 PASS. The diagnostic harness explicitly
+  Linux audit-tool verification is 137/137 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
-  new working tree still requires its own exact Go 1.26.4 candidate CI and a
+  final local Go 1.26.4 Linux race lane completed in 961.918 seconds without a
+  race, panic, or timeout. The new working tree still requires its own exact candidate CI and a
   fresh second-machine execution; no predecessor result is relabelled as PASS.
+
+- Close all 12 issues from the local CodeRabbit `main...working-tree` review
+  (six major and six minor) before creating the final candidate. Host A/B
+  evidence now binds six executable/schema source hashes plus their bundle,
+  rejects dense warm-lane sample dilution, conserves request outcomes, and
+  aligns Python candidate identity limits with the closed schema. Semantic run
+  configuration requires the clean exact eight-file CI candidate manifest and
+  rejects tracked or untracked source drift. Machine-evidence tuples require
+  their complete mode/protocol/stream lengths; `BoundCorpus` descriptor guards
+  survive optimized Python; counted-Mock sockets have a finite idle timeout;
+  SQLite status reads the configured capacity under the writer lock; and Mock
+  environment cleanup preserves an already-propagating primary exception.
+  Exact-commit CodeRabbit follow-up, GitHub gates, and second-machine evidence
+  remain pending and are not inferred from this local remediation.
 
   The first clean audit-candidate CI exposed a separate reproducibility defect:
   `cyclonedx-gomod` could resolve the main-module pseudo-version in the root

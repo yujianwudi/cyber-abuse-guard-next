@@ -97,9 +97,9 @@ func round6ManagementSizeName(size int) string {
 	switch size {
 	case 270 << 10:
 		return "270KiB"
-	case 1 << 20:
-		return "1MiB"
+	case (1 << 20) - 64:
+		return "1MiB-minus-64B"
 	default:
-		return "other"
+		return "other-size"
 	}
 }
