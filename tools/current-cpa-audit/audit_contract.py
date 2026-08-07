@@ -14,6 +14,7 @@ import math
 import os
 import re
 import stat
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -476,6 +477,7 @@ class BoundCorpus:
     ) -> None:
         self.root = root
         self.label = label
+        self._operation_lock = threading.RLock()
         self.root_fd: int | None = None
         self.corpus_fd: int | None = None
         self.uses_dir_fd = os.name == "posix" and os.open in os.supports_dir_fd
@@ -519,13 +521,14 @@ class BoundCorpus:
             fail(f"{label} filesystem directory identity drifted")
 
     def close(self) -> None:
-        for field in ("corpus_fd", "root_fd"):
-            descriptor = getattr(self, field, None)
-            if descriptor is not None:
-                try:
-                    os.close(descriptor)
-                finally:
-                    setattr(self, field, None)
+        with self._operation_lock:
+            for field in ("corpus_fd", "root_fd"):
+                descriptor = getattr(self, field, None)
+                if descriptor is not None:
+                    try:
+                        os.close(descriptor)
+                    finally:
+                        setattr(self, field, None)
 
     def _root_descriptor(self) -> int:
         descriptor = self.root_fd
@@ -551,6 +554,14 @@ class BoundCorpus:
         return (left.st_dev, left.st_ino) == (right.st_dev, right.st_ino)
 
     def identity_problems(self, *, require_named_corpus: bool = True) -> list[str]:
+        with self._operation_lock:
+            return self._identity_problems_locked(
+                require_named_corpus=require_named_corpus
+            )
+
+    def _identity_problems_locked(
+        self, *, require_named_corpus: bool = True
+    ) -> list[str]:
         problems: list[str] = []
         try:
             root_path_info = self.root.lstat()
@@ -593,6 +604,11 @@ class BoundCorpus:
 
     def write(self, relative: str, raw: bytes, mode: int = 0o600) -> None:
         """Create one corpus file relative to the held acquisition directory."""
+
+        with self._operation_lock:
+            self._write_locked(relative, raw, mode)
+
+    def _write_locked(self, relative: str, raw: bytes, mode: int) -> None:
 
         name = self._basename(relative, f"new corpus file {relative}")
         if not self.uses_dir_fd:
@@ -638,6 +654,10 @@ class BoundCorpus:
             os.close(descriptor)
 
     def read(self, relative: str, label: str, maximum: int) -> bytes:
+        with self._operation_lock:
+            return self._read_locked(relative, label, maximum)
+
+    def _read_locked(self, relative: str, label: str, maximum: int) -> bytes:
         name = self._basename(relative, label)
         if not self.uses_dir_fd:
             return read_regular_bytes(
@@ -679,6 +699,10 @@ class BoundCorpus:
             os.close(descriptor)
 
     def verify_manifest_files(self, manifest: Mapping[str, Any]) -> None:
+        with self._operation_lock:
+            self._verify_manifest_files_locked(manifest)
+
+    def _verify_manifest_files_locked(self, manifest: Mapping[str, Any]) -> None:
         seen: set[str] = set()
         for case in manifest["semantic_cases"]:
             source = case["source"]
@@ -697,6 +721,14 @@ class BoundCorpus:
             fail("bound corpus directory identity drifted: " + ",".join(sorted(problems)))
 
     def unlink_source(
+        self, relative: str, expected_bytes: int, expected_sha256: str
+    ) -> tuple[bool, list[str]]:
+        with self._operation_lock:
+            return self._unlink_source_locked(
+                relative, expected_bytes, expected_sha256
+            )
+
+    def _unlink_source_locked(
         self, relative: str, expected_bytes: int, expected_sha256: str
     ) -> tuple[bool, list[str]]:
         name = self._basename(relative, f"cleanup corpus file {relative}")
@@ -753,6 +785,10 @@ class BoundCorpus:
             os.close(descriptor)
 
     def finish_cleanup(self) -> list[str]:
+        with self._operation_lock:
+            return self._finish_cleanup_locked()
+
+    def _finish_cleanup_locked(self) -> list[str]:
         problems = self.identity_problems()
         corpus_removed = False
         if self.uses_dir_fd:

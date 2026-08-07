@@ -257,6 +257,7 @@ type Classifier struct {
 	implementationRequest  int
 	implementationStarts   []string
 	implementationPatterns compactRuleIntentPatterns
+	continuationIntents    []string
 	outcomeRequest         int
 	metaOverride           compiledMetaOverrideSignals
 	semanticProfiles       []compiledSemanticProfile
@@ -373,6 +374,12 @@ func New(set *rules.RuleSet) (*Classifier, error) {
 	c.implementationRequest = implementationSignal
 	c.implementationStarts = normalizedTermValues(implementationTerms)
 	c.implementationPatterns = compileCompactRuleIntentPatterns(c.implementationStarts)
+	c.continuationIntents = make([]string, 0,
+		len(quotedReviewSpecificContinuationIntents)+
+			len(quotedReviewTerseContinuationIntents)+len(c.implementationStarts))
+	c.continuationIntents = append(c.continuationIntents, quotedReviewSpecificContinuationIntents...)
+	c.continuationIntents = append(c.continuationIntents, quotedReviewTerseContinuationIntents...)
+	c.continuationIntents = append(c.continuationIntents, c.implementationStarts...)
 	outcomeTerms := rules.Terms{
 		ZH: []string{"最终结果", "最终要", "最终应", "最终状态", "最终需要", "目标结果", "目标是", "成功标准", "完成后", "交付后", "结果应", "结果要", "期望结果", "预期结果", "所需终态", "要求的终态"},
 		EN: []string{"desired outcome", "desired result", "required outcome", "required result", "specific outcome", "target outcome", "end result", "end state", "end-state", "required end state", "final outcome", "final state", "success means", "success is", "success criteria", "at completion", "when finished", "by the end", "once complete", "once finished"},

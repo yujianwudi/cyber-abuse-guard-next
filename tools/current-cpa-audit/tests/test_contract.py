@@ -5,8 +5,10 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 HERE = Path(__file__).resolve().parent
 TOOL = HERE.parent
@@ -14,6 +16,7 @@ sys.path.insert(0, str(TOOL))
 sys.path.insert(0, str(HERE))
 
 import acquire
+import audit_contract
 from audit_contract import (
     CPA_COMMIT,
     CPA_TAG,
@@ -37,6 +40,7 @@ class ContractTests(unittest.TestCase):
         bound = object.__new__(BoundCorpus)
         bound.root = root
         bound.label = "closed test corpus"
+        bound._operation_lock = threading.RLock()
         bound.root_fd = None
         bound.corpus_fd = None
         bound.uses_dir_fd = True
@@ -75,10 +79,12 @@ from pathlib import Path
 
 sys.path.insert(0, sys.argv[1])
 from audit_contract import BoundCorpus, ContractError
+import threading
 
 bound = object.__new__(BoundCorpus)
 bound.root = Path.cwd()
 bound.label = "optimized test corpus"
+bound._operation_lock = threading.RLock()
 bound.root_fd = None
 bound.corpus_fd = None
 bound.uses_dir_fd = True
@@ -115,6 +121,74 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
             0,
             msg=f"stdout={completed.stdout!r} stderr={completed.stderr!r}",
         )
+
+    @unittest.skipUnless(audit_contract.os.name == "posix", "dir-fd corpus contract")
+    def test_bound_corpus_serializes_unlink_and_close(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            corpus = root / "corpus"
+            corpus.mkdir()
+            root_info = root.stat()
+            corpus_info = corpus.stat()
+            bound = BoundCorpus(
+                root,
+                {
+                    "acquisition_root": {
+                        "device": root_info.st_dev,
+                        "inode": root_info.st_ino,
+                    },
+                    "corpus_directory": {
+                        "device": corpus_info.st_dev,
+                        "inode": corpus_info.st_ino,
+                    },
+                },
+                "serialized test corpus",
+            )
+            raw = b"private corpus text"
+            bound.write("corpus/sample.txt", raw)
+            entered = threading.Event()
+            release = threading.Event()
+            close_finished = threading.Event()
+            result: list[tuple[bool, list[str]]] = []
+            original_unlink = audit_contract.os.unlink
+
+            def blocking_unlink(*args: object, **kwargs: object) -> None:
+                entered.set()
+                if not release.wait(timeout=5):
+                    raise RuntimeError("timed out waiting to release unlink")
+                original_unlink(*args, **kwargs)
+
+            def unlink_worker() -> None:
+                result.append(
+                    bound.unlink_source(
+                        "corpus/sample.txt",
+                        len(raw),
+                        audit_contract.sha256_bytes(raw),
+                    )
+                )
+
+            def close_worker() -> None:
+                bound.close()
+                close_finished.set()
+
+            try:
+                with mock.patch("audit_contract.os.unlink", side_effect=blocking_unlink):
+                    unlink_thread = threading.Thread(target=unlink_worker)
+                    unlink_thread.start()
+                    self.assertTrue(entered.wait(timeout=5))
+                    close_thread = threading.Thread(target=close_worker)
+                    close_thread.start()
+                    self.assertFalse(close_finished.wait(timeout=0.1))
+                    release.set()
+                    unlink_thread.join(timeout=5)
+                    close_thread.join(timeout=5)
+                self.assertFalse(unlink_thread.is_alive())
+                self.assertFalse(close_thread.is_alive())
+                self.assertTrue(close_finished.is_set())
+                self.assertEqual(result, [(True, [])])
+            finally:
+                release.set()
+                bound.close()
 
     def test_repository_policy_is_exact_and_closed(self) -> None:
         policy = load_json_file(TOOL / "repository-policy.json", "policy")

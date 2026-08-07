@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
+current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
 ```
 
 > **Frozen historical snapshot.** The classifier identity above is the

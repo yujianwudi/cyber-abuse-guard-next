@@ -3976,12 +3976,7 @@ func (c *Classifier) profiledCarrierExplicitActivationOwnerState(
 	if !complete {
 		return state, false
 	}
-	allIntents := make([]string, 0,
-		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(c.implementationStarts))
-	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
-	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
-	allIntents = append(allIntents, c.implementationStarts...)
-	decisions, complete := profiledPartContinuationDecisions(c, owner.Text, allIntents)
+	decisions, complete := profiledPartContinuationDecisions(c, owner.Text, c.continuationIntents)
 	if !complete {
 		return state, false
 	}
@@ -4279,15 +4274,10 @@ func affirmativeProfiledParts(c *Classifier, parts []string) ([]profiledAffirmat
 	if c == nil || len(parts) == 0 {
 		return nil, true
 	}
-	allIntents := make([]string, 0,
-		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(c.implementationStarts))
-	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
-	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
-	allIntents = append(allIntents, c.implementationStarts...)
 	cancellations := make([]quotedReviewContinuationDecision, 0, 4)
 	affirmative := make([]profiledAffirmativePart, 0, len(parts))
 	for index := len(parts) - 1; index >= 0; index-- {
-		decisions, complete := profiledPartContinuationDecisions(c, parts[index], allIntents)
+		decisions, complete := profiledPartContinuationDecisions(c, parts[index], c.continuationIntents)
 		if !complete {
 			if profiledOverflowNeutralDirective(c, parts[index]) {
 				continue
@@ -4533,13 +4523,8 @@ func profiledOverflowNeutralDirective(c *Classifier, text string) bool {
 	if c == nil || strings.TrimSpace(text) == "" {
 		return false
 	}
-	affirmativeIntents := make([]string, 0,
-		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(c.implementationStarts))
-	affirmativeIntents = append(affirmativeIntents, quotedReviewSpecificContinuationIntents...)
-	affirmativeIntents = append(affirmativeIntents, quotedReviewTerseContinuationIntents...)
-	affirmativeIntents = append(affirmativeIntents, c.implementationStarts...)
 	affirmative, complete := profiledPartIntentDecisionsBounded(
-		c, text, c.implementationStarts, affirmativeIntents, true, true,
+		c, text, c.implementationStarts, c.continuationIntents, true, true,
 	)
 	if !complete || profiledEffectiveIntentDecisionExists(affirmative, nil) {
 		return false

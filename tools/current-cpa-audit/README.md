@@ -35,10 +35,13 @@ It does not approve a release or a production deployment.
   directory descriptors from initial creation and writes relative to the held
   corpus FD, so failure cleanup still reaches the original directory after a
   rename. Runner/discard cleanup likewise holds the validated directory
-  descriptors, opens and unlinks files relative to them, rechecks
+  descriptors and serializes every in-process read, write, cleanup, and close.
+  It opens and unlinks files relative to the held directory, rechecks
   size/SHA and inode identity, and requires the post-unlink link count to be
   zero. Directory replacement, same-name decoys, or external hardlinks fail
-  closed and can never produce `retained=false` PASS evidence.
+  closed and can never produce `retained=false` PASS evidence. Linux has no
+  regular-file unlink-by-descriptor operation; an untrusted process sharing the
+  dedicated runner UID remains outside the stated threat model below.
 - NERV has no unambiguous repository licence in this review. Its complete text
   is mode-0600 ephemeral input only. A pending review candidate must be
   discarded with the manifest-validated `--discard-candidate` operation;

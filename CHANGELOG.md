@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1
+current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
 ```
 
 Source-tree status updated: 2026-08-08 (Asia/Shanghai)
@@ -23,7 +23,7 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
   `X-API-Key` values resolve to a deterministic conflict identity. The
   classifier advances to `classifier-policy-v12` /
-  `cbbf29e9dbf63f06b960ea046950a319d80d9de529bd55b1b4fd2f23058ce8f1`:
+  `bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`:
   an outer defensive owner suppresses only its own inert carrier, and a later
   explicit activation must be in the same scope and a distinct logical field;
   missing paths or exhausted proof budgets remain incomplete rather than
@@ -90,14 +90,21 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   records now add only a low-cardinality stage and optional readiness-state
   digest. A dedicated second-machine real-Docker smoke passed both successful
   and expected-failure `--env-file` paths; it retained no file/container and
-  found zero credential-field mentions in the unit journal. The current runner bundle is
-  `1f2e5163a96efb13f23c713b25a91b7b73874b194286e4383b66e24e402ad0a2`;
-  its `run.py` source is
-  `0d762d79d664b05ec1803d1726db2ea97ef89849b4b7051c2838fe7b0feb0947`.
-  Linux audit-tool verification is 137/137 PASS. The diagnostic harness explicitly
+  found zero credential-field mentions in the unit journal. The current runner
+  identity closure is:
+
+  ```text
+  current_audit_runner_bundle_sha256: 67fda3c6ba0debe4f0b97f5967ace8f3c5e09f538aaabbc7ac771ce16ea5591f
+  current_audit_contract_sha256: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
+  current_audit_run_source_sha256: eac0c0a00bb9e16a934458bf27ff89d1cd0b88bc8dbcf7674d8c85fedaefd79b
+  current_audit_machine_schema_sha256: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
+  current_audit_tool_test_count: 144
+  ```
+
+  Linux audit-tool verification is 144/144 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
-  final local Go 1.26.4 Linux race lane completed in 961.918 seconds without a
+  final local Go 1.26.4 Linux race lane completed in 977.8 seconds without a
   race, panic, or timeout. The new working tree still requires its own exact candidate CI and a
   fresh second-machine execution; no predecessor result is relabelled as PASS.
 

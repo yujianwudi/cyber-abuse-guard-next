@@ -3810,31 +3810,31 @@ func profiledStreamingOverflowPairDirectionActive(
 	classifier *Classifier,
 	carrier profiledCurrentReferentUnit,
 	anchor profiledCurrentReferentUnit,
-) (bool, bool) {
+) (bool, profiledCarrierActivationOwnerState, bool) {
 	activation, complete := profiledStreamingCarrierActivationOwnerState(classifier, anchor)
 	if !complete {
-		return false, false
+		return false, activation, false
 	}
 	if carrier.ref.index < anchor.ref.index {
 		switch activation.previous {
 		case quotedReviewContinuationActive:
-			return true, true
+			return true, activation, true
 		case quotedReviewContinuationCancelled, quotedReviewContinuationInert:
-			return false, true
+			return false, activation, true
 		}
 		// An explicit following disposition owns only its forward slot. A
 		// direction-free legacy speech act may still use the nearest predecessor.
-		return activation.following == quotedReviewContinuationNone, true
+		return activation.following == quotedReviewContinuationNone, activation, true
 	}
 	switch activation.following {
 	case quotedReviewContinuationActive:
-		return true, true
+		return true, activation, true
 	case quotedReviewContinuationCancelled, quotedReviewContinuationInert:
-		return false, true
+		return false, activation, true
 	}
 	// Legacy previous-style referents may fall forward only when no preceding
 	// semantic owner existed. A tombstone proves that such an owner was evicted.
-	return !anchor.precedingOwnerEvicted, true
+	return !anchor.precedingOwnerEvicted, activation, true
 }
 
 func profiledStreamingOverflowPairActiveDecisions(
@@ -3843,15 +3843,11 @@ func profiledStreamingOverflowPairActiveDecisions(
 	anchor profiledCurrentReferentUnit,
 	decisions []quotedReviewContinuationDecision,
 ) ([]quotedReviewContinuationDecision, bool) {
-	directionActive, complete := profiledStreamingOverflowPairDirectionActive(
+	directionActive, activation, complete := profiledStreamingOverflowPairDirectionActive(
 		classifier, carrier, anchor,
 	)
 	if !complete || !directionActive {
 		return nil, complete
-	}
-	activation, complete := profiledStreamingCarrierActivationOwnerState(classifier, anchor)
-	if !complete {
-		return nil, false
 	}
 	targetDirection := profiledCarrierActivationFollowing
 	if carrier.ref.index < anchor.ref.index {
@@ -3924,12 +3920,7 @@ func profiledStreamingCanonicalActivationOwnerText(
 	}
 	requiresDirectionalMarker := activation.previous == quotedReviewContinuationActive ||
 		activation.following == quotedReviewContinuationActive
-	allIntents := make([]string, 0,
-		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(classifier.implementationStarts))
-	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
-	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
-	allIntents = append(allIntents, classifier.implementationStarts...)
-	decisions, complete := profiledPartContinuationDecisions(classifier, owner.Text, allIntents)
+	decisions, complete := profiledPartContinuationDecisions(classifier, owner.Text, classifier.continuationIntents)
 	if !complete {
 		return "", false
 	}
@@ -3963,7 +3954,7 @@ func profiledStreamingCanonicalActivationOwnerText(
 				continue
 			}
 			fixed := ""
-			for _, candidate := range allIntents {
+			for _, candidate := range classifier.continuationIntents {
 				if decision.intent == candidate {
 					fixed = candidate
 					break
@@ -4176,7 +4167,7 @@ func (s *ScanSession) recordProfiledOverflowPair(
 			activePotential = profiledOverflowDecisionsHaveActiveIntent(affirmative) ||
 				profiledStreamingUnitDirectRulePotential(s.classifier, anchor)
 			if activePotential {
-				directionActive, directionComplete := profiledStreamingOverflowPairDirectionActive(
+				directionActive, _, directionComplete := profiledStreamingOverflowPairDirectionActive(
 					s.classifier, carrier, anchor,
 				)
 				if !directionComplete {
@@ -4298,12 +4289,7 @@ func profiledStreamingUnitIntentDecisions(
 	if direct {
 		return profiledPartDirectRuleDecisions(classifier, unit.text)
 	}
-	allIntents := make([]string, 0,
-		len(quotedReviewSpecificContinuationIntents)+len(quotedReviewTerseContinuationIntents)+len(classifier.implementationStarts))
-	allIntents = append(allIntents, quotedReviewSpecificContinuationIntents...)
-	allIntents = append(allIntents, quotedReviewTerseContinuationIntents...)
-	allIntents = append(allIntents, classifier.implementationStarts...)
-	return profiledPartContinuationDecisions(classifier, unit.text, allIntents)
+	return profiledPartContinuationDecisions(classifier, unit.text, classifier.continuationIntents)
 }
 
 func profiledOverflowIntentSameIdentity(first, second string) bool {
