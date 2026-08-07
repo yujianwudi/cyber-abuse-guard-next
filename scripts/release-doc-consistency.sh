@@ -114,7 +114,12 @@ import run
 
 
 identities = run.runner_identities()
-suite = unittest.defaultTestLoader.discover(str(tool / "tests"), pattern="test_*.py")
+loader = unittest.TestLoader()
+suite = loader.discover(str(tool / "tests"), pattern="test_*.py")
+if loader.errors:
+    for error in loader.errors:
+        print(error, file=sys.stderr)
+    raise SystemExit("CPA audit unittest discovery reported loader errors")
 for key in (
     "bundle_sha256",
     "audit_contract_sha256",

@@ -14,11 +14,11 @@ stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c
 stale_abbreviated_policy_sha256="dc869ac9...e045"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
-python3_bin="$(command -v python3)"
-[[ -x "$python3_bin" ]] || {
+python3_bin=""
+if ! python3_bin="$(command -v python3)" || [[ ! -x "$python3_bin" ]]; then
   printf 'python3 is required for release document consistency fixtures\n' >&2
   exit 127
-}
+fi
 
 audit_tool_root="$root/tools/current-cpa-audit"
 audit_identity_output=""
@@ -35,7 +35,12 @@ import run
 
 
 identities = run.runner_identities()
-suite = unittest.defaultTestLoader.discover(str(tool / "tests"), pattern="test_*.py")
+loader = unittest.TestLoader()
+suite = loader.discover(str(tool / "tests"), pattern="test_*.py")
+if loader.errors:
+    for error in loader.errors:
+        print(error, file=sys.stderr)
+    raise SystemExit("CPA audit unittest discovery reported loader errors")
 for key in (
     "bundle_sha256",
     "audit_contract_sha256",
@@ -460,6 +465,42 @@ grep -Fq -- \
   exit 1
 }
 printf 'release document consistency rejected failed CPA identity computation as expected\n'
+
+mkdir -p \
+  "$work/python-loader-error-bin" \
+  "$work/python-loader-error-module"
+printf '%s\n' \
+  'class _Suite:' \
+  '    def countTestCases(self):' \
+  '        return 144' \
+  '' \
+  'class TestLoader:' \
+  '    def __init__(self):' \
+  '        self.errors = []' \
+  '' \
+  '    def discover(self, *args, **kwargs):' \
+  '        self.errors.append("synthetic loader error")' \
+  '        return _Suite()' \
+  >"$work/python-loader-error-module/unittest.py"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  "export PYTHONPATH=\"$work/python-loader-error-module\${PYTHONPATH:+:\$PYTHONPATH}\"" \
+  "exec \"$python3_bin\" \"\$@\"" \
+  >"$work/python-loader-error-bin/python3"
+chmod 0700 "$work/python-loader-error-bin/python3"
+if PATH="$work/python-loader-error-bin:$PATH" \
+  run_gate "$work/pass" >"$work/python-loader-error.log" 2>&1; then
+  printf 'release document consistency accepted unittest loader errors\n' >&2
+  exit 1
+fi
+grep -Fq -- \
+  'cannot determine the current CPA audit runner identity closure' \
+  "$work/python-loader-error.log" || {
+  printf 'release document consistency emitted the wrong loader-error diagnostic\n' >&2
+  exit 1
+}
+printf 'release document consistency rejected unittest loader errors as expected\n'
 
 cp -a "$work/pass" "$work/stale-round12-task-book-classifier"
 sed -i "s/$classifier_policy_sha256/$old_classifier_policy_sha256/" \

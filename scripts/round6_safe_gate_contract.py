@@ -1356,11 +1356,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "26221061af7f1bdcf73ce424ded5ff9b25cf2a76808e34fa30c3c1a4b2cd0b9c"
+    "d5b0d5f3971d9e8d5594f6081715b6aebb299309c301f50c633dbb679bfbe122"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "cc6612262d965751fcc00a97a94d8db7349d4298589d1762778acac611bdcdf4",
-    "scripts/release-doc-consistency.sh": "868ddb61ffb7e68bced37ebcc765d1c233d1f81f09d766142c98947d1bebe924",
+    "scripts/release-doc-consistency-test.sh": "2f0de917f76fc7d53fcabab725765e1f7f2e679708a7b273036bb1c0a351b7c0",
+    "scripts/release-doc-consistency.sh": "97946d05f4d2893b58b60b542ac533f7b0c0985201a96efc3b2b7272e6f73309",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
