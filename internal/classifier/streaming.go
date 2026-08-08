@@ -357,24 +357,50 @@ type profiledCurrentReferentScopeKey struct {
 }
 
 type profiledCurrentReferentUnit struct {
-	ref                   profiledSegmentRef
-	text                  string
-	result                Result
-	hasResult             bool
-	complete              bool
-	barrier               bool
-	carrier               bool
-	directive             bool
-	precedingOwnerEvicted bool
-	affirmativePotential  bool
-	proofIncomplete       bool
-	overflowNeutral       bool
-	carrierProofComplete  bool
-	defensiveQuoteSignals inertQuotedSafetyReviewFrameSignals
-	independentActivation bool
-	outerDefensiveOwned   bool
-	activationOwnerState  profiledCarrierActivationOwnerState
-	activationOwnerSet    bool
+	ref                    profiledSegmentRef
+	text                   string
+	result                 Result
+	hasResult              bool
+	complete               bool
+	barrier                bool
+	carrier                bool
+	directive              bool
+	precedingOwnerEvicted  bool
+	affirmativePotential   bool
+	proofIncomplete        bool
+	overflowNeutral        bool
+	carrierProofComplete   bool
+	defensiveQuoteSignals  inertQuotedSafetyReviewFrameSignals
+	independentActivation  bool
+	outerDefensiveOwned    bool
+	outerDefensiveReplayed bool
+	activationOwnerState   profiledCarrierActivationOwnerState
+	activationOwnerSet     bool
+}
+
+// profiledExactUntrustedOuterState retains one physically contiguous logical
+// field only after its exact fixed defensive opener has been observed.  Raw
+// bytes are bounded by the existing quoted-review budget and live no longer
+// than the current request. A category-bearing inner natural-language winner is
+// kept provisional until the terminal structural proof either owns or releases
+// it; this also prevents an audit-mode category leak from a valid owner.
+type profiledExactUntrustedOuterState struct {
+	set              bool
+	owner            extract.Segment
+	rawOriginal      []byte
+	pieces           []profiledExactUntrustedOuterPiece
+	structuralBytes  int
+	proofUnavailable bool
+	runEnded         bool
+	pending          Result
+	hasPending       bool
+	pendingOrigin    FindingOrigin
+	pendingScope     EnforcementScope
+}
+
+type profiledExactUntrustedOuterPiece struct {
+	ref        profiledSegmentRef
+	start, end int
 }
 
 type profiledOverflowIntentKind uint8
@@ -417,6 +443,7 @@ type profiledCurrentReferentScope struct {
 	independentActivationAt                     int
 	independentActivationCancellationIncomplete bool
 	defensiveQuoteOverflowRun                   profiledDefensiveQuoteOverflowRun
+	exactUntrustedOuter                         profiledExactUntrustedOuterState
 	units                                       []profiledCurrentReferentUnit
 }
 
@@ -1183,6 +1210,21 @@ func (s *ScanSession) finishField(field *streamingField) {
 	fieldSegment := streamingSegmentForField(field, "")
 	profiledField := s.profiledRequest && !segmentUsesLegacyUntrustedFallback(fieldSegment)
 	fieldSegment = s.profiledStreamingRequestSegment(fieldSegment)
+	exactUntrustedOuterField := false
+	if profiledField && field.totalBytes > 0 {
+		completeFieldText := field.totalBytes == int64(len(field.buffer))
+		rawFieldText := field.head
+		if completeFieldText {
+			rawFieldText = field.buffer
+		}
+		exactUntrustedOuterField = s.observeProfiledExactUntrustedOuterField(
+			fieldSegment, rawFieldText, completeFieldText,
+			s.profiledGroupPhysicalOrdinal,
+		)
+		if s.coverage.State != CoverageComplete {
+			return
+		}
+	}
 	if profiledField && profiledContentInert(fieldSegment.ContentKind) &&
 		!s.profiledStreamingPendingTool(fieldSegment) && field.totalBytes > 0 {
 		s.quotedOrInertSuppressed = true
@@ -1222,7 +1264,7 @@ func (s *ScanSession) finishField(field *streamingField) {
 		requestLocalNonUser := requestLocalSystem || deferredRequestLocalTool
 		controlPlaneIncomplete := !requestLocalNonUser && controlPlaneCandidate &&
 			(aggregatePotential.meta.controlPlaneBlock || persistentControlProofUnavailable)
-		if ordinaryIncomplete || controlPlaneIncomplete {
+		if (ordinaryIncomplete || controlPlaneIncomplete) && !exactUntrustedOuterField {
 			if deferredRequestLocalTool {
 				s.rememberProfiledPendingToolIncomplete(fieldSegment, int(field.id))
 			} else {
@@ -1293,9 +1335,18 @@ func (s *ScanSession) finishField(field *streamingField) {
 				// carrier. The bounded group path reclassifies complete text and keeps
 				// its candidate provisional until the ownership transaction closes.
 			} else if s.profiledStreamingClassifiable(segment) || unclosedSafetyCommitted {
-				s.considerWithEnforcementScope(
-					candidate, origin, enforcementScopeForProfiledGroup(refs),
+				deferred := s.deferProfiledExactUntrustedOuterCandidate(
+					segment, candidate, origin, enforcementScopeForProfiledGroup(refs),
 				)
+				if deferred {
+					// The exact logical-field owner is not trusted until its terminal
+					// close is proven. Keep this category winner provisional; a
+					// malformed frame releases it and proof loss becomes unavailable.
+				} else {
+					s.considerWithEnforcementScope(
+						candidate, origin, enforcementScopeForProfiledGroup(refs),
+					)
+				}
 			}
 		} else if knownStreamingRoleSegment(segment) {
 			s.consider(field.best, origin)
@@ -2900,9 +2951,14 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			)
 			s.rememberProfiledPendingSystemCarrier(candidate)
 		} else {
-			s.considerWithEnforcementScope(
-				candidate, findingOriginForSegment(segment), s.profiledGroupAuthorityScope,
-			)
+			origin := findingOriginForSegment(segment)
+			if !s.deferProfiledExactUntrustedOuterCandidate(
+				segment, candidate, origin, s.profiledGroupAuthorityScope,
+			) {
+				s.considerWithEnforcementScope(
+					candidate, origin, s.profiledGroupAuthorityScope,
+				)
+			}
 		}
 	}
 }
@@ -3316,6 +3372,9 @@ func (s *ScanSession) findOrAddProfiledCurrentReferentScope(
 		s.profiledCurrentReferents[evictIndex].units = nil
 		clear(s.profiledCurrentReferents[evictIndex].overflowIntents)
 		s.profiledCurrentReferents[evictIndex].overflowIntents = nil
+		clearProfiledExactUntrustedOuter(
+			&s.profiledCurrentReferents[evictIndex].exactUntrustedOuter,
+		)
 		s.profiledCurrentReferents[evictIndex].independentActivation = Result{}
 		s.profiledCurrentReferents[evictIndex].hasIndependentActivation = false
 		s.profiledCurrentReferents[evictIndex].independentActivationAt = 0
@@ -3513,7 +3572,8 @@ func (s *ScanSession) profiledCurrentReferentScopeNeedsRetention(
 	if s == nil || state == nil {
 		return false
 	}
-	if state.hasIndependentActivation || state.independentActivationCancellationIncomplete {
+	if state.exactUntrustedOuter.set || state.hasIndependentActivation ||
+		state.independentActivationCancellationIncomplete {
 		return true
 	}
 	if profiledCurrentReferentScopeHasPotential(s.classifier, state) {
@@ -4021,6 +4081,348 @@ func finalizeProfiledDefensiveQuoteOverflowRun(state *profiledCurrentReferentSco
 	state.defensiveQuoteOverflowRun = profiledDefensiveQuoteOverflowRun{}
 }
 
+func clearProfiledExactUntrustedOuter(state *profiledExactUntrustedOuterState) {
+	if state == nil {
+		return
+	}
+	clear(state.rawOriginal)
+	clear(state.pieces)
+	*state = profiledExactUntrustedOuterState{}
+}
+
+// reclassifyProfiledExactUntrustedOuterField replaces chunk-local provisional
+// winners with the bounded logical-field result after exact structural proof
+// fails. This is not wrapper credit: the ordinary profiled batch path decides
+// whether active text is eligible or an independent cancellation is inert.
+func (s *ScanSession) reclassifyProfiledExactUntrustedOuterField(
+	state *profiledCurrentReferentScope,
+) bool {
+	if s == nil || s.classifier == nil || state == nil ||
+		!state.exactUntrustedOuter.set {
+		return false
+	}
+	outer := &state.exactUntrustedOuter
+	if state.overflow {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return false
+	}
+	if len(outer.pieces) == 0 {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return false
+	}
+	segments := make([]extract.Segment, len(outer.pieces))
+	defer clear(segments)
+	for index := range outer.pieces {
+		piece := outer.pieces[index]
+		if piece.start < 0 || piece.end < piece.start || piece.end > len(outer.rawOriginal) ||
+			!piece.ref.hasPhysicalOrdinal || index > 0 &&
+			!profiledSegmentRefsPhysicallyAdjacent(outer.pieces[index-1].ref, piece.ref) {
+			clearProfiledExactUntrustedOuter(outer)
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return false
+		}
+		segment := piece.ref.segment
+		segment.Text = string(outer.rawOriginal[piece.start:piece.end])
+		if !profiledSegmentsShareLogicalTextField(outer.owner, segment) {
+			clearProfiledExactUntrustedOuter(outer)
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return false
+		}
+		segments[index] = segment
+	}
+	candidate := s.classifier.classifyProfiledSegmentsWithPolicy(
+		segments, s.mode, s.thresholds, s.policy,
+	)
+	if candidate.Truncated || candidate.Coverage.State != "" &&
+		candidate.Coverage.State != CoverageComplete {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return false
+	}
+	outer.pending = Result{}
+	outer.hasPending = false
+	outer.pendingOrigin = FindingOriginNone
+	outer.pendingScope = EnforcementScopeNone
+	if candidate.Category == "" {
+		return true
+	}
+	outer.pending = cloneProfiledReferentResult(candidate)
+	outer.pendingOrigin = candidate.FindingOrigin
+	if outer.pendingOrigin == FindingOriginNone {
+		outer.pendingOrigin = FindingOriginUserContent
+	}
+	outer.pendingScope = EnforcementScopeCurrentUser
+	outer.hasPending = true
+	return true
+}
+
+func (s *ScanSession) finalizeProfiledExactUntrustedOuter(
+	state *profiledCurrentReferentScope,
+) {
+	if s == nil || state == nil || !state.exactUntrustedOuter.set {
+		return
+	}
+	outer := &state.exactUntrustedOuter
+	if outer.proofUnavailable {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return
+	}
+	var reconstructed strings.Builder
+	reconstructed.Grow(outer.structuralBytes)
+	for index := range outer.pieces {
+		piece := outer.pieces[index]
+		if piece.start < 0 || piece.end < piece.start || piece.end > len(outer.rawOriginal) {
+			clearProfiledExactUntrustedOuter(outer)
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return
+		}
+		segment := piece.ref.segment
+		segment.Text = string(outer.rawOriginal[piece.start:piece.end])
+		reconstructed.WriteString(profiledOuterDefensiveOwnerUnitText(segment))
+	}
+	raw := reconstructed.String()
+	if len(raw) != outer.structuralBytes {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return
+	}
+	_, _, _, structureComplete := rawExactUntrustedDefensiveParts(raw)
+	_, valid, complete := s.classifier.rawExactUntrustedDefensiveReferent(raw)
+	if !complete {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return
+	}
+	if !structureComplete {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return
+	}
+	if !valid {
+		if !s.reclassifyProfiledExactUntrustedOuterField(state) {
+			return
+		}
+		for index := range state.units {
+			unit := &state.units[index]
+			if !unit.barrier && profiledSegmentsShareLogicalTextField(
+				outer.owner, unit.ref.segment,
+			) {
+				unit.outerDefensiveReplayed = true
+			}
+		}
+	}
+	if valid && state.overflow {
+		clearProfiledExactUntrustedOuter(outer)
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return
+	}
+	if valid {
+		ownerStart := -1
+		ownerEnd := -1
+		for index := range state.units {
+			unit := state.units[index]
+			if unit.barrier || !profiledSegmentsShareLogicalTextField(
+				outer.owner, unit.ref.segment,
+			) {
+				if ownerStart >= 0 && ownerEnd < 0 {
+					ownerEnd = index
+				}
+				continue
+			}
+			if ownerEnd >= 0 {
+				valid = false
+				break
+			}
+			if ownerStart < 0 {
+				ownerStart = index
+			}
+		}
+		if ownerStart < 0 {
+			clearProfiledExactUntrustedOuter(outer)
+			s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+			return
+		}
+		if ownerEnd < 0 {
+			ownerEnd = len(state.units)
+		}
+		if valid {
+			laterActivation, laterComplete := s.profiledOuterDefensiveOwnerHasLaterActivation(
+				state, state.units[ownerStart], ownerEnd,
+			)
+			if !laterComplete {
+				clearProfiledExactUntrustedOuter(outer)
+				s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+				return
+			}
+			valid = !laterActivation
+		}
+	}
+	if valid {
+		for index := range state.units {
+			unit := &state.units[index]
+			if !unit.barrier && profiledSegmentsShareLogicalTextField(
+				outer.owner, unit.ref.segment,
+			) {
+				unit.outerDefensiveOwned = true
+			}
+		}
+		s.quotedOrInertSuppressed = true
+		clearProfiledExactUntrustedOuter(outer)
+		return
+	}
+	if outer.hasPending {
+		s.considerWithEnforcementScope(
+			outer.pending, outer.pendingOrigin, outer.pendingScope,
+		)
+	}
+	clearProfiledExactUntrustedOuter(outer)
+}
+
+func (s *ScanSession) appendProfiledExactUntrustedOuterText(
+	state *profiledCurrentReferentScope,
+	segment extract.Segment,
+	text []byte,
+	physicalOrdinal int,
+) {
+	if s == nil || state == nil || !state.exactUntrustedOuter.set ||
+		state.exactUntrustedOuter.proofUnavailable {
+		return
+	}
+	segment.Text = string(text)
+	structuralPiece := profiledOuterDefensiveOwnerUnitText(segment)
+	const maxBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	if len(state.exactUntrustedOuter.pieces) >= maxRoleClassifierSegments ||
+		len(text) > maxBytes-len(state.exactUntrustedOuter.rawOriginal) ||
+		len(structuralPiece) > maxBytes-state.exactUntrustedOuter.structuralBytes {
+		clear(state.exactUntrustedOuter.rawOriginal)
+		state.exactUntrustedOuter.rawOriginal = nil
+		clear(state.exactUntrustedOuter.pieces)
+		state.exactUntrustedOuter.pieces = nil
+		state.exactUntrustedOuter.proofUnavailable = true
+		return
+	}
+	segment.Text = ""
+	ref := profiledSegmentRef{
+		index: physicalOrdinal, physicalOrdinal: physicalOrdinal,
+		hasPhysicalOrdinal: true, segment: segment,
+	}
+	if len(state.exactUntrustedOuter.pieces) > 0 &&
+		!profiledSegmentRefsPhysicallyAdjacent(
+			state.exactUntrustedOuter.pieces[len(state.exactUntrustedOuter.pieces)-1].ref, ref,
+		) {
+		clear(state.exactUntrustedOuter.rawOriginal)
+		state.exactUntrustedOuter.rawOriginal = nil
+		clear(state.exactUntrustedOuter.pieces)
+		state.exactUntrustedOuter.pieces = nil
+		state.exactUntrustedOuter.proofUnavailable = true
+		return
+	}
+	start := len(state.exactUntrustedOuter.rawOriginal)
+	state.exactUntrustedOuter.rawOriginal = append(state.exactUntrustedOuter.rawOriginal, text...)
+	state.exactUntrustedOuter.pieces = append(
+		state.exactUntrustedOuter.pieces,
+		profiledExactUntrustedOuterPiece{ref: ref, start: start, end: len(state.exactUntrustedOuter.rawOriginal)},
+	)
+	state.exactUntrustedOuter.structuralBytes += len(structuralPiece)
+}
+
+// observeProfiledExactUntrustedOuterField starts retention only for the exact
+// fixed opener.  A different physical field terminates the optional owner and
+// releases any pending winner before that new field is ranked.
+func (s *ScanSession) observeProfiledExactUntrustedOuterField(
+	segment extract.Segment,
+	text []byte,
+	complete bool,
+	physicalOrdinal int,
+) bool {
+	if s == nil || s.classifier == nil || s.coverage.State != CoverageComplete ||
+		!segment.IsCurrentTurn || segment.ScopeID == 0 || segment.FieldPathHash == "" ||
+		!trustedUserContentSegment(segment) {
+		return false
+	}
+	for index := range s.profiledCurrentReferents {
+		state := &s.profiledCurrentReferents[index]
+		if !state.exactUntrustedOuter.set {
+			continue
+		}
+		if !profiledSegmentsShareLogicalTextField(state.exactUntrustedOuter.owner, segment) {
+			state.exactUntrustedOuter.runEnded = true
+		}
+	}
+
+	key := profiledCurrentReferentScopeKey{turnIndex: segment.TurnIndex, scopeID: segment.ScopeID}
+	state := s.findOrAddProfiledCurrentReferentScope(key)
+	if state == nil || s.coverage.State != CoverageComplete {
+		return false
+	}
+	outer := &state.exactUntrustedOuter
+	if outer.set {
+		if !profiledSegmentsShareLogicalTextField(outer.owner, segment) {
+			return false
+		}
+		if outer.runEnded {
+			outer.proofUnavailable = true
+			clear(outer.rawOriginal)
+			outer.rawOriginal = nil
+			clear(outer.pieces)
+			outer.pieces = nil
+			return true
+		}
+		if !complete {
+			outer.proofUnavailable = true
+			clear(outer.rawOriginal)
+			outer.rawOriginal = nil
+			clear(outer.pieces)
+			outer.pieces = nil
+			return true
+		}
+		s.appendProfiledExactUntrustedOuterText(state, segment, text, physicalOrdinal)
+		return true
+	}
+	if !rawExactUntrustedDefensivePotentialBytes(text) {
+		return false
+	}
+	owner := segment
+	owner.Text = ""
+	outer.set = true
+	outer.owner = owner
+	if !complete {
+		outer.proofUnavailable = true
+		return true
+	}
+	s.appendProfiledExactUntrustedOuterText(state, segment, text, physicalOrdinal)
+	return true
+}
+
+func (s *ScanSession) deferProfiledExactUntrustedOuterCandidate(
+	segment extract.Segment,
+	candidate Result,
+	origin FindingOrigin,
+	scope EnforcementScope,
+) bool {
+	if s == nil || candidate.Category == "" {
+		return false
+	}
+	for index := range s.profiledCurrentReferents {
+		outer := &s.profiledCurrentReferents[index].exactUntrustedOuter
+		if !outer.set || !profiledSegmentsShareLogicalTextField(outer.owner, segment) {
+			continue
+		}
+		if !outer.hasPending || roleResultBetter(candidate, outer.pending) {
+			outer.pending = cloneProfiledReferentResult(candidate)
+			outer.pendingOrigin = origin
+			outer.pendingScope = scope
+		}
+		outer.hasPending = true
+		return true
+	}
+	return false
+}
+
 func (s *ScanSession) recordProfiledDefensiveQuoteOverflowUnit(
 	state *profiledCurrentReferentScope,
 	unit profiledCurrentReferentUnit,
@@ -4434,6 +4836,7 @@ func (s *ScanSession) flushProfiledCurrentReferentScope() {
 			states[index].hasIndependentActivation = false
 			states[index].independentActivationCancellationIncomplete = false
 			states[index].defensiveQuoteOverflowRun = profiledDefensiveQuoteOverflowRun{}
+			clearProfiledExactUntrustedOuter(&states[index].exactUntrustedOuter)
 			clear(states[index].units)
 			states[index].units = nil
 		}
@@ -4451,7 +4854,14 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	if s == nil || state == nil || !state.set {
 		return
 	}
-	if s.coverage.State != CoverageComplete || len(state.units) == 0 {
+	if s.coverage.State != CoverageComplete {
+		return
+	}
+	s.finalizeProfiledExactUntrustedOuter(state)
+	if s.coverage.State != CoverageComplete {
+		return
+	}
+	if len(state.units) == 0 {
 		return
 	}
 	if state.hasIndependentActivation {
@@ -4488,7 +4898,7 @@ func (s *ScanSession) flushProfiledCurrentReferentState(state *profiledCurrentRe
 	hasLocalCarrier := false
 	for index, unit := range state.units {
 		hasLocalCarrier = hasLocalCarrier || unit.carrier
-		if unit.outerDefensiveOwned {
+		if unit.outerDefensiveOwned || unit.outerDefensiveReplayed {
 			continue
 		}
 		if !unit.directive {
@@ -4743,7 +5153,7 @@ func (s *ScanSession) considerProfiledDirectCompactionApplications(
 		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
 			end++
 		}
-		if first.outerDefensiveOwned {
+		if first.outerDefensiveOwned || first.outerDefensiveReplayed {
 			start = end
 			continue
 		}
@@ -4991,6 +5401,10 @@ func (s *ScanSession) markProfiledOuterDefensiveOwnerFields(
 		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
 			end++
 		}
+		if first.outerDefensiveOwned || first.outerDefensiveReplayed {
+			start = end
+			continue
+		}
 
 		hasCarrier := false
 		hasDirective := false
@@ -5015,7 +5429,7 @@ func (s *ScanSession) markProfiledOuterDefensiveOwnerFields(
 				segment.Text = state.units[index].text
 				raw.WriteString(profiledOuterDefensiveOwnerUnitText(segment))
 			}
-			if s.classifier.isRawInertQuotedSafetyReview(raw.String()) {
+			if s.classifier.isRawInertOuterDefensiveReview(raw.String()) {
 				laterActivation, laterProofComplete :=
 					s.profiledOuterDefensiveOwnerHasLaterActivation(state, first, end)
 				if laterActivation {
@@ -5126,6 +5540,10 @@ func (s *ScanSession) considerProfiledDefensiveQuotedAmbiguity(state *profiledCu
 		for end < len(state.units) && profiledUnitsShareLogicalTextField(first, state.units[end]) {
 			end++
 		}
+		if first.outerDefensiveOwned || first.outerDefensiveReplayed {
+			start = end
+			continue
+		}
 
 		hasCarrier := false
 		hasDirective := false
@@ -5159,7 +5577,7 @@ func (s *ScanSession) considerProfiledDefensiveQuotedAmbiguity(state *profiledCu
 			raw.WriteString(state.units[index].text)
 		}
 		text := raw.String()
-		if s.classifier.isRawInertQuotedSafetyReview(text) {
+		if s.classifier.isRawInertOuterDefensiveReview(text) {
 			start = end
 			continue
 		}
@@ -5294,7 +5712,7 @@ func (s *ScanSession) considerProfiledSelfContainedCarriers(state *profiledCurre
 	batch := &roleClassificationBatch{session: s}
 	for index := 0; index < len(state.units); {
 		unit := state.units[index]
-		if unit.outerDefensiveOwned || !unit.carrier || !unit.complete ||
+		if unit.outerDefensiveOwned || unit.outerDefensiveReplayed || !unit.carrier || !unit.complete ||
 			!profiledSelfContainedCarrierKind(unit.ref.segment.ContentKind) {
 			index++
 			continue
@@ -5538,6 +5956,7 @@ func (s *ScanSession) clearProfiledCurrentReferentScope() {
 		state.hasIndependentActivation = false
 		state.independentActivationAt = 0
 		state.independentActivationCancellationIncomplete = false
+		clearProfiledExactUntrustedOuter(&state.exactUntrustedOuter)
 		clear(state.overflowIntents)
 		state.overflowIntents = nil
 		clear(state.units)

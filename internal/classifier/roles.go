@@ -509,7 +509,7 @@ func profiledGroupAllowsExtendedGeneratedAgentWindow(group profiledSegmentGroup)
 func (c *Classifier) profiledOuterDefensiveOwnerSegmentIndexes(
 	segments []extract.Segment,
 ) (map[int]struct{}, bool) {
-	if c == nil || len(segments) < 2 {
+	if c == nil || len(segments) == 0 {
 		return nil, false
 	}
 	const maxReconstructedBytes = maxInertQuotedReviewReferentBytes +
@@ -548,13 +548,23 @@ func (c *Classifier) profiledOuterDefensiveOwnerSegmentIndexes(
 			}
 			totalBytes += len(segment.Text)
 		}
-		if complete && hasCarrier && hasDirective && totalBytes != 0 {
+		if !complete && rawExactUntrustedDefensivePotential(first.Text) {
+			proofUnavailable = true
+		}
+		if complete && hasDirective && totalBytes != 0 {
 			var raw strings.Builder
 			raw.Grow(totalBytes)
 			for index := start; index < end; index++ {
 				raw.WriteString(profiledOuterDefensiveOwnerUnitText(segments[index]))
 			}
-			if c.isRawInertQuotedSafetyReview(raw.String()) {
+			reconstructed := raw.String()
+			_, exactValid, exactComplete := c.rawExactUntrustedDefensiveReferent(reconstructed)
+			if rawExactUntrustedDefensivePotential(reconstructed) && !exactComplete {
+				proofUnavailable = true
+			}
+			recognized := exactComplete && exactValid ||
+				hasCarrier && c.isRawInertQuotedSafetyReview(reconstructed)
+			if recognized {
 				laterActivation, laterProofComplete :=
 					c.profiledOuterDefensiveOwnerHasLaterActivation(segments, first, end)
 				if laterActivation {
@@ -573,6 +583,128 @@ func (c *Classifier) profiledOuterDefensiveOwnerSegmentIndexes(
 		start = end
 	}
 	return omitted, proofUnavailable
+}
+
+// profiledExactUntrustedActiveTailCandidate handles the one exact structural
+// frame whose post-close text is an active referential instruction. The suffix
+// invalidates defensive ownership; classifying the already-bounded referent
+// directly avoids making unrelated Markdown delimiters consume generic quote
+// proof budget. Malformed tags never enter this path.
+func (c *Classifier) profiledExactUntrustedActiveTailCandidate(
+	segments []extract.Segment,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (Result, map[int]struct{}, bool) {
+	if c == nil || len(segments) == 0 {
+		return Result{}, nil, c != nil
+	}
+	var best Result
+	hasBest := false
+	const maxBytes = maxInertQuotedReviewReferentBytes +
+		maxInertQuotedReviewFrameBytes + maxInertQuotedReviewDelimiterBytes
+	var handled map[int]struct{}
+	for start := 0; start < len(segments); {
+		first := segments[start]
+		end := start + 1
+		for end < len(segments) && profiledSegmentsShareLogicalTextField(first, segments[end]) &&
+			profiledSegmentRefsPhysicallyAdjacent(
+				profiledSegmentRef{index: end - 1, segment: segments[end-1]},
+				profiledSegmentRef{index: end, segment: segments[end]},
+			) {
+			end++
+		}
+		if strings.TrimSpace(first.Text) == "" || first.FieldPathHash == "" ||
+			!first.IsCurrentTurn || !trustedUserContentSegment(first) ||
+			!rawExactUntrustedDefensivePotential(first.Text) {
+			start = end
+			continue
+		}
+
+		totalBytes := 0
+		var raw strings.Builder
+		for index := start; index < end; index++ {
+			piece := profiledOuterDefensiveOwnerUnitText(segments[index])
+			if len(piece) > maxBytes-totalBytes {
+				return Result{}, nil, false
+			}
+			totalBytes += len(piece)
+			raw.WriteString(piece)
+		}
+		referent, suffix, valid, complete := rawExactUntrustedDefensiveParts(raw.String())
+		if !complete {
+			return Result{}, nil, false
+		}
+		if !valid || suffix == "" {
+			start = end
+			continue
+		}
+		disposition, dispositionComplete := c.profiledCarrierLocalOwnerDisposition(extract.Segment{
+			ContentKind: extract.ContentKindNaturalLanguageDirective,
+			Text:        suffix,
+		})
+		if !dispositionComplete {
+			return Result{}, nil, false
+		}
+		if disposition != quotedReviewContinuationActive {
+			start = end
+			continue
+		}
+
+		candidate := c.classifyWithPolicy(
+			[]string{referent}, mode, thresholds, policy, false,
+		)
+		if resultIsNeutralClassifierIncomplete(candidate) || candidate.Truncated {
+			return Result{}, nil, false
+		}
+		candidate = withRoleAwareFindingOrigin(
+			candidate, FindingOriginUserContent, mode, thresholds,
+		)
+		source := first
+		source.ContentKind = extract.ContentKindNaturalLanguageDirective
+		source.Text = referent
+		ref := profiledSegmentRef{index: start, segment: source}
+		c.annotateProfiledResult(&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds)
+		markResultReferentActivated(&candidate, true, true, mode, thresholds)
+
+		// The active tail may contain an independent abuse request in addition to
+		// the referential activation. Rank that tail as its own trusted-user act
+		// before excluding the physical field from the generic paths; otherwise a
+		// benign referent could launder an unrelated malicious suffix.
+		suffixSource := first
+		suffixSource.ContentKind = extract.ContentKindNaturalLanguageDirective
+		suffixSource.Text = suffix
+		suffixCandidate := c.classifyProfiledSegmentsWithPolicy(
+			[]extract.Segment{suffixSource}, mode, thresholds, policy,
+		)
+		if suffixCandidate.Truncated || suffixCandidate.Coverage.State != "" &&
+			suffixCandidate.Coverage.State != CoverageComplete {
+			return Result{}, nil, false
+		}
+		if roleResultBetter(suffixCandidate, candidate) {
+			candidate = suffixCandidate
+		}
+		if !resultHasEligibleMaliciousWinner(candidate, thresholds) ||
+			candidate.FindingConfidence == FindingNone ||
+			!candidate.CandidateIdentityBlockingProofComplete() {
+			// No authoritative special-path winner exists. Leave the field to the
+			// ordinary profiled classifier instead of hiding any suffix evidence.
+			start = end
+			continue
+		}
+		if !hasBest || roleResultBetter(candidate, best) {
+			best = candidate
+			hasBest = true
+		}
+		if handled == nil {
+			handled = make(map[int]struct{}, end-start)
+		}
+		for index := start; index < end; index++ {
+			handled[index] = struct{}{}
+		}
+		start = end
+	}
+	return best, handled, true
 }
 
 // profiledOuterDefensiveOwnerHasLaterActivation prevents optional whole-field
@@ -746,12 +878,29 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	quotedOrInertSuppressed := false
 	outerDefensiveOmissions, carrierProofUnavailable :=
 		c.profiledOuterDefensiveOwnerSegmentIndexes(segments)
+	activeExactCandidate, activeExactHandled, activeExactComplete :=
+		c.profiledExactUntrustedActiveTailCandidate(segments, mode, thresholds, policy)
+	if !activeExactComplete {
+		carrierProofUnavailable = true
+	} else if len(activeExactHandled) != 0 && roleResultBetter(activeExactCandidate, best) {
+		best = activeExactCandidate
+	}
+	outerDefensiveExcluded := outerDefensiveOmissions
+	if len(activeExactHandled) != 0 {
+		outerDefensiveExcluded = make(map[int]struct{}, len(outerDefensiveOmissions)+len(activeExactHandled))
+		for index := range outerDefensiveOmissions {
+			outerDefensiveExcluded[index] = struct{}{}
+		}
+		for index := range activeExactHandled {
+			outerDefensiveExcluded[index] = struct{}{}
+		}
+	}
 	var pendingClassifierIncomplete profiledIncompleteCorrelation
 	if len(outerDefensiveOmissions) != 0 {
 		quotedOrInertSuppressed = true
 	}
 	for _, group := range buildProfiledCurrentMetaControlGroups(segments) {
-		group = profiledGroupWithoutCarrierIndexes(group, outerDefensiveOmissions, nil)
+		group = profiledGroupWithoutCarrierIndexes(group, outerDefensiveExcluded, nil)
 		for _, run := range profiledDirectCompactionRuns(group) {
 			if !run.hasCarrier || run.totalBytes == 0 {
 				pendingClassifierIncomplete.rememberUncorrelated(CoverageReasonClassifierWindow)
@@ -788,7 +937,7 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			}
 		}
 		activeGroup := profiledGroupWithoutCarrierIndexes(
-			group, outerDefensiveOmissions, nil,
+			group, outerDefensiveExcluded, nil,
 		)
 		activeGroup = profiledGroupWithoutDirectCompactionApplications(activeGroup)
 		if !activeGroup.activeDirective || len(activeGroup.parts) < 2 {
@@ -851,6 +1000,10 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 		}
 		if _, omitted := outerDefensiveOmissions[index]; omitted {
 			quotedOrInertSuppressed = true
+			index++
+			continue
+		}
+		if _, handled := activeExactHandled[index]; handled {
 			index++
 			continue
 		}
@@ -930,7 +1083,7 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 	groups := buildProfiledSegmentGroups(segments, false)
 	for index := range groups {
 		groups[index] = profiledGroupWithoutCarrierIndexes(
-			groups[index], outerDefensiveOmissions, nil,
+			groups[index], outerDefensiveExcluded, nil,
 		)
 	}
 	carrierOmissions, unresolvedCarriers, carrierSuppressed, carrierOwnershipComplete :=

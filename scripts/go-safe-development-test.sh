@@ -682,12 +682,22 @@ expected_round10_classifier_entries=(
 expected_round12_classifier_entries=(
   TestRound12CarrierOmissionRecomputesGroupClassificationFlags
   TestRound12CrossScopeBareReferentDoesNotReactivateOuterDefensiveOwner
+  TestRound12ExactUntrustedCrossWindowOpenerIsUnavailable
+  TestRound12ExactUntrustedManyFenceShapeStreaming
+  TestRound12ExactUntrustedMalformedWrappersRestorePendingWinner
+  TestRound12ExactUntrustedOuterDefensiveProtocolMatrix
+  TestRound12ExactUntrustedProofBudgetOverflowIsUnavailable
+  TestRound12ExactUntrustedPureNaturalFieldParity
+  TestRound12ExactUntrustedRawStructuralProofRejectsMalformedTags
   TestRound12MDXV45ActivatedProtocolMatrix
   TestRound12MDXV45FalsePositiveBoundaries
   TestRound12MDXV45FamiliesCannotCrossScope
   TestRound12MDXV45LeadingFamiliesStaySourceSpecific
   TestRound12MDXV45LeadingOverflowProof
   TestRound12MDXV45OuterDefensiveOwnerStaysNonBlocking
+  TestRound12NERVExactUntrustedBypassBoundaries
+  TestRound12NERVExactUntrustedFrameAndScopeBoundaries
+  TestRound12NERVExactUntrustedPairedProtocolMatrix
   TestRound12NativeReferentActivationDisposition
   TestRound12NativeReferentActivationSingleIntentMatrix
   TestRound12OuterDefensiveOwnerBoundaries
@@ -698,6 +708,7 @@ expected_round12_classifier_entries=(
 
 expected_round12_plugin_entries=(
   TestRound12MDXV45AuditResponsesStreamPersistsEligibleEvent
+  TestRound12NERVExactUntrustedResponsesStreamDisposition
 )
 require_reviewed_entries ./internal/plugin "round-twelve plugin" \
   '^TestRound12[A-Za-z0-9_]*$' "${expected_round12_plugin_entries[@]}"
