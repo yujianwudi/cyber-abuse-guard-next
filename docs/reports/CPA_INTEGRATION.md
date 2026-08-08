@@ -1,8 +1,8 @@
 # CPA v7.2.116 schema-2 active contract and frozen v7.2.113/v7.2.109/v7.2.104/v7.2.103/v7.2.102 validation
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 ## Active compatibility target
