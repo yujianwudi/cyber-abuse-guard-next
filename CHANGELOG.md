@@ -1,13 +1,166 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
-Source-tree status updated: 2026-08-04 (Asia/Shanghai)
+Source-tree status updated: 2026-08-08 (Asia/Shanghai)
 
 ## Unreleased - v0.16 main development
+
+- Complete the Round 12 working-tree implementation without claiming final
+  acceptance or a release. SQLite audit writes now enforce the configured live
+  page ceiling after bounded write batches, purge Raw Capture before ordinary
+  events, reject further audit writes when capacity cannot be recovered, and
+  expose low-cardinality capacity state. Subject snapshots now preflight live
+  pages inside their replacement transaction and roll back on overflow instead
+  of evicting audit evidence; rows are encoded and inserted one at a time rather
+  than retaining a second full snapshot copy. Committed event deletion, Raw
+  Capture purge, and subject deletion only remeasure the gate and never evict
+  evidence outside the requested maintenance scope.
+  Management and RPC request limits are
+  fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
+  `X-API-Key` values resolve to a deterministic conflict identity. The
+  classifier advances to `classifier-policy-v12` /
+  `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`:
+  an outer defensive owner suppresses only its own inert carrier, and a later
+  explicit activation must be in the same scope and a distinct logical field;
+  missing paths or exhausted proof budgets remain incomplete rather than
+  fabricated semantic positives. Batch and streaming paths share the same
+  proof and recompute group flags after carrier omission.
+
+- Add the closed `tools/current-cpa-audit` RT12-05 harness. The approved policy
+  binds 11 reviewed paths across the five fixed repositories to exact
+  commit/tree/blob/raw/text identities and 19 semantic cases; policy SHA-256 is
+  `9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225`.
+  The MDX repository pin advances to latest HEAD
+  `77e7a649903f9556f2d7bfa0223fa99e123aad52`: the current single-member
+  `gpt-5.6-sol-unrestricted-v45.zip` replaces the v42 path moved into the
+  historical directory, while the selected safety-evaluation document remains
+  byte-identical. The replacement archive and extracted Markdown are reviewed
+  and bound to their new blob/raw/text hashes.
+  Acquisition and cleanup are device/inode, SHA, size, and link-count bound;
+  pending material cannot run, source drift requires a new human review, and
+  private corpus text is removed after use. A final audit found and closed a
+  concatenated-ZIP prefix bypass that Python's ZIP reader would otherwise
+  silently rebase to the last archive. Superseded PR head
+  `9782eaf9da37d466ffc0b644b052d3c842f7f1ca` passed CI `31016759352`,
+  Policy and Corpus Gate `31016760807`, and CodeQL `31016759262`; Linux
+  artifact `8936474093` contained a plugin SO with SHA-256
+  `4fdd0914328b63f585187b970a0dc8f4501c3f6dece7819cd414d4fb3179a4ad`.
+  Its second-machine harness attempt then failed closed before any counted-Mock
+  request because Docker/runc rejected a `/proc/<pid>/fd/...` magic link as a
+  bind-mount source (`error_id=32a64d93ec0f3ed9`). It emitted no
+  `machine-evidence.json`, executed no third-party repository code, removed the
+  private corpus text, and is not a PASS.
+
+  The remediation keeps evidence/runtime/cleanup/failure writes on the held
+  directory descriptor but gives Docker only a normal path after checking the
+  complete absolute ancestor snapshot and every descriptor-bound subtree
+  identity. It rechecks the handoff after start and closes exactly five
+  Source/Destination/RW/rprivate binds. `HostConfig.Tmpfs` must contain only the
+  hardened `/tmp` contract; because Docker may omit tmpfs entries from
+  `.Mounts`, zero or one matching `/tmp` entry is accepted there. Changed paths,
+  extra mounts, and volumes fail closed.
+
+  PR head `30b613e82a1be97938dbfe974b98d4cb76a359a0` then passed CI
+  `31031462761`, Policy and Corpus Gate `31031462702`, and CodeQL
+  `31031462510`; its merge-ref artifact SO had SHA-256
+  `199a7617b1ae37237768b252a2c5bd2ffb292dfcef7ec84a8c9a7bd4d095b0e8`.
+  The real second-machine run proved that the normal bind/rprivate/tmpfs
+  remediation reached CPA startup, but failed closed at CAG readiness with
+  `error_id=2f0ba84bbf89fe0c`: CI had deliberately compiled `dirty=true` into
+  the development SO while the formal harness correctly requires a clean
+  candidate. It emitted no machine evidence, executed no third-party code,
+  removed all corpus text and labelled Docker resources, and left the business
+  container snapshot unchanged. The same run also exposed generated Mock
+  control credentials in the `sudo docker run` argv/journal.
+
+  CI now builds, Host-loads, uploads, and reproduces an exact-merge clean,
+  unreleased audit candidate instead of supplying dirty bytes to this harness.
+  It rejects any `dist/` entry outside the eight fixed v0.16 base files, seals
+  their SHA-256 and byte counts plus event/run/commit/tree identity into an
+  explicit `UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE`
+  manifest, uploads only the resulting nine named files, and rechecks that
+  closed set and every manifest hash before two-clean-clone reproduction.
+  Mock credentials move through a single-link mode-0600 `--env-file` below the
+  descriptor-bound cold directory and are identity-checked and removed as soon
+  as the Docker CLI returns; argv and final evidence contain no values. Failure
+  records now add only a low-cardinality stage and optional readiness-state
+  digest. A dedicated second-machine real-Docker smoke passed both successful
+  and expected-failure `--env-file` paths; it retained no file/container and
+  found zero credential-field mentions in the unit journal. The current runner
+  now gives only its descriptor-bound, per-cold-start `/cag/config` directory
+  write access because CPA v7.2.116 persists plugin config before hot reload;
+  it rejects any config-directory file-set, owner, link-count, size, or mount
+  access drift before and after each Audit/Balanced/Strict transition. The current runner
+  identity closure is:
+
+  ```text
+  current_audit_runner_bundle_sha256: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
+  current_audit_contract_sha256: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
+  current_audit_run_source_sha256: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
+  current_audit_machine_schema_sha256: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
+  current_audit_tool_test_count: 145
+  ```
+
+  Linux audit-tool verification is 145/145 PASS. The diagnostic harness explicitly
+  excludes a hostile process sharing its dedicated UID because directory
+  creation and the daemon path handoff are not atomic same-UID boundaries. The
+  final local Go 1.26.4 Linux race lane completed in 977.8 seconds without a
+  race, panic, or timeout. The new working tree still requires its own exact candidate CI and a
+  fresh second-machine execution; no predecessor result is relabelled as PASS.
+
+- Close all 12 issues from the local CodeRabbit `main...working-tree` review
+  (six major and six minor) before creating the final candidate. Host A/B
+  evidence now binds six executable/schema source hashes plus their bundle,
+  rejects dense warm-lane sample dilution, conserves request outcomes, and
+  aligns Python candidate identity limits with the closed schema. Semantic run
+  configuration requires the clean exact eight-file CI candidate manifest and
+  rejects tracked or untracked source drift. Machine-evidence tuples require
+  their complete mode/protocol/stream lengths; `BoundCorpus` descriptor guards
+  survive optimized Python; counted-Mock sockets have a finite idle timeout;
+  SQLite status reads the configured capacity under the writer lock; and Mock
+  environment cleanup preserves an already-propagating primary exception.
+  Exact-commit CodeRabbit follow-up, GitHub gates, and second-machine evidence
+  remain pending and are not inferred from this local remediation.
+
+  The first clean audit-candidate CI exposed a separate reproducibility defect:
+  `cyclonedx-gomod` could resolve the main-module pseudo-version in the root
+  checkout but silently omitted it in linked worktrees, so only the SBOM and
+  its enclosing checksum manifest differed. SBOM generation now fail-closed
+  normalizes the single main component to the source-derived candidate,
+  annotated RC, formal-tag, or explicitly dirty development identity; it also
+  records the full commit, tree, and build kind as CycloneDX properties and
+  rewrites every matching dependency reference atomically. Versioned and
+  unversioned generator inputs normalize byte-identically, while ambiguous
+  modules, duplicate roots, stale PURLs, conflicting reserved properties, and
+  malformed dependency graphs are rejected. Reproducibility now uses two
+  independent `blob:none` sparse clones with separate `.git` directories, no
+  alternates, a persistent filtering upload-pack for lazy public-blob fetches,
+  and both `round9-independent-*` paths excluded before checkout. A synthetic
+  restricted blob remains absent before and after sparse checkout. Candidate
+  and RC normalization also accepts a valid CycloneDX Go pseudo-version derived
+  from an ancestor formal tag only when its terminal revision matches the exact
+  current HEAD prefix; an otherwise identical version for another commit is
+  rejected. The synthetic no-lazy-fetch proof now rejects Git older than 2.39
+  explicitly instead of reporting a misleading reproducibility failure. The
+  new exact-merge GitHub run and second-machine evidence remain pending.
+
+- Freeze the Round 12 evidence vocabulary and publication boundary. Exact
+  baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI
+  `30880739397`, Policy and Corpus Gate `30880739368`, and CodeQL
+  `30880739360`; those are exact-main engineering results only. The supplied
+  1,320-transport second-machine report remains
+  `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`; the
+  superseded `9782eaf` RT12-05 attempt is `FAIL_CLOSED / NOT_PASS`, and the
+  remediated final-candidate run remains
+  `PENDING_REMEDIATED_HEAD_EXECUTION`. Protected Host, independent attestation,
+  production approval, and release readiness remain `NOT_PROVIDED`. This round
+  may merge a gated PR to `main` and does not create a tag, RC, plugin asset, or
+  GitHub Release. The old repository and `v0.15` Release now return GitHub API
+  `404`, so legacy availability is `UNAVAILABLE` and support is `SUSPENDED`.
 
 - Advance the sole active CPA contract from official `v7.2.113` to official
   `v7.2.116` (`a88197f845c979132c8978ea223c6af05cc81536`) with module sum
@@ -24,8 +177,10 @@ Source-tree status updated: 2026-08-04 (Asia/Shanghai)
   `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`;
   recording that upstream hash is not a download, execution, CAG artifact, or
   Host PASS. Frozen v7.2.113 results remain bound to their original commit and
-  bytes; all v7.2.116 exact-commit CI, Host, watchdog, sandbox, and production
-  conclusions remain pending. The final tree must rebind the classifier source
+  bytes. Exact v7.2.116 baseline `main@21267e7` engineering CI passed, while the
+  Round 12 final candidate still needs its own exact-commit CI and second-machine
+  execution; protected Host, independent, sandbox, release, and production
+  conclusions remain `NOT_PROVIDED`. The final tree must rebind the classifier source
   identity because root `go.mod` and `go.sum` changed; no prior result is
   reattributed.
 

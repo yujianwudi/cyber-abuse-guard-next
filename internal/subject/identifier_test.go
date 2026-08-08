@@ -62,6 +62,83 @@ func TestIdentifierHeaderPriorityAndNoPlaintext(t *testing.T) {
 	}
 }
 
+func TestIdentifierConflictingHeaderKeysAreDeterministicAndUntrusted(t *testing.T) {
+	t.Setenv(HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
+	identifier, err := NewIdentifier(IdentifierConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const first = "first-conflicting-credential-canary"
+	const second = "second-conflicting-credential-canary"
+	firstHeaders := http.Header{
+		"Authorization": []string{"Bearer " + first},
+		"authorization": []string{"Bearer " + second},
+	}
+	secondHeaders := http.Header{
+		"AUTHORIZATION": []string{"Bearer " + second, "Bearer " + first},
+	}
+	firstIdentity := identifier.FromHeaders(firstHeaders)
+	secondIdentity := identifier.FromHeaders(secondHeaders)
+	if firstIdentity.Source != SourceConflict || secondIdentity.Source != SourceConflict {
+		t.Fatalf("conflicting Authorization source=%q/%q, want %q", firstIdentity.Source, secondIdentity.Source, SourceConflict)
+	}
+	if firstIdentity.Hash == "" || firstIdentity.Hash != secondIdentity.Hash {
+		t.Fatalf("conflicting Authorization identity is not deterministic: %#v %#v", firstIdentity, secondIdentity)
+	}
+	if strings.Contains(firstIdentity.Hash, first) || strings.Contains(firstIdentity.Hash, second) {
+		t.Fatal("conflicting Authorization identity exposed credential material")
+	}
+	if firstIdentity.Hash == expectedHMAC("0123456789abcdef0123456789abcdef", first) ||
+		firstIdentity.Hash == expectedHMAC("0123456789abcdef0123456789abcdef", second) {
+		t.Fatal("conflicting Authorization identity silently selected one credential")
+	}
+
+	same := identifier.FromHeaders(http.Header{
+		"Authorization": []string{"Bearer " + first},
+		"authorization": []string{"bearer\t" + first},
+	})
+	if same.Source != SourceAuthorization || same.Hash != expectedHMAC("0123456789abcdef0123456789abcdef", first) {
+		t.Fatalf("identical duplicate Authorization values did not collapse: %#v", same)
+	}
+
+	apiConflict := identifier.FromHeaders(http.Header{
+		"X-API-Key": []string{second, first},
+		"x-api-key": []string{first},
+	})
+	if apiConflict.Source != SourceConflict || apiConflict.Hash == "" {
+		t.Fatalf("conflicting X-API-Key identity=%#v", apiConflict)
+	}
+
+	mixedScheme := identifier.FromHeaders(http.Header{
+		"Authorization": []string{"Bearer " + first},
+		"authorization": []string{"Basic " + second},
+	})
+	reversedMixedScheme := identifier.FromHeaders(http.Header{
+		"AUTHORIZATION": []string{"Basic " + second, "bearer\t" + first},
+	})
+	if mixedScheme.Source != SourceConflict || reversedMixedScheme.Source != SourceConflict ||
+		mixedScheme.Hash != reversedMixedScheme.Hash {
+		t.Fatalf("mixed-scheme Authorization conflict is not deterministic: %#v %#v", mixedScheme, reversedMixedScheme)
+	}
+
+	malformedCompetition := identifier.FromHeaders(http.Header{
+		"Authorization": []string{"Bearer " + first, "Bearer"},
+	})
+	if malformedCompetition.Source != SourceConflict {
+		t.Fatalf("malformed competing Authorization identity=%#v", malformedCompetition)
+	}
+
+	authorizationWins := identifier.FromHeaders(http.Header{
+		"Authorization": []string{"Bearer " + first},
+		"X-API-Key":     []string{first, second},
+	})
+	if authorizationWins.Source != SourceAuthorization ||
+		authorizationWins.Hash != expectedHMAC("0123456789abcdef0123456789abcdef", first) {
+		t.Fatalf("Authorization priority changed: %#v", authorizationWins)
+	}
+}
+
 func TestIdentifierSecretFilePermissions(t *testing.T) {
 	t.Setenv(HMACKeyEnvironment, "")
 	t.Setenv(HMACKeyFileEnvironment, "")

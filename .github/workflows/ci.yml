@@ -140,21 +140,155 @@ jobs:
           retention-days: 14
       - name: dependency-vulnerability-gate
         run: make round6-vulncheck
-      - name: Linux Host loads candidate .so and builds development artifacts
+      - name: Linux Host loads exact-merge clean audit candidate
         env:
-          ALLOW_DIRTY_BUILD: '1'
+          RELEASE_CANDIDATE_BUILD: '1'
           REQUIRE_DIST_ARTIFACTS: '1'
-        run: make integration-test round6-development-artifacts round6-cpa-store-contract
+          ROUND6_SAFE_SPARSE_BUILD: '1'
+        run: |
+          RELEASE_CANDIDATE_EXPECTED_COMMIT="$GITHUB_SHA"
+          RELEASE_CANDIDATE_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          export RELEASE_CANDIDATE_EXPECTED_COMMIT RELEASE_CANDIDATE_EXPECTED_TREE
+          make integration-test round6-development-artifacts round6-cpa-store-contract
+          jq -e \
+            --arg commit "$RELEASE_CANDIDATE_EXPECTED_COMMIT" \
+            --arg tree "$RELEASE_CANDIDATE_EXPECTED_TREE" \
+            '.commit == $commit and .tree == $tree and
+             .version == .source_version and .dirty == false' \
+            dist/build-metadata.json >/dev/null
       - name: artifact-hash
-        env:
-          ALLOW_DIRTY_BUILD: '1'
         run: make artifact-hash
+      - name: Seal exact-merge audit candidate manifest
+        run: |
+          set -euo pipefail
+
+          artifact_version="$(jq -er '.version' dist/build-metadata.json)"
+          [[ "$artifact_version" == 0.16 ]] || {
+            echo "unexpected audit-candidate version: $artifact_version" >&2
+            exit 1
+          }
+
+          base_artifacts=(
+            "cyber-abuse-guard-v${artifact_version}.so"
+            "cyber-abuse-guard-v${artifact_version}.so.sha256"
+            "cyber-abuse-guard_${artifact_version}_linux_amd64.zip"
+            build-metadata.json
+            checksums.txt
+            ruleset-manifest.json
+            ruleset.sha256
+            sbom.cdx.json
+          )
+          mapfile -t expected_base < <(printf '%s\n' "${base_artifacts[@]}" | LC_ALL=C sort)
+          mapfile -d '' -t actual_base < <(
+            find dist -mindepth 1 -maxdepth 1 -printf '%f\0' | LC_ALL=C sort -z
+          )
+          if (( ${#actual_base[@]} != ${#expected_base[@]} )); then
+            echo 'audit-candidate dist/ does not contain exactly the eight base artifacts' >&2
+            diff -u \
+              <(printf '%s\n' "${expected_base[@]}") \
+              <(printf '%s\n' "${actual_base[@]}") >&2 || true
+            exit 1
+          fi
+          for index in "${!expected_base[@]}"; do
+            [[ "${actual_base[$index]}" == "${expected_base[$index]}" ]] || {
+              echo 'audit-candidate dist/ base artifact set differs from the allowlist' >&2
+              diff -u \
+                <(printf '%s\n' "${expected_base[@]}") \
+                <(printf '%s\n' "${actual_base[@]}") >&2 || true
+              exit 1
+            }
+          done
+
+          artifact_records="$(
+            for name in "${base_artifacts[@]}"; do
+              path="dist/$name"
+              [[ -f "$path" && ! -L "$path" ]] || {
+                echo "audit-candidate artifact is not a regular non-symlink file: $path" >&2
+                exit 1
+              }
+              jq -cn \
+                --arg name "$name" \
+                --arg sha256 "$(sha256sum "$path" | awk '{print $1}')" \
+                --argjson bytes "$(stat -c %s "$path")" \
+                '{name: $name, sha256: $sha256, bytes: $bytes}'
+            done | jq -s .
+          )"
+
+          source_commit="$GITHUB_SHA"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          manifest_schema='cyber-abuse-guard.audit-candidate-manifest.v1'
+          manifest_status='UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE'
+          manifest_path='dist/audit-candidate-manifest.json'
+          manifest_tmp="$(mktemp "$RUNNER_TEMP/cag-audit-candidate-manifest.XXXXXX")"
+          trap 'rm -f -- "$manifest_tmp"' EXIT
+
+          [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$source_tree" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$(git rev-parse HEAD)" == "$source_commit" ]]
+          jq -S -n \
+            --arg schema "$manifest_schema" \
+            --arg status "$manifest_status" \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg commit "$source_commit" \
+            --arg tree "$source_tree" \
+            --arg version "$artifact_version" \
+            --argjson artifacts "$artifact_records" \
+            '{
+              schema: $schema,
+              status: $status,
+              event: $event,
+              run_id: $run_id,
+              run_attempt: $run_attempt,
+              commit: $commit,
+              tree: $tree,
+              dirty: false,
+              version: $version,
+              artifacts: $artifacts
+            }' >"$manifest_tmp"
+          chmod 0644 "$manifest_tmp"
+          mv -- "$manifest_tmp" "$manifest_path"
+          trap - EXIT
+
+          jq -e \
+            --arg schema "$manifest_schema" \
+            --arg status "$manifest_status" \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg commit "$source_commit" \
+            --arg tree "$source_tree" \
+            --arg version "$artifact_version" \
+            --argjson artifacts "$artifact_records" \
+            '.schema == $schema and .status == $status and
+             .event == $event and .run_id == $run_id and .run_attempt == $run_attempt and
+             .commit == $commit and .tree == $tree and .dirty == false and
+             .version == $version and .artifacts == $artifacts' \
+            "$manifest_path" >/dev/null
+
+          final_artifacts=("${base_artifacts[@]}" audit-candidate-manifest.json)
+          mapfile -t expected_final < <(printf '%s\n' "${final_artifacts[@]}" | LC_ALL=C sort)
+          mapfile -d '' -t actual_final < <(
+            find dist -mindepth 1 -maxdepth 1 -printf '%f\0' | LC_ALL=C sort -z
+          )
+          if (( ${#actual_final[@]} != ${#expected_final[@]} )); then
+            echo 'audit-candidate dist/ does not contain exactly the nine sealed files' >&2
+            exit 1
+          fi
+          for index in "${!expected_final[@]}"; do
+            [[ "${actual_final[$index]}" == "${expected_final[$index]}" ]] || {
+              echo 'sealed audit-candidate file set differs from the allowlist' >&2
+              exit 1
+            }
+          done
       - name: safe-evidence-summary
         run: |
           artifact_version="$(jq -er '.version' dist/build-metadata.json)"
           jq -r '
             "artifact_commit=" + (.commit // "unknown" | tostring),
             "artifact_version=" + (.version // "unknown" | tostring),
+            "artifact_dirty=" + (.dirty | tostring),
             "classifier_policy=" + (.classifier_policy_version // "unknown" | tostring),
             "classifier_policy_sha256=" + (.classifier_policy_sha256 // "unknown" | tostring),
             "streaming_scanner=" + (.streaming_scanner // "unknown" | tostring)
@@ -167,7 +301,8 @@ jobs:
             dist/checksums.txt \
             dist/ruleset-manifest.json \
             dist/ruleset.sha256 \
-            dist/sbom.cdx.json; do
+            dist/sbom.cdx.json \
+            dist/audit-candidate-manifest.json; do
             printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
             sha256sum "$artifact"
           done
@@ -175,20 +310,22 @@ jobs:
           echo 'cpa_primary_identity=v7.2.116@a88197f845c979132c8978ea223c6af05cc81536'
       - name: clean-tree-check
         run: make clean-tree-check
-      - name: Upload development verification artifacts
+      - name: Upload exact-merge clean audit candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cyber-abuse-guard-linux-amd64-dirty
+          name: cyber-abuse-guard-linux-amd64-audit-candidate
           path: |
-            dist/cyber-abuse-guard-v*-dirty.so
-            dist/cyber-abuse-guard-v*-dirty.so.sha256
-            dist/cyber-abuse-guard_*-dirty_linux_amd64.zip
+            dist/cyber-abuse-guard-v0.16.so
+            dist/cyber-abuse-guard-v0.16.so.sha256
+            dist/cyber-abuse-guard_0.16_linux_amd64.zip
             dist/build-metadata.json
             dist/checksums.txt
             dist/ruleset-manifest.json
             dist/ruleset.sha256
             dist/sbom.cdx.json
+            dist/audit-candidate-manifest.json
           if-no-files-found: error
+          retention-days: 14
   reproducibility:
     needs: quality-and-artifacts
     runs-on: ubuntu-24.04
@@ -245,10 +382,122 @@ jobs:
           # shellcheck disable=SC2086
           GOBIN="$RUNNER_TEMP/bin" go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@${CYCLONEDX_GOMOD_VERSION}
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Compare two clean-clone Round6-safe development builds
+      - name: Download exact-merge clean audit candidate
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: cyber-abuse-guard-linux-amd64-audit-candidate
+          path: dist
+      - name: Verify downloaded exact-merge audit candidate manifest
+        run: |
+          set -euo pipefail
+
+          artifact_version=0.16
+          base_artifacts=(
+            "cyber-abuse-guard-v${artifact_version}.so"
+            "cyber-abuse-guard-v${artifact_version}.so.sha256"
+            "cyber-abuse-guard_${artifact_version}_linux_amd64.zip"
+            build-metadata.json
+            checksums.txt
+            ruleset-manifest.json
+            ruleset.sha256
+            sbom.cdx.json
+          )
+          expected_files=("${base_artifacts[@]}" audit-candidate-manifest.json)
+          mapfile -t expected_sorted < <(printf '%s\n' "${expected_files[@]}" | LC_ALL=C sort)
+          mapfile -d '' -t actual_sorted < <(
+            find dist -mindepth 1 -maxdepth 1 -printf '%f\0' | LC_ALL=C sort -z
+          )
+          if (( ${#actual_sorted[@]} != ${#expected_sorted[@]} )); then
+            echo 'downloaded audit candidate is not the exact nine-file closed set' >&2
+            diff -u \
+              <(printf '%s\n' "${expected_sorted[@]}") \
+              <(printf '%s\n' "${actual_sorted[@]}") >&2 || true
+            exit 1
+          fi
+          for index in "${!expected_sorted[@]}"; do
+            [[ "${actual_sorted[$index]}" == "${expected_sorted[$index]}" ]] || {
+              echo 'downloaded audit-candidate file set differs from the allowlist' >&2
+              exit 1
+            }
+          done
+          for name in "${expected_files[@]}"; do
+            [[ -f "dist/$name" && ! -L "dist/$name" ]] || {
+              echo "downloaded audit-candidate entry is not a regular non-symlink file: $name" >&2
+              exit 1
+            }
+          done
+
+          source_commit="$GITHUB_SHA"
+          source_tree="$(git rev-parse 'HEAD^{tree}')"
+          [[ "$(git rev-parse HEAD)" == "$source_commit" ]]
+          expected_names="$(printf '%s\n' "${base_artifacts[@]}" | jq -R . | jq -s .)"
+          manifest='dist/audit-candidate-manifest.json'
+          jq -e \
+            --arg event "$GITHUB_EVENT_NAME" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg commit "$source_commit" \
+            --arg tree "$source_tree" \
+            --arg version "$artifact_version" \
+            --argjson expected_names "$expected_names" \
+            '.schema == "cyber-abuse-guard.audit-candidate-manifest.v1" and
+             .status == "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE" and
+             .event == $event and .run_id == $run_id and .run_attempt == $run_attempt and
+             .commit == $commit and .tree == $tree and .dirty == false and
+             .version == $version and
+             ([.artifacts[].name] == $expected_names) and
+             ([.artifacts[].name] | length) ==
+               ([.artifacts[].name] | unique | length) and
+             all(.artifacts[];
+               (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
+               (.bytes | type == "number" and . >= 0 and floor == .))' \
+            "$manifest" >/dev/null
+
+          jq -e \
+            --arg commit "$source_commit" \
+            --arg tree "$source_tree" \
+            --arg version "$artifact_version" \
+            '.commit == $commit and .tree == $tree and
+             .version == $version and .source_version == $version and .dirty == false' \
+            dist/build-metadata.json >/dev/null
+
+          for name in "${base_artifacts[@]}"; do
+            manifest_sha256="$(
+              jq -er --arg name "$name" \
+                '[.artifacts[] | select(.name == $name)] |
+                 if length == 1 then .[0].sha256 else error("artifact identity is not unique") end' \
+                "$manifest"
+            )"
+            manifest_bytes="$(
+              jq -er --arg name "$name" \
+                '[.artifacts[] | select(.name == $name)] |
+                 if length == 1 then .[0].bytes else error("artifact identity is not unique") end' \
+                "$manifest"
+            )"
+            actual_sha256="$(sha256sum "dist/$name" | awk '{print $1}')"
+            actual_bytes="$(stat -c %s "dist/$name")"
+            [[ "$actual_sha256" == "$manifest_sha256" ]] || {
+              echo "manifest SHA-256 mismatch for $name" >&2
+              exit 1
+            }
+            [[ "$actual_bytes" == "$manifest_bytes" ]] || {
+              echo "manifest byte-count mismatch for $name" >&2
+              exit 1
+            }
+          done
+
+          printf 'audit_candidate_manifest_sha256=%s\n' \
+            "$(sha256sum "$manifest" | awk '{print $1}')"
+      - name: Reproduce exact-merge clean audit candidate in two clean clones
         env:
-          ROUND6_REPRODUCIBILITY_MODE: development
-        run: make round6-reproducibility-test
+          RELEASE_CANDIDATE_BUILD: '1'
+          ROUND6_REPRODUCIBILITY_MODE: release
+          ROUND6_SAFE_SPARSE_BUILD: '1'
+        run: |
+          RELEASE_CANDIDATE_EXPECTED_COMMIT="$GITHUB_SHA"
+          RELEASE_CANDIDATE_EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          export RELEASE_CANDIDATE_EXPECTED_COMMIT RELEASE_CANDIDATE_EXPECTED_TREE
+          make round6-reproducibility-test
       - name: clean-tree-check
         run: make clean-tree-check
 

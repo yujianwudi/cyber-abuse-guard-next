@@ -59,6 +59,24 @@ func (s *Store) SaveSubjectSnapshot(ctx context.Context, snapshot subject.Persis
 			seenRequests[persistedHit.RequestHash] = struct{}{}
 		}
 	}
+
+	// Subject persistence shares the audit database but is intentionally never
+	// removed by automatic retention: deleting risk-control state to make room
+	// would weaken enforcement. Serialize its replacement with capacity checks
+	// and reject the uncommitted snapshot if its live pages would exceed the hard
+	// limit, preserving both the prior snapshot and ordinary audit evidence.
+	s.capacityMu.Lock()
+	var capacityReport error
+	defer func() {
+		s.capacityMu.Unlock()
+		if capacityReport != nil {
+			s.report(capacityReport)
+		}
+	}()
+	if s.overLimit.Load() {
+		s.capacityRejected.Add(1)
+		return ErrCapacityExceeded
+	}
 	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("audit: begin subject persistence update: %w", err)
@@ -80,6 +98,7 @@ hmac_key_id=excluded.hmac_key_id, saved_at_ns=excluded.saved_at_ns, updated_at_n
 		return fmt.Errorf("audit: prepare subject persistence write: %w", err)
 	}
 	defer statement.Close()
+	var encodedBytes int64
 	for _, persisted := range snapshot.Subjects {
 		encoded, err := json.Marshal(persisted)
 		if err != nil {
@@ -88,13 +107,30 @@ hmac_key_id=excluded.hmac_key_id, saved_at_ns=excluded.saved_at_ns, updated_at_n
 		if len(encoded) > maxPersistedStateJSON {
 			return fmt.Errorf("audit: encoded subject persistence row exceeds %d bytes", maxPersistedStateJSON)
 		}
+		encodedBytes += int64(len(encoded))
+		if encodedBytes > s.cfg.MaxBytes {
+			s.capacityRejected.Add(1)
+			return ErrCapacityExceeded
+		}
 		if _, err := statement.ExecContext(ctx, persisted.SubjectHash, string(encoded), updatedAt); err != nil {
 			return fmt.Errorf("audit: store subject persistence row: %w", err)
 		}
 	}
+	used, err := liveDatabaseBytesFrom(ctx, tx)
+	if err != nil {
+		capacityErr := s.capacityFailure(ErrCapacityCheckFailed, false)
+		capacityReport = capacityErr
+		return capacityErr
+	}
+	if used > s.cfg.MaxBytes {
+		s.capacityRejected.Add(1)
+		return ErrCapacityExceeded
+	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("audit: commit subject persistence update: %w", err)
 	}
+	s.setCapacityMeasurement(used)
+	s.clearCapacityFailure()
 	return nil
 }
 
@@ -182,7 +218,14 @@ func (s *Store) DeleteSubjectSnapshot(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM subject_state_meta`); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// The deletion is committed. Re-measure immediately so removing an inherited
+	// oversized snapshot can clear the admission gate without waiting for the
+	// periodic cleanup tick; residual capacity state remains visible in Status.
+	_ = s.remeasureCapacity(ctx)
+	return nil
 }
 
 func (s *Store) availableDB() (*sql.DB, error) {

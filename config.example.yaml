@@ -89,6 +89,11 @@ plugins:
         # operational_ready=false so deployment promotion fails closed.
         require_persistent_storage: true
         retention_days: 30
+        # Runtime hard cap over SQLite live pages. The writer measures after
+        # every bounded batch, removes oldest Raw Capture rows before ordinary
+        # events, and rejects later audit writes if the fixed schema or a
+        # storage failure prevents recovery. Classification still continues;
+        # authenticated status exposes the degraded/over-limit state.
         max_db_mb: 256
         # Observe never persists per-request events and therefore does not hash
         # the request body for this field. Audit/enforcing modes compute it only

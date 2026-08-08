@@ -260,6 +260,7 @@ script-test: repository-secret-scan
 	python3 -B ./tools/round9-eval/cag_round9_external_evaluator_test.py
 	python3 -B ./tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py
 	python3 -B ./tools/round9-eval/cag_round9_eval_broker_test.py
+	python3 -B -m unittest discover -s ./tools/current-cpa-audit/tests -p 'test_*.py'
 	./scripts/release-candidate-contract-test.sh
 	bash -n ./scripts/verify-external-release-attestation.sh
 	./scripts/verify-external-release-attestation-test.sh
@@ -290,6 +291,7 @@ round6-script-test: repository-secret-scan
 	python3 -B ./tools/round9-eval/cag_round9_external_evaluator_test.py
 	python3 -B ./tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py
 	python3 -B ./tools/round9-eval/cag_round9_eval_broker_test.py
+	python3 -B -m unittest discover -s ./tools/current-cpa-audit/tests -p 'test_*.py'
 	python3 -B ./scripts/round6_safe_gate_contract_test.py
 	python3 -B ./scripts/round6_safe_gate_contract.py --root .
 	./scripts/check-production-health-test.sh

@@ -1,22 +1,59 @@
 # CPA Cyber Abuse Guard
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
-> **Repository lineage:** this is the clean-history successor project. Legacy
-> tags, branches, Releases, and historical assets remain read-only in
+<!-- round12-status:start -->
+```text
+round12_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_RELEASE
+round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
+round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
+round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
+round12_go_platform: go1.26.4 / linux-amd64
+round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
+round12_working_candidate_engineering_ci: PENDING_FINAL_CANDIDATE
+round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
+round12_final_candidate_second_machine: PENDING_FINAL_CANDIDATE_EXECUTION
+round12_protected_host: NOT_PROVIDED
+round12_independent_attestation: NOT_PROVIDED
+round12_production_approved: NOT_PROVIDED
+round12_release_ready: NOT_PROVIDED
+round12_tag_and_release: NOT_CREATED / NOT_AUTHORIZED
+legacy_v0.15_availability: UNAVAILABLE
+legacy_v0.15_support: SUSPENDED
+```
+<!-- round12-status:end -->
+
+See the [Round 12 active status and evidence boundary](docs/ROUND12_STATUS.md)
+for the exact distinction between the green baseline, the input diagnostic, and
+the still-pending final-candidate gates.
+
+> **Repository lineage:** this is the clean-history successor project. The
+> previously documented legacy repository
 > [`yujianwudi/cyber-abuse-guard`](https://github.com/yujianwudi/cyber-abuse-guard)
-> and are intentionally not recreated here.
+> and its `v0.15` Release are currently unavailable (GitHub API `404`, verified
+> 2026-08-04). Historical identities remain records, but their assets are not
+> claimed to be downloadable or independently verifiable until a read-only
+> repository or signed immutable archive is restored.
 
 > **Current development state:** `main` is the sole maintained source line. The
 > fixed source/compile target is CPA `v7.2.116` with C ABI 1 and RPC schema 2
 > only. GitHub
 > Actions performs CI, CodeQL, and policy/corpus validation; it does not create
-> an RC or Release. Independent server-side sandbox review remains owner-run.
+> an RC or Release. Server-side sandbox diagnostics remain separately owner-run
+> and are not independent evidence.
 > Production approval has not been granted, and production Balanced must remain
 > gated.
+>
+> Exact `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed CI
+> `30880739397`, Policy and Corpus Gate `30880739368`, and CodeQL
+> `30880739360` for CPA v7.2.116. A later owner-run 1,320-execution second-machine
+> run is retained only as `SECOND-MACHINE DIAGNOSTIC / NOT INDEPENDENT
+> ATTESTATION`; it does not close protected-Host, independent-audit, release, or
+> production gates. RT12-05/06 execution against the final candidate is still
+> `PENDING_FINAL_CANDIDATE_EXECUTION`.
 >
 > The frozen CPA v7.2.113 Round 11 line started at exact `main` commit
 > `aaa71d9924bef935196790976c838968408dcdeb` and ended at
@@ -60,12 +97,12 @@ English | [简体中文](README_CN.md)
 
 > [!WARNING]
 > [`v0.15`](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15)
-> was manually published as the latest stable release on 2026-07-20 with ten
-> assets. Its release notes disclose that GitHub Actions did not run because of
-> billing and that the owner built the assets manually after an owner-reported
-> production sandbox pass. No independent Host/audit/evaluation attestation is
-> attached. The Round 6 and `v0.15-rc.*` material retained below is a historical
-> pre-publication engineering record, not the current v0.16 release state.
+> was historically reported as a manually published stable release on
+> 2026-07-20, but the repository, Release and ten assets now return `404`.
+> Security support and rollback claims are therefore **SUSPENDED / UNAVAILABLE**
+> until the original bytes and digests are restored in a verifiable read-only
+> location. Retained Round 6 and `v0.15-rc.*` text is historical engineering
+> evidence, not a substitute for those missing assets.
 
 When CPA has loaded and registered the plugin, the schema-2 before-auth request
 interceptor inspects supported model requests before authentication scheduling,
@@ -79,28 +116,29 @@ is not sent to a public classifier.
 | Item | State |
 |---|---|
 | Source version / publication model | `0.16` development on `main`; the repository no longer contains an automated RC or Release workflow |
-| Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 9 output |
-| GitHub publication | Historical tags and Releases are retained unchanged. Current Actions validate source and development artifacts only; they cannot create or modify a Release |
-| Audited committed baseline | `150c25e6352cb237cb3956bd66c83c3278c3fe33`; historical classifier digest `e0cbc975...`; CPA v7.2.104 |
-| Engineering CI | CI `30697468074`, CodeQL `30697468078`, and Policy and Corpus Gate `30697468079` **PASS** for exact starting `main` commit `aaa71d9924bef935196790976c838968408dcdeb`; later commits require their own checks, and this is not production approval |
-| Safety audit | **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
-| Current remediation | Round 10/11 classifier behavior is frozen at the CPA v7.2.113 final baseline `main@a9fba4e`; its exact-final CI/Policy/CodeQL checks passed, while a bound second-machine watchdog or independent re-audit is not provided. The active v7.2.116 source/compile delta must rebind the source identity and rerun independently; no v7.2.113 PASS transfers |
-| CPA source/compile target | Pinned target `v7.2.116` (`a88197f845c979132c8978ea223c6af05cc81536`), C ABI 1 / RPC schema 2. Source, SDK/API, integration compile, and Linux Host `.so` load checks are authoritative only after the exact-commit GitHub lane passes; protected runtime testing remains pending |
+| Historical candidates | `v0.16-rc.1`, immutable Round 8 `v0.16-rc.2`, and immutable failed Phase 1 `v0.16-rc.3` identities are historical evidence only and must not be overwritten, relabeled, or reused as Round 12 output |
+| GitHub publication | The documented legacy `v0.15` repository/Release is unavailable; current Actions validate source and expiring development artifacts only and cannot create or modify a Release |
+| Current committed baseline | `main@21267e742b624b29a75bd3683fd6914f76c764b5`; classifier `classifier-policy-v10` / `7934e15f...`; CPA v7.2.116 |
+| Engineering CI | CI `30880739397`, Policy and Corpus Gate `30880739368`, and CodeQL `30880739360` **PASS** for exact `main@21267e7`; later commits require their own checks, and this is not production approval |
+| Historical failed audit | Exact `150c25e6` / CPA v7.2.104 remains **FAIL / BLOCKED**: 287 complete malicious fail-open cases, 36 malicious incomplete HTTP 403 cases, and 2 complete benign false positives |
+| Input second-machine diagnostic | The supplied CPA v7.2.116 report records 1,320 transport executions. It is `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`; transport permutations do not become independent semantic samples or close any Round 12 gate |
+| Round 12 final-candidate second machine | **PENDING_FINAL_CANDIDATE_EXECUTION**. RT12-05/06 has not yet run against the final candidate commit/tree/SO, so no Round 12 second-machine PASS is claimed |
+| CPA source/compile target | Pinned target `v7.2.116` (`a88197f845c979132c8978ea223c6af05cc81536`), C ABI 1 / RPC schema 2. The exact baseline GitHub lane passed; every later candidate must obtain its own exact-commit results and protected runtime testing remains pending |
 | Historical Round 9 protected evaluator | Frozen CPA v7.2.113 regression contract only. Its no-checkout root-owned broker uses a Docker 29-compatible internal-only bridge and publishes no CPA or counted-Mock ports to the Host; evaluator aggregate v3, ledger event v3, protected Git ledger proof v1, external counted-Mock v1, and CPA sandbox descriptor v2 remain historical schemas, not a v7.2.116 lane |
-| CPA v7.2.116 protected Host/evaluation | **NOT_PROVIDED**; no reviewed versioned protected lane, signed evaluation, ledger proof, or second-machine watchdog result exists for v7.2.116. Any future lane must use an internal-only bridge that publishes no CPA or counted-Mock ports to the Host and records `host_ip=internal-only, host_port=0, container_port=8317`; the Host may reach only the exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4 addresses, and any Host binding, additional container, or non-internal network is inadmissible |
+| CPA v7.2.116 protected Host/evaluation | **NOT_PROVIDED**. The owner-run input diagnostic does not supply a signed protected lane, independent evaluator, or ledger proof. Any future protected lane must use an internal-only bridge that publishes no CPA or counted-Mock ports to the Host and records `host_ip=internal-only, host_port=0, container_port=8317`; the Host may reach only the exact two Docker-inspect-verified, distinct RFC1918 bridge IPv4 addresses, and any Host binding, additional container, or non-internal network is inadmissible |
 | Public adversarial corpus | `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`; visible development regression only. All 199 GitHub Release assets are recorded as metadata/digests only and were neither downloaded nor opened. Valid v12/v11/v10/v9, immutable-invalid v8, rejected v8 rebind, valid v7, and frozen-invalid v6 remain historical; no third-party repository code is executed |
-| Independent audit | The 2026-07-29 isolated audit of exact baseline `150c25e6` is a safety **FAIL / BLOCKED** with the counts above. The current remediation has not been independently re-audited |
-| Production approval | **NOT GRANTED**; there is no stable `v0.16` and no automatic Balanced re-admission |
-| Active workflows | `ci.yml`, `codeql.yml`, and `policy-gate.yml` are the only executable Actions workflows; release, RC, Round 8, and automated Host workflows were removed from the default branch |
+| Independent audit | The 2026-07-29 isolated audit of exact baseline `150c25e6` remains **FAIL / BLOCKED**. The current `21267e7` diagnostic was owner-run and is explicitly not an independent re-audit |
+| Independent attestation / production approval / release readiness | **NOT_PROVIDED**; there is no stable `v0.16`, no automatic Balanced re-admission, and this round does not create a tag or Release |
+| Active workflows | `ci.yml`, `codeql.yml`, and `policy-gate.yml` are the only repository-owned executable workflow YAML files. The live Actions API also returns GitHub's generated `dynamic/dependabot/update-graph` record; see the [governance snapshot](docs/reports/ROUND12_GITHUB_GOVERNANCE_SNAPSHOT.md) |
 | Static analysis governance | `.github/workflows/codeql.yml` performs minimal-permission Go analysis on Ubuntu within the reviewed sparse source boundary; CodeQL results do not authorize a release |
 | Validation platform | Linux amd64 only; emitted numeric GLIBC ABI versions must be `<= 2.34` |
 | Out of scope | Windows, macOS, musl/Alpine, real Provider traffic, production deployment/validation |
-| CPA Host matrix | Active target CPA v7.2.116, Linux amd64, isolated counted Mock upstream only. The real-candidate `.so` Raw Capture schema-4 lifecycle test and dedicated bind-mounted audit carrier belong to the frozen v7.2.113 Round 11 lane; v7.2.116 exact-commit and Host binding are **PENDING / NOT PROVIDED**. Full protected-server Audit→Balanced→Strict, signed external evaluation, and protected-ledger proof are **NOT RUN / PENDING** |
+| CPA Host matrix | Active target CPA v7.2.116, Linux amd64, isolated counted Mock upstream only. Exact-main engineering `.so` load passed inside GitHub CI and the owner-run input diagnostic remains non-final/non-independent; RT12-05/06 protected Audit→Balanced→Strict, signed external evaluation, special-path closure, and protected-ledger proof remain **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current source snapshot: `classifier-policy-v10` / `7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2`; behavior version is unchanged, while the digest is rebound because the CPA module pin is part of the identity; exact-commit GitHub and Host binding remain pending |
+| Classifier policy | Current working-source snapshot: `classifier-policy-v12` / `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`; Round 12 changes role/streaming defensive-owner behavior as well as the CPA-bound source identity. Exact-commit GitHub and final-candidate second-machine binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
-| Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, status discloses its sensitive-data inventory, and raw capture remains default-off |
+| Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, Raw Capture remains default-off, and `audit.max_db_mb` is enforced after each bounded write batch and inside subject-snapshot replacement transactions, with raw-first cleanup, explicit capacity status, and storage-write rejection that does not change classification |
 | Code review | Automated review is advisory; no independent approval is claimed |
 
 ### Frozen CPA v7.2.113 remediation and active v7.2.116 compatibility delta
@@ -207,13 +245,14 @@ are not relabelled as v7.2.116 results.
 - These changes are source-only. They do not create a Tag, Release, plugin
   binary, CPA Host result, independent audit, or production approval.
 
-## Historical v0.15 release record
+## Historical v0.15 release record — currently unavailable
 
 | Item | Historical fact |
 |---|---|
-| Stable release | `v0.15` was manually published on 2026-07-20 as non-draft, non-prerelease, latest stable |
-| Assets | Ten manually built release assets |
-| Validation claim | Production sandbox PASS is owner-reported in the Release notes; supporting independent Host evidence is not attached |
+| Historical publication claim | `v0.15` was reported as manually published on 2026-07-20 as non-draft, non-prerelease, latest stable |
+| Current availability/support | **UNAVAILABLE / SUPPORT SUSPENDED**; the documented repository and Release now return GitHub API `404` |
+| Assets | Historical metadata says ten manually built assets; their bytes are not currently reachable or verified |
+| Validation claim | The historical production sandbox PASS was owner-reported in Release notes that are now unavailable; no supporting independent Host evidence is attached here |
 | Independent evidence | No `formal-release-attestation.json` or `round6-prerelease-attestation.json` asset |
 | Source identities | classifier `v5`, ruleset `1.0.7`, audit schema v3 |
 
@@ -483,8 +522,10 @@ warnings.
 ## Historical v0.15 pre-publication verification record
 
 The table and process below describe the reviewed v0.15 admission design before
-the later manual stable publication. They are retained for audit history and do
-not describe an available v0.16 workflow.
+the historically reported manual stable publication. The old repository and
+Release now return `404`; all links and states below are retained historical
+records, not claims that the source, runs, tags, Releases, or assets remain
+reachable. They do not describe an available v0.16 workflow.
 
 | Gate | Current state |
 |---|---|
@@ -513,9 +554,9 @@ Safe Round 6 entry points are documented in
 allowlisted gates with broad `go test ./...` or `go vet ./...` commands that
 could compile or open consumed evaluation packages.
 
-Before the manual publication, the reviewed process prohibited creating
+Before the reported manual publication, the reviewed process prohibited creating
 `v0.15` until its external gates passed. That instruction is now historical;
-the published v0.15 assets still must not be reused as v0.16 evidence. Consumed
+the unavailable v0.15 assets must not be inferred or reused as v0.16 evidence. Consumed
 v10 remains immutable and must not be rerun.
 
 ## Artifact contract
@@ -556,9 +597,10 @@ only by external Round 6/formal attestation assets that bind the final source,
 candidate workflow run, candidate bytes, Host records, independent audit, and
 release evaluation.
 
-The actual 2026-07-20 v0.15 publication did not complete that protected chain;
-its owner-reported sandbox result and manual-build disclosure live in the
-GitHub Release notes and are not upgraded here into independent evidence.
+The historically reported 2026-07-20 v0.15 publication did not complete that
+protected chain. Its owner-reported sandbox result and manual-build disclosure
+were attributed to Release notes that are now unavailable and are not upgraded
+here into independent evidence.
 
 The Round 9 prerelease development target is pinned to CPA v7.2.113 at
 `bc71c77f5cc42f3fbe1bf040cf14d4f166894835`. Later upstream

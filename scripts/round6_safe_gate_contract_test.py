@@ -908,6 +908,54 @@ jobs:
         with self.assertRaisesRegex(ContractError, "differs from the workflow contract"):
             validate_round6_reproducibility_script(text, source)
 
+    def test_reproducibility_independent_blobless_clone_is_locked(self):
+        original, source = self.reproducibility_script()
+        mutations = (
+            (
+                "blob filter",
+                original.replace("--filter=blob:none", "--filter=blob:limit=1", 1),
+            ),
+            (
+                "alternates",
+                original.replace(
+                    '[[ ! -e "$destination/.git/objects/info/alternates" ]]',
+                    '[[ -e "$destination/.git/objects/info/alternates" ]]',
+                    1,
+                ),
+            ),
+            (
+                "linked worktree",
+                original.replace(
+                    'git -C "$destination" init --quiet',
+                    'git -C "$root" worktree add "$destination"',
+                    1,
+                ),
+            ),
+        )
+        for label, text in mutations:
+            with self.subTest(label=label):
+                self.assertNotEqual(text, original)
+                with self.assertRaisesRegex(
+                    ContractError, "independent blobless|linked or alternate"
+                ):
+                    validate_round6_reproducibility_script(text, source)
+
+    def test_reproducibility_independent_clone_order_is_locked(self):
+        original, source = self.reproducibility_script()
+        fetch = (
+            '  git -C "$destination" fetch --quiet '
+            '--filter=blob:none --no-tags origin "$fetch_target"'
+        )
+        checkout = (
+            '  git -C "$destination" checkout --quiet --detach '
+            '"$RELEASE_GIT_COMMIT"'
+        )
+        text = original.replace(f"{fetch}\n", "", 1)
+        text = text.replace(checkout, f"{checkout}\n{fetch}", 1)
+        self.assertNotEqual(text, original)
+        with self.assertRaisesRegex(ContractError, "filter and sparsify"):
+            validate_round6_reproducibility_script(text, source)
+
     def test_reproducibility_entry_mode_contract_is_locked(self):
         original, source = self.reproducibility_script()
         text = original.replace(
@@ -1865,7 +1913,7 @@ jobs:
             original.replace(
                 'compare_artifact "checksums manifest" checksums.txt\n', "", 1
             ),
-            original.replace(" build-metadata.json checksums.txt \\\n", " build-metadata.json \\\n", 1),
+            original.replace(" build-metadata.json sbom.cdx.json \\\n", " build-metadata.json \\\n", 1),
         )
         for text in mutations:
             self.assertNotEqual(text, original)
@@ -2603,6 +2651,34 @@ jobs:
                 text = before + marker + mutated_round6
                 with self.assertRaisesRegex(ContractError, "privacy-safe mutation fixture"):
                     validate_round6_makefile_contract(text, source)
+
+    def test_round6_makefile_requires_current_cpa_audit_unittest(self):
+        source = Path(__file__).parent.parent / "Makefile"
+        original = source.read_text(encoding="utf-8")
+        required_line = (
+            "\tpython3 -B -m unittest discover -s "
+            "./tools/current-cpa-audit/tests -p 'test_*.py'\n"
+        )
+        self.assertEqual(original.count(required_line), 2)
+        validate_round6_makefile_contract(original, source)
+        before_last, last, after_last = original.rpartition(required_line)
+        self.assertEqual(last, required_line)
+        mutations = (
+            ("script-test", original.replace(required_line, "", 1)),
+            ("round6-script-test", before_last + after_last),
+        )
+        for target, mutation in mutations:
+            with self.subTest(target=target):
+                self.assertNotEqual(mutation, original)
+                self.assertEqual(mutation.count(required_line), 1)
+                with tempfile.TemporaryDirectory() as directory:
+                    mutated_source = Path(directory) / "Makefile"
+                    mutated_source.write_text(mutation, encoding="utf-8")
+                    with self.assertRaisesRegex(ContractError, "current-cpa-audit"):
+                        validate_round6_makefile_contract(
+                            mutated_source.read_text(encoding="utf-8"),
+                            mutated_source,
+                        )
 
     def candidate_workflow(self) -> str:
         source = Path(__file__).parent.parent / ".github/workflows/candidate.yml"

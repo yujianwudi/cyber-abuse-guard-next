@@ -99,6 +99,59 @@ fi
 [[ "$current_release_version" =~ ^[0-9]+\.[0-9]+$ ]] || \
   fail "cannot determine the exact two-component release version"
 
+audit_tool_root="$root/tools/current-cpa-audit"
+audit_identity_output=""
+if ! audit_identity_output="$(python3 -B - "$audit_tool_root" <<'PY'
+import sys
+import unittest
+from pathlib import Path
+
+
+tool = Path(sys.argv[1]).resolve(strict=True)
+sys.path.insert(0, str(tool))
+sys.path.insert(0, str(tool / "tests"))
+import run
+
+
+identities = run.runner_identities()
+loader = unittest.TestLoader()
+suite = loader.discover(str(tool / "tests"), pattern="test_*.py")
+if loader.errors:
+    for error in loader.errors:
+        print(error, file=sys.stderr)
+    raise SystemExit("CPA audit unittest discovery reported loader errors")
+for key in (
+    "bundle_sha256",
+    "audit_contract_sha256",
+    "run_source_sha256",
+    "machine_schema_sha256",
+):
+    print(identities[key])
+print(suite.countTestCases())
+PY
+)"; then
+  fail "cannot determine the current CPA audit runner identity closure"
+fi
+audit_identity_values=()
+mapfile -t audit_identity_values <<<"$audit_identity_output"
+[[ "${#audit_identity_values[@]}" == 5 ]] || \
+  fail "cannot determine the current CPA audit runner identity closure"
+current_audit_runner_bundle_sha256="${audit_identity_values[0]}"
+current_audit_contract_sha256="${audit_identity_values[1]}"
+current_audit_run_source_sha256="${audit_identity_values[2]}"
+current_audit_machine_schema_sha256="${audit_identity_values[3]}"
+current_audit_tool_test_count="${audit_identity_values[4]}"
+for digest in \
+  "$current_audit_runner_bundle_sha256" \
+  "$current_audit_contract_sha256" \
+  "$current_audit_run_source_sha256" \
+  "$current_audit_machine_schema_sha256"; do
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || \
+    fail "current CPA audit runner identity is not a lowercase 64-character digest"
+done
+[[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
+  fail "current CPA audit tool test count is invalid"
+
 documents=(
   README.md
   README_CN.md
@@ -122,6 +175,8 @@ documents=(
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
   docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+  docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+  docs/ROUND12_STATUS.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -330,6 +385,8 @@ classifier_identity_documents=(
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
   docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+  docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+  docs/ROUND12_STATUS.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -353,6 +410,24 @@ count_policy_key() {
   normalized_policy_keys "$document" |
     { grep -Eo "(^|[^[:alnum:]_])${key}[[:space:]]*:" || true; } |
     wc -l | tr -d '[:space:]'
+}
+count_policy_key_in_text() {
+  local text="$1" key="$2"
+  printf '%s\n' "$text" |
+    LC_ALL=C tr -d "\"'\`" |
+    { grep -Eo "(^|[^[:alnum:]_])${key}[[:space:]]*:" || true; } |
+    wc -l | tr -d '[:space:]'
+}
+count_fixed_in_text() {
+  local text="$1" value="$2"
+  printf '%s\n' "$text" |
+    { grep -Fo -- "$value" || true; } |
+    wc -l | tr -d '[:space:]'
+}
+count_exact_key_value_in_text() {
+  local text="$1" key="$2" value="$3"
+  printf '%s\n' "$text" |
+    { grep -Ec "^[[:space:]]*${key}[[:space:]]*:[[:space:]]*${value}[[:space:]]*$" || true; }
 }
 for relative in "${classifier_identity_documents[@]}"; do
   document="$doc_root/$relative"
@@ -384,6 +459,72 @@ for relative in "${classifier_identity_documents[@]}"; do
     fail "$relative must not contain unlabeled legacy classifier policy keys; use current_ or historical_ prefixes"
   fi
 done
+
+round12_status="$doc_root/docs/ROUND12_STATUS.md"
+round12_classifier_identity_line="round12_classifier_policy: $current_classifier_policy_version / $current_classifier_policy_sha256"
+[[ "$(grep -Fxc -- "$round12_classifier_identity_line" "$round12_status")" == 1 &&
+  "$(count_policy_key "$round12_status" round12_classifier_policy)" == 1 ]] ||
+  fail "docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity"
+
+declare -A round12_audit_status_identities=(
+  [round12_audit_runner_bundle]="$current_audit_runner_bundle_sha256"
+  [round12_audit_contract]="$current_audit_contract_sha256"
+  [round12_audit_run_source]="$current_audit_run_source_sha256"
+  [round12_audit_machine_schema]="$current_audit_machine_schema_sha256"
+  [round12_local_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
+)
+for key in "${!round12_audit_status_identities[@]}"; do
+  exact_line="$key: ${round12_audit_status_identities[$key]}"
+  [[ "$(grep -Fxc -- "$exact_line" "$round12_status")" == 1 &&
+    "$(count_policy_key "$round12_status" "$key")" == 1 ]] ||
+    fail "docs/ROUND12_STATUS.md must contain exactly one exact Round 12 CPA audit identity: $key"
+done
+
+round12_test_report_section="$(awk '
+  $0 == "## Round 12 working-tree pre-final Linux validation" { inside = 1; next }
+  inside && /^## / { exit }
+  inside { print }
+' "$doc_root/docs/reports/TEST_REPORT.md")"
+[[ -n "$round12_test_report_section" ]] ||
+  fail "docs/reports/TEST_REPORT.md lost the Round 12 working-tree validation section"
+declare -A round12_test_report_identities=(
+  [runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+  [audit_contract_sha256]="$current_audit_contract_sha256"
+  [run_source_sha256]="$current_audit_run_source_sha256"
+  [machine_schema_sha256]="$current_audit_machine_schema_sha256"
+)
+for key in "${!round12_test_report_identities[@]}"; do
+  exact_line="$key: ${round12_test_report_identities[$key]}"
+  [[ "$(grep -Fxc -- "$exact_line" <<<"$round12_test_report_section")" == 1 &&
+    "$(count_policy_key_in_text "$round12_test_report_section" "$key")" == 1 ]] ||
+    fail "docs/reports/TEST_REPORT.md Round 12 section must bind the current CPA audit identity: $key"
+done
+round12_audit_pass_prefix="| Current CPA audit tool | **PASS**, Linux ${current_audit_tool_test_count}/${current_audit_tool_test_count}."
+[[ "$(grep -Fc -- "$round12_audit_pass_prefix" <<<"$round12_test_report_section")" == 1 ]] ||
+  fail "docs/reports/TEST_REPORT.md Round 12 section must bind the current CPA audit test count"
+
+unreleased_changelog_section="$(awk '
+  $0 == "## Unreleased - v0.16 main development" { inside = 1; next }
+  inside && /^## / { exit }
+  inside { print }
+' "$doc_root/CHANGELOG.md")"
+[[ -n "$unreleased_changelog_section" ]] ||
+  fail "CHANGELOG.md lost the Unreleased v0.16 development section"
+declare -A unreleased_changelog_audit_identities=(
+  [current_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+  [current_audit_contract_sha256]="$current_audit_contract_sha256"
+  [current_audit_run_source_sha256]="$current_audit_run_source_sha256"
+  [current_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
+  [current_audit_tool_test_count]="$current_audit_tool_test_count"
+)
+for key in "${!unreleased_changelog_audit_identities[@]}"; do
+  value="${unreleased_changelog_audit_identities[$key]}"
+  [[ "$(count_exact_key_value_in_text "$unreleased_changelog_section" "$key" "$value")" == 1 &&
+    "$(count_policy_key_in_text "$unreleased_changelog_section" "$key")" == 1 ]] ||
+    fail "CHANGELOG.md Unreleased section must bind the current CPA audit identity: $key"
+done
+[[ "$(count_fixed_in_text "$unreleased_changelog_section" "Linux audit-tool verification is ${current_audit_tool_test_count}/${current_audit_tool_test_count} PASS.")" == 1 ]] ||
+  fail "CHANGELOG.md Unreleased section must bind the current CPA audit test count"
 
 if ! python3 -B - \
   "$doc_root" \

@@ -4,9 +4,12 @@
 > This publication design was retired by the workflow cleanup. The default
 > branch now
 > contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create
-> or modify a GitHub Release. The owner performs independent server-side
-> sandbox review outside GitHub Actions. The remainder of this document is a
+> or modify a GitHub Release. Owner-run server diagnostics occur outside GitHub
+> Actions and are not independent evidence. The remainder of this document is a
 > point-in-time audit record, not an executable or current publication plan.
+> Current Round 12 status is defined in [ROUND12_STATUS.md](ROUND12_STATUS.md):
+> final-candidate second-machine execution remains pending, and this round does
+> not create a tag or Release.
 
 Field names beginning with `current_` below are preserved verbatim from that
 historical snapshot; they do not describe the active workflow inventory.

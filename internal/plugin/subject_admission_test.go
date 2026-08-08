@@ -35,6 +35,7 @@ func TestSubjectAccumulationEligibility(t *testing.T) {
 	}{
 		{name: "authorization hard block without eligibility", identity: validIdentity, result: validResult, hardBlock: 80},
 		{name: "api key hard block without eligibility", identity: subject.Identity{Hash: validIdentity.Hash, Source: subject.SourceAPIKey}, result: validResult, hardBlock: 80},
+		{name: "credential conflict", identity: subject.Identity{Hash: validIdentity.Hash, Source: subject.SourceConflict}, result: validResult, hardBlock: 80},
 		{name: "anonymous", identity: subject.Identity{Hash: validIdentity.Hash, Source: subject.SourceAnonymous}, result: validResult, hardBlock: 80},
 		{name: "unknown identity source", identity: subject.Identity{Hash: validIdentity.Hash, Source: subject.Source("future_source")}, result: validResult, hardBlock: 80},
 		{name: "missing identity hash", identity: subject.Identity{Source: subject.SourceAuthorization}, result: validResult, hardBlock: 80},

@@ -275,6 +275,7 @@ func TestRound9GeneratedAgentExtendedWindowIsTrustedCurrentUserOnly(t *testing.T
 	if !complete || len(active) <= target || !metaOverrideBoundedRefusalSuppression(active) ||
 		!guard.metaOverrideSignalsHaveActiveControlComposition(
 			signals, metaOverrideBoundedRefusalSuppression(active),
+			metaOverrideV45ValidatedFamilies(active),
 		) {
 		t.Fatalf("extended leading proof incomplete: complete=%t bytes=%d target=%d", complete, len(active), target)
 	}

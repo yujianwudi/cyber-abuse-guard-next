@@ -14,6 +14,57 @@ stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c
 stale_abbreviated_policy_sha256="dc869ac9...e045"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
+python3_bin=""
+if ! python3_bin="$(command -v python3)" || [[ ! -x "$python3_bin" ]]; then
+  printf 'python3 is required for release document consistency fixtures\n' >&2
+  exit 127
+fi
+
+audit_tool_root="$root/tools/current-cpa-audit"
+audit_identity_output=""
+if ! audit_identity_output="$(python3 -B - "$audit_tool_root" <<'PY'
+import sys
+import unittest
+from pathlib import Path
+
+
+tool = Path(sys.argv[1]).resolve(strict=True)
+sys.path.insert(0, str(tool))
+sys.path.insert(0, str(tool / "tests"))
+import run
+
+
+identities = run.runner_identities()
+loader = unittest.TestLoader()
+suite = loader.discover(str(tool / "tests"), pattern="test_*.py")
+if loader.errors:
+    for error in loader.errors:
+        print(error, file=sys.stderr)
+    raise SystemExit("CPA audit unittest discovery reported loader errors")
+for key in (
+    "bundle_sha256",
+    "audit_contract_sha256",
+    "run_source_sha256",
+    "machine_schema_sha256",
+):
+    print(identities[key])
+print(suite.countTestCases())
+PY
+)"; then
+  printf 'cannot determine current CPA audit runner fixture identities\n' >&2
+  exit 1
+fi
+audit_identity_values=()
+mapfile -t audit_identity_values <<<"$audit_identity_output"
+[[ "${#audit_identity_values[@]}" == 5 ]] || {
+  printf 'cannot determine current CPA audit runner fixture identities\n' >&2
+  exit 1
+}
+audit_runner_bundle_sha256="${audit_identity_values[0]}"
+audit_contract_sha256="${audit_identity_values[1]}"
+audit_run_source_sha256="${audit_identity_values[2]}"
+audit_machine_schema_sha256="${audit_identity_values[3]}"
+audit_tool_test_count="${audit_identity_values[4]}"
 
 documents=(
   README.md
@@ -38,6 +89,8 @@ documents=(
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
   docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+  docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+  docs/ROUND12_STATUS.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -76,6 +129,8 @@ classifier_identity_documents=(
   docs/ROUND9_HOST_RUNNER.md
   docs/ROUND9_OPERATOR_ROLLOUT.md
   docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+  docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+  docs/ROUND12_STATUS.md
   docs/RULES.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
@@ -263,7 +318,23 @@ make_fixture() {
         '## Architecture and security model' \
         >"$fixture/$relative"
     elif [[ "$relative" == CHANGELOG.md ]]; then
-      printf '# Changelog\n\n## 0.16 - 2026-07-21\n\nround6-prerelease-attestation.json\nformal-release-attestation.json\n' >"$fixture/$relative"
+      printf '%s\n' \
+        '# Changelog' \
+        '' \
+        '## Unreleased - v0.16 main development' \
+        '' \
+        "current_audit_runner_bundle_sha256: $audit_runner_bundle_sha256" \
+        "current_audit_contract_sha256: $audit_contract_sha256" \
+        "current_audit_run_source_sha256: $audit_run_source_sha256" \
+        "current_audit_machine_schema_sha256: $audit_machine_schema_sha256" \
+        "current_audit_tool_test_count: $audit_tool_test_count" \
+        "Linux audit-tool verification is $audit_tool_test_count/$audit_tool_test_count PASS." \
+        '' \
+        '## 0.16 - 2026-07-21' \
+        '' \
+        'round6-prerelease-attestation.json' \
+        'formal-release-attestation.json' \
+        >"$fixture/$relative"
     elif [[ "$relative" == docs/reports/CORPUS_REPORT.md ]]; then
       printf '# Historical project regression corpus report - v0.1.2 candidate\n' >"$fixture/$relative"
     elif [[ "$relative" == docs/reports/ROUND8_RELEASE_READINESS.md ]]; then
@@ -316,6 +387,28 @@ make_fixture() {
     } >"$staged"
     mv -f -- "$staged" "$fixture/$relative"
   done
+  printf '%s\n' \
+    '' \
+    "round12_classifier_policy: $classifier_policy_version / $classifier_policy_sha256" \
+    "round12_audit_runner_bundle: $audit_runner_bundle_sha256" \
+    "round12_audit_contract: $audit_contract_sha256" \
+    "round12_audit_run_source: $audit_run_source_sha256" \
+    "round12_audit_machine_schema: $audit_machine_schema_sha256" \
+    "round12_local_audit_tool_tests: PASS / LINUX / ${audit_tool_test_count}_OF_${audit_tool_test_count}" \
+    >>"$fixture/docs/ROUND12_STATUS.md"
+  printf '%s\n' \
+    '' \
+    '## Round 12 working-tree pre-final Linux validation' \
+    '' \
+    '```text' \
+    "runner_bundle_sha256: $audit_runner_bundle_sha256" \
+    "audit_contract_sha256: $audit_contract_sha256" \
+    "run_source_sha256: $audit_run_source_sha256" \
+    "machine_schema_sha256: $audit_machine_schema_sha256" \
+    '```' \
+    '' \
+    "| Current CPA audit tool | **PASS**, Linux $audit_tool_test_count/$audit_tool_test_count. Fixture evidence. |" \
+    >>"$fixture/docs/reports/TEST_REPORT.md"
   for relative in \
     docs/reports/RELEASE_EVIDENCE.md \
     docs/reports/TEST_REPORT.md; do
@@ -351,6 +444,150 @@ must_fail() {
 
 make_fixture "$work/pass"
 run_gate "$work/pass"
+
+mkdir -p "$work/python-exit-after-output"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  "\"$python3_bin\" \"\$@\"" \
+  'exit 1' \
+  >"$work/python-exit-after-output/python3"
+chmod 0700 "$work/python-exit-after-output/python3"
+if PATH="$work/python-exit-after-output:$PATH" \
+  run_gate "$work/pass" >"$work/python-exit-after-output.log" 2>&1; then
+  printf 'release document consistency accepted failed CPA identity computation\n' >&2
+  exit 1
+fi
+grep -Fq -- \
+  'cannot determine the current CPA audit runner identity closure' \
+  "$work/python-exit-after-output.log" || {
+  printf 'release document consistency emitted the wrong Python failure diagnostic\n' >&2
+  exit 1
+}
+printf 'release document consistency rejected failed CPA identity computation as expected\n'
+
+mkdir -p \
+  "$work/python-loader-error-bin" \
+  "$work/python-loader-error-module"
+printf '%s\n' \
+  'class _Suite:' \
+  '    def countTestCases(self):' \
+  '        return 144' \
+  '' \
+  'class TestLoader:' \
+  '    def __init__(self):' \
+  '        self.errors = []' \
+  '' \
+  '    def discover(self, *args, **kwargs):' \
+  '        self.errors.append("synthetic loader error")' \
+  '        return _Suite()' \
+  >"$work/python-loader-error-module/unittest.py"
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  "export PYTHONPATH=\"$work/python-loader-error-module\${PYTHONPATH:+:\$PYTHONPATH}\"" \
+  "exec \"$python3_bin\" \"\$@\"" \
+  >"$work/python-loader-error-bin/python3"
+chmod 0700 "$work/python-loader-error-bin/python3"
+if PATH="$work/python-loader-error-bin:$PATH" \
+  run_gate "$work/pass" >"$work/python-loader-error.log" 2>&1; then
+  printf 'release document consistency accepted unittest loader errors\n' >&2
+  exit 1
+fi
+grep -Fq -- \
+  'cannot determine the current CPA audit runner identity closure' \
+  "$work/python-loader-error.log" || {
+  printf 'release document consistency emitted the wrong loader-error diagnostic\n' >&2
+  exit 1
+}
+printf 'release document consistency rejected unittest loader errors as expected\n'
+
+cp -a "$work/pass" "$work/stale-round12-task-book-classifier"
+sed -i "s/$classifier_policy_sha256/$old_classifier_policy_sha256/" \
+  "$work/stale-round12-task-book-classifier/docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md"
+must_fail stale-round12-task-book-classifier \
+  "$work/stale-round12-task-book-classifier" \
+  'docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md must place the exact visible classifier policy prologue on lines 2-6'
+
+cp -a "$work/pass" "$work/stale-round12-status-classifier"
+sed -i \
+  "s|^round12_classifier_policy: $classifier_policy_version / $classifier_policy_sha256$|round12_classifier_policy: $classifier_policy_version / $old_classifier_policy_sha256|" \
+  "$work/stale-round12-status-classifier/docs/ROUND12_STATUS.md"
+must_fail stale-round12-status-classifier \
+  "$work/stale-round12-status-classifier" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
+
+cp -a "$work/pass" "$work/duplicate-round12-status-classifier"
+printf '\nround12_classifier_policy: %s / %s\n' \
+  "$classifier_policy_version" "$old_classifier_policy_sha256" \
+  >>"$work/duplicate-round12-status-classifier/docs/ROUND12_STATUS.md"
+must_fail duplicate-round12-status-classifier \
+  "$work/duplicate-round12-status-classifier" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
+
+cp -a "$work/pass" "$work/backtick-round12-status-classifier"
+printf '\n`round12_classifier_policy: %s / %s`\n' \
+  "$old_classifier_policy_version" "$old_classifier_policy_sha256" \
+  >>"$work/backtick-round12-status-classifier/docs/ROUND12_STATUS.md"
+must_fail backtick-round12-status-classifier \
+  "$work/backtick-round12-status-classifier" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
+
+cp -a "$work/pass" "$work/json-round12-status-classifier"
+printf '\n{"round12_classifier_policy": "%s / %s"}\n' \
+  "$old_classifier_policy_version" "$old_classifier_policy_sha256" \
+  >>"$work/json-round12-status-classifier/docs/ROUND12_STATUS.md"
+must_fail json-round12-status-classifier \
+  "$work/json-round12-status-classifier" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
+
+cp -a "$work/pass" "$work/bulleted-round12-status-classifier"
+printf '\n- round12_classifier_policy: %s / %s\n' \
+  "$old_classifier_policy_version" "$old_classifier_policy_sha256" \
+  >>"$work/bulleted-round12-status-classifier/docs/ROUND12_STATUS.md"
+must_fail bulleted-round12-status-classifier \
+  "$work/bulleted-round12-status-classifier" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
+
+cp -a "$work/pass" "$work/stale-round12-audit-runner-bundle"
+sed -i "s/$audit_runner_bundle_sha256/$old_classifier_policy_sha256/" \
+  "$work/stale-round12-audit-runner-bundle/docs/ROUND12_STATUS.md"
+must_fail stale-round12-audit-runner-bundle \
+  "$work/stale-round12-audit-runner-bundle" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 CPA audit identity: round12_audit_runner_bundle'
+
+cp -a "$work/pass" "$work/stale-round12-audit-contract-report"
+sed -i "s/$audit_contract_sha256/$old_classifier_policy_sha256/" \
+  "$work/stale-round12-audit-contract-report/docs/reports/TEST_REPORT.md"
+must_fail stale-round12-audit-contract-report \
+  "$work/stale-round12-audit-contract-report" \
+  'docs/reports/TEST_REPORT.md Round 12 section must bind the current CPA audit identity: audit_contract_sha256'
+
+cp -a "$work/pass" "$work/stale-round12-audit-run-changelog"
+sed -i "s/$audit_run_source_sha256/$old_classifier_policy_sha256/" \
+  "$work/stale-round12-audit-run-changelog/CHANGELOG.md"
+must_fail stale-round12-audit-run-changelog \
+  "$work/stale-round12-audit-run-changelog" \
+  'CHANGELOG.md Unreleased section must bind the current CPA audit identity:'
+
+cp -a "$work/pass" "$work/swapped-round12-audit-changelog"
+sed -i \
+  "s|current_audit_contract_sha256: $audit_contract_sha256|current_audit_contract_sha256: $audit_run_source_sha256|" \
+  "$work/swapped-round12-audit-changelog/CHANGELOG.md"
+sed -i \
+  "s|current_audit_run_source_sha256: $audit_run_source_sha256|current_audit_run_source_sha256: $audit_contract_sha256|" \
+  "$work/swapped-round12-audit-changelog/CHANGELOG.md"
+must_fail swapped-round12-audit-changelog \
+  "$work/swapped-round12-audit-changelog" \
+  'CHANGELOG.md Unreleased section must bind the current CPA audit identity:'
+
+cp -a "$work/pass" "$work/stale-round12-audit-test-count"
+sed -i \
+  "s/PASS \/ LINUX \/ ${audit_tool_test_count}_OF_${audit_tool_test_count}/PASS \/ LINUX \/ 1_OF_1/" \
+  "$work/stale-round12-audit-test-count/docs/ROUND12_STATUS.md"
+must_fail stale-round12-audit-test-count \
+  "$work/stale-round12-audit-test-count" \
+  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 CPA audit identity: round12_local_audit_tool_tests'
 
 cp -a "$work/pass" "$work/symlinked-github-parent"
 mv -- "$work/symlinked-github-parent/.github" "$work/escaped-github-parent"

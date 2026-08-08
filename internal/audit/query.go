@@ -152,27 +152,34 @@ func EmptyStats() Stats {
 
 func statsFromStatus(status Status) Stats {
 	return Stats{
-		ByAction:                 make(map[string]int64),
-		ByDecisionKind:           make(map[string]int64),
-		ByCategory:               make(map[string]int64),
-		RetryWindowSeconds:       retryWindowSeconds,
-		Enqueued:                 status.Enqueued,
-		Written:                  status.Written,
-		Dropped:                  status.Dropped,
-		Failed:                   status.Failed,
-		Rejected:                 status.Rejected,
-		RawCaptureEnqueued:       status.RawCaptureEnqueued,
-		RawCaptureWritten:        status.RawCaptureWritten,
-		RawCaptureDropped:        status.RawCaptureDropped,
-		RawCaptureFailed:         status.RawCaptureFailed,
-		RawCaptureRejected:       status.RawCaptureRejected,
-		RawCaptureDeduplicated:   status.RawCaptureDeduplicated,
-		RawCaptureQueueHighWater: status.RawCaptureQueueHighWater,
-		RawCapturePrepareCount:   status.RawCapturePrepareCount,
-		RawCapturePrepareTotalUS: status.RawCapturePrepareTotalUS,
-		RawCapturePrepareLastUS:  status.RawCapturePrepareLastUS,
-		RawCapturePrepareMaxUS:   status.RawCapturePrepareMaxUS,
-		CleanupDeleted:           status.CleanupDeleted,
+		ByAction:                     make(map[string]int64),
+		ByDecisionKind:               make(map[string]int64),
+		ByCategory:                   make(map[string]int64),
+		RetryWindowSeconds:           retryWindowSeconds,
+		Enqueued:                     status.Enqueued,
+		Written:                      status.Written,
+		Dropped:                      status.Dropped,
+		Failed:                       status.Failed,
+		Rejected:                     status.Rejected,
+		RawCaptureEnqueued:           status.RawCaptureEnqueued,
+		RawCaptureWritten:            status.RawCaptureWritten,
+		RawCaptureDropped:            status.RawCaptureDropped,
+		RawCaptureFailed:             status.RawCaptureFailed,
+		RawCaptureRejected:           status.RawCaptureRejected,
+		RawCaptureDeduplicated:       status.RawCaptureDeduplicated,
+		RawCaptureQueueHighWater:     status.RawCaptureQueueHighWater,
+		RawCapturePrepareCount:       status.RawCapturePrepareCount,
+		RawCapturePrepareTotalUS:     status.RawCapturePrepareTotalUS,
+		RawCapturePrepareLastUS:      status.RawCapturePrepareLastUS,
+		RawCapturePrepareMaxUS:       status.RawCapturePrepareMaxUS,
+		CleanupDeleted:               status.CleanupDeleted,
+		CurrentLiveBytes:             status.CurrentLiveBytes,
+		ConfiguredMaxBytes:           status.ConfiguredMaxBytes,
+		CapacityMeasurementAvailable: status.CapacityMeasurementAvailable,
+		OverLimit:                    status.OverLimit,
+		CapacityCleanupRuns:          status.CapacityCleanupRuns,
+		CapacityCleanupDeleted:       status.CapacityCleanupDeleted,
+		CapacityRejected:             status.CapacityRejected,
 	}
 }
 
@@ -266,6 +273,10 @@ func (s *Store) Delete(ctx context.Context, query Query) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("audit: count deleted events: %w", err)
 	}
+	// The requested deletion is already committed. Capacity enforcement latches
+	// any residual condition into Status; do not report completed maintenance as
+	// if it were rolled back.
+	_ = s.remeasureCapacity(ctx)
 	return deleted, nil
 }
 

@@ -925,23 +925,22 @@ func TestCleanupEnforcesMaximumLiveSize(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	for i := 0; i < 3; i++ {
-		if err := store.Enqueue(testEvent(fmt.Sprintf("size-%d", i), time.Now().UTC())); err != nil {
-			t.Fatal(err)
-		}
+	status := store.Status()
+	if !status.CapacityMeasurementAvailable || !status.OverLimit || !status.Degraded ||
+		status.CurrentLiveBytes <= status.ConfiguredMaxBytes || status.ConfiguredMaxBytes != 1 ||
+		status.LastError != ErrCapacityExceeded.Error() {
+		t.Fatalf("startup capacity status = %#v", status)
 	}
-	if err := store.Flush(context.Background()); err != nil {
-		t.Fatal(err)
+	if err := store.Enqueue(testEvent("size-rejected", time.Now().UTC())); !errors.Is(err, ErrCapacityExceeded) {
+		t.Fatalf("Enqueue() error = %v, want capacity exceeded", err)
 	}
-	if err := store.Cleanup(context.Background()); err != nil {
-		t.Fatal(err)
+	status = store.Status()
+	if status.Enqueued != 0 || status.Rejected != 1 || status.CapacityRejected != 1 {
+		t.Fatalf("capacity rejection counters = %#v", status)
 	}
 	events, err := store.Query(context.Background(), Query{Limit: 10})
 	if err != nil || len(events) != 0 {
-		t.Fatalf("maximum-size events = (%#v, %v)", events, err)
-	}
-	if store.Status().CleanupDeleted < 3 {
-		t.Fatalf("maximum-size cleanup status = %#v", store.Status())
+		t.Fatalf("capacity-rejected events = (%#v, %v)", events, err)
 	}
 }
 

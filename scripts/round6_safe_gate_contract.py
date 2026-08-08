@@ -133,6 +133,10 @@ ACTIONLINT_COMMAND = (
     "$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) "
     + " ".join(ACTIVE_WORKFLOW_PATHS)
 )
+CURRENT_CPA_AUDIT_UNITTEST_COMMAND = (
+    "python3 -B -m unittest discover -s "
+    "./tools/current-cpa-audit/tests -p 'test_*.py'"
+)
 WORKFLOW_DIRECTORY_AUXILIARY_PATHS = (".github/workflows/README.md",)
 ACTIVE_RC_WORKFLOW_PATH = ".github/workflows/release-rc.yml"
 ROUND9_GATE_WORKFLOW_PATH = ".github/workflows/policy-gate.yml"
@@ -606,7 +610,8 @@ CONSUMED_BOUNDARY_LINES = {
         "    cmd/*evaluation*|cmd/*holdout*|cmd/*consumed*|cmd/*private*|cmd/*blind*|cmd/*retired*|\\",
         "    docs/*consumed*|docs/*private*|docs/*blind*|docs/*retired*|\\",
         "    internal/classifier/*consumed*|internal/classifier/*private*|internal/classifier/*blind*|internal/classifier/*retired*|\\",
-        "    testdata/*evaluation*|testdata/*holdout*|testdata/*consumed*|testdata/*private*|testdata/*blind*|testdata/*retired*)",
+        "    testdata/*evaluation*|testdata/*holdout*|testdata/*consumed*|testdata/*private*|testdata/*blind*|testdata/*retired*|\\",
+        "    testdata/round9-independent-benign-v1/*|testdata/round9-independent-malicious-v1/*)",
     ),
     "scripts/package-source-release.sh": (
         "  ':(exclude,glob).round9-local-sandbox/**'",
@@ -721,7 +726,7 @@ CONSUMED_BOUNDARY_LINES = {
     ),
 }
 ROUND6_REPRODUCIBILITY_SCRIPT_SHA256 = (
-    "7a49d38a291c78e48a89b2d3573efc063d634a2a9f1d9b8d88c775993caf600a"
+    "7850bac3f274dcf80f21271bdec8afa0a0ac9583a52b95f2ce668b52e4663761"
 )
 ROUND6_REPRODUCIBILITY_ENTRY_MODE_CONTRACT = """reproducibility_mode="${ROUND6_REPRODUCIBILITY_MODE:-release}"
 case "$reproducibility_mode" in
@@ -764,7 +769,7 @@ ROUND6_REPRODUCIBILITY_CHECKSUMS_CONTRACT = (
     '        sbom.cdx.json >checksums.txt',
     '      sha256sum -c checksums.txt',
     'compare_artifact "checksums manifest" checksums.txt',
-    '  for relative in "$so" "$so.sha256" "$store_zip" build-metadata.json checksums.txt \\',
+    '  for relative in "$so" "$so.sha256" "$store_zip" build-metadata.json sbom.cdx.json \\',
 )
 BLOCKED_STEP_RUN_SHA256 = {
     ("admission", 0): "e687f6dfcf81b226a179502e0e078696ab8da5ed66797f30fe7cf19e59b83013",
@@ -1052,7 +1057,7 @@ CANDIDATE_ARTIFACTS = (
 )
 CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
-    "release-candidate-contract-test.sh": "61ebbe72f0062c3f5b0ccfc7df4f0ab3b85594b43561cd1926fe87b602d92a90",
+    "release-candidate-contract-test.sh": "ffd78a8531d2f8c1d10e4931327b0c7575a030381d7dd1a1dd5ac1896f33c141",
 }
 RC_RELEASE_SCRIPT_SHA256 = "c6d08fb43288cec1a4c56a46a980b744acbe09168030f43eb30336a9eb726256"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
@@ -1151,7 +1156,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
   fi'''
 ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "039a9598fe4d4de438bb70cd61b23e5e36fb6d6e4822d3031905b437b4b4d2a2"
+ROUND9_GATE_WORKFLOW_SHA256 = "25c287b8d55b95bd1d4ed1d8c049b0a660388dac6b48bc1986331b3fb5e5062d"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "09ab4e5dedb90ffbfe8f2436c8dc7ee6353162dc825e9751c708bdca68c800e1"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1351,11 +1356,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "5beae27fab62f148b10a9be6c8aeda2a5f90841f6b93f7e2538494506d4899d2"
+    "d5b0d5f3971d9e8d5594f6081715b6aebb299309c301f50c633dbb679bfbe122"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "c737d3beac40e2f87021d298f4cf04f112f28b79a6b78a9076fa0e1e587cbb20",
-    "scripts/release-doc-consistency.sh": "d0d4856298737e46f85126f13d1dac5a38afd83bdf8c2a9518b460685b30199d",
+    "scripts/release-doc-consistency-test.sh": "2f0de917f76fc7d53fcabab725765e1f7f2e679708a7b273036bb1c0a351b7c0",
+    "scripts/release-doc-consistency.sh": "97946d05f4d2893b58b60b542ac533f7b0c0985201a96efc3b2b7272e6f73309",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1492,7 +1497,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "0484d4a1376e7812c0b7dba7d18bed214888b79df77af8b2a9f3b2fa3ab6abd2"
+ROUND6_SAFE_GATE_TEST_SHA256 = "d70cc0603c76d2ae87b60d1c11654f10602f7997ca4e898a9af250b0fb1bb545"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -2502,9 +2507,16 @@ def auditable_shell_commands(text: str, source: Path) -> tuple[str, ...]:
 
 
 def reject_dynamic_dispatch(text: str, source: Path) -> set[str]:
+    dispatch_text = text
+    if source.name in {"Makefile:script-test", "Makefile:round6-script-test"}:
+        dispatch_text = "\n".join(
+            line
+            for line in text.splitlines()
+            if " ".join(line.split()) != CURRENT_CPA_AUDIT_UNITTEST_COMMAND
+        )
     if re.search(r"(?m)(?:^|[;&|])\s*(?:env\s+[^\n;&|]*\s+)?(?:bash|sh)\s+[^\n;&|]*-c(?:\s|$)", text):
         raise ContractError(f"dynamic shell dispatch cannot be audited safely: {source}")
-    if re.search(r"(?m)(?:^|[;&|])\s*(?:env\s+[^\n;&|]*\s+)?python(?:3(?:\.\d+)?)?\s+[^\n;&|]*(?:-c|-m)(?:\s|$)", text):
+    if re.search(r"(?m)(?:^|[;&|])\s*(?:env\s+[^\n;&|]*\s+)?python(?:3(?:\.\d+)?)?\s+[^\n;&|]*(?:-c|-m)(?:\s|$)", dispatch_text):
         raise ContractError(f"dynamic Python dispatch cannot be audited safely: {source}")
     if re.search(r"(?m)(?:^|[;&|])\s*eval(?:\s|$)|\$\((?:MAKE|\{?MAKE\}?)\)", text):
         raise ContractError(f"dynamic shell/Make dispatch cannot be audited safely: {source}")
@@ -2517,6 +2529,11 @@ def reject_dynamic_dispatch(text: str, source: Path) -> set[str]:
         r"^\s*(?:(?:if|while|until|then)\s+|!\s+)?[\"']?\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?"
     )
     for line in auditable_shell_commands(text, source):
+        if (
+            source.name in {"Makefile:script-test", "Makefile:round6-script-test"}
+            and " ".join(line.split()) == CURRENT_CPA_AUDIT_UNITTEST_COMMAND
+        ):
+            continue
         match = variable_command.search(line)
         if match and not extract_script_references(line):
             variable = match.group(1)
@@ -7419,7 +7436,7 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "test ! -e testdata/round9-independent-benign-v1/cases.jsonl",
         "test ! -e testdata/round9-independent-malicious-v1",
         "independent_corpus_executed=false",
-        "classifier-policy-v10",
+        "classifier-policy-v12",
         "1.0.10",
     ):
         if marker not in text:
@@ -9177,9 +9194,46 @@ def validate_round6_reproducibility_script(text: str, source: Path) -> None:
     patterns = tuple(
         re.findall(r"['\"]((?:/\*|!/[^'\"]+))['\"]", match.group("body"))
     )
-    if patterns != ROUND6_SPARSE_PATTERNS:
+    if patterns != ROUND9_SPARSE_PATTERNS:
         raise ContractError(
             f"Round6 reproducibility sparse checkout differs from the workflow contract: {source}"
+        )
+    clone_init_contract = 'git -C "$destination" init --quiet'
+    clone_fetch_contract = 'git -C "$destination" fetch --quiet'
+    sparse_checkout_contract = 'sparse-checkout set --no-cone'
+    source_checkout_contract = 'checkout --quiet --detach "$RELEASE_GIT_COMMIT"'
+    independent_clone_contract = (
+        clone_init_contract,
+        "local upload_pack='git -c uploadpack.allowFilter=true -c uploadpack.allowAnySHA1InWant=true upload-pack'",
+        'config remote.origin.uploadpack "$upload_pack"',
+        clone_fetch_contract,
+        '--filter=blob:none --no-tags origin "$fetch_target"',
+        '[[ -d "$destination/.git" && ! -L "$destination/.git" ]]',
+        'rev-parse --git-common-dir',
+        '[[ ! -e "$destination/.git/objects/info/alternates" ]]',
+        'config --get remote.origin.promisor',
+        'config --get remote.origin.partialclonefilter',
+        'config --get remote.origin.uploadpack',
+        '"$destination"/.git/objects/pack/*.promisor',
+        sparse_checkout_contract,
+        source_checkout_contract,
+        'release_round6_safe_sparse_path "$path"',
+    )
+    if any(text.count(contract) != 1 for contract in independent_clone_contract):
+        raise ContractError(
+            f"Round6 reproducibility must use the exact independent blobless clone contract: {source}"
+        )
+    if "worktree add" in text or "objects/info/alternates" not in text:
+        raise ContractError(
+            f"Round6 reproducibility must not share a linked or alternate Git object store: {source}"
+        )
+    clone_init = text.index(clone_init_contract)
+    clone_fetch = text.index(clone_fetch_contract)
+    sparse_checkout = text.index(sparse_checkout_contract)
+    source_checkout = text.index(source_checkout_contract)
+    if not clone_init < clone_fetch < sparse_checkout < source_checkout:
+        raise ContractError(
+            f"Round6 reproducibility must filter and sparsify before source checkout: {source}"
         )
     if text.count(ROUND6_REPRODUCIBILITY_ENTRY_MODE_CONTRACT) != 1:
         raise ContractError(
@@ -9561,6 +9615,16 @@ def validate_round6_makefile_contract(text: str, source: Path) -> None:
         raise ContractError(
             "round6-regression must execute the exact fail-closed wrapper audit plugin pattern"
         )
+    script_test_commands = tuple(
+        " ".join(line.split())
+        for line in recipes.get("script-test", "").splitlines()
+        if line.strip()
+    )
+    if script_test_commands.count(CURRENT_CPA_AUDIT_UNITTEST_COMMAND) != 1:
+        raise ContractError(
+            "script-test must reach the current-cpa-audit unittest gate: "
+            f"{source}"
+        )
     required_script_commands = (
         "make workflow-lint",
         "make shellcheck-lint",
@@ -9573,6 +9637,7 @@ def validate_round6_makefile_contract(text: str, source: Path) -> None:
         "python3 -B ./scripts/round9_host_evidence_contract_test.py",
         "python3 -B ./scripts/round9_external_evaluation_contract_test.py",
         "python3 -B ./scripts/round9_independent_audit_contract_test.py",
+        CURRENT_CPA_AUDIT_UNITTEST_COMMAND,
         "python3 -B ./scripts/round6_safe_gate_contract.py --root .",
         "./scripts/check-production-health-test.sh",
         "GO=$(GO) ./scripts/create-store-archive-test.sh",
