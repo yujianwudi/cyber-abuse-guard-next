@@ -35,6 +35,14 @@ unbounded copy of every prompt.
   bounded to `max_bytes + 64 KiB` of prefix/overlap; the resulting preview is
   then truncated on a valid UTF-8 boundary.
 - Per-record bound: `max_bytes`, default 8192, allowed range 1..1048576.
+- Database bound: `audit.max_db_mb` is a live-page runtime hard cap, not only a
+  periodic retention target. After each bounded writer batch, the Store removes
+  oldest previews before ordinary events. If it cannot recover below the cap,
+  later audit/capture writes are rejected and status becomes degraded; the
+  request classification/disposition is not changed by that storage failure.
+  Subject-state replacement uses a transactional live-page preflight and rolls
+  back on overflow rather than allowing subject data to trigger evidence
+  eviction; deleting subject state remeasures the gate immediately.
 - Lifetime: `ttl_hours`, default 72 and allowed range 1..87600. When capture is
   enabled it may not exceed `audit.retention_days * 24`.
 - Storage: the ordinary block event and optional preview enter the shared queue
@@ -94,6 +102,7 @@ audit:
   data_dir: /plugin-data/cyber-abuse-guard
   require_persistent_storage: true
   retention_days: 30
+  max_db_mb: 256
   log_request_hash: true
   log_subject_hash: true
   log_original_text: false

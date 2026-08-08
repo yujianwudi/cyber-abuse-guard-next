@@ -1,18 +1,19 @@
-# CPA Cyber Abuse Guard v0.16 Round 9 Design
+# CPA Cyber Abuse Guard v0.16 Round 12 Design
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 ## Scope, release state, and invariants
 
 Cyber Abuse Guard is an in-process CPA C-ABI v1 plugin for CLIProxyAPI. The
-current source version is `0.16`; the Round 9 development target is the Linux
-amd64 prerelease `v0.16-rc.4`. It is not the stable `v0.16` release and is not
-production-approved. The earlier `v0.16-rc.1`, Round 8 `v0.16-rc.2`, and failed
-Phase 1 `v0.16-rc.3` identities are immutable historical evidence and must not
-be overwritten, relabeled, repaired, or republished as current Round 9 output.
+current source version is `0.16`; Round 12 targets Linux amd64 engineering
+source and ends at a gated merge to `main`. It does not create an RC, tag,
+plugin Release, or stable `v0.16`, and it is not production-approved. The
+earlier `v0.16-rc.1`, Round 8 `v0.16-rc.2`, failed Phase 1 `v0.16-rc.3`, and
+Round 9 `v0.16-rc.4` identities are immutable historical evidence and must not
+be overwritten, relabeled, repaired, or republished as Round 12 output.
 
 The fixed CPA source/compile target is:
 
@@ -27,8 +28,9 @@ not followed automatically.
 Source/compile contracts are not counted-Mock Host evidence, and neither is a
 substitute for independent review of the exact candidate bytes.
 
-Round 9 redesigns the Balanced false-positive boundary around candidate-level
-block eligibility. The classifier does not treat a request as a bag of globally
+Round 9 introduced the candidate-level Balanced false-positive boundary that
+Round 12 retains and hardens. The classifier does not treat a request as a bag
+of globally
 composable keywords or use a request-global safety boolean. Each harmful-core
 candidate binds category, clause, ownership scope, referent chain, and evidence
 occurrences. Only a candidate whose inspection, current execution act, harmful
@@ -159,8 +161,8 @@ Host HTTP 405. No current official public route maps Guard's error to final
 client 405, so the result is `NOT AVAILABLE / NOT RUN` and remains a handoff
 blocker that current CI cannot solve. The real four-protocol HTTP/SSE and zero
 Auth/Usage/Provider/Upstream matrix must be executed against the exact
-`v0.16-rc.4` candidate in the protected Round 9 counted-Mock lane before it
-becomes Host evidence.
+Round 12 final-candidate commit/tree/SO in the authorized isolated counted-Mock
+lane before it becomes Host evidence.
 
 CPA ABI v1 `ExecutorResponse` has payload and headers but no HTTP status.
 Consequently, ABI v1 cannot simultaneously return an arbitrary plugin-owned
@@ -508,7 +510,7 @@ These mechanisms remain stateless across independent API calls and do not
 attest to local instruction-file integrity.
 
 Ruleset `1.0.10` identifies the embedded YAML assets only. The complete
-code-level behavior is separately identified as `classifier-policy-v10`; its
+code-level behavior is separately identified as `classifier-policy-v12`; its
 exact SHA-256 is the canonical current identity in this document's prologue and
 `internal/classifier/policy_identity.go`.
 Its tested source list binds the classifier, matcher, normalizer, role logic,
@@ -563,6 +565,16 @@ that hashes will not be stable across restarts. On Linux, a configured secret
 file is opened with `O_NOFOLLOW`; its type, permissions, size, and contents are
 validated through that same descriptor to prevent final-component symlink and
 path-swap races.
+
+Authorization and API-key header names are aggregated case-insensitively even
+when a caller supplies multiple differently cased map keys. Identical Bearer
+values collapse after scheme normalization. Competing non-empty Authorization
+values (including mixed or malformed schemes), or competing `X-API-Key` values,
+produce a deterministic HMAC conflict identity with source
+`credential_conflict`; they never select one credential by Go map order and are
+not eligible for rolling subject accumulation. A sole unsupported Authorization
+scheme is not treated as key material and retains the existing `X-API-Key`
+fallback.
 
 Subject control is disabled by default and request interception does not enter the
 identifier/controller path unless `subject_control.enabled: true` is explicit.
@@ -670,10 +682,29 @@ Changing it is a correlation reset, not a transparent rotation.
 
 When enabled, SQLite stores only the minimal event schema. The database uses
 WAL, a busy timeout, parameterized SQL, bounded asynchronous writes, retention
-cleanup, and a configured maximum size. A database open/write failure degrades
-to in-memory counters and rate-limited host-error diagnostics; classification
-continues. Shutdown has a five-second runtime budget so a locked SQLite writer
-cannot indefinitely stall plugin reconfiguration or shutdown.
+cleanup, and a runtime live-page hard cap from `audit.max_db_mb`. After every
+writer batch of at most 64 queue items, the Store measures
+`(page_count - freelist_count) * page_size`. If the cap is exceeded it removes
+the oldest Raw Capture rows first and then the oldest ordinary audit events in
+bounded deletion batches. If the fixed schema, a query failure, or bounded
+cleanup cannot restore the cap, later audit/capture writes are rejected while
+classification continues. Subject risk snapshots are never automatically
+deleted to make room: replacement is measured inside its SQLite transaction
+and rolled back with `ErrCapacityExceeded` before commit, preserving both the
+prior risk state and audit evidence. Explicit subject-state deletion commits
+first and immediately remeasures so an inherited oversized snapshot can clear
+the gate without waiting for the periodic cleanup tick. Authenticated status
+and statistics expose
+`current_live_bytes`, `configured_max_bytes`,
+`capacity_measurement_available`, `over_limit`, `capacity_cleanup_runs`,
+`capacity_cleanup_deleted`, and `capacity_rejected`; capacity errors use only
+fixed low-cardinality messages. This live-page contract is distinct from the
+physical database/WAL file allocation reported by the filesystem.
+
+A database open/write/capacity failure degrades to in-memory counters and
+rate-limited host-error diagnostics; classification continues. Shutdown has a
+five-second runtime budget so a locked SQLite writer cannot indefinitely stall
+plugin reconfiguration or shutdown.
 
 A complete non-user/untrusted category-free wrapper-only
 `audit_suspicious_text` result with no opaque media is a counter-only
@@ -968,8 +999,8 @@ synthetic fallback cannot satisfy Host evidence.
 
 Whether the authorized sandbox and independent auditor ran the suite against the
 exact candidate is an evidence field, not an architectural property; consult
-the Round 9 execution record, the historical Round 8 readiness report, and the
-explicitly historical Round 6 handoff.
+the Round 12 status boundary for current claims. The Round 9 execution record,
+Round 8 readiness report, and Round 6 handoff remain historical evidence only.
 Release verification inspects the ELF and rejects a binary whose imported glibc
 symbol version exceeds `GLIBC_2.34`. The published artifact therefore requires
 glibc 2.34 or newer, is compatible with the official Debian Bookworm CPA image,
@@ -984,13 +1015,14 @@ SSE stream with terminal frames; returning successful chunks would force HTTP
 ## Build identity and release reproducibility
 
 Builds link immutable version, full commit SHA, ruleset version/hash,
-`classifier-policy-v10` and its exact policy SHA-256, streaming-scanner identity,
+`classifier-policy-v12` and its exact policy SHA-256, streaming-scanner identity,
 and dirty state. Build metadata and the verifier bind
 these identities. Candidate mode requires a clean worktree, exact expected
 commit/tree, the commit timestamp, an absent stable `v0.16` tag, and forbids
-formal operations. The Round 9 RC workflow may create only the non-latest
-prerelease `v0.16-rc.4`. `ALLOW_DIRTY_BUILD=1` remains development-only and
-cannot produce the Host-test candidate.
+formal operations. Round 12 does not authorize candidate publication, tags, or
+GitHub Releases; the historical Round 9 RC workflow is not an active publication
+path. `ALLOW_DIRTY_BUILD=1` remains development-only and cannot produce the
+final-candidate Host-test artifact.
 
 `SOURCE_DATE_EPOCH` derives from the commit timestamp; clean candidate and formal
 builds reject a different override.

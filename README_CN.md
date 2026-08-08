@@ -1,19 +1,52 @@
 # CPA Cyber Abuse Guard
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
-> **仓库沿革：** 这是采用全新 Git 历史的后续项目。旧 tag、分支、Release
-> 和历史资产继续只读保留在
+<!-- round12-status:start -->
+```text
+round12_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_RELEASE
+round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
+round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
+round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
+round12_go_platform: go1.26.4 / linux-amd64
+round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
+round12_working_candidate_engineering_ci: PENDING_FINAL_CANDIDATE
+round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
+round12_final_candidate_second_machine: PENDING_FINAL_CANDIDATE_EXECUTION
+round12_protected_host: NOT_PROVIDED
+round12_independent_attestation: NOT_PROVIDED
+round12_production_approved: NOT_PROVIDED
+round12_release_ready: NOT_PROVIDED
+round12_tag_and_release: NOT_CREATED / NOT_AUTHORIZED
+legacy_v0.15_availability: UNAVAILABLE
+legacy_v0.15_support: SUSPENDED
+```
+<!-- round12-status:end -->
+
+精确区分绿色基线、输入诊断与仍待执行的最终候选门禁，见
+[第十二轮当前状态与证据边界](docs/ROUND12_STATUS.md)。
+
+> **仓库沿革：** 这是采用全新 Git 历史的后续项目。此前记录的旧仓库
 > [`yujianwudi/cyber-abuse-guard`](https://github.com/yujianwudi/cyber-abuse-guard)，
-> 本仓库不会重新创建或冒充这些历史产物。
+> 及其 `v0.15` Release 当前均不可用（2026-08-04 经 GitHub API 验证为 `404`）。
+> 历史身份仍作为记录保留，但在恢复只读仓库或带签名的不可变归档前，不声称其资产
+> 仍可下载或可独立验证。
 
 > **当前开发状态：** 仅维护 `main` 源码线。固定源码/编译目标为 CPA
 > `v7.2.116`，并仅使用 C ABI 1 / RPC schema 2。GitHub Actions 只执行 CI、CodeQL
-> 和策略/语料验证，不创建 RC 或 Release；独立服务器沙盒审计由所有者自行执行。
+> 和策略/语料验证，不创建 RC 或 Release；服务器沙盒诊断由所有者另行执行，
+> 不属于独立证据。
 > 尚未获得生产批准，也不得据此自动重新开启生产 Balanced。
+>
+> 精确 `main@21267e742b624b29a75bd3683fd6914f76c764b5` 的 CI
+> `30880739397`、Policy and Corpus Gate `30880739368`、CodeQL
+> `30880739360` 已对 CPA v7.2.116 成功。后续所有者运行的 1,320 次传输执行报告只保留为
+> `SECOND-MACHINE DIAGNOSTIC / NOT INDEPENDENT ATTESTATION`；它不是最终候选
+> RT12-05/06 执行，也不能关闭受保护 Host、独立审计、发布或生产门禁。最终候选
+> 二号机执行仍为 `PENDING_FINAL_CANDIDATE_EXECUTION`。
 >
 > 已冻结的 CPA v7.2.113 第十一轮从精确 `main` 提交
 > `aaa71d9924bef935196790976c838968408dcdeb` 开始，最终结束于
@@ -54,10 +87,10 @@ current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2
 
 > [!WARNING]
 > [`v0.15`](https://github.com/yujianwudi/cyber-abuse-guard/releases/tag/v0.15)
-> 已于 2026-07-20 手工发布为 latest stable，共十项资产。Release Notes 明确披露：
-> GitHub Actions 因 Billing 未运行，资产由所有者在报告生产沙盒通过后手工构建。
-> 该 Release 没有附带独立 Host、审计或评测 attestation。下文保留的 Round 6
-> 与 `v0.15-rc.*` 内容是发布前工程历史，不代表当前 v0.16 发布状态。
+> 曾被记录为 2026-07-20 手工发布的 latest stable，但旧仓库、Release 和十项资产
+> 当前均返回 `404`。安全支持与回滚声明因此为 **SUSPENDED / UNAVAILABLE**，直到
+> 原始字节与摘要恢复到可验证的只读位置。下文 Round 6 与 `v0.15-rc.*` 仅是历史
+> 工程记录，不能代替缺失资产。
 
 CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInterceptor，在账号认证调度、Provider 执行、用量记账、SSE 建立和上游请求之前检查受支持的模型请求。命中时直接返回 HTTP 403；旧的本地 Executor 仅作为纵深防御保留。请求内容只在进程内判断，不发送给公网分类器。
 
@@ -67,27 +100,28 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 |---|---|
 | 源码版本 / 发布模式 | `0.16` 开发版，仅维护 `main`；仓库不再提供自动 RC 或 Release 工作流 |
 | 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
-| GitHub 发布 | 历史 Tag 与 Release 保持不变；当前 Actions 只验证源码和开发产物，不能创建或修改 Release |
-| 已审计提交基线 | `150c25e6352cb237cb3956bd66c83c3278c3fe33`；历史 classifier 摘要 `e0cbc975...`；CPA v7.2.104 |
-| 工程 CI | 精确起始 `main` 提交 `aaa71d9924bef935196790976c838968408dcdeb` 的 CI `30697468074`、CodeQL `30697468078`、Policy and Corpus Gate `30697468079` 均 **PASS**；后续提交仍须各自检查，且这不是生产批准 |
-| 安全审计 | **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
-| 当前修复 | 第十/十一轮 classifier 行为冻结在 CPA v7.2.113 最终基线 `main@a9fba4e`；最终提交的 CI/Policy/CodeQL 均通过，但没有绑定该提交的二号机 watchdog 或独立复审证据。当前 v7.2.116 源码/编译增量必须重绑源码身份并独立重跑，任何 v7.2.113 PASS 均不转移 |
-| CPA 源码/编译目标 | 固定 `v7.2.116`（`a88197f845c979132c8978ea223c6af05cc81536`），C ABI 1 / RPC schema 2；源码、SDK/API、集成编译与 Linux Host `.so` 加载结论仅以精确提交 GitHub 门禁为准，独立受保护运行时验证仍待执行 |
+| GitHub 发布 | 旧 `v0.15` 仓库/Release 当前不可用；Actions 只验证源码和有期限的开发产物，不能创建或修改 Release |
+| 当前已提交基线 | `main@21267e742b624b29a75bd3683fd6914f76c764b5`；classifier `classifier-policy-v11` / `f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`；CPA v7.2.116 |
+| 工程 CI | 精确 `main@21267e7` 的 CI `30880739397`、Policy and Corpus Gate `30880739368`、CodeQL `30880739360` 均 **PASS**；后续候选必须取得自己的精确提交结果，且这不是生产批准 |
+| 历史失败审计 | 精确 `150c25e6` / CPA v7.2.104 保持 **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
+| 输入二号机诊断 | 已提供的 CPA v7.2.116 报告记录 1,320 次传输执行；它是 `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`，传输排列不等于独立语义样本，也不能关闭第十二轮门禁 |
+| 第十二轮最终候选二号机 | **PENDING_FINAL_CANDIDATE_EXECUTION**；RT12-05/06 尚未针对最终候选 commit/tree/SO 执行，不声称本轮二号机 PASS |
+| CPA 源码/编译目标 | 固定 `v7.2.116`（`a88197f845c979132c8978ea223c6af05cc81536`），C ABI 1 / RPC schema 2；精确基线 GitHub 门禁已通过，所有后续候选仍须取得自身结果，受保护运行时验证仍待执行 |
 | 历史第九轮受保护 evaluator | 仅为已冻结 CPA v7.2.113 的回归合同。其无 checkout 的 root-owned broker 使用 Docker 29 兼容 internal-only bridge 且不向 Host 发布 CPA/counted-Mock 端口；evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、external counted-Mock v1、CPA sandbox descriptor v2 均为历史 schema，不是 v7.2.116 lane |
-| CPA v7.2.116 受保护 Host/评估 | **NOT_PROVIDED**；尚无经审查的版本化受保护 lane、签名评估、账本证明或二号机 watchdog 结果。任何未来 lane 都必须使用 internal-only bridge，不向 Host 发布 CPA 或 counted-Mock 端口，并记录 `host_ip=internal-only, host_port=0, container_port=8317`；Host 只能访问经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4，任何 Host binding、额外容器或非内部网络均不准入 |
+| CPA v7.2.116 受保护 Host/评估 | **NOT_PROVIDED**；所有者输入诊断不提供签名受保护 lane、独立 evaluator 或账本证明。任何未来 lane 都必须使用 internal-only bridge，不向 Host 发布 CPA 或 counted-Mock 端口，并记录 `host_ip=internal-only, host_port=0, container_port=8317`；Host 只能访问经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4，任何 Host binding、额外容器或非内部网络均不准入 |
 | 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
 | 独立审计 | 2026-07-29 对精确基线 `150c25e6` 的隔离审计为安全 **FAIL / BLOCKED**，失败计数见上；当前修复尚未接受独立重审 |
-| 生产批准 | **NOT GRANTED**；不存在稳定版 `v0.16`，也不能自动重新准入 Balanced |
-| 当前工作流 | 仅保留 `ci.yml`、`codeql.yml`、`policy-gate.yml` 三条可执行 Actions；Release、RC、第八轮与自动 Host 工作流已从默认分支移除 |
+| 独立证明 / 生产批准 / Release Ready | **NOT_PROVIDED**；不存在稳定版 `v0.16`，不能自动重新准入 Balanced，本轮也不创建 tag 或 Release |
+| 当前工作流 | 仓库自有可执行 workflow YAML 仅 `ci.yml`、`codeql.yml`、`policy-gate.yml` 三条；live Actions API 另返回 GitHub 生成的 `dynamic/dependabot/update-graph` 记录，见[治理快照](docs/reports/ROUND12_GITHUB_GOVERNANCE_SNAPSHOT.md) |
 | 静态分析治理 | `.github/workflows/codeql.yml` 在经过审查的稀疏源码边界内，以最小权限在 Ubuntu 上分析 Go；CodeQL 结果不能授权发布 |
 | 验证平台 | 仅 Linux amd64；产物引用的数字型 GLIBC ABI 版本必须 `<= 2.34` |
 | 不在范围 | Windows、macOS、musl/Alpine、真实 Provider、生产部署/验证 |
-| CPA 固定目标 | 当前目标仅 v7.2.116、Linux amd64、隔离 counted Mock。真实候选 `.so` 的 Raw Capture schema-4 生命周期及独立 bind mount 审计载体测试属于已冻结的 v7.2.113 第十一轮；v7.2.116 的精确提交与 Host 绑定为 **PENDING / NOT PROVIDED**。完整受保护服务器 Audit→Balanced→Strict、签名外部评测与账本证明仍为 **NOT RUN / PENDING** |
-| 外部 CPA 评估 / 当前源码独立审计 | 受保护发行评估仍为 `NOT_RUN`；现有隔离审计已判安全 `FAIL`，当前修复精确重审仍待执行，生产批准未授予 |
+| CPA 固定目标 | 当前目标仅 v7.2.116、Linux amd64、隔离 counted Mock。精确 `main@21267e7` 的工程 `.so` load 已由 GitHub CI 通过，已有 1,320 次传输执行仅为所有者运行的输入诊断；针对第十二轮最终候选的 RT12-05/06 二号机执行仍为 **PENDING_FINAL_CANDIDATE_EXECUTION** |
+| 外部 CPA 评估 / 当前源码独立审计 | 历史 `150c25e6` 隔离审计仍为 **FAIL / BLOCKED**；当前 `21267e7` 报告不是独立重审。受保护 Host、独立证明、生产批准与 release readiness 均为 `NOT_PROVIDED` |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前源码快照为 `classifier-policy-v10` / `7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2`；行为版本不变，但 CPA module pin 属于身份输入，因此摘要已重绑定；精确提交 GitHub 与 Host 绑定仍待完成 |
+| Classifier policy | 当前工作源码快照为 `classifier-policy-v12` / `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`；第十二轮同时修改 role/streaming 防御所有权语义与 CPA 绑定源码身份；精确提交 GitHub 与最终候选二号机绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
-| 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，状态页披露敏感备份清单，raw capture 默认仍关闭 |
+| 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，raw capture 默认关闭；`audit.max_db_mb` 在每个有界写批次后执行原文优先清理，无法恢复时公开容量降级并拒绝后续审计写入，但不改变请求分类 |
 
 ### 已冻结的 CPA v7.2.113 修复与当前 v7.2.116 兼容增量
 
@@ -105,13 +139,14 @@ v7.2.113 第十/十一轮证据，不得重标为 v7.2.116 结果。
 - provider-native tool result 只有在请求内完整事务被证明后才具有 request-local 权限。Gemini 整组只能是全显式 ID 匹配，或全无 ID 且按 name+ordinal 完整匹配；混合、缺项、错 owner、非终端和孤立结果均无权。只有 `previous_response_id` 的 Responses continuation 仍无权，因为插件无法验证 Host 的 pending call、已消费状态与防重放状态。
 - 去武器化 NERV 回归已覆盖凭证/会话窃取、持久化/C2/规避、勒索、钓鱼、隐蔽键盘记录、未授权利用和入侵后外传，并覆盖四 Provider 约 7 KiB 前/中/后 system 与终端 tool 路由；仓库名、授权运维、检测工程和闭合防御分析近邻保持不阻断。当前仍只是源码回归，精确 main 的五仓 counted-Mock 复测尚未提供。
 
-## 历史 v0.15 发布记录
+## 历史 v0.15 发布记录 — 当前不可用
 
 | 项目 | 历史事实 |
 |---|---|
-| Stable Release | `v0.15` 于 2026-07-20 手工发布，非 draft、非 prerelease、标记为 latest |
-| 资产 | 十项手工构建的发行资产 |
-| 验证声明 | 生产沙盒 PASS 仅为所有者在 Release Notes 中的报告，未附独立 Host 证据 |
+| 历史发布声明 | `v0.15` 被记录为 2026-07-20 手工发布，非 draft、非 prerelease、标记为 latest |
+| 当前可用性/支持 | **UNAVAILABLE / SUPPORT SUSPENDED**；记录中的仓库与 Release 现均返回 GitHub API `404` |
+| 资产 | 历史元数据称有十项手工构建资产；其字节当前不可访问或验证 |
+| 验证声明 | 历史生产沙盒 PASS 仅为所有者在现已不可用的 Release Notes 中报告，本仓库未附独立 Host 证据 |
 | 独立证据 | 没有 `formal-release-attestation.json` 或 `round6-prerelease-attestation.json` 资产 |
 | 源码身份 | classifier `v5`、ruleset `1.0.7`、audit schema v3 |
 
@@ -313,8 +348,9 @@ curl -H "X-Management-Key: $CPA_MANAGEMENT_KEY" \
 
 ## 历史 v0.15 发布前验证记录
 
-下表和后续流程描述的是 v0.15 手工稳定版发布前审查过的 admission 设计，保留用于
-审计历史；它们不是当前可用的 v0.16 工作流。
+下表和后续流程描述的是历史报告的 v0.15 手工稳定版发布前审查过的 admission 设计。
+旧仓库和 Release 现返回 `404`，所列链接与状态仅保留为历史记录，不声称源码、运行、
+tag、Release 或资产仍可访问；它们也不是当前可用的 v0.16 工作流。
 
 | 门禁 | 当前状态 |
 |---|---|
@@ -342,8 +378,8 @@ Windows 和 macOS 有意不出现在本轮矩阵中。缺少它们不是 Linux-o
 `go test ./...` 或 `go vet ./...` 替换 allowlist 门禁，以免编译或打开已消费的
 evaluation 包。
 
-在手工发布之前，审查流程要求外部门禁通过前不得创建 `v0.15`。该指令现在仅是历史
-记录；已发布的 v0.15 资产仍不得用作 v0.16 证据。已消费 v10 保持不可重跑。
+在报告的手工发布之前，审查流程要求外部门禁通过前不得创建 `v0.15`。该指令现在仅是
+历史记录；不得推断或把当前不可用的 v0.15 资产用作 v0.16 证据。已消费 v10 保持不可重跑。
 
 ## 产物契约
 
@@ -376,8 +412,8 @@ source archive 只属于后续正式发行路径。候选字节即使干净，�
 v0.15 是否具备资格，只能由外部 Round 6 / formal attestation 资产判定；这些资产必须绑定
 最终源码、候选工作流运行、候选字节、Host 记录、独立审计与发行评估。
 
-实际 2026-07-20 的 v0.15 发布没有完成上述受保护链；所有者报告的沙盒结果与手工构建
-披露只存在于 GitHub Release Notes，本仓库不会把它升级成独立证据。
+历史报告的 2026-07-20 v0.15 发布没有完成上述受保护链；所有者报告的沙盒结果与手工
+构建披露被归因于现已不可用的 GitHub Release Notes，本仓库不会把它升级成独立证据。
 
 第八轮预发行目标固定为 CPA v7.2.95 / `f71ec0eb6776854457892452cf28c47f0d658251`。
 后续上游版本不会自动改变受支持或可准入发行的目标；更早观察仅作为
