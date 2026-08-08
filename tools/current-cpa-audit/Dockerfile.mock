@@ -1,0 +1,11 @@
+ARG PYTHON_IMAGE
+FROM ${PYTHON_IMAGE}
+
+ARG MOCK_SOURCE_SHA256
+LABEL io.cyber-abuse-guard.mock-contract="cag-current-cpa-counted-mock/v1" \
+      io.cyber-abuse-guard.mock-source-sha256="${MOCK_SOURCE_SHA256}"
+
+COPY --chmod=0555 counted_mock.py /opt/cag-audit/counted_mock.py
+
+USER 65532:65532
+ENTRYPOINT ["python3", "-I", "-S", "-B", "/opt/cag-audit/counted_mock.py"]
