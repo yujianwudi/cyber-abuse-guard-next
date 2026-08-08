@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 Last updated: 2026-08-04 (Asia/Shanghai)
@@ -355,7 +355,7 @@ boundaries.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The active source-line identity is
     `classifier-policy-v12` / SHA-256
-`bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`,
+`795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`,
     and remains pending until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical

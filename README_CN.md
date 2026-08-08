@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 <!-- round12-status:start -->
@@ -119,7 +119,7 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | CPA 固定目标 | 当前目标仅 v7.2.116、Linux amd64、隔离 counted Mock。精确 `main@21267e7` 的工程 `.so` load 已由 GitHub CI 通过，已有 1,320 次传输执行仅为所有者运行的输入诊断；针对第十二轮最终候选的 RT12-05/06 二号机执行仍为 **PENDING_FINAL_CANDIDATE_EXECUTION** |
 | 外部 CPA 评估 / 当前源码独立审计 | 历史 `150c25e6` 隔离审计仍为 **FAIL / BLOCKED**；当前 `21267e7` 报告不是独立重审。受保护 Host、独立证明、生产批准与 release readiness 均为 `NOT_PROVIDED` |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前工作源码快照为 `classifier-policy-v12` / `bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`；第十二轮同时修改 role/streaming 防御所有权语义与 CPA 绑定源码身份；精确提交 GitHub 与最终候选二号机绑定仍待完成 |
+| Classifier policy | 当前工作源码快照为 `classifier-policy-v12` / `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`；第十二轮同时修改 role/streaming 防御所有权语义与 CPA 绑定源码身份；精确提交 GitHub 与最终候选二号机绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，raw capture 默认关闭；`audit.max_db_mb` 在每个有界写批次后执行原文优先清理，无法恢复时公开容量降级并拒绝后续审计写入，但不改变请求分类 |
 

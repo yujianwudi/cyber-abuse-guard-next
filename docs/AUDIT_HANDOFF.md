@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 ## 2026-08-04 Round 12 / CPA v7.2.116 当前交接边界
@@ -10,7 +10,7 @@ current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1
 The active source/compile target is now CPA
 `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
 with classifier source identity `classifier-policy-v12` /
-`bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`.
+`795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`.
 Round 12 changes classifier role/streaming semantics as well as the exact CPA
 module pin, so both the policy version and digest changed. No v7.2.113 Round 9
 result or earlier `classifier-policy-v10` result transfers to this source tree.

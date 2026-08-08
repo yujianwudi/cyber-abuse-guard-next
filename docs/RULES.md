@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 The default rule set is embedded into the shared object from `/rules`. Every
@@ -286,7 +286,7 @@ policy is separately identified as:
 
 ```text
 current_release_classifier_policy_version: classifier-policy-v12
-current_release_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_release_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 The policy digest test binds the deterministic classifier, matcher,

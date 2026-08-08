@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 Last updated: 2026-08-08 (Asia/Shanghai)
@@ -123,7 +123,7 @@ cpa_v7.2.116_tag_and_release: NOT_CREATED / NOT_AUTHORIZED
 The current working tree implements the Round 12 capacity, subject-admission,
 classifier, repository-governance, and five-repository audit-tool changes. Its
 classifier identity is exactly `classifier-policy-v12` /
-`bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`.
+`795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`.
 The current approved five-repository source policy and runner identities are:
 
 ```text

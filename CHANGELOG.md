@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 Source-tree status updated: 2026-08-08 (Asia/Shanghai)
@@ -23,7 +23,7 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
   `X-API-Key` values resolve to a deterministic conflict identity. The
   classifier advances to `classifier-policy-v12` /
-  `bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`:
+  `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`:
   an outer defensive owner suppresses only its own inert carrier, and a later
   explicit activation must be in the same scope and a distinct logical field;
   missing paths or exhausted proof budgets remain incomplete rather than

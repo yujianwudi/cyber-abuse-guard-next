@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 This page is the short, current status overlay for
@@ -18,7 +18,7 @@ round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
 round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
 round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
-round12_classifier_policy: classifier-policy-v12 / bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+round12_classifier_policy: classifier-policy-v12 / 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 round12_source_policy: APPROVED_EXACT_PINS / 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
 round12_audit_runner_bundle: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
 round12_audit_contract: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a

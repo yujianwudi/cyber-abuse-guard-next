@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 <!-- round12-status:start -->
@@ -136,7 +136,7 @@ is not sent to a public classifier.
 | CPA Host matrix | Active target CPA v7.2.116, Linux amd64, isolated counted Mock upstream only. Exact-main engineering `.so` load passed inside GitHub CI and the owner-run input diagnostic remains non-final/non-independent; RT12-05/06 protected Audit→Balanced→Strict, signed external evaluation, special-path closure, and protected-ledger proof remain **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current working-source snapshot: `classifier-policy-v12` / `bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73`; Round 12 changes role/streaming defensive-owner behavior as well as the CPA-bound source identity. Exact-commit GitHub and final-candidate second-machine binding remain pending |
+| Classifier policy | Current working-source snapshot: `classifier-policy-v12` / `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`; Round 12 changes role/streaming defensive-owner behavior as well as the CPA-bound source identity. Exact-commit GitHub and final-candidate second-machine binding remain pending |
 | Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, Raw Capture remains default-off, and `audit.max_db_mb` is enforced after each bounded write batch and inside subject-snapshot replacement transactions, with raw-first cleanup, explicit capacity status, and storage-write rejection that does not change classification |
 | Code review | Automated review is advisory; no independent approval is claimed |
