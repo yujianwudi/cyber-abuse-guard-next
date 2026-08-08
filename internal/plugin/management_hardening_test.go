@@ -92,11 +92,36 @@ func TestManagementUnblockAuthenticationAndBodyContract(t *testing.T) {
 }
 
 func TestManagementBoundsAndQueryWhitelist(t *testing.T) {
-	const queryKeyCanary = "MANAGEMENT_QUERY_KEY_CANARY_2f64a9b1"
+	const (
+		queryKeyCanary                  = "MANAGEMENT_QUERY_KEY_CANARY_2f64a9b1"
+		managementBodyContractBytes     = 1 << 20
+		managementEnvelopeContractBytes = 2 << 20
+	)
+	if maxManagementBody != managementBodyContractBytes {
+		t.Fatalf("management body contract=%d, want %d", maxManagementBody, managementBodyContractBytes)
+	}
+	if maxManagementEnvelope != managementEnvelopeContractBytes {
+		t.Fatalf("management envelope contract=%d, want %d", maxManagementEnvelope, managementEnvelopeContractBytes)
+	}
 	p := New()
 	t.Cleanup(p.Shutdown)
 	register(t, p, "audit:\n  enabled: false\n")
 	auth := http.Header{"X-Management-Key": []string{"unit-test-management-key"}}
+	prefix := []byte(`{"text":"`)
+	suffix := []byte(`","mode":"balanced"}`)
+	exactBody := make([]byte, 0, managementBodyContractBytes)
+	exactBody = append(exactBody, prefix...)
+	exactBody = append(exactBody, strings.Repeat("a", managementBodyContractBytes-len(prefix)-len(suffix))...)
+	exactBody = append(exactBody, suffix...)
+	if len(exactBody) != managementBodyContractBytes {
+		t.Fatalf("exact management body bytes=%d, want %d", len(exactBody), managementBodyContractBytes)
+	}
+	exactResponse, exactResponseBody := callManagementResponse(t, p, pluginapi.ManagementRequest{
+		Method: http.MethodPost, Path: managementBasePath + "/test", Headers: auth, Body: exactBody,
+	})
+	if exactResponse.StatusCode != http.StatusOK {
+		t.Fatalf("exact management body response=%+v body=%s", exactResponse, exactResponseBody)
+	}
 
 	tests := []struct {
 		name       string
@@ -108,7 +133,7 @@ func TestManagementBoundsAndQueryWhitelist(t *testing.T) {
 		{
 			name: "oversized body",
 			request: pluginapi.ManagementRequest{Method: http.MethodPost, Path: managementBasePath + "/test", Headers: auth,
-				Body: make([]byte, maxManagementBody+1)},
+				Body: make([]byte, managementBodyContractBytes+1)},
 			wantStatus: http.StatusRequestEntityTooLarge,
 			wantCode:   "request_too_large",
 		},
@@ -189,10 +214,14 @@ func TestManagementBoundsAndQueryWhitelist(t *testing.T) {
 }
 
 func TestManagementRejectsOversizedRPCEnvelope(t *testing.T) {
+	const managementEnvelopeContractBytes = 2 << 20
 	p := New()
 	t.Cleanup(p.Shutdown)
 
-	raw, code := p.Call(pluginabi.MethodManagementHandle, make([]byte, maxManagementEnvelope+1))
+	exact, exactCode := p.Call(pluginabi.MethodManagementHandle, make([]byte, managementEnvelopeContractBytes))
+	assertEnvelopeError(t, exact, exactCode, "invalid_request", 0)
+
+	raw, code := p.Call(pluginabi.MethodManagementHandle, make([]byte, managementEnvelopeContractBytes+1))
 	if code != 0 {
 		t.Fatalf("oversized management envelope call code = %d; envelope=%s", code, raw)
 	}
@@ -268,6 +297,33 @@ func TestManagementAuditEndpointsDistinguishDisabledFromUnavailable(t *testing.T
 			t.Fatalf("disabled stats schema = %#v, want %#v", got, want)
 		}
 	})
+}
+
+func TestManagementStatusRetainsConfiguredAuditCapacityWhenStoreUnavailable(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+	state := *p.runtime.Load()
+	state.config.Audit.Enabled = true
+	state.config.Audit.MaxDBMB = 37
+	state.audit = nil
+
+	raw := p.managementStatus(&state)
+	var response pluginapi.ManagementResponse
+	decodeOKResult(t, raw, &response)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("status response=%+v body=%s", response, response.Body)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(response.Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	auditStatus, ok := body["audit"].(map[string]any)
+	if !ok || auditStatus["enabled"] != true || auditStatus["degraded"] != true ||
+		auditStatus["configured_max_bytes"] != float64(37<<20) ||
+		auditStatus["capacity_measurement_available"] != false {
+		t.Fatalf("unavailable audit status=%#v", body["audit"])
+	}
 }
 
 func TestManagementEventDeletionWritesPrivacySafeAuditMarker(t *testing.T) {

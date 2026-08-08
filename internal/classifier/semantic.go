@@ -694,12 +694,12 @@ func semanticExplicitReferentReactivation(text string) bool {
 	}
 	activeDirective := semanticContinuationFragment(text) || hasAnyPrefix(text,
 		"actually ", "instead ", "nevertheless ", "nonetheless ", "even so ",
-		"execute ", "implement ", "apply ", "carry ", "do ",
-		"实际", "改为", "执行", "实现", "应用", "照做",
+		"execute ", "implement ", "apply ", "carry ", "do ", "install and activate ",
+		"实际", "改为", "执行", "实现", "应用", "照做", "安装并激活", "按上面", "按上述", "按以上", "按前述",
 	)
 	return activeDirective && containsAnyLiteral(text,
 		" it", " them", " that", " those", " the above", " above request", " same ",
-		"它", "它们", "上述", "上面", "该内容", "同一",
+		"它", "它们", "上述", "上面", "以上", "前述", "该内容", "同一",
 	)
 }
 

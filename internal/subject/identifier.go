@@ -7,12 +7,14 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -32,6 +34,7 @@ type Source string
 const (
 	SourceAuthorization Source = "authorization_bearer"
 	SourceAPIKey        Source = "x_api_key"
+	SourceConflict      Source = "credential_conflict"
 	SourceAnonymous     Source = "anonymous"
 )
 
@@ -148,17 +151,24 @@ func (i *Identifier) KeyID() string {
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil))
 }
 
-// FromHeaders prefers an Authorization Bearer credential over x-api-key and
-// otherwise returns an HMACed anonymous bucket. Header names are matched
-// case-insensitively even when a caller constructed a non-canonical Header map.
+// FromHeaders aggregates header names case-insensitively, rejects competing
+// non-empty Authorization values as one deterministic untrusted identity, then
+// prefers a sole Bearer credential over x-api-key. Unsupported sole schemes do
+// not become credential material and retain the x-api-key fallback.
 func (i *Identifier) FromHeaders(headers http.Header) Identity {
-	if token := bearerToken(headerValues(headers, "Authorization")); token != "" {
-		return Identity{Hash: i.digest(token), Source: SourceAuthorization}
-	}
-	for _, value := range headerValues(headers, "X-API-Key") {
-		if value = strings.TrimSpace(value); value != "" {
-			return Identity{Hash: i.digest(value), Source: SourceAPIKey}
+	if values := normalizedAuthorizationValues(headerValues(headers, "Authorization")); len(values) != 0 {
+		if len(values) > 1 {
+			return i.conflictingIdentity("authorization", values)
 		}
+		if token, ok := canonicalBearerToken(values[0]); ok {
+			return Identity{Hash: i.digest(token), Source: SourceAuthorization}
+		}
+	}
+	if tokens := nonEmptyUniqueValues(headerValues(headers, "X-API-Key")); len(tokens) != 0 {
+		if len(tokens) == 1 {
+			return Identity{Hash: i.digest(tokens[0]), Source: SourceAPIKey}
+		}
+		return i.conflictingIdentity("x_api_key", tokens)
 	}
 	return i.Anonymous()
 }
@@ -175,29 +185,81 @@ func (i *Identifier) digest(value string) string {
 	return "hmac-sha256:" + hex.EncodeToString(mac.Sum(nil))
 }
 
-func headerValues(headers http.Header, name string) []string {
-	for key, values := range headers {
-		if strings.EqualFold(key, name) {
-			return values
-		}
+func (i *Identifier) conflictingIdentity(kind string, values []string) Identity {
+	mac := hmac.New(sha256.New, i.key)
+	_, _ = io.WriteString(mac, "cyber-abuse-guard:credential-conflict:v1\x00")
+	_, _ = io.WriteString(mac, kind)
+	var length [8]byte
+	for _, value := range values {
+		binary.BigEndian.PutUint64(length[:], uint64(len(value)))
+		_, _ = mac.Write(length[:])
+		_, _ = io.WriteString(mac, value)
 	}
-	return nil
+	return Identity{Hash: "hmac-sha256:" + hex.EncodeToString(mac.Sum(nil)), Source: SourceConflict}
 }
 
-func bearerToken(values []string) string {
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if len(value) <= len("Bearer") || !strings.EqualFold(value[:len("Bearer")], "Bearer") {
-			continue
-		}
-		if value[len("Bearer")] != ' ' && value[len("Bearer")] != '\t' {
-			continue
-		}
-		if token := strings.TrimSpace(value[len("Bearer"):]); token != "" {
-			return token
+func headerValues(headers http.Header, name string) []string {
+	var matched []string
+	for key, values := range headers {
+		if strings.EqualFold(key, name) {
+			matched = append(matched, values...)
 		}
 	}
-	return ""
+	return matched
+}
+
+const canonicalBearerPrefix = "bearer\x00"
+
+func normalizedAuthorizationValues(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if len(value) > len("Bearer") && strings.EqualFold(value[:len("Bearer")], "Bearer") {
+			if boundary := value[len("Bearer")]; boundary == ' ' || boundary == '\t' {
+				if token := strings.TrimSpace(value[len("Bearer"):]); token != "" {
+					normalized = append(normalized, canonicalBearerPrefix+token)
+					continue
+				}
+			}
+		}
+		normalized = append(normalized, "other\x00"+value)
+	}
+	return uniqueSortedValues(normalized)
+}
+
+func canonicalBearerToken(value string) (string, bool) {
+	if !strings.HasPrefix(value, canonicalBearerPrefix) {
+		return "", false
+	}
+	token := strings.TrimPrefix(value, canonicalBearerPrefix)
+	return token, token != ""
+}
+
+func nonEmptyUniqueValues(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			normalized = append(normalized, value)
+		}
+	}
+	return uniqueSortedValues(normalized)
+}
+
+func uniqueSortedValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	sort.Strings(values)
+	unique := values[:0]
+	for _, value := range values {
+		if len(unique) == 0 || unique[len(unique)-1] != value {
+			unique = append(unique, value)
+		}
+	}
+	return unique
 }
 
 func readSecretFile(path string) ([]byte, error) {
