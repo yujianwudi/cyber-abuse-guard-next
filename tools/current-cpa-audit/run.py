@@ -1435,7 +1435,11 @@ class Harness:
     def cpa_bind_mount_args(self, cold_root: Path) -> list[str]:
         specifications = (
             (cold_root / "plugins", "/cag/plugins", True),
-            (cold_root / "config", "/cag/config", True),
+            # CPA persists the replacement plugin object before applying its
+            # asynchronous hot reload. This bind is an isolated, per-cold-
+            # start directory below the descriptor-bound evidence root; a
+            # read-only bind makes every mode transition fail with HTTP 500.
+            (cold_root / "config", "/cag/config", False),
             (cold_root / "auth", "/cag/auth", False),
             (cold_root / "audit", "/cag/audit", False),
             (cold_root / "secrets", "/cag/secrets", True),
@@ -1522,6 +1526,44 @@ class Harness:
                 or item.get("Propagation") != "rprivate"
             ):
                 fail("CPA bind-mount source, identity, or access mode drifted")
+
+    def verify_runtime_config_storage(self) -> None:
+        record = self.active_cpa_mounts.get("/cag/config")
+        if record is None or record[2] is not False:
+            fail("isolated CPA config bind must be present and writable")
+        config_directory = record[0]
+        require_private_directory(config_directory, "isolated CPA config directory")
+        directory_info = config_directory.lstat()
+        if os.name == "posix" and (
+            directory_info.st_uid != os.getuid()
+            or directory_info.st_gid != os.getgid()
+        ):
+            fail("isolated CPA config directory owner drifted")
+        try:
+            entries = list(config_directory.iterdir())
+        except OSError as exc:
+            fail(
+                "isolated CPA config directory cannot be listed: "
+                f"{type(exc).__name__}"
+            )
+        if len(entries) != 1 or entries[0].name != "config.yaml":
+            fail("isolated CPA config directory file set is not closed")
+        config_info = regular_file_info(
+            entries[0], "isolated CPA runtime config", require_single_link=True
+        )
+        if (
+            config_info.st_size < 1
+            or config_info.st_size > MAX_CONFIG_BYTES
+            or (
+                os.name == "posix"
+                and (
+                    config_info.st_uid != os.getuid()
+                    or config_info.st_gid != os.getgid()
+                    or config_info.st_mode & 0o022
+                )
+            )
+        ):
+            fail("isolated CPA runtime config ownership, mode, or size drifted")
 
     def start_cold(self, cold_root: Path, initial_mode: str) -> None:
         mock = self.config["identities"]["mock"]
@@ -1778,6 +1820,7 @@ class Harness:
         self.container_contract(
             self.cpa_name, self.config["identities"]["cpa"]["image_id"], "cpa"
         )
+        self.verify_runtime_config_storage()
         self.container_contract(
             self.mock_name, self.config["identities"]["mock"]["image_id"], "mock"
         )

@@ -20,11 +20,11 @@ round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
 round12_go_platform: go1.26.4 / linux-amd64
 round12_classifier_policy: classifier-policy-v12 / bc5656109362bc149e51afbfc58bf33ffc197c5cb04bd1a230e534a3eb1def73
 round12_source_policy: APPROVED_EXACT_PINS / 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
-round12_audit_runner_bundle: 67fda3c6ba0debe4f0b97f5967ace8f3c5e09f538aaabbc7ac771ce16ea5591f
+round12_audit_runner_bundle: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
 round12_audit_contract: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
-round12_audit_run_source: eac0c0a00bb9e16a934458bf27ff89d1cd0b88bc8dbcf7674d8c85fedaefd79b
+round12_audit_run_source: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
 round12_audit_machine_schema: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
-round12_local_audit_tool_tests: PASS / LINUX / 144_OF_144
+round12_local_audit_tool_tests: PASS / LINUX / 145_OF_145
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 round12_local_safe_gate: PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: PASS / GO1.26.4_LINUX / 313.5_SECONDS / DEVELOPMENT_EVIDENCE_ONLY
@@ -73,7 +73,7 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   property binding, malformed-graph rejection, and a synthetic independent
   `blob:none` sparse-clone test in which the excluded restricted blob remained
   absent before and after checkout;
-- the current CPA audit harness passed 144/144 Linux tests, including the
+- the current CPA audit harness passed 145/145 Linux tests, including the
   concatenated-ZIP rejection, stopped-image Mock source verification,
   private-parent mode drift, symlink/ancestor/evidence/subdirectory replacement,
   normal-path Docker handoff, closed Source/Destination/RW/rprivate bind and
@@ -226,7 +226,7 @@ download, rollback, or support guarantee.
 `9782eaf` 的 CI、Policy Gate 和 CodeQL 也曾通过，但二号机正式 harness 因 runc
 拒绝 proc-fd bind source 而 fail closed：没有生成 `machine-evidence.json`，没有执行
 第三方仓库代码，私有 corpus 正文已经删除。当前 normal-path handoff 修复已完成本地
-144/144 Linux 审计工具回归、313.5 秒 unit 和 977.8 秒 Go 1.26.4 race；新的精确
+145/145 Linux 审计工具回归、313.5 秒 unit 和 977.8 秒 Go 1.26.4 race；新的精确
 HEAD 门禁和二号机执行仍为
 `PENDING_NEW_HEAD_EXECUTION`。已有的 1,320 次传输执行报告只属于所有者运行
 的输入诊断，不是独立证明。受保护 Host、独立证明、生产批准与 Release Ready 均为

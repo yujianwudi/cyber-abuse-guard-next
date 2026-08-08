@@ -294,6 +294,18 @@ zero or one matching `/tmp` entry there and rejects every other bind, volume,
 or non-bind mount. The dedicated-UID condition bounds the non-atomic daemon
 handoff. The runner itself creates only an internal bridge.
 
+The private `/cag/config` bind is writable by design. CPA v7.2.116 persists a
+replacement `plugins.configs.<id>` object to `config.yaml` before applying the
+hot reload, so a read-only config bind makes every Audit/Balanced/Strict mode
+transition fail with HTTP 500. This does not expose a Host or business config:
+the directory is created separately for each cold start below the mode-0700,
+descriptor-bound evidence root, contains exactly one single-link regular
+`config.yaml`, and is owned by the dedicated runner UID/GID. The runner
+rechecks that closed file set, ownership, size, bind identity, `RW=true`, and
+the Mock-only in-memory CPA configuration after every transition. The Host
+root filesystem remains read-only; the plugin, secret, and counted-Mock image
+inputs remain read-only as well.
+
 ```bash
 python3 -B tools/current-cpa-audit/run.py \
   --config /srv/cag-audit/run-config.json

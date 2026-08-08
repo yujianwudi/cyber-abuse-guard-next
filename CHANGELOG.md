@@ -91,17 +91,21 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   digest. A dedicated second-machine real-Docker smoke passed both successful
   and expected-failure `--env-file` paths; it retained no file/container and
   found zero credential-field mentions in the unit journal. The current runner
+  now gives only its descriptor-bound, per-cold-start `/cag/config` directory
+  write access because CPA v7.2.116 persists plugin config before hot reload;
+  it rejects any config-directory file-set, owner, link-count, size, or mount
+  access drift before and after each Audit/Balanced/Strict transition. The current runner
   identity closure is:
 
   ```text
-  current_audit_runner_bundle_sha256: 67fda3c6ba0debe4f0b97f5967ace8f3c5e09f538aaabbc7ac771ce16ea5591f
+  current_audit_runner_bundle_sha256: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
   current_audit_contract_sha256: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
-  current_audit_run_source_sha256: eac0c0a00bb9e16a934458bf27ff89d1cd0b88bc8dbcf7674d8c85fedaefd79b
+  current_audit_run_source_sha256: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
   current_audit_machine_schema_sha256: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
-  current_audit_tool_test_count: 144
+  current_audit_tool_test_count: 145
   ```
 
-  Linux audit-tool verification is 144/144 PASS. The diagnostic harness explicitly
+  Linux audit-tool verification is 145/145 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
   final local Go 1.26.4 Linux race lane completed in 977.8 seconds without a

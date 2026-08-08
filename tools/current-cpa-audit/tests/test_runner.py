@@ -533,6 +533,11 @@ class RunnerPureTests(unittest.TestCase):
                     )
                 )
                 self.assertTrue(all("/proc/" not in value for value in mount_values))
+                self.assertTrue(harness.active_cpa_mounts["/cag/plugins"][2])
+                self.assertFalse(harness.active_cpa_mounts["/cag/config"][2])
+                self.assertFalse(harness.active_cpa_mounts["/cag/auth"][2])
+                self.assertFalse(harness.active_cpa_mounts["/cag/audit"][2])
+                self.assertTrue(harness.active_cpa_mounts["/cag/secrets"][2])
 
                 mounts = []
                 for destination, (_, host_source, read_only, _) in (
@@ -704,6 +709,57 @@ class RunnerPureTests(unittest.TestCase):
                     harness.verify_cpa_bind_mounts()
             finally:
                 binding.close()
+
+    @unittest.skipUnless(os.name == "posix", "Linux isolated config contract")
+    def test_runtime_config_storage_is_writable_private_and_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as parent:
+            config_directory = Path(parent) / "config"
+            config_directory.mkdir(mode=0o700)
+            config_file = config_directory / "config.yaml"
+            config_file.write_text("commercial-mode: true\n", encoding="utf-8")
+            config_file.chmod(0o600)
+
+            identity = (
+                (config_directory.stat().st_dev, config_directory.stat().st_ino),
+            )
+            harness = object.__new__(run.Harness)
+            harness.active_cpa_mounts = {
+                "/cag/config": (
+                    config_directory,
+                    config_directory,
+                    False,
+                    identity,
+                )
+            }
+            harness.verify_runtime_config_storage()
+
+            harness.active_cpa_mounts["/cag/config"] = (
+                config_directory,
+                config_directory,
+                True,
+                identity,
+            )
+            with self.assertRaisesRegex(
+                run.AuditFailure, "must be present and writable"
+            ):
+                harness.verify_runtime_config_storage()
+            harness.active_cpa_mounts["/cag/config"] = (
+                config_directory,
+                config_directory,
+                False,
+                identity,
+            )
+
+            extra = config_directory / "unexpected"
+            extra.write_text("unexpected", encoding="utf-8")
+            with self.assertRaisesRegex(run.AuditFailure, "file set is not closed"):
+                harness.verify_runtime_config_storage()
+            extra.unlink()
+
+            linked = Path(parent) / "linked.yaml"
+            os.link(config_file, linked)
+            with self.assertRaisesRegex(run.ContractError, "exactly one hard link"):
+                harness.verify_runtime_config_storage()
 
     @unittest.skipUnless(os.name == "posix", "Linux private runtime contract")
     def test_prepare_cold_runtime_makes_every_mount_ancestor_private(self) -> None:
