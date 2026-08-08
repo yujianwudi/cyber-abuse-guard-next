@@ -2,7 +2,14 @@ package audit
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"math"
+)
+
+const (
+	capacityDeleteBatchSize   int64 = 256
+	maxCapacityCleanupBatches       = 64
 )
 
 // Cleanup applies logical retention, bounds live database pages by deleting
@@ -50,65 +57,6 @@ func (s *Store) cleanup(ctx context.Context) error {
 		}
 	}
 
-	for {
-		used, err := s.liveDatabaseBytes(ctx)
-		if err != nil {
-			return err
-		}
-		if used <= s.cfg.MaxBytes {
-			break
-		}
-		var rawCount int64
-		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM raw_request_captures").Scan(&rawCount); err != nil {
-			return fmt.Errorf("audit: count raw captures for size cleanup: %w", err)
-		}
-		if rawCount > 0 {
-			batch := rawCount / 10
-			if batch < 1 {
-				batch = 1
-			}
-			result, err := s.db.ExecContext(ctx, `DELETE FROM raw_request_captures WHERE id IN (
-            SELECT id FROM raw_request_captures ORDER BY timestamp_ns ASC, id ASC LIMIT ?
-        )`, batch)
-			if err != nil {
-				return fmt.Errorf("audit: raw capture maximum-size cleanup: %w", err)
-			}
-			deleted, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("audit: count raw capture maximum-size cleanup: %w", err)
-			}
-			if deleted > 0 {
-				s.cleaned.Add(uint64(deleted))
-				continue
-			}
-		}
-		var count int64
-		if err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM audit_events").Scan(&count); err != nil {
-			return fmt.Errorf("audit: count events for size cleanup: %w", err)
-		}
-		if count == 0 {
-			break // the fixed schema itself can be larger than a tiny configured cap
-		}
-		batch := count / 10
-		if batch < 1 {
-			batch = 1
-		}
-		result, err := s.db.ExecContext(ctx, `DELETE FROM audit_events WHERE id IN (
-            SELECT id FROM audit_events ORDER BY timestamp_ns ASC, id ASC LIMIT ?
-        )`, batch)
-		if err != nil {
-			return fmt.Errorf("audit: maximum-size cleanup: %w", err)
-		}
-		deleted, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("audit: count maximum-size cleanup: %w", err)
-		}
-		if deleted <= 0 {
-			break
-		}
-		s.cleaned.Add(uint64(deleted))
-	}
-
 	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
 		return fmt.Errorf("audit: WAL checkpoint: %w", err)
 	}
@@ -118,33 +66,202 @@ func (s *Store) cleanup(ctx context.Context) error {
 	if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
 		return err
 	}
+	return s.enforceCapacity(ctx)
+}
+
+// enforceCapacity is the runtime hard-cap gate. The writer invokes it after
+// every bounded batch, while startup and explicit maintenance use the same
+// path. Cleanup is itself bounded so a very large inherited database cannot
+// monopolize the writer indefinitely; an unrecoverable excess latches the
+// admission gate until a later maintenance pass proves the store is back under
+// the configured limit.
+func (s *Store) enforceCapacity(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return ErrUnavailable
+	}
+	s.capacityMu.Lock()
+	err := s.enforceCapacityLocked(ctx)
+	s.capacityMu.Unlock()
+	if err != nil {
+		s.report(err)
+	}
+	return err
+}
+
+// remeasureCapacity refreshes and latches the hard-cap state without deleting
+// any rows. It is used after committed maintenance where automatic eviction of
+// unrelated audit evidence would violate the operation's scope.
+func (s *Store) remeasureCapacity(ctx context.Context) error {
+	if s == nil || s.db == nil {
+		return ErrUnavailable
+	}
+	s.capacityMu.Lock()
+	used, err := s.liveDatabaseBytes(ctx)
+	if err != nil {
+		err = s.capacityFailure(ErrCapacityCheckFailed, false)
+	} else {
+		s.setCapacityMeasurement(used)
+		if used > s.cfg.MaxBytes {
+			err = s.capacityFailure(ErrCapacityExceeded, true)
+		} else {
+			s.clearCapacityFailure()
+		}
+	}
+	s.capacityMu.Unlock()
+	if err != nil {
+		s.report(err)
+	}
+	return err
+}
+
+func (s *Store) enforceCapacityLocked(ctx context.Context) error {
+	used, err := s.liveDatabaseBytes(ctx)
+	if err != nil {
+		return s.capacityFailure(ErrCapacityCheckFailed, false)
+	}
+	s.setCapacityMeasurement(used)
+	if used <= s.cfg.MaxBytes {
+		s.clearCapacityFailure()
+		return nil
+	}
+
+	s.capacityCleanupRuns.Add(1)
+	deletedTotal := uint64(0)
+	for batch := 0; batch < maxCapacityCleanupBatches && used > s.cfg.MaxBytes; batch++ {
+		deleted, deleteErr := s.deleteOldestCapacityRows(ctx, "raw_request_captures")
+		if deleteErr != nil {
+			return s.capacityFailure(ErrCapacityCleanupFailed, false)
+		}
+		if deleted == 0 {
+			deleted, deleteErr = s.deleteOldestCapacityRows(ctx, "audit_events")
+			if deleteErr != nil {
+				return s.capacityFailure(ErrCapacityCleanupFailed, false)
+			}
+		}
+		if deleted == 0 {
+			break
+		}
+		deletedTotal += uint64(deleted)
+		s.cleaned.Add(uint64(deleted))
+		s.capacityCleanupDeleted.Add(uint64(deleted))
+
+		used, err = s.liveDatabaseBytes(ctx)
+		if err != nil {
+			return s.capacityFailure(ErrCapacityCheckFailed, false)
+		}
+		s.setCapacityMeasurement(used)
+	}
+
+	if deletedTotal != 0 {
+		if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)"); err != nil {
+			return s.capacityFailure(ErrCapacityCleanupFailed, false)
+		}
+		if _, err := s.db.ExecContext(ctx, "PRAGMA incremental_vacuum"); err != nil {
+			return s.capacityFailure(ErrCapacityCleanupFailed, false)
+		}
+	}
+
+	used, err = s.liveDatabaseBytes(ctx)
+	if err != nil {
+		return s.capacityFailure(ErrCapacityCheckFailed, false)
+	}
+	s.setCapacityMeasurement(used)
+	if used > s.cfg.MaxBytes {
+		return s.capacityFailure(ErrCapacityExceeded, true)
+	}
+	s.clearCapacityFailure()
 	return nil
 }
 
+func (s *Store) deleteOldestCapacityRows(ctx context.Context, table string) (int64, error) {
+	var statement string
+	switch table {
+	case "raw_request_captures":
+		statement = `DELETE FROM raw_request_captures WHERE id IN (
+			SELECT id FROM raw_request_captures ORDER BY timestamp_ns ASC, id ASC LIMIT ?
+		)`
+	case "audit_events":
+		statement = `DELETE FROM audit_events WHERE id IN (
+			SELECT id FROM audit_events ORDER BY timestamp_ns ASC, id ASC LIMIT ?
+		)`
+	default:
+		return 0, ErrCapacityCleanupFailed
+	}
+	result, err := s.db.ExecContext(ctx, statement, capacityDeleteBatchSize)
+	if err != nil {
+		return 0, ErrCapacityCleanupFailed
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		return 0, ErrCapacityCleanupFailed
+	}
+	return deleted, nil
+}
+
+func (s *Store) setCapacityMeasurement(used int64) {
+	s.currentLiveBytes.Store(used)
+	s.capacityMeasured.Store(true)
+}
+
+func (s *Store) capacityFailure(kind error, measurementAvailable bool) error {
+	if !measurementAvailable {
+		s.capacityMeasured.Store(false)
+	}
+	s.overLimit.Store(true)
+	s.degraded.Store(true)
+	s.lastErr.Store(kind.Error())
+	return kind
+}
+
+func (s *Store) clearCapacityFailure() {
+	s.overLimit.Store(false)
+	lastError, _ := s.lastErr.Load().(string)
+	if lastError == ErrCapacityExceeded.Error() ||
+		lastError == ErrCapacityCheckFailed.Error() ||
+		lastError == ErrCapacityCleanupFailed.Error() {
+		s.degraded.Store(false)
+		s.lastErr.Store("")
+	}
+}
+
 func (s *Store) liveDatabaseBytes(ctx context.Context) (int64, error) {
-	pageCount, err := pragmaInt64(ctx, s, "PRAGMA page_count")
+	return liveDatabaseBytesFrom(ctx, s.db)
+}
+
+type sqliteQueryRower interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
+func liveDatabaseBytesFrom(ctx context.Context, queryer sqliteQueryRower) (int64, error) {
+	pageCount, err := pragmaInt64(ctx, queryer, "PRAGMA page_count")
 	if err != nil {
 		return 0, err
 	}
-	freePages, err := pragmaInt64(ctx, s, "PRAGMA freelist_count")
+	freePages, err := pragmaInt64(ctx, queryer, "PRAGMA freelist_count")
 	if err != nil {
 		return 0, err
 	}
-	pageSize, err := pragmaInt64(ctx, s, "PRAGMA page_size")
+	pageSize, err := pragmaInt64(ctx, queryer, "PRAGMA page_size")
 	if err != nil {
 		return 0, err
 	}
 	livePages := pageCount - freePages
 	if livePages < 0 {
-		livePages = 0
+		return 0, ErrCapacityCheckFailed
+	}
+	if pageSize <= 0 || livePages > math.MaxInt64/pageSize {
+		return 0, ErrCapacityCheckFailed
 	}
 	return livePages * pageSize, nil
 }
 
-func pragmaInt64(ctx context.Context, s *Store, statement string) (int64, error) {
+func pragmaInt64(ctx context.Context, queryer sqliteQueryRower, statement string) (int64, error) {
 	var value int64
-	if err := s.db.QueryRowContext(ctx, statement).Scan(&value); err != nil {
-		return 0, fmt.Errorf("audit: %s: %w", statement, err)
+	if err := queryer.QueryRowContext(ctx, statement).Scan(&value); err != nil {
+		return 0, ErrCapacityCheckFailed
+	}
+	if value < 0 {
+		return 0, ErrCapacityCheckFailed
 	}
 	return value, nil
 }

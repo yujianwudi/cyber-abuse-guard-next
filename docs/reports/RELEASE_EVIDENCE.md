@@ -1,13 +1,13 @@
 # v0.16 release evidence — CPA v7.2.116 active target plus frozen history
 
 ```text
-current_classifier_policy_version: classifier-policy-v10
-current_classifier_policy_sha256: 7934e15f95b8bb617f683507c7739d62c12b508961d0b2c3f3e39ead19cda3c2
+current_classifier_policy_version: classifier-policy-v12
+current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
 ```
 
 Last updated: 2026-08-04 (Asia/Shanghai)
 
-## CPA v7.2.116 active dependency target — release evidence pending
+## CPA v7.2.116 active dependency target — baseline engineering PASS, Round 12 release gates open
 
 The source/compile target is
 `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
@@ -18,6 +18,19 @@ This upstream hash is not a CAG artifact hash, and the asset was not downloaded
 or executed for this documentation update.
 The top `current_classifier_policy_*` prologue identifies the active working
 tree; it is not metadata for the frozen v7.2.113 evidence sections below.
+
+The canonical current boundary is
+[Round 12 active status](../ROUND12_STATUS.md). Exact baseline
+`main@21267e742b624b29a75bd3683fd6914f76c764b5` passed its five GitHub
+engineering contexts through CI `30880739397`, Policy and Corpus Gate
+`30880739368`, and CodeQL `30880739360`. Those results are exact-main baseline
+evidence only. They do not transfer to the Round 12 working candidate or close
+protected Host, independent, release, or production gates.
+
+The supplied 1,320-transport second-machine report is retained only as
+`DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`.
+RT12-05/06 against the final candidate remains
+`PENDING_FINAL_CANDIDATE_EXECUTION`; no Round 12 second-machine PASS is claimed.
 
 The reviewed v7.2.113-to-v7.2.116 range keeps C ABI 1, RPC schema 2, and all 235
 scoped plugin blobs byte-identical. Home may refresh an OAuth credential and
@@ -37,17 +50,25 @@ active_cpa_local_source_compile: PASS / LINUX_AMD64 / GO1.26.4 / PINNED_MODULE_O
 active_cpa_remote_latest_release_api: PASS / v7.2.116
 active_cpa_remote_tag_ref_api: PASS / a88197f845c979132c8978ea223c6af05cc81536 / COMMIT_VERIFIED
 active_cpa_remote_git_tag_gate: NOT_COMPLETED_LOCAL_NETWORK / TWO_BOUNDED_TIMEOUT_RUNS / GITHUB_CI_REQUIRED
-active_cpa_exact_commit_ci: PENDING
-active_cpa_linux_host: NOT_PROVIDED
-active_cpa_second_machine_watchdog: NOT_PROVIDED
-active_cpa_independent_audit: NOT_PROVIDED
+active_cpa_exact_main_baseline_ci: PASS / EXACT_MAIN_ONLY / 21267e742b624b29a75bd3683fd6914f76c764b5
+active_cpa_round12_candidate_ci: PENDING_FINAL_CANDIDATE
+active_cpa_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
+active_cpa_final_candidate_second_machine: PENDING_FINAL_CANDIDATE_EXECUTION
+active_cpa_protected_host: NOT_PROVIDED
+active_cpa_independent_attestation: NOT_PROVIDED
 active_cpa_release: NOT_CREATED
-active_cpa_production_approval: NOT_GRANTED
+active_cpa_production_approval: NOT_PROVIDED
+active_cpa_release_ready: NOT_PROVIDED
 ```
 
-Overall v7.2.116 status is **LOCAL SOURCE PASS / EXTERNAL GATES PENDING /
-NOT A RELEASE PASS**. No v7.2.113 result
+Overall v7.2.116 status is **EXACT-MAIN BASELINE ENGINEERING PASS / ROUND 12
+FINAL-CANDIDATE GATES PENDING / NO RELEASE**. No v7.2.113 result
 is relabelled or used to close a v7.2.116 gate.
+
+The previously documented old repository and `v0.15` Release returned GitHub
+API `404` on 2026-08-04. Their availability is `UNAVAILABLE` and security
+support is `SUSPENDED`; historical sections below do not promise downloadable
+bytes, rollback availability, or active support.
 
 ## Frozen CPA v7.2.113 final engineering evidence
 
@@ -998,11 +1019,11 @@ production_approval: NOT_GRANTED
 stable_v0.16: NOT_RELEASED
 ```
 
-## Current Round 9 source-tree identity footer
+## Historical Round 9 source-tree identity footer
 
-This footer supersedes the current-tense identity for release-document
-validation without rewriting the retained Round 8 evidence above. It is a
-development contract only; classifier final source freeze, exact-main CI,
+This footer superseded the then-current identity for historical
+release-document validation without rewriting the retained Round 8 evidence
+above. It is a development contract only; classifier final source freeze, exact-main CI,
 counted-Mock Host evidence, independent audit, tag, and GitHub prerelease are
 not provided by this source-tree record.
 
