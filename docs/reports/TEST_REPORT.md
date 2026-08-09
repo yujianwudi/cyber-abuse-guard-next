@@ -6,6 +6,8 @@
 round13_source_version: 1.0.0
 round13_rc_tag: v1.0.0-rc.1
 round13_cpa: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
+round13_local_source_evidence_commit: d358f0922d322deca1c86113b8c8aed2405f4364
+round13_local_source_evidence_tree: 52098fc6eeb03a7a9f7bfbe95e08e0390c575cf9
 round13_platform: linux-amd64
 round13_local_source_matrix: PASS
 round13_local_native_host: NOT_RUN
@@ -14,16 +16,18 @@ round13_second_machine: NOT_RUN
 round13_release: NOT_CREATED
 ```
 
-The following commands passed on 2026-08-09 for this working tree:
+The following close-out commands passed on 2026-08-10 (Asia/Shanghai) against
+the source candidate commit/tree recorded above. They remain local source
+evidence; exact PR-head GitHub and native Host gates are separate:
 
 | Round 13 contract command | Result |
 |---|---|
 | `bash scripts/release-doc-consistency.sh` | `PASS` |
-| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 376.79s` |
+| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 460.5s` |
 | `bash scripts/release-rc-contract-test.sh` | `PASS` |
 | `bash scripts/release-candidate-contract-test.sh` | `PASS` |
-| `make unit-test` | `PASS / 353.40s` |
-| `make race` | `PASS / 1153.73s / NO DATA RACE` |
+| `make unit-test` | `PASS / 329.4s` |
+| `make race` | `PASS / 1123.7s / NO DATA RACE` |
 | `make round6-vet` | `PASS` |
 | `make fuzz-smoke` and `make round9-fuzz ROUND9_FUZZTIME=1s` | `PASS` |
 | `make corpus-regression development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus` | `PASS` |
@@ -59,7 +63,7 @@ current_classifier_policy_version: classifier-policy-v15
 current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
-Last updated: 2026-08-09 (Asia/Shanghai)
+Last updated: 2026-08-10 (Asia/Shanghai)
 
 ## Frozen CPA v7.2.124 target — local source/compile PASS, exact candidate pending
 
