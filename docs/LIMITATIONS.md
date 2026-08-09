@@ -1,27 +1,65 @@
-# Known Limitations — v0.16 Round 12 development source
+# Known Limitations — v1.0.0-rc.1 candidate
+
+> [!IMPORTANT]
+> The active Round 13 boundary is Linux amd64, source `1.0.0`, planned
+> `v1.0.0-rc.1`, and CPA
+> `v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`. The Round 12 evidence
+> table below remains historical and non-transferable; current gate status is
+> tracked in [ROUND13_STATUS.md](ROUND13_STATUS.md).
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
-Last updated: 2026-08-04 (Asia/Shanghai)
+Last updated: 2026-08-09 (Asia/Shanghai)
 
-## Current Round 12 evidence boundary
+## Current Round 13 evidence boundary
+
+The active Linux amd64 target is CAG source `1.0.0`, planned prerelease
+`v1.0.0-rc.1`, and CPA
+`v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e` with C ABI 1 / RPC schema 2.
+The CPA module sum is `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, the go.mod sum is
+`h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, the official archive
+SHA-256 is `4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`,
+and the binary SHA-256 is
+`656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+
+| Evidence boundary | Current Round 13 status |
+|---|---|
+| Pinned CPA source/compile contract and audit-harness unit suite | `PASS / 184_OF_184` |
+| no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `PASS / NATIVE_HOST_PENDING` |
+| Exact-candidate Linux native Host, race, and full matrix | `NOT_RUN / PENDING` |
+| Second-machine, protected Host, and independent attestation | `NOT_PROVIDED` |
+| Release readiness and production approval | `NOT_PROVIDED` |
+
+No source/unit result closes the real Host, race, full-matrix, second-machine,
+independent-audit, release, or production gates. Current status is maintained in
+[ROUND13_STATUS.md](ROUND13_STATUS.md).
+
+## Frozen historical Round 12 evidence boundary
+
+The remainder of this document preserves the Round 12 / CPA v7.2.124
+point-in-time limitation record. Its uses of "current", RT12 lane names, and
+v0.16 identities are scoped only to that frozen historical section and must not
+be used as active Round 13 guidance.
 
 Round 12 starts from exact
-`main@21267e742b624b29a75bd3683fd6914f76c764b5`, targets CPA v7.2.116 with
+`main@21267e742b624b29a75bd3683fd6914f76c764b5`, and now targets CPA v7.2.124 at
+`197f520426374e514218ed155933ac546c98d345` with
 Go 1.26.4 on Linux amd64, and ends with a gated PR merge rather than a tag or
 Release. The following evidence classes are independent and must not be
 collapsed into a generic "Host," "second machine," or "counted-Mock" claim.
-See the [canonical status boundary](ROUND12_STATUS.md).
+The table below and [Round 12 status](ROUND12_STATUS.md) define the current
+v7.2.124 boundary; v7.2.116 results inside them are historical evidence only.
 
 | Evidence boundary | Current status |
 |---|---|
-| Exact baseline GitHub engineering checks | `PASS / EXACT_MAIN_ONLY`; five required contexts for `main@21267e7` |
-| Round 12 working/final candidate GitHub checks | `PENDING_FINAL_CANDIDATE`; baseline PASS does not transfer |
-| Supplied 1,320-transport second-machine report | `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION` |
-| RT12-05/06 final-candidate second-machine run | `PENDING_FINAL_CANDIDATE_EXECUTION` |
+| Historical exact baseline GitHub engineering checks | `PASS / HISTORICAL_V7.2.116_EXACT_MAIN_ONLY`; five required contexts for `main@21267e7`; does not transfer to v7.2.124 |
+| Round 12 v7.2.124 working/final candidate GitHub checks | `PENDING_FINAL_CANDIDATE`; historical baseline PASS does not transfer |
+| Historical supplied CPA v7.2.116 1,320-transport second-machine report | `HISTORICAL_ONLY / DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION` |
+| RT12-05/06 exact-v7.2.124 final-candidate second-machine run | `PENDING_FINAL_CANDIDATE_EXECUTION` |
+| Multi-Agent v2 `/v1/responses` pre-interceptor tool-definition rewrite | `PENDING_EXACT_V7.2.124_REGRESSION`; historical v7.2.116 CI, second-machine, and five-repository data are non-transferable |
 | Protected Host / external evaluation | `NOT_PROVIDED` |
 | Independent attestation | `NOT_PROVIDED` |
 | Production approval / release readiness | `NOT_PROVIDED`; no tag or Release is authorized |
@@ -122,7 +160,8 @@ boundaries.
    metadata from forging tool authority.
 
 8. **CPA interceptor failures retain host-level fail-open boundaries.** The
-   required Host matrix is CPA v7.2.116 with C ABI 1 and RPC schema 2. CPA skips
+   required Host matrix is CPA v7.2.124 with unchanged C ABI 1 and RPC schema 2.
+   CPA skips
    an interceptor that returns an RPC error and fuses an interceptor that
    panics across the Host boundary; it may then continue the remaining chain and
    native execution. The plugin returns successful, mode-aware responses for
@@ -150,9 +189,16 @@ boundaries.
    as outside the admission boundary. A higher-priority legacy schema-1
    ModelRouter alone no longer bypasses ordinary model requests because the
    schema-2 before-auth interceptor still runs before execution. Alpha Search is
-   different: CPA v7.2.116 omits RequestInterceptor there, so deployment must
+   different: CPA v7.2.124 omits RequestInterceptor there, so deployment must
    also ensure no unreviewed higher-priority ModelRouter handles
    `codex-alpha-search` before CAG.
+
+   CPA v7.2.124 Multi-Agent v2 also rewrites `/v1/responses` tool definitions
+   before `RequestInterceptor`. The plugin cannot infer the original client-wire
+   tool schema from the post-rewrite envelope. Exact-target tests must cover
+   recognized/unknown tool definitions, inert tool schemas, tool-call arguments,
+   terminal tool-result provenance, budget behavior, and allow/block parity.
+   No v7.2.116 result is admissible for that new ordering boundary.
 
 10. **Duplicate plugin binaries cannot be detected in-process.** ABI v1 does
     not expose the plugin directory. The operator must ensure only one
@@ -164,7 +210,7 @@ boundaries.
     frame; successful chunks would force HTTP 200. The policy executor routes
     `execute`, `execute_stream`, and `count_tokens` to the same policy HTTP 403;
     `http_request` returns an unsupported-method RPC error whose `StatusCode()`
-    is 405; the official adapter returns `(nil, error)`. CPA v7.2.116's two Alpha
+    is 405; the official adapter returns `(nil, error)`. CPA v7.2.124's two Alpha
     Search routes do not call RequestInterceptor or request lifecycle. CAG's
     format-gated ModelRouter returns a self-target for malicious search, which
     the Alpha handler rejects as HTTP 503 before Codex credential selection or
@@ -172,7 +218,7 @@ boundaries.
     Alpha Search until CPA exposes local termination there; the Linux Host test
     must prove both aliases with an in-memory OAuth auth and a networkless Codex
     probe rather than claiming the ordinary interceptor response shape.
-    `ModelRouter` registration is global in CPA v7.2.116, so ordinary requests
+    `ModelRouter` registration is global in CPA v7.2.124, so ordinary requests
     still pay Host-side body cloning, JSON/Base64 serialization, and one Router
     RPC before CAG returns `Handled:false`; the plugin cannot make that work
     O(1). An oversized callback supplies only the method name, not the source
@@ -193,7 +239,7 @@ boundaries.
 13. **No `Retry-After` on executor errors.** ABI-v1 RPC errors cannot attach
     arbitrary downstream response headers.
 
-14. **Exact management routes only.** CPA v7.2.116 rejects dynamic `:`/`*`
+14. **Exact management routes only.** CPA v7.2.124 rejects dynamic `:`/`*`
     plugin routes, so subject unblock uses a fixed path and bounded JSON body.
     CPA host middleware, not the plugin, is the Management Key verification
     authority; ABI v1 does not reveal the configured key to the plugin. Host
@@ -214,7 +260,7 @@ boundaries.
     reserved, but `classifier.enabled: true` is rejected. The plugin makes no
     classifier network request and does not upload prompts to a third party.
 
-17. **No authenticated management UI.** CPA v7.2.116 resource routes are not a
+17. **No authenticated management UI.** CPA v7.2.124 resource routes are not a
     safe place for audit/subject data. This version exposes exact authenticated
     management API routes only.
 
@@ -281,7 +327,7 @@ boundaries.
 
 29. **Only one platform and one fixed CPA Host target are in scope.** The
     release platform is Linux amd64 with glibc 2.34+; musl/Alpine is unsupported.
-    The root module and both current contract modules pin CPA v7.2.116.
+    The root module and both current contract modules pin CPA v7.2.124.
     Source/compile success is not runtime admission. Exact-candidate counted-Mock
     Host evidence is required for this target.
     Earlier v7.2.85/v7.2.84/v7.2.83/v7.2.82/v7.2.81 checks are historical and non-gating.
@@ -355,7 +401,7 @@ boundaries.
 37. **Classifier-policy identity is source- and artifact-bound, but still not
     independent approval.** The active source-line identity is
     `classifier-policy-v12` / SHA-256
-`795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`,
+`2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`,
     and remains pending until bound to the final commit,
     tree, and candidate bytes.
     Build metadata and artifact verification carry it. The historical
@@ -529,7 +575,7 @@ boundaries.
 
 54. **The CPA source/compile contract is evidence only until counted-Mock Host
     validation.** `integration/cpalatestcontract` and
-    `integration/pluginstorecontract` both bind CPA v7.2.116. Each module asserts
+    `integration/pluginstorecontract` both bind CPA v7.2.124. Each module asserts
     the named critical Host tests and executes the complete upstream
     `internal/pluginhost` package, so this source coverage overlaps rather than
     forming two non-duplicative exact-name runs. The wider contract compiles the
@@ -567,7 +613,7 @@ boundaries.
     v7.2.80, an `agent` request that the Guard self-routes is rejected by CPA's
     native-Interactions validator with HTTP 400 before the Guard executor runs;
     a uniform Guard 403 would require an upstream CPA change. The owner-operated
-    sandbox must recheck that behavior on v7.2.116 and
+    sandbox must recheck that behavior on v7.2.124 and
     separately verify model/agent, stream/non-stream, exact status
     shapes, first-byte behavior, and zero Auth/Provider/Usage/upstream effects.
 
@@ -657,3 +703,13 @@ boundaries.
     peer and trusted ancestors. A stronger claim requires a different-UID
     trusted collector or an fd supplied by a trusted supervisor; RT12-05/06
     remains diagnostic and is not independent attestation.
+
+64. **Unchanged ABI and RPC schema do not prove v7.2.124 request-shape
+    compatibility.** CPA v7.2.124 retains C ABI 1 and RPC schema 2, but
+    Multi-Agent v2 rewrites `/v1/responses` tool definitions before
+    `RequestInterceptor`. CAG therefore sees a Host-mutated representation on
+    that path. Until an exact-v7.2.124 candidate regression proves tool-schema
+    inertness, tool-call/result provenance, bounded extraction, allow/block
+    parity, and zero forbidden side effects, the Responses Multi-Agent path is
+    `PENDING / NOT ADMITTED`. Historical v7.2.116 GitHub CI, second-machine,
+    and five-repository data remain historical evidence only.

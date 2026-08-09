@@ -1,16 +1,17 @@
 # Round 6 v0.15 CI, candidate, and release gate
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
-> **Frozen historical snapshot.** The classifier identity above is the
-> repository's current Round 9 identity. The body below preserves the Round 6 /
+> **Frozen historical snapshot.** The classifier identity above is active-tree
+> navigation metadata only. The body below preserves the Round 6 /
 > v0.15 release gate, including any CPA v7.2.95 wording such as "current real
 > Host state"; those statements are historical only and are not the active
-> repository release identity. The current formal CPA identity is
-> `v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835` (RPC schema 2).
+> repository release identity. The current overlay is CAG source `1.0.0`,
+> planned `v1.0.0-rc.1` on Linux amd64, and
+> `v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e` (C ABI 1 / RPC schema 2).
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**.
 

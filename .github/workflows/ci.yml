@@ -66,6 +66,8 @@ jobs:
             !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
       - name: Recheck restricted-data and active-workflow contracts
         run: python3 -B scripts/round6_safe_gate_contract.py --root .
+      - name: Validate fixed RC release contract
+        run: bash scripts/release-rc-contract-test.sh
       - name: Set up pinned Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
@@ -89,7 +91,7 @@ jobs:
         run: make round6-module-verify
       - name: Historical Round 8 counted-Mock regression
         run: make round8-counted-mock-historical-regression
-      - name: CPA v7.2.116 pinned source API and SDK contract
+      - name: CPA v7.2.125 pinned source API and SDK contract
         env:
           CPA_COMPAT_PROFILE: "primary"
           CPA_COMPAT_VERIFY_REMOTE: "1"
@@ -163,7 +165,7 @@ jobs:
           set -euo pipefail
 
           artifact_version="$(jq -er '.version' dist/build-metadata.json)"
-          [[ "$artifact_version" == 0.16 ]] || {
+          [[ "$artifact_version" == 1.0.0 ]] || {
             echo "unexpected audit-candidate version: $artifact_version" >&2
             exit 1
           }
@@ -216,6 +218,31 @@ jobs:
 
           source_commit="$GITHUB_SHA"
           source_tree="$(git rev-parse 'HEAD^{tree}')"
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              candidate_head_branch="$GITHUB_HEAD_REF"
+              candidate_head_sha="$(jq -er '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
+              ;;
+            push)
+              candidate_head_branch="$GITHUB_REF_NAME"
+              candidate_head_sha="$GITHUB_SHA"
+              ;;
+            *)
+              echo "unsupported audit-candidate event: $GITHUB_EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          candidate_repository="$GITHUB_REPOSITORY"
+          candidate_workflow_name="$GITHUB_WORKFLOW"
+          candidate_workflow_ref="$GITHUB_WORKFLOW_REF"
+          [[ "$candidate_repository" == 'yujianwudi/cyber-abuse-guard-next' ]]
+          [[ "$candidate_workflow_name" == 'CI' ]]
+          [[ "$candidate_head_branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$ ]]
+          [[ "$candidate_head_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$candidate_workflow_ref" == "$candidate_repository/"*'@'* ]]
+          candidate_workflow_path="${candidate_workflow_ref#${candidate_repository}/}"
+          candidate_workflow_path="${candidate_workflow_path%@*}"
+          [[ "$candidate_workflow_path" == '.github/workflows/ci.yml' ]]
           manifest_schema='cyber-abuse-guard.audit-candidate-manifest.v1'
           manifest_status='UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE'
           manifest_path='dist/audit-candidate-manifest.json'
@@ -225,26 +252,36 @@ jobs:
           [[ "$source_commit" =~ ^[0-9a-f]{40}$ ]]
           [[ "$source_tree" =~ ^[0-9a-f]{40}$ ]]
           [[ "$(git rev-parse HEAD)" == "$source_commit" ]]
-          jq -S -n \
+          jq -cS -n \
             --arg schema "$manifest_schema" \
             --arg status "$manifest_status" \
             --arg event "$GITHUB_EVENT_NAME" \
+            --arg head_branch "$candidate_head_branch" \
+            --arg head_sha "$candidate_head_sha" \
+            --arg repository "$candidate_repository" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             --arg commit "$source_commit" \
             --arg tree "$source_tree" \
             --arg version "$artifact_version" \
+            --arg workflow_name "$candidate_workflow_name" \
+            --arg workflow_path "$candidate_workflow_path" \
             --argjson artifacts "$artifact_records" \
             '{
               schema: $schema,
               status: $status,
               event: $event,
+              head_branch: $head_branch,
+              head_sha: $head_sha,
+              repository: $repository,
               run_id: $run_id,
               run_attempt: $run_attempt,
               commit: $commit,
               tree: $tree,
               dirty: false,
               version: $version,
+              workflow_name: $workflow_name,
+              workflow_path: $workflow_path,
               artifacts: $artifacts
             }' >"$manifest_tmp"
           chmod 0644 "$manifest_tmp"
@@ -255,14 +292,22 @@ jobs:
             --arg schema "$manifest_schema" \
             --arg status "$manifest_status" \
             --arg event "$GITHUB_EVENT_NAME" \
+            --arg head_branch "$candidate_head_branch" \
+            --arg head_sha "$candidate_head_sha" \
+            --arg repository "$candidate_repository" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             --arg commit "$source_commit" \
             --arg tree "$source_tree" \
             --arg version "$artifact_version" \
+            --arg workflow_name "$candidate_workflow_name" \
+            --arg workflow_path "$candidate_workflow_path" \
             --argjson artifacts "$artifact_records" \
             '.schema == $schema and .status == $status and
              .event == $event and .run_id == $run_id and .run_attempt == $run_attempt and
+             .head_branch == $head_branch and .head_sha == $head_sha and
+             .repository == $repository and
+             .workflow_name == $workflow_name and .workflow_path == $workflow_path and
              .commit == $commit and .tree == $tree and .dirty == false and
              .version == $version and .artifacts == $artifacts' \
             "$manifest_path" >/dev/null
@@ -306,18 +351,19 @@ jobs:
             printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
             sha256sum "$artifact"
           done
-          echo 'integration_summary=CPA v7.2.116 source/fail-open, SDK ABI/API, and Linux Host .so load checks completed'
-          echo 'cpa_primary_identity=v7.2.116@a88197f845c979132c8978ea223c6af05cc81536'
+          echo 'integration_summary=CPA v7.2.125 source/fail-open, no-copy, response.failed, SDK ABI/API, and Linux Host .so load checks completed'
+          echo 'cpa_primary_identity=v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e'
       - name: clean-tree-check
         run: make clean-tree-check
       - name: Upload exact-merge clean audit candidate
+        id: upload_audit_candidate
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cyber-abuse-guard-linux-amd64-audit-candidate
           path: |
-            dist/cyber-abuse-guard-v0.16.so
-            dist/cyber-abuse-guard-v0.16.so.sha256
-            dist/cyber-abuse-guard_0.16_linux_amd64.zip
+            dist/cyber-abuse-guard-v1.0.0.so
+            dist/cyber-abuse-guard-v1.0.0.so.sha256
+            dist/cyber-abuse-guard_1.0.0_linux_amd64.zip
             dist/build-metadata.json
             dist/checksums.txt
             dist/ruleset-manifest.json
@@ -326,6 +372,18 @@ jobs:
             dist/audit-candidate-manifest.json
           if-no-files-found: error
           retention-days: 14
+      - name: Report post-upload candidate artifact admission coordinates
+        env:
+          CANDIDATE_ARTIFACT_DIGEST: ${{ steps.upload_audit_candidate.outputs.artifact-digest }}
+          CANDIDATE_ARTIFACT_ID: ${{ steps.upload_audit_candidate.outputs.artifact-id }}
+          CANDIDATE_ARTIFACT_NAME: cyber-abuse-guard-linux-amd64-audit-candidate
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CANDIDATE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf 'candidate_artifact_id=%s\n' "$CANDIDATE_ARTIFACT_ID"
+          printf 'candidate_artifact_name=%s\n' "$CANDIDATE_ARTIFACT_NAME"
+          printf 'candidate_artifact_digest=%s\n' "$CANDIDATE_ARTIFACT_DIGEST"
   reproducibility:
     needs: quality-and-artifacts
     runs-on: ubuntu-24.04
@@ -391,7 +449,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          artifact_version=0.16
+          artifact_version=1.0.0
           base_artifacts=(
             "cyber-abuse-guard-v${artifact_version}.so"
             "cyber-abuse-guard-v${artifact_version}.so.sha256"
@@ -429,20 +487,53 @@ jobs:
 
           source_commit="$GITHUB_SHA"
           source_tree="$(git rev-parse 'HEAD^{tree}')"
+          case "$GITHUB_EVENT_NAME" in
+            pull_request)
+              candidate_head_branch="$GITHUB_HEAD_REF"
+              candidate_head_sha="$(jq -er '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
+              ;;
+            push)
+              candidate_head_branch="$GITHUB_REF_NAME"
+              candidate_head_sha="$GITHUB_SHA"
+              ;;
+            *)
+              echo "unsupported audit-candidate event: $GITHUB_EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          candidate_repository="$GITHUB_REPOSITORY"
+          candidate_workflow_name="$GITHUB_WORKFLOW"
+          candidate_workflow_ref="$GITHUB_WORKFLOW_REF"
+          [[ "$candidate_repository" == 'yujianwudi/cyber-abuse-guard-next' ]]
+          [[ "$candidate_workflow_name" == 'CI' ]]
+          [[ "$candidate_head_branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$ ]]
+          [[ "$candidate_head_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$candidate_workflow_ref" == "$candidate_repository/"*'@'* ]]
+          candidate_workflow_path="${candidate_workflow_ref#${candidate_repository}/}"
+          candidate_workflow_path="${candidate_workflow_path%@*}"
+          [[ "$candidate_workflow_path" == '.github/workflows/ci.yml' ]]
           [[ "$(git rev-parse HEAD)" == "$source_commit" ]]
           expected_names="$(printf '%s\n' "${base_artifacts[@]}" | jq -R . | jq -s .)"
           manifest='dist/audit-candidate-manifest.json'
           jq -e \
             --arg event "$GITHUB_EVENT_NAME" \
+            --arg head_branch "$candidate_head_branch" \
+            --arg head_sha "$candidate_head_sha" \
+            --arg repository "$candidate_repository" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
             --arg commit "$source_commit" \
             --arg tree "$source_tree" \
             --arg version "$artifact_version" \
+            --arg workflow_name "$candidate_workflow_name" \
+            --arg workflow_path "$candidate_workflow_path" \
             --argjson expected_names "$expected_names" \
             '.schema == "cyber-abuse-guard.audit-candidate-manifest.v1" and
              .status == "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE" and
              .event == $event and .run_id == $run_id and .run_attempt == $run_attempt and
+             .head_branch == $head_branch and .head_sha == $head_sha and
+             .repository == $repository and
+             .workflow_name == $workflow_name and .workflow_path == $workflow_path and
              .commit == $commit and .tree == $tree and .dirty == false and
              .version == $version and
              ([.artifacts[].name] == $expected_names) and
@@ -450,7 +541,7 @@ jobs:
                ([.artifacts[].name] | unique | length) and
              all(.artifacts[];
                (.sha256 | type == "string" and test("^[0-9a-f]{64}$")) and
-               (.bytes | type == "number" and . >= 0 and floor == .))' \
+               (.bytes | type == "number" and . > 0 and floor == .))' \
             "$manifest" >/dev/null
 
           jq -e \

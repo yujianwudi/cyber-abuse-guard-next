@@ -50,6 +50,8 @@ type auditStorageObjectIdentity struct {
 // through Add, so wall-clock adjustments cannot extend this interval.
 const auditStorageMinimumReprobeInterval = time.Second
 
+const auditStorageGateUnarmedReason = "storage_gate_unarmed"
+
 // auditStorageGate binds every production storage access to the identity
 // captured after SQLite Open. The first failed live verification is permanent
 // for this runtime: a later probe cannot silently turn writes back on. An
@@ -72,13 +74,23 @@ func newAuditStorageGate(
 	maxBytes int64,
 	inspect func(string, bool, bool, int64) auditStorageVerification,
 ) *auditStorageGate {
-	return &auditStorageGate{
+	gate := &auditStorageGate{
 		baseline: baseline,
-		current:  baseline,
 		maxBytes: maxBytes,
 		inspect:  inspect,
 		now:      time.Now,
 	}
+	if baseline.preventsDatabaseOpen() {
+		gate.current = baseline
+		gate.armed = true
+		gate.latched = true
+		return gate
+	}
+	gate.current = baseline
+	gate.current.State = "unarmed"
+	gate.current.PersistenceVerified = false
+	gate.current.PersistenceReason = auditStorageGateUnarmedReason
+	return gate
 }
 
 func (gate *auditStorageGate) arm(baseline auditStorageVerification) {
@@ -90,7 +102,7 @@ func (gate *auditStorageGate) arm(baseline auditStorageVerification) {
 	gate.current = baseline
 	gate.nextProbeAt = time.Time{}
 	gate.armed = true
-	gate.latched = baseline.blocksOperationalReadiness()
+	gate.latched = baseline.preventsDatabaseOpen()
 	gate.mu.Unlock()
 }
 
@@ -124,7 +136,7 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 	}
 	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, false, gate.inspect)
 	gate.current = fresh
-	if fresh.blocksOperationalReadiness() {
+	if fresh.preventsDatabaseOpen() {
 		gate.latched = true
 	} else {
 		// Start the minimum interval after the potentially slow live probe. This
@@ -135,10 +147,94 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 }
 
 func (gate *auditStorageGate) access() error {
+	if gate == nil {
+		return errors.New("persistent audit storage gate is unavailable")
+	}
 	status := gate.verification()
-	if !status.blocksOperationalReadiness() {
+	gate.mu.Lock()
+	blocked := !gate.armed || gate.latched || status.preventsDatabaseOpen()
+	gate.mu.Unlock()
+	if !blocked {
 		return nil
 	}
+	return auditStorageAccessError(status)
+}
+
+// activationAccess is deliberately independent from verification's one-second
+// write-hot-path cache. It is called only after runtime Swap and before SQLite
+// open/create, and it never arms the gate: the opened DB/WAL/SHM identity must
+// still be captured by bindAfterOpen.
+func (gate *auditStorageGate) activationAccess() error {
+	if gate == nil {
+		return errors.New("persistent audit storage activation gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.latched {
+		return auditStorageAccessError(gate.current)
+	}
+	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, false, gate.inspect)
+	gate.current = fresh
+	gate.nextProbeAt = time.Time{}
+	if fresh.preventsDatabaseOpen() {
+		gate.armed = true
+		gate.latched = true
+		return auditStorageAccessError(fresh)
+	}
+	gate.armed = false
+	return nil
+}
+
+// bindAfterOpen captures the exact artifact identities produced by SQLite open
+// before migrations or cleanup execute. It also bypasses the cached probe and
+// is the sole transition from an unarmed candidate to an admission-capable
+// Store.
+func (gate *auditStorageGate) bindAfterOpen() (auditStorageVerification, error) {
+	if gate == nil {
+		return disabledAuditStorageVerification(), errors.New("persistent audit storage bind gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.latched {
+		return gate.current, auditStorageAccessError(gate.current)
+	}
+	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, true, gate.inspect)
+	gate.current = fresh
+	gate.nextProbeAt = time.Time{}
+	if fresh.preventsDatabaseOpen() {
+		gate.armed = true
+		gate.latched = true
+		return fresh, auditStorageAccessError(fresh)
+	}
+	gate.baseline = fresh
+	gate.armed = true
+	gate.latched = false
+	return fresh, nil
+}
+
+// readAccess performs a fresh probe for every sensitive read. A successful
+// write-cache verdict is intentionally irrelevant; a failure permanently
+// latches this runtime until reconfigure/reopen.
+func (gate *auditStorageGate) readAccess() error {
+	if gate == nil {
+		return errors.New("persistent audit storage read gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if !gate.armed || gate.latched {
+		return auditStorageAccessError(gate.current)
+	}
+	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, false, gate.inspect)
+	gate.current = fresh
+	if fresh.preventsDatabaseOpen() {
+		gate.latched = true
+		gate.nextProbeAt = time.Time{}
+		return auditStorageAccessError(fresh)
+	}
+	return nil
+}
+
+func auditStorageAccessError(status auditStorageVerification) error {
 	reason := status.PersistenceReason
 	if reason == "" {
 		reason = "unverified"

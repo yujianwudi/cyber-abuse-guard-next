@@ -96,10 +96,19 @@ if [[ -z "$current_release_version" ]]; then
     's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' \
     "$root/internal/buildinfo/buildinfo.go" | sed -n '1p')"
 fi
-[[ "$current_release_version" =~ ^[0-9]+\.[0-9]+$ ]] || \
-  fail "cannot determine the exact two-component release version"
+if [[ "$fixture_mode" == 1 ]]; then
+  [[ "$current_release_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || \
+    fail "cannot determine the exact fixture release version"
+else
+  [[ "$current_release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || \
+    fail "cannot determine the exact three-component semantic release version"
+fi
 
 audit_tool_root="$root/tools/current-cpa-audit"
+round13_cpa_module_sum='h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg='
+round13_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
+round13_cpa_archive_sha256='4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233'
+round13_cpa_binary_sha256='656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a'
 audit_identity_output=""
 if ! audit_identity_output="$(python3 -B - "$audit_tool_root" <<'PY'
 import sys
@@ -111,6 +120,7 @@ tool = Path(sys.argv[1]).resolve(strict=True)
 sys.path.insert(0, str(tool))
 sys.path.insert(0, str(tool / "tests"))
 import run
+import audit_contract
 
 
 identities = run.runner_identities()
@@ -128,19 +138,31 @@ for key in (
 ):
     print(identities[key])
 print(suite.countTestCases())
+print(audit_contract.CPA_MODULE_SUM)
+print(audit_contract.CPA_GO_MOD_SUM)
+print(audit_contract.CPA_OFFICIAL_ASSET_SHA256)
+print(audit_contract.CPA_OFFICIAL_BINARY_SHA256)
+print(audit_contract.CAG_SOURCE_VERSION)
+print(audit_contract.CAG_SO_NAME)
 PY
 )"; then
   fail "cannot determine the current CPA audit runner identity closure"
 fi
 audit_identity_values=()
 mapfile -t audit_identity_values <<<"$audit_identity_output"
-[[ "${#audit_identity_values[@]}" == 5 ]] || \
+[[ "${#audit_identity_values[@]}" == 11 ]] || \
   fail "cannot determine the current CPA audit runner identity closure"
 current_audit_runner_bundle_sha256="${audit_identity_values[0]}"
 current_audit_contract_sha256="${audit_identity_values[1]}"
 current_audit_run_source_sha256="${audit_identity_values[2]}"
 current_audit_machine_schema_sha256="${audit_identity_values[3]}"
 current_audit_tool_test_count="${audit_identity_values[4]}"
+audit_cpa_module_sum="${audit_identity_values[5]}"
+audit_cpa_go_mod_sum="${audit_identity_values[6]}"
+audit_cpa_archive_sha256="${audit_identity_values[7]}"
+audit_cpa_binary_sha256="${audit_identity_values[8]}"
+audit_cag_source_version="${audit_identity_values[9]}"
+audit_cag_so_name="${audit_identity_values[10]}"
 for digest in \
   "$current_audit_runner_bundle_sha256" \
   "$current_audit_contract_sha256" \
@@ -151,6 +173,408 @@ for digest in \
 done
 [[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
   fail "current CPA audit tool test count is invalid"
+[[ "$current_audit_tool_test_count" == 184 ]] || \
+  fail "current CPA audit harness must retain the reviewed 184-test closure"
+[[ "$audit_cpa_module_sum" == "$round13_cpa_module_sum" ]] || \
+  fail "current CPA audit harness module sum differs from the v7.2.125 authority"
+[[ "$audit_cpa_go_mod_sum" == "$round13_cpa_go_mod_sum" ]] || \
+  fail "current CPA audit harness go.mod sum differs from the v7.2.125 authority"
+[[ "$audit_cpa_archive_sha256" == "$round13_cpa_archive_sha256" ]] || \
+  fail "current CPA audit harness archive SHA-256 differs from the v7.2.125 authority"
+[[ "$audit_cpa_binary_sha256" == "$round13_cpa_binary_sha256" ]] || \
+  fail "current CPA audit harness binary SHA-256 differs from the v7.2.125 authority"
+[[ "$audit_cag_source_version" == 1.0.0 ]] || \
+  fail "current CPA audit harness CAG source version differs from 1.0.0"
+[[ "$audit_cag_so_name" == cyber-abuse-guard-v1.0.0.so ]] || \
+  fail "current CPA audit harness CAG SO name differs from source 1.0.0"
+
+if [[
+  ("$fixture_mode" == 0 && "$current_release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$) ||
+  ("$fixture_mode" == 1 && "$current_release_version" == "1.0.0")
+]]; then
+  round13_documents=(
+    README.md
+    README_CN.md
+    CHANGELOG.md
+    SECURITY.md
+    docs/AUDIT_HANDOFF.md
+    docs/DESIGN.md
+    docs/INSTALL_DOCKER.md
+    docs/LIMITATIONS.md
+    docs/RAW_CAPTURE.md
+    docs/README.md
+    docs/RELEASE_POLICY.md
+    docs/ROUND6_DEVELOPMENT_HANDOFF.md
+    docs/ROUND6_LIMITATIONS.md
+    docs/ROUND6_RELEASE_GATE.md
+    docs/ROUND6_CONFIG_MIGRATION.md
+    docs/ROUND6_STREAMING_SCANNER_DESIGN.md
+    docs/ROUND8_HOST_RUNNER.md
+    docs/ROUND9_AUDIT_SCHEMA_V6.md
+    docs/ROUND9_HOST_RUNNER.md
+    docs/ROUND9_OPERATOR_ROLLOUT.md
+    docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+    docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+    docs/ROUND12_STATUS.md
+    docs/RULES.md
+    docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md
+    docs/ROUND13_STATUS.md
+    docs/THREAT_MODEL.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PHASE0_CPA_CONTRACT.md
+    docs/reports/PROMPT_INJECTION_REVIEW.md
+    docs/reports/RELEASE_EVIDENCE.md
+    docs/reports/ROUND8_RELEASE_READINESS.md
+    docs/reports/PERFORMANCE.md
+    docs/reports/PRIVACY.md
+    docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
+    docs/reports/ROUND8_CALIBRATION.md
+    docs/reports/ROUND9_EXECUTION_RECORD.md
+    docs/reports/TEST_REPORT.md
+    integration/cpalatestcontract/README.md
+    tools/current-cpa-audit/README.md
+  )
+  for relative in "${round13_documents[@]}"; do
+    path="$doc_root/$relative"
+    [[ -f "$path" && ! -L "$path" ]] || fail "required Round 13 document is missing or unsafe: $relative"
+  done
+
+  current_classifier_prologue_documents=(
+    docs/ROUND6_CONFIG_MIGRATION.md
+    docs/ROUND6_STREAMING_SCANNER_DESIGN.md
+    docs/ROUND8_HOST_RUNNER.md
+    docs/ROUND9_AUDIT_SCHEMA_V6.md
+    docs/ROUND9_HOST_RUNNER.md
+    docs/ROUND9_OPERATOR_ROLLOUT.md
+    docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+    docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+    docs/ROUND12_STATUS.md
+    docs/RULES.md
+    docs/reports/PERFORMANCE.md
+    docs/reports/PRIVACY.md
+    docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
+    docs/reports/ROUND8_CALIBRATION.md
+    docs/reports/ROUND9_EXECUTION_RECORD.md
+  )
+  current_policy_version='current_classifier_policy_version: classifier-policy-v15'
+  current_policy_sha='current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9'
+  for relative in "${current_classifier_prologue_documents[@]}"; do
+    document="$doc_root/$relative"
+    prologue="$(sed -n '1,15p' "$document")"
+    [[ "$(grep -Fxc "$current_policy_version" <<<"$prologue")" == 1 && \
+       "$(grep -Fxc "$current_policy_sha" <<<"$prologue")" == 1 ]] || \
+      fail "$relative lost the exact current classifier identity in its first 15 lines"
+    [[ "$(grep -Fxc "$current_policy_version" "$document")" == 1 && \
+       "$(grep -Fxc "$current_policy_sha" "$document")" == 1 ]] || \
+      fail "$relative must contain exactly one current classifier identity; historical body identities remain allowed"
+  done
+
+  grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README.md" || \
+    fail "README.md lost the current 1.0.0 source identity"
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/README.md" || \
+    fail "README.md lost the current RC tag identity"
+  grep -Fqx 'current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' "$doc_root/README.md" || \
+    fail "README.md lost the CPA v7.2.125 identity"
+  grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the current 1.0.0 source identity"
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the current RC tag identity"
+  grep -Fqx 'current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the CPA v7.2.125 identity"
+  grep -Fqx 'current_source_version: 1.0.0' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost the current source version"
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost the current RC tag"
+  grep -Fqx 'current_rc_prerelease: true' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost prerelease=true"
+  grep -Fqx 'current_rc_make_latest: false' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost make_latest=false"
+  grep -Fq '## Unreleased - v1.0.0-rc.1' "$doc_root/CHANGELOG.md" || \
+    fail "CHANGELOG.md lost the active v1.0.0-rc.1 section"
+  grep -Fq 'round13_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' "$doc_root/docs/ROUND13_STATUS.md" || \
+    fail "ROUND13_STATUS.md lost the exact CPA identity"
+  grep -Fq 'round13_rc_tag: v1.0.0-rc.1' "$doc_root/docs/ROUND13_STATUS.md" || \
+    fail "ROUND13_STATUS.md lost the exact RC identity"
+
+  round13_identity_documents=(
+    CHANGELOG.md
+    docs/README.md
+    docs/ROUND13_STATUS.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PHASE0_CPA_CONTRACT.md
+    tools/current-cpa-audit/README.md
+  )
+  for relative in "${round13_identity_documents[@]}"; do
+    document="$doc_root/$relative"
+    grep -Fq "$round13_cpa_module_sum" "$document" || \
+      fail "$relative lost the exact CPA v7.2.125 module sum"
+    grep -Fq "$round13_cpa_go_mod_sum" "$document" || \
+      fail "$relative lost the exact CPA v7.2.125 go.mod sum"
+    grep -Fq "$round13_cpa_archive_sha256" "$document" || \
+      fail "$relative lost the exact CPA v7.2.125 archive SHA-256"
+    grep -Fq "$round13_cpa_binary_sha256" "$document" || \
+      fail "$relative lost the exact CPA v7.2.125 binary SHA-256"
+  done
+
+  round13_overlay_documents=(
+    docs/DESIGN.md
+    docs/INSTALL_DOCKER.md
+    docs/ROUND6_DEVELOPMENT_HANDOFF.md
+    docs/ROUND6_LIMITATIONS.md
+    docs/ROUND6_RELEASE_GATE.md
+    docs/THREAT_MODEL.md
+    docs/reports/PROMPT_INJECTION_REVIEW.md
+    docs/reports/ROUND8_RELEASE_READINESS.md
+  )
+  for relative in "${round13_overlay_documents[@]}"; do
+    document="$doc_root/$relative"
+    grep -Fq 'v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' "$document" || \
+      fail "$relative lost its active-tree CPA v7.2.125 overlay"
+    grep -Fq 'current_classifier_policy_version: classifier-policy-v15' "$document" || \
+      fail "$relative lost its active-tree classifier overlay"
+  done
+
+  grep -Fq 'exact v7.2.125 / CAG `1.0.0` lane must revalidate it' \
+    "$doc_root/docs/RAW_CAPTURE.md" || \
+    fail "docs/RAW_CAPTURE.md lost the active v7.2.125 transport guidance"
+  grep -Fq '## Frozen historical Round 12 evidence boundary' \
+    "$doc_root/docs/LIMITATIONS.md" || \
+    fail "docs/LIMITATIONS.md must explicitly freeze the retained Round 12 body"
+  grep -Fq 'cyber-abuse-guard-v1.0.0.so' \
+    "$doc_root/tools/current-cpa-audit/README.md" || \
+    fail "current CPA audit README lost the closed CAG 1.0.0 SO name"
+  grep -Fq '"source_version": {"const": "1.0.0"}' \
+    "$root/tools/current-cpa-audit/machine-evidence.schema.json" || \
+    fail "machine evidence schema lost the closed CAG 1.0.0 identity"
+  grep -Fq '"version": {"const": "1.0.0"}' \
+    "$root/tools/current-cpa-audit/host-performance-evidence.schema.json" || \
+    fail "Host performance evidence schema lost the closed CAG 1.0.0 candidate version"
+
+  round13_active_cpa_documents=(
+    README.md
+    README_CN.md
+    CHANGELOG.md
+    SECURITY.md
+    docs/AUDIT_HANDOFF.md
+    docs/DESIGN.md
+    docs/INSTALL_DOCKER.md
+    docs/LIMITATIONS.md
+    docs/RAW_CAPTURE.md
+    docs/README.md
+    docs/ROUND6_DEVELOPMENT_HANDOFF.md
+    docs/ROUND6_LIMITATIONS.md
+    docs/ROUND6_RELEASE_GATE.md
+    docs/ROUND13_STATUS.md
+    docs/THREAT_MODEL.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PHASE0_CPA_CONTRACT.md
+    docs/reports/PROMPT_INJECTION_REVIEW.md
+    docs/reports/RELEASE_EVIDENCE.md
+    docs/reports/ROUND8_RELEASE_READINESS.md
+    docs/reports/TEST_REPORT.md
+    integration/cpalatestcontract/README.md
+    tools/current-cpa-audit/README.md
+  )
+  if ! python3 -B - "$doc_root" "${round13_active_cpa_documents[@]}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+root = Path(sys.argv[1])
+relatives = sys.argv[2:]
+stale = re.compile(r"v7\.2\.124", re.IGNORECASE)
+active = re.compile(r"\b(?:active|current)\b|(?:活动|当前)", re.IGNORECASE)
+historical = re.compile(
+    r"\b(?:frozen|historical|retained|non-transferable|superseded)\b|(?:冻结|历史|保留|不可转移)",
+    re.IGNORECASE,
+)
+freeze_markers = {
+    "README.md": "The Round 12 block retained below is historical v7.2.124 evidence.",
+    "README_CN.md": "下方第十二轮状态仅保留为 CPA v7.2.124 历史证据",
+    "CHANGELOG.md": "## Historical unreleased - v0.16 main development",
+    "docs/AUDIT_HANDOFF.md": "下文为冻结的第十二轮历史交接记录",
+    "docs/DESIGN.md": "## Frozen historical Round 12 design body",
+    "docs/INSTALL_DOCKER.md": "## Frozen historical Round 12 installation body",
+    "docs/LIMITATIONS.md": "## Frozen historical Round 12 evidence boundary",
+    "docs/THREAT_MODEL.md": "## Frozen historical Round 12 threat-model body",
+    "docs/reports/CPA_INTEGRATION.md": "Everything below this overlay is the frozen Round 12 / CPA v7.2.124 report",
+    "docs/reports/RELEASE_EVIDENCE.md": "Everything below is frozen v0.16 / Round 12",
+    "docs/reports/TEST_REPORT.md": "All v7.2.124 and earlier results below are historical",
+}
+problems = []
+for relative in relatives:
+    text = (root / relative).read_text(encoding="utf-8")
+    lines = text.splitlines()
+    marker = freeze_markers.get(relative)
+    frozen_after = len(lines) + 1
+    if marker:
+        for index, line in enumerate(lines, 1):
+            if marker in line:
+                frozen_after = index
+                break
+
+    if relative == "docs/README.md":
+        for index, line in enumerate(lines, 1):
+            if stale.search(line) and re.search(
+                r"\[Active\s+v7\.2\.124|active\s+v7\.2\.124\s+boundary",
+                line,
+                re.IGNORECASE,
+            ):
+                problems.append(f"{relative}:{index}: stale active v7.2.124 navigation")
+
+    if relative in {
+        "docs/ROUND6_DEVELOPMENT_HANDOFF.md",
+        "docs/ROUND6_LIMITATIONS.md",
+        "docs/ROUND6_RELEASE_GATE.md",
+        "docs/reports/PROMPT_INJECTION_REVIEW.md",
+        "docs/reports/ROUND8_RELEASE_READINESS.md",
+    }:
+        for index, line in enumerate(lines, 1):
+            if stale.search(line) and re.search(
+                r"current_(?:formal_)?cpa|current\s+(?:formal\s+)?CPA\s+identity",
+                line,
+                re.IGNORECASE,
+            ):
+                problems.append(f"{relative}:{index}: stale active-tree CPA overlay")
+
+    paragraph = []
+    paragraph_start = 1
+    for index in range(1, len(lines) + 2):
+        line = lines[index - 1] if index <= len(lines) else ""
+        if line.strip():
+            if not paragraph:
+                paragraph_start = index
+            paragraph.append(line)
+            continue
+        if not paragraph:
+            continue
+        value = "\n".join(paragraph)
+        if (
+            paragraph_start < frozen_after
+            and stale.search(value)
+            and active.search(value)
+            and not historical.search(value)
+        ):
+            problems.append(
+                f"{relative}:{paragraph_start}: unfrozen current/active v7.2.124 claim"
+            )
+        paragraph = []
+
+if problems:
+    print("\n".join(problems), file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
+    fail "Round 13 active document allowlist contains an unfrozen current/active v7.2.124 claim"
+  fi
+
+  if ! python3 -B - "$doc_root" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+root = Path(sys.argv[1])
+
+
+def split_once(relative, marker):
+    text = (root / relative).read_text(encoding="utf-8")
+    if text.count(marker) != 1:
+        raise SystemExit(f"{relative}: expected exactly one active/frozen boundary marker")
+    return text.split(marker, 1)
+
+
+for relative, marker in (
+    (
+        "docs/reports/CPA_INTEGRATION.md",
+        "Everything below this overlay is the frozen Round 12 / CPA v7.2.124 report",
+    ),
+    (
+        "docs/reports/TEST_REPORT.md",
+        "All v7.2.124 and earlier results below are historical",
+    ),
+):
+    active, _ = split_once(relative, marker)
+    if len(re.findall(r"(?<![0-9])184/184 PASS(?![0-9])", active)) != 1:
+        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 184/184 PASS result")
+
+
+relative = "docs/reports/RELEASE_EVIDENCE.md"
+marker = "Everything below is frozen v0.16 / Round 12 history"
+active, frozen = split_once(relative, marker)
+expected_target = (
+    "active_cpa_target: v7.2.125 / "
+    "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e"
+)
+active_target = re.compile(r"(?m)^[ \t]*" + re.escape(expected_target) + r"[ \t]*$")
+if len(active_target.findall(active)) != 1:
+    raise SystemExit(
+        f"{relative}: active boundary must contain exactly one exact v7.2.125 active_cpa_target"
+    )
+if len(re.findall(r"(?m)^[ \t]*active_cpa_target[ \t]*:", active)) != 1:
+    raise SystemExit(f"{relative}: active boundary contains a duplicate or conflicting active_cpa_target")
+
+active_cpa_key = re.compile(
+    r"(?m)^[ \t]*(?:[-*+][ \t]+)?[`'\"]?(active_cpa_[A-Za-z0-9_]+)[`'\"]?[ \t]*:"
+)
+stale_keys = sorted(set(active_cpa_key.findall(frozen)))
+if stale_keys:
+    raise SystemExit(
+        f"{relative}: frozen Round 12 block contains active_cpa_* keys: {', '.join(stale_keys)}"
+    )
+
+historical_target = re.compile(
+    r"(?m)^[ \t]*historical_round12_cpa_target:[ \t]*"
+    r"v7\.2\.124 / 197f520426374e514218ed155933ac546c98d345[ \t]*$"
+)
+if len(historical_target.findall(frozen)) != 1:
+    raise SystemExit(
+        f"{relative}: frozen block must contain exactly one historical_round12_cpa_target"
+    )
+
+required_store_markers = (
+    "active_cpa_store_rc_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / "
+    "ROOT_CYBER_ABUSE_GUARD.SO / PAYLOAD_BYTE_EQUAL",
+    "active_cpa_store_checksum_contract: checksums.txt / "
+    "EXACT_STANDALONE_AND_TWO_STORE_ZIPS",
+    "payload is byte-for-byte equal to the audited standalone SO",
+    "derived-container relationship explicitly",
+)
+for required in required_store_markers:
+    if active.count(required) != 1:
+        raise SystemExit(
+            f"{relative}: active boundary must retain exactly one RC Store marker: {required}"
+        )
+PY
+  then
+    fail "Round 13 active/frozen release-report contract is inconsistent"
+  fi
+
+  grep -Fqx 'VERSION ?= 1.0.0' "$root/Makefile" || fail "Makefile source version differs from 1.0.0"
+  grep -Fq 'Version        = "1.0.0"' "$root/internal/buildinfo/buildinfo.go" || \
+    fail "buildinfo source version differs from 1.0.0"
+  for modfile in \
+    "$root/go.mod" \
+    "$root/integration/cpalatestcontract/go.mod" \
+    "$root/integration/pluginstorecontract/go.mod"; do
+    grep -Fq 'github.com/router-for-me/CLIProxyAPI/v7 v7.2.125' "$modfile" || \
+      fail "active CPA module is not pinned to v7.2.125: $modfile"
+  done
+  for sumfile in \
+    "$root/go.sum" \
+    "$root/integration/cpalatestcontract/go.sum" \
+    "$root/integration/pluginstorecontract/go.sum"; do
+    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 v7.2.125 $round13_cpa_module_sum" "$sumfile" || \
+      fail "active CPA module sum is not exact: $sumfile"
+    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 v7.2.125/go.mod $round13_cpa_go_mod_sum" "$sumfile" || \
+      fail "active CPA go.mod sum is not exact: $sumfile"
+  done
+
+  printf 'release document consistency passed: source=%s rc=v%s-rc.1 cpa=v7.2.125 audit_tests=%s\n' \
+    "$current_release_version" "$current_release_version" "$current_audit_tool_test_count"
+  exit 0
+fi
 
 documents=(
   README.md
@@ -363,8 +787,8 @@ if [[ "$doc_root" == "$root" ]]; then
     fail "Round 9 audit guide lost the enabled-but-unavailable management contract"
 fi
 
-# Historical RELEASE_POLICY and ROUND8_CALIBRATION snapshots remain required
-# above, but intentionally do not use the fixed current-document prologue.
+# Historical RELEASE_POLICY remains required above but intentionally does not
+# use the fixed current-document prologue. ROUND8_CALIBRATION now does use it.
 classifier_identity_documents=(
   README.md
   README_CN.md

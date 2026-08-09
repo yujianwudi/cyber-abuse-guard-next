@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import stat
+import subprocess
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+from release_rc_cpa_store import (
+    AUDIT_CHECKSUMS,
+    AUDIT_ZIP,
+    CPA_CHECKSUMS,
+    ENTRY_NAME,
+    RC_ZIP,
+    SO_NAME,
+    create,
+    verify_release,
+)
+
+
+class CPAStoreReleaseTests(unittest.TestCase):
+    def write_zip(self, path: Path, entries: dict[str, bytes]) -> None:
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as archive:
+            for name, payload in entries.items():
+                archive.writestr(name, payload)
+
+    def fixture(self, root: Path) -> tuple[Path, bytes]:
+        payload = b"audited-elf-payload\x00"
+        (root / SO_NAME).write_bytes(payload)
+        self.write_zip(root / AUDIT_ZIP, {SO_NAME: payload})
+        create(root / SO_NAME, root / RC_ZIP)
+        (root / AUDIT_CHECKSUMS).write_text(
+            hashlib.sha256(payload).hexdigest() + f"  {SO_NAME}\n", encoding="ascii"
+        )
+        names = (SO_NAME, AUDIT_ZIP, RC_ZIP)
+        (root / CPA_CHECKSUMS).write_text(
+            "".join(
+                hashlib.sha256((root / name).read_bytes()).hexdigest() + f"  {name}\n"
+                for name in names
+            ),
+            encoding="ascii",
+        )
+        digest = hashlib.sha256(payload).hexdigest()
+        provenance = {
+            "derived_artifacts": [{
+                "name": RC_ZIP,
+                "relationship": "cpa-plugin-store-container",
+                "derived_from": {"name": SO_NAME, "sha256": digest},
+                "archive_entry": ENTRY_NAME,
+                "payload_sha256": digest,
+                "recompiled": False,
+                "standalone_renamed": False,
+            }]
+        }
+        (root / "release-provenance.json").write_text(
+            json.dumps(provenance, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        return root, payload
+
+    def test_deterministic_rc_zip_and_valid_release(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = self.fixture(Path(temporary))
+            verify_release(root)
+            other = root / "other.zip"
+            create(root / SO_NAME, other)
+            self.assertEqual((root / RC_ZIP).read_bytes(), other.read_bytes())
+
+    def test_generated_package_is_accepted_by_pinned_cpa_install_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root, _ = self.fixture(Path(temporary))
+            repository = Path(__file__).resolve().parent.parent
+            result = subprocess.run(
+                [
+                    "go", "test", "./...", "-run",
+                    "^TestPublishedRCStoreArchive$", "-count=1",
+                ],
+                cwd=repository / "integration/pluginstorecontract",
+                env={**os.environ, "DIST_DIR": str(root)},
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_rejects_packaging_and_release_mutations(self) -> None:
+        mutations = {
+            "stable-only": lambda root, payload: (root / RC_ZIP).unlink(),
+            "base-version-entry": lambda root, payload: self.write_zip(root / RC_ZIP, {SO_NAME: payload}),
+            "rc-standalone": lambda root, payload: (root / "cyber-abuse-guard-v1.0.0-rc.1.so").write_bytes(payload),
+            "subdirectory": lambda root, payload: self.write_zip(root / RC_ZIP, {"nested/" + ENTRY_NAME: payload}),
+            "second-so": lambda root, payload: self.write_zip(root / RC_ZIP, {ENTRY_NAME: payload, "other.so": payload}),
+            "payload-drift": lambda root, payload: self.write_zip(root / RC_ZIP, {ENTRY_NAME: payload + b"drift"}),
+            "symlink-entry": lambda root, payload: self.rewrite_rc(root, payload, mode=stat.S_IFLNK | 0o777),
+            "device-entry": lambda root, payload: self.rewrite_rc(root, payload, mode=stat.S_IFCHR | 0o600),
+            "encrypted-entry": self.encrypt_rc_entry,
+            "compressed-method": lambda root, payload: self.rewrite_rc(root, payload, method=zipfile.ZIP_DEFLATED),
+            "timestamp-drift": lambda root, payload: self.rewrite_rc(root, payload, date_time=(2026, 8, 9, 0, 0, 0)),
+            "mode-drift": lambda root, payload: self.rewrite_rc(root, payload, mode=stat.S_IFREG | 0o644),
+            "extra-field": lambda root, payload: self.rewrite_rc(root, payload, extra=b"\x01\x00\x00\x00"),
+            "entry-comment": lambda root, payload: self.rewrite_rc(root, payload, comment=b"drift"),
+            "archive-comment": lambda root, payload: self.rewrite_rc(root, payload, archive_comment=b"drift"),
+            "checksums-missing-rc": self.remove_rc_checksum,
+            "checksums-wrong-hash": self.wrong_rc_checksum,
+            "candidate-checksums-masquerade": self.copy_candidate_checksums,
+            "provenance-missing-derived": self.remove_derived,
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root, payload = self.fixture(Path(temporary))
+                mutate(root, payload)
+                with self.assertRaises((ValueError, FileNotFoundError, zipfile.BadZipFile)):
+                    verify_release(root)
+
+    @staticmethod
+    def remove_rc_checksum(root: Path, _payload: bytes) -> None:
+        rows = (root / CPA_CHECKSUMS).read_text("ascii").splitlines()
+        (root / CPA_CHECKSUMS).write_text(
+            "\n".join(row for row in rows if not row.endswith("  " + RC_ZIP)) + "\n",
+            encoding="ascii",
+        )
+
+    @staticmethod
+    def wrong_rc_checksum(root: Path, _payload: bytes) -> None:
+        text = (root / CPA_CHECKSUMS).read_text("ascii")
+        rows = ["0" * 64 + f"  {RC_ZIP}" if row.endswith("  " + RC_ZIP) else row for row in text.splitlines()]
+        (root / CPA_CHECKSUMS).write_text("\n".join(rows) + "\n", encoding="ascii")
+
+    @staticmethod
+    def copy_candidate_checksums(root: Path, _payload: bytes) -> None:
+        (root / CPA_CHECKSUMS).write_bytes((root / AUDIT_CHECKSUMS).read_bytes())
+
+    @staticmethod
+    def remove_derived(root: Path, _payload: bytes) -> None:
+        (root / "release-provenance.json").write_text(
+            json.dumps({"derived_artifacts": []}) + "\n", encoding="utf-8"
+        )
+
+    @staticmethod
+    def rewrite_rc(
+        root: Path,
+        payload: bytes,
+        *,
+        mode: int = stat.S_IFREG | 0o755,
+        method: int = zipfile.ZIP_STORED,
+        date_time: tuple[int, int, int, int, int, int] = (1980, 1, 1, 0, 0, 0),
+        extra: bytes = b"",
+        comment: bytes = b"",
+        archive_comment: bytes = b"",
+    ) -> None:
+        info = zipfile.ZipInfo(ENTRY_NAME, date_time=date_time)
+        info.create_system = 3
+        info.compress_type = method
+        info.external_attr = mode << 16
+        info.extra = extra
+        info.comment = comment
+        with zipfile.ZipFile(root / RC_ZIP, "w") as archive:
+            archive.comment = archive_comment
+            archive.writestr(info, payload)
+
+    @staticmethod
+    def encrypt_rc_entry(root: Path, _payload: bytes) -> None:
+        path = root / RC_ZIP
+        raw = bytearray(path.read_bytes())
+        local = raw.index(b"PK\x03\x04")
+        central = raw.index(b"PK\x01\x02")
+        raw[local + 6 : local + 8] = (
+            int.from_bytes(raw[local + 6 : local + 8], "little") | 1
+        ).to_bytes(2, "little")
+        raw[central + 8 : central + 10] = (
+            int.from_bytes(raw[central + 8 : central + 10], "little") | 1
+        ).to_bytes(2, "little")
+        path.write_bytes(raw)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -18,7 +18,15 @@ sys.path.insert(0, str(HERE))
 import acquire
 import audit_contract
 from audit_contract import (
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
     CPA_COMMIT,
+    CPA_GO_MOD_SUM,
+    CPA_MODULE_SUM,
+    CPA_OFFICIAL_BINARY_SHA256,
+    CPA_OFFICIAL_ASSET_NAME,
+    CPA_OFFICIAL_ASSET_SHA256,
+    CPA_OFFICIAL_ASSET_SIZE,
     CPA_TAG,
     MOCK_CONTRACT,
     RUN_CONFIG_SCHEMA,
@@ -26,15 +34,57 @@ from audit_contract import (
     ContractError,
     build_execution_plan,
     load_json_file,
+    require_timestamp,
     validate_corpus_manifest,
     validate_machine_evidence,
     validate_result,
     validate_run_config,
 )
-from fixtures import approved_policy, evidence_files, manifest
+from fixtures import approved_policy, candidate_provenance, evidence_files, manifest
 
 
 class ContractTests(unittest.TestCase):
+    def test_timestamps_require_real_utc_z_values(self) -> None:
+        for value in (
+            "2026-08-09T01:02:03Z",
+            "2026-08-09T01:02:03.123456Z",
+        ):
+            self.assertEqual(require_timestamp(value, "timestamp"), value)
+        for value in (
+            "garbage-timestamp-value",
+            "2026-08-09T01:02:03+00:00",
+            "2026-08-09T01:02:03.1234567Z",
+            "2026-13-40T25:61:61Z",
+        ):
+            with self.subTest(value=value), self.assertRaises(ContractError):
+                require_timestamp(value, "timestamp")
+
+    def test_active_cpa_identity_is_exact(self) -> None:
+        self.assertEqual(
+            {
+                "commit": CPA_COMMIT,
+                "go_mod_sum": CPA_GO_MOD_SUM,
+                "module_sum": CPA_MODULE_SUM,
+                "official_binary_sha256": CPA_OFFICIAL_BINARY_SHA256,
+                "official_asset_name": CPA_OFFICIAL_ASSET_NAME,
+                "official_asset_sha256": CPA_OFFICIAL_ASSET_SHA256,
+                "official_asset_size": CPA_OFFICIAL_ASSET_SIZE,
+                "tag": CPA_TAG,
+            },
+            {
+                "commit": "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e",
+                "go_mod_sum": "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
+                "module_sum": "h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=",
+                "official_binary_sha256": "656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a",
+                "official_asset_name": "CLIProxyAPI_7.2.125_linux_amd64.tar.gz",
+                "official_asset_sha256": (
+                    "4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233"
+                ),
+                "official_asset_size": 20_853_030,
+                "tag": "v7.2.125",
+            },
+        )
+
     @staticmethod
     def closed_bound_corpus(root: Path) -> BoundCorpus:
         bound = object.__new__(BoundCorpus)
@@ -246,15 +296,26 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
         config = {
             "corpus_manifest_sha256": "1" * 64,
             "identities": {
-                "cag": {"commit": "1" * 40, "so_sha256": "2" * 64, "tree": "3" * 40},
+                "candidate": candidate_provenance(
+                    commit="1" * 40,
+                    tree="3" * 40,
+                    so_sha256="2" * 64,
+                ),
+                "cag": {
+                    "commit": "1" * 40,
+                    "so_name": CAG_SO_NAME,
+                    "so_sha256": "2" * 64,
+                    "source_version": CAG_SOURCE_VERSION,
+                    "tree": "3" * 40,
+                },
                 "cpa": {
                     "binary_path": "/usr/local/bin/CLIProxyAPI",
-                    "binary_sha256": "3" * 64,
+                    "binary_sha256": CPA_OFFICIAL_BINARY_SHA256,
                     "commit": CPA_COMMIT,
                     "image_id": "sha256:" + "4" * 64,
                     "image_ref": "registry.example/cpa@sha256:" + "5" * 64,
-                    "official_asset_name": "cpa.tar.gz",
-                    "official_asset_sha256": "6" * 64,
+                    "official_asset_name": CPA_OFFICIAL_ASSET_NAME,
+                    "official_asset_sha256": CPA_OFFICIAL_ASSET_SHA256,
                     "repo_digest": "registry.example/cpa@sha256:" + "5" * 64,
                     "tag": CPA_TAG,
                 },
@@ -267,10 +328,11 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
                 },
             },
             "paths": {
+                "candidate_manifest": "/srv/audit-candidate-manifest.json",
                 "cag_repository": "/srv/cag",
-                "cag_so": "/srv/cag.so",
+                "cag_so": f"/srv/{CAG_SO_NAME}",
                 "corpus_manifest": "/srv/acquisition/corpus-manifest.json",
-                "cpa_official_asset": "/srv/cpa.tar.gz",
+                "cpa_official_asset": f"/srv/{CPA_OFFICIAL_ASSET_NAME}",
                 "evidence_directory": "/srv/evidence",
                 "mock_source": "/srv/counted_mock.py",
             },
@@ -287,6 +349,37 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
         wrong["identities"]["cpa"]["tag"] = "v7.2.115"
         with self.assertRaises(ContractError):
             validate_run_config(wrong)
+        wrong_asset = copy.deepcopy(config)
+        wrong_asset["identities"]["cpa"]["official_asset_name"] = "cpa.tar.gz"
+        with self.assertRaises(ContractError):
+            validate_run_config(wrong_asset)
+        wrong_asset_sha = copy.deepcopy(config)
+        wrong_asset_sha["identities"]["cpa"]["official_asset_sha256"] = "6" * 64
+        with self.assertRaises(ContractError):
+            validate_run_config(wrong_asset_sha)
+        wrong_cag_version = copy.deepcopy(config)
+        wrong_cag_version["identities"]["cag"]["source_version"] = "0.16"
+        with self.assertRaises(ContractError):
+            validate_run_config(wrong_cag_version)
+        for label, mutate in {
+            "missing_candidate": lambda value: value["identities"].pop("candidate"),
+            "artifact_digest": lambda value: value["identities"]["candidate"][
+                "artifact"
+            ].__setitem__("digest", "not-a-github-artifact-digest"),
+            "artifact_id": lambda value: value["identities"]["candidate"][
+                "artifact"
+            ].__setitem__("id", "0"),
+            "candidate_commit": lambda value: value["identities"]["candidate"][
+                "source"
+            ].__setitem__("commit", "f" * 40),
+            "candidate_so": lambda value: value["identities"]["candidate"][
+                "so"
+            ].__setitem__("sha256", "f" * 64),
+        }.items():
+            wrong_candidate = copy.deepcopy(config)
+            mutate(wrong_candidate)
+            with self.subTest(label=label), self.assertRaises(ContractError):
+                validate_run_config(wrong_candidate)
 
     def test_complete_machine_evidence_passes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -301,6 +394,27 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
             del evidence["identities"]["cpa"]["binary_sha256"]
             with self.assertRaises(ContractError):
                 validate_machine_evidence(source_manifest, evidence, results)
+
+    def test_candidate_provenance_is_required_closed_and_cag_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            source_manifest, baseline, results = evidence_files(Path(directory))
+            mutations = {
+                "missing": lambda value: value["identities"].pop("candidate"),
+                "unknown": lambda value: value["identities"]["candidate"].__setitem__(
+                    "untrusted", True
+                ),
+                "source_commit": lambda value: value["identities"]["candidate"][
+                    "source"
+                ].__setitem__("commit", "f" * 40),
+                "so_sha": lambda value: value["identities"]["candidate"]["so"].__setitem__(
+                    "sha256", "f" * 64
+                ),
+            }
+            for label, mutate in mutations.items():
+                evidence = copy.deepcopy(baseline)
+                mutate(evidence)
+                with self.subTest(label=label), self.assertRaises(ContractError):
+                    validate_machine_evidence(source_manifest, evidence, results)
 
     def test_missing_quick_check_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

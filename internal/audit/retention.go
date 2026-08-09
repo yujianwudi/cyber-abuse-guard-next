@@ -29,6 +29,12 @@ func (s *Store) cleanup(ctx context.Context) error {
 	if s.db == nil {
 		return ErrUnavailable
 	}
+	s.maintenanceMu.Lock()
+	defer s.maintenanceMu.Unlock()
+	return s.cleanupLocked(ctx)
+}
+
+func (s *Store) cleanupLocked(ctx context.Context) error {
 	if err := s.checkStorageAccess(); err != nil {
 		return err
 	}
@@ -43,7 +49,7 @@ func (s *Store) cleanup(ctx context.Context) error {
 	if !s.cfg.RawCapture.Enabled {
 		// Disabling capture is privacy-destructive by design. Retrying the purge
 		// here makes a transient hot-reconfigure WAL/lock conflict self-healing.
-		if _, err := s.purgeRawCaptures(ctx); err != nil {
+		if _, err := s.purgeRawCapturesLocked(ctx); err != nil {
 			return err
 		}
 	} else {
@@ -66,7 +72,7 @@ func (s *Store) cleanup(ctx context.Context) error {
 	if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
 		return err
 	}
-	return s.enforceCapacity(ctx)
+	return s.enforceCapacityMaintenanceLocked(ctx)
 }
 
 // enforceCapacity is the runtime hard-cap gate. The writer invokes it after
@@ -79,12 +85,19 @@ func (s *Store) enforceCapacity(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return ErrUnavailable
 	}
-	s.capacityMu.Lock()
-	err := s.enforceCapacityLocked(ctx)
-	s.capacityMu.Unlock()
+	s.maintenanceMu.Lock()
+	err := s.enforceCapacityMaintenanceLocked(ctx)
+	s.maintenanceMu.Unlock()
 	if err != nil {
 		s.report(err)
 	}
+	return err
+}
+
+func (s *Store) enforceCapacityMaintenanceLocked(ctx context.Context) error {
+	s.capacityMu.Lock()
+	err := s.enforceCapacityLocked(ctx)
+	s.capacityMu.Unlock()
 	return err
 }
 
@@ -95,6 +108,16 @@ func (s *Store) remeasureCapacity(ctx context.Context) error {
 	if s == nil || s.db == nil {
 		return ErrUnavailable
 	}
+	s.maintenanceMu.Lock()
+	err := s.remeasureCapacityMaintenanceLocked(ctx)
+	s.maintenanceMu.Unlock()
+	if err != nil {
+		s.report(err)
+	}
+	return err
+}
+
+func (s *Store) remeasureCapacityMaintenanceLocked(ctx context.Context) error {
 	s.capacityMu.Lock()
 	used, err := s.liveDatabaseBytes(ctx)
 	if err != nil {
@@ -108,9 +131,6 @@ func (s *Store) remeasureCapacity(ctx context.Context) error {
 		}
 	}
 	s.capacityMu.Unlock()
-	if err != nil {
-		s.report(err)
-	}
 	return err
 }
 

@@ -6,8 +6,21 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from audit_contract import (
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
+    CANDIDATE_ARTIFACT_NAME,
+    CANDIDATE_MANIFEST_SCHEMA,
+    CANDIDATE_MANIFEST_STATUS,
+    CANDIDATE_REPOSITORY,
+    CANDIDATE_WORKFLOW_NAME,
+    CANDIDATE_WORKFLOW_PATH,
     CLAIM_BOUNDARY,
     CORPUS_SCHEMA,
+    CPA_COMMIT,
+    CPA_OFFICIAL_BINARY_SHA256,
+    CPA_OFFICIAL_ASSET_NAME,
+    CPA_OFFICIAL_ASSET_SHA256,
+    CPA_TAG,
     EVIDENCE_SCHEMA,
     FIXED_REPOSITORIES,
     FIXED_SOURCE_PATHS,
@@ -29,6 +42,87 @@ STAMP = "2026-08-04T00:00:00Z"
 
 def digest(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
+
+
+def candidate_provenance(
+    *,
+    commit: str,
+    tree: str,
+    so_sha256: str,
+    manifest_sha256: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "artifact": {
+            "digest": "sha256:" + digest("candidate-artifact"),
+            "id": "123456789",
+            "name": CANDIDATE_ARTIFACT_NAME,
+        },
+        "event": "pull_request",
+        "head_branch": "feature/candidate-provenance",
+        "head_sha": digest("candidate-head")[:40],
+        "manifest_sha256": manifest_sha256 or digest("candidate-manifest"),
+        "repository": CANDIDATE_REPOSITORY,
+        "run_attempt": "1",
+        "run_id": "987654321",
+        "schema": CANDIDATE_MANIFEST_SCHEMA,
+        "source": {
+            "commit": commit,
+            "dirty": False,
+            "tree": tree,
+            "version": CAG_SOURCE_VERSION,
+        },
+        "so": {"name": CAG_SO_NAME, "sha256": so_sha256},
+        "status": CANDIDATE_MANIFEST_STATUS,
+        "workflow": {
+            "name": CANDIDATE_WORKFLOW_NAME,
+            "path": CANDIDATE_WORKFLOW_PATH,
+        },
+    }
+
+
+def audit_candidate_manifest(
+    *,
+    commit: str,
+    tree: str,
+    so_sha256: str,
+    run_id: str = "987654321",
+    run_attempt: str = "1",
+) -> dict[str, Any]:
+    names = (
+        CAG_SO_NAME,
+        CAG_SO_NAME + ".sha256",
+        f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip",
+        "build-metadata.json",
+        "checksums.txt",
+        "ruleset-manifest.json",
+        "ruleset.sha256",
+        "sbom.cdx.json",
+    )
+    artifacts = [
+        {
+            "bytes": 100 + index,
+            "name": name,
+            "sha256": so_sha256 if name == CAG_SO_NAME else digest(f"candidate:{name}"),
+        }
+        for index, name in enumerate(names, start=1)
+    ]
+    return {
+        "artifacts": artifacts,
+        "commit": commit,
+        "dirty": False,
+        "event": "pull_request",
+        "head_branch": "feature/candidate-provenance",
+        "head_sha": digest("candidate-head")[:40],
+        "repository": CANDIDATE_REPOSITORY,
+        "run_attempt": run_attempt,
+        "run_id": run_id,
+        "schema": CANDIDATE_MANIFEST_SCHEMA,
+        "status": CANDIDATE_MANIFEST_STATUS,
+        "tree": tree,
+        "version": CAG_SOURCE_VERSION,
+        "workflow_name": CANDIDATE_WORKFLOW_NAME,
+        "workflow_path": CANDIDATE_WORKFLOW_PATH,
+    }
 
 
 def approved_policy() -> dict[str, Any]:
@@ -450,17 +544,28 @@ def evidence_files(directory: Path) -> tuple[dict[str, Any], dict[str, Any], Pat
             "unique_semantic_cases": source_manifest["unique_semantic_cases"],
         },
         "identities": {
-            "cag": {"commit": "1" * 40, "so_sha256": "1" * 64, "tree": "2" * 40},
+            "candidate": candidate_provenance(
+                commit="1" * 40,
+                tree="2" * 40,
+                so_sha256="1" * 64,
+            ),
+            "cag": {
+                "commit": "1" * 40,
+                "so_name": CAG_SO_NAME,
+                "so_sha256": "1" * 64,
+                "source_version": CAG_SOURCE_VERSION,
+                "tree": "2" * 40,
+            },
             "configuration": {"input_sha256": "2" * 64, "runtime_sha256s": runtime_hashes},
             "cpa": {
                 "binary_path": "/usr/local/bin/CLIProxyAPI",
-                "binary_sha256": "3" * 64,
-                "commit": "a88197f845c979132c8978ea223c6af05cc81536",
+                "binary_sha256": CPA_OFFICIAL_BINARY_SHA256,
+                "commit": CPA_COMMIT,
                 "image_id": cpa_image,
-                "official_asset_name": "CLIProxyAPI_7.2.116_linux_amd64.tar.gz",
-                "official_asset_sha256": "4" * 64,
+                "official_asset_name": CPA_OFFICIAL_ASSET_NAME,
+                "official_asset_sha256": CPA_OFFICIAL_ASSET_SHA256,
                 "repo_digest": "registry.example/cpa@sha256:" + "5" * 64,
-                "tag": "v7.2.116",
+                "tag": CPA_TAG,
             },
             "mock": {
                 "contract": "cag-current-cpa-counted-mock/v1",

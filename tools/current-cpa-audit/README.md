@@ -1,8 +1,17 @@
 # Current CPA five-repository isolated audit
 
-This directory is the RT12-05 diagnostic harness for **CPA v7.2.116** at commit
-`a88197f845c979132c8978ea223c6af05cc81536`. Its output claim is deliberately
-limited to:
+This directory is the RT13-05 diagnostic harness for **CPA v7.2.125** at commit
+`2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`. The closed active upstream identity
+also binds module sum `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`,
+go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, and the official Linux
+amd64 asset `CLIProxyAPI_7.2.125_linux_amd64.tar.gz` at exactly 20,853,030 bytes
+with SHA-256
+`4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`, and
+the extracted binary SHA-256
+`656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+These values identify the active upstream input only; they do not relabel an
+older second-machine or CI result as a v7.2.125 PASS. The harness output claim
+is deliberately limited to:
 
 > SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION
 
@@ -100,7 +109,7 @@ are the explicitly audited runtime, not corpus execution.
 - `run.py` — three-to-ten cold-start isolated runner.
 - `machine-evidence.schema.json` — closed JSON Schema 2020-12 description.
 - `validate.py` — standalone fail-closed validator.
-- `host_performance.py` — RT12-06 Host A/B plan binder, integrated Linux
+- `host_performance.py` — RT13-06 Host A/B plan binder, integrated Linux
   collector, and raw-derived evidence assembler. It does not synthesize or
   substitute measurements.
 - `host-performance-evidence.schema.json` — closed JSON Schema 2020-12 for
@@ -204,8 +213,9 @@ Preload, do not pull during the audit:
    the selected merge commit/tree and report `dirty=false`; the runner rejects
    dirty development bytes. This is still an unreleased diagnostic candidate,
    not a release artifact.
-2. CPA v7.2.116 image by exact RepoDigest and image ID.
-3. The official v7.2.116 linux/amd64 asset and its published SHA-256.
+2. CPA v7.2.125 image by exact RepoDigest and image ID.
+3. The official v7.2.125 linux/amd64 asset at exactly 20,853,030 bytes and its
+   published SHA-256.
 4. The exact CPA binary SHA-256 expected inside that image.
 5. A counted-Mock image built from this directory with a previously reviewed,
    digest-pinned Python base image.
@@ -218,7 +228,7 @@ docker build --pull=false \
   --build-arg PYTHON_IMAGE='python:3.12-slim@sha256:<reviewed-base-digest>' \
   --build-arg MOCK_SOURCE_SHA256="$MOCK_SOURCE_SHA256" \
   -f tools/current-cpa-audit/Dockerfile.mock \
-  -t private-audit-registry/cag-counted-mock:rt12 \
+  -t private-audit-registry/cag-counted-mock:rt13 \
   tools/current-cpa-audit
 ```
 
@@ -236,25 +246,42 @@ disconnecting external network access.
 `make_run_config.py` derives the CAG source commit/tree, CAG SO SHA, corpus,
 policy, Mock source, and official-asset hashes. It requires the sealed CI
 `audit-candidate-manifest.json`, rejects tracked or untracked worktree drift,
-and accepts the CAG identity only when the clean manifest's exact eight-file
-set binds the selected SO name and SHA. Supply image identities and the
+and accepts the CAG identity only when the canonical, single-link manifest's
+exact eight-file set binds the reviewed repository/workflow, GitHub run and
+head identities, source `1.0.0`, SO `cyber-abuse-guard-v1.0.0.so`, and its
+SHA. The manifest and SO must be regular single-link files in one resolved
+artifact directory. Their identities are re-read by `run.py` before execution
+and by `validate.py` during final validation, then preserved in machine
+evidence.
+
+GitHub assigns the Actions artifact ID and digest only after uploading the
+artifact that already contains the manifest. They therefore cannot truthfully
+appear inside that manifest without a circular digest. Supply the real
+post-upload `artifact-id`, fixed artifact name, and `artifact-digest` reported
+by the CI upload step as external admission metadata; the run config and
+machine evidence cross-bind those values but do not claim that the manifest
+self-attests them.
+Supply image identities and the
 image-contained CPA binary identity explicitly.
 
 ```bash
 python3 -B tools/current-cpa-audit/make_run_config.py \
   --output /srv/cag-audit/run-config.json \
-  --run-id rt12-cpa-20260804-001 \
-  --seed 1205 \
+  --run-id rt13-cpa-20260809-001 \
+  --seed 1305 \
   --cold-start-count 3 \
   --manifest /srv/cag-audit/acquisition-approved/corpus-manifest.json \
-  --evidence-directory /srv/cag-audit/evidence-rt12-cpa-20260804-001 \
+  --evidence-directory /srv/cag-audit/evidence-rt13-cpa-20260809-001 \
   --cag-repository /srv/src/cyber-abuse-guard \
-  --cag-so /srv/artifacts/cyber-abuse-guard-v0.16.so \
+  --cag-so /srv/artifacts/cyber-abuse-guard-v1.0.0.so \
   --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
-  --cpa-official-asset /srv/artifacts/CLIProxyAPI_7.2.116_linux_amd64.tar.gz \
-  --cpa-official-asset-sha256 <published-64-hex> \
+  --candidate-artifact-id '<GitHub artifact-id>' \
+  --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
+  --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
+  --cpa-official-asset /srv/artifacts/CLIProxyAPI_7.2.125_linux_amd64.tar.gz \
+  --cpa-official-asset-sha256 4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233 \
   --cpa-binary-path /CLIProxyAPI \
-  --cpa-binary-sha256 <64-hex> \
+  --cpa-binary-sha256 656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a \
   --cpa-image-ref 'private-audit-registry/cpa@sha256:<64-hex>' \
   --cpa-image-id 'sha256:<64-hex>' \
   --mock-image-ref 'private-audit-registry/cag-counted-mock@sha256:<64-hex>' \
@@ -294,7 +321,7 @@ zero or one matching `/tmp` entry there and rejects every other bind, volume,
 or non-bind mount. The dedicated-UID condition bounds the non-atomic daemon
 handoff. The runner itself creates only an internal bridge.
 
-The private `/cag/config` bind is writable by design. CPA v7.2.116 persists a
+The private `/cag/config` bind is writable by design. CPA v7.2.125 persists a
 replacement `plugins.configs.<id>` object to `config.yaml` before applying the
 hot reload, so a read-only config bind makes every Audit/Balanced/Strict mode
 transition fail with HTTP 500. This does not expose a Host or business config:
@@ -353,10 +380,10 @@ evidence can be valid only when both it and that manifest record
 
 ```bash
 python3 -B tools/current-cpa-audit/validate.py evidence \
-  --manifest /srv/cag-audit/evidence-rt12-cpa-20260804-001/corpus-manifest.json \
-  --evidence /srv/cag-audit/evidence-rt12-cpa-20260804-001/machine-evidence.json \
-  --results /srv/cag-audit/evidence-rt12-cpa-20260804-001/transport-results.jsonl \
-  --run-config /srv/cag-audit/evidence-rt12-cpa-20260804-001/run-config.json
+  --manifest /srv/cag-audit/evidence-rt13-cpa-20260809-001/corpus-manifest.json \
+  --evidence /srv/cag-audit/evidence-rt13-cpa-20260809-001/machine-evidence.json \
+  --results /srv/cag-audit/evidence-rt13-cpa-20260809-001/transport-results.jsonl \
+  --run-config /srv/cag-audit/evidence-rt13-cpa-20260809-001/run-config.json
 ```
 
 The Python validator is authoritative for cross-file and cross-row
@@ -365,7 +392,7 @@ matrix coverage, deterministic order, cold-start consistency, request/event
 pairing, and exact cleanup multiplicity). The JSON Schema is the closed shape
 contract; every object has `additionalProperties: false`.
 
-## 6. RT12-06 CPA Host A/B performance evidence
+## 6. RT13-06 CPA Host A/B performance evidence
 
 Host performance is a separate, fail-closed evidence lane. The semantic
 machine evidence above is not performance evidence: its requests are serial,
@@ -375,14 +402,17 @@ the CAG audit queue. Do not derive a Host PASS from those fields.
 `host_performance.py` binds a measurement plan to all of these immutable
 inputs:
 
-- the canonical current-CPA `run-config.json`, including the exact CAG
-  commit/tree/SO SHA and CPA tag/commit/image/RepoDigest/binary/official asset;
+- the canonical current-CPA `run-config.json`, including the candidate
+  manifest hash/path, CI repository/workflow/run/head/source identities,
+  external GitHub artifact admission coordinates, exact CAG commit/tree/SO
+  identity, and CPA tag/commit/image/RepoDigest/binary/official asset;
 - the sealed CI `audit-candidate-manifest.json`, which must be clean, bind the
   same commit/tree, contain exactly eight base-artifact records, and bind the
   selected SO SHA;
 - a canonical workload manifest with exactly `fixed_workload`, `ordinary`,
-  `five_repository_activation`, and `public`, each identified by a request-set
-  SHA-256 and positive request count;
+  `five_repository_activation`, `public`, and `large_payload`, each identified
+  by a request-set SHA-256, positive request count, and bound wire-body byte
+  count. `large_payload` is exactly one 4 MiB canonical JSON wire body;
 - an independently reviewed approval for the exact tool checkout used on the
   Host. The approval is a canonical JSON object with exactly
   `acquire_sha256`, `audit_contract_sha256`,
@@ -394,20 +424,20 @@ Produce that approval only from an independently reviewed exact checkout, then
 transfer it to the Host as a reviewed input. Never regenerate or replace the
 approval from unreviewed Host tool bytes merely to make a drift check pass.
 
-Example workload entry (repeat it for all four fixed IDs). Each request body is
+Example workload entry (repeat it for all five fixed IDs). Each request body is
 a canonical JSON file below the private workload root. The manifest binds its
 path, bytes, endpoint, and expected status in both arms; `request_set_sha256` is
 the SHA-256 of the canonical `requests` array:
 
 ```json
-{"id":"fixed_workload","request_count":1,"request_set_sha256":"<SHA-256 of canonical requests array>","requests":[{"body_path":"fixed-workload.json","body_sha256":"<64-hex>","endpoint":"/v1/chat/completions","expected_status_by_arm":{"cpa_cag":200,"cpa_only":200}}]}
+{"id":"fixed_workload","request_count":1,"request_set_sha256":"<SHA-256 of canonical requests array>","requests":[{"body_bytes":1234,"body_path":"fixed-workload.json","body_sha256":"<64-hex>","endpoint":"/v1/chat/completions","expected_status_by_arm":{"cpa_cag":200,"cpa_only":200}}]}
 ```
 
 Those status values are descriptive bindings, not operator-selected success
-criteria. The validator owns the exact map: `fixed_workload`, `ordinary`, and
-`public` require 200; `five_repository_activation` requires CPA-only 200 and
-CPA+CAG 403. A manifest that changes any expected status, including to a fast
-5xx, fails before acquisition.
+criteria. The validator owns the exact map: `fixed_workload`, `ordinary`,
+`public`, and `large_payload` require 200; `five_repository_activation`
+requires CPA-only 200 and CPA+CAG 403. A manifest that changes any expected
+status, including to a fast 5xx, fails before acquisition.
 
 Create the immutable plan before collecting samples:
 
@@ -418,7 +448,7 @@ python3 -B tools/current-cpa-audit/host_performance.py make-config \
   --workload-manifest /srv/cag-audit/host-performance-workloads.json \
   --approved-tool-identities /srv/cag-audit/approved-host-performance-tool-identities.json \
   --output /srv/cag-audit/host-performance-config.json \
-  --seed 1206 \
+  --seed 1306 \
   --paired-repetitions 3 \
   --warmup-seconds 30 \
   --measurement-seconds 120 \
@@ -561,8 +591,19 @@ It records:
   CPU/steal, and CAG audit-queue samples. Every normal resource and CPA+CAG
   queue series has exactly one terminal `final_sample: true` observation; all
   cadence observations are explicitly `false`;
-- the complete CPA+CAG absolute matrices for `ordinary`,
-  `five_repository_activation`, and `public` at c=1/4/8/16;
+- complete seeded CPA-only/CPA+CAG paired absolute matrices for `ordinary`,
+  `five_repository_activation`, and `public` at c=1/4/8/16. Both arms retain
+  their raw latency distributions and request/counter conservation;
+- a separate seeded large-payload A/B lane at c=4 for every repetition. Each
+  arm sends exactly 16 requests using the bound 4 MiB wire body. The raw lane
+  records exactly five pre-request process-RSS observations inside the cell
+  interval, then a nominal 20 ms
+  `/proc/<container-init-pid>/status:VmRSS` series through the request interval.
+  Every observation carries the Docker init PID, its Linux `/proc/<pid>/stat`
+  start-time tick, a monotonic elapsed marker, an exact millisecond UTC wall
+  timestamp, and the RSS value. The collector checks the PID/start-time pair
+  before sampling and twice after acquisition, and also records raw latencies,
+  throughput, counted-Mock deltas, and the same runtime identity contract;
 - a separate CPA+CAG fixed-workload c=16 warm lane with exactly 3,600 seconds of
   continuous RSS coverage at the fixed one-second cadence. The cadence-derived
   minimum includes both window boundaries and is therefore 3,601 samples; at
@@ -579,8 +620,20 @@ It records:
 
 The raw validator also requires the exact seeded list order, serial
 non-overlapping cell timestamps, a complete warmup gap before every cell, and
-wall-clock intervals consistent with monotonic `elapsed_seconds`. Overlapping
-matrices cannot be relabeled as a sequential A/B run.
+wall-clock intervals consistent with monotonic `elapsed_seconds`. Every Host
+timestamp must use exactly `YYYY-MM-DDTHH:MM:SS.mmmZ`; alternate fractional
+precision and numeric offsets are rejected. Overlapping matrices cannot be
+relabeled as a sequential A/B run.
+
+For the large-payload lane, each RSS wall timestamp must agree with its
+monotonic marker within 5 ms and every sample must retain the cell's exact
+PID/start-time identity. Non-final gaps are at least 10 ms, no gap may exceed
+30 ms, and the request series must cover both boundaries with the sample count
+implied by that worst-case gap. The validator also requires
+`sum(success_latency_ms) / concurrency` and the maximum successful latency to
+fit inside the measured request interval. Sparse RSS, process replacement, or
+latency work that cannot fit in the claimed wall duration therefore fails
+closed.
 
 Container CPU and memory samples come from one exact-three-target
 `docker stats --no-stream` read; Host CPU and steal percentages are
@@ -607,30 +660,55 @@ terminal final observation. This makes the nearest-rank Host CPU percentiles
 insensitive to dense tail insertion; an operator-authored burst of extra zero
 samples is rejected rather than allowed to dilute interference.
 
-Known P2 limitation: the secret-redacted Docker comparable projection binds
-the non-plugin mount shape but does not yet bind each bind source's backing
-filesystem identity. Consequently, this evidence alone cannot prove that both
-arms used equivalent local storage rather than, for example, one arm using a
-slow FUSE or network filesystem. Until backing identity is wired into the
-hashed projection, second-machine setup and review must place both arms' common
-binds on the same reviewed backing filesystem; this is not a closed automated
-gate.
+The secret-redacted Docker projection now retains every ordinary bind Source
+as a SHA-256 and binds its resolved path/stat and backing filesystem identity:
+filesystem/device, complete mount/super-option hashes, closed critical-flag
+sets, mount source/root hashes, `st_dev`, inode, kind, mode, link count, size, a
+regular-file content SHA-256 when applicable, and a canonical identity SHA-256.
+Missing Source, non-bind mounts, duplicate destinations, unresolved backing,
+different common Source paths, or different common backing identities fail the
+A/B equivalence gate. Directory identities deliberately do not claim a
+recursive content hash. Config/runtime binds are arm-specific but must retain
+the same destination/access shape and the same backing-equivalence subset:
+filesystem type, device and `st_dev`, mount source/root/option hashes, and
+critical mount/super flags. Their local Source/resolved hashes, inode, and file
+content may differ; the management API's redacted non-plugin config must still
+remain equal. `/cag/plugins` is also explicit:
+CPA-only must have no plugin bind and CPA+CAG must have exactly one read-only
+plugin bind; the existing copied-out one-SO SHA check binds its candidate bytes.
+Final evidence publishes the full structured common and per-arm redacted mount
+projections together with their recomputed common, arm-specific, and complete
+projection hashes. The closed schema fixes every projection field and the
+non-recursive directory-content boundary.
 
 The assembler recomputes nearest-rank p50/p95/p99, aggregate throughput,
 per-c audit-queue depth/capacity ratios, first/last five-minute median RSS,
-every comparison, and every gate. It publishes the worst applicable values:
+every comparison, and every gate. Absolute A/B acquisition is paired by seeded
+window, not request-by-request, so ordinary overhead uses the explicit
+conservative fallback `max(0, CPA+CAG aggregate p95 - CPA-only aggregate p50)`
+for each concurrency and then takes the worst concurrency. It never relabels
+the CPA+CAG absolute p95 as plugin overhead.
+
+The large-payload metric is the number of paired repetitions where CPA+CAG's
+peak RSS growth above its own five-sample baseline exceeds CPA-only's analogous
+growth by at least one complete 4 MiB payload. This is a Host-observed
+full-payload-equivalent resident-amplification proxy. It is not an allocation
+trace and must not be described as an exact copy/allocation count. The evidence
+publishes both arms' baselines, peaks, growth and throughput so the count is
+recomputable. The worst applicable values are:
 
 ```text
-ordinary_p95_ms <= 10
+ordinary_plugin_overhead_p95_ms <= 10
 five_repository_activation_p95_ms <= 250
-public_p95_ms <= 150
-public_p99_ms <= 300
+public_adversarial_p95_ms <= 150
+public_adversarial_p99_ms <= 300
 fixed_workload_p99_regression_percent <= 10
 host_throughput_vs_cpa_only >= 0.90
 audit_queue_peak_ratio < 0.80
 warm_rss_growth_60m_mib <= 64
-unexpected_http_or_infra_errors = 0
+large_payload_full_copy_regression = 0
 restart_oom_panic = 0
+unexpected_http_or_infrastructure_errors = 0
 ```
 
 Build and then independently revalidate the derived evidence:
@@ -660,6 +738,63 @@ truthful `FAIL` report for diagnosis, but the command exits nonzero and the
 standalone validator rejects it as a gate result. No Host measurement or PASS
 report is checked into this directory; a real second-machine run is still
 required.
+
+## Portable owner-run release admission
+
+The complete machine and Host-performance bundles intentionally bind absolute
+paths, real-path aliases, file metadata, directory device/inode identities, and
+raw measurements. Copying only their final JSON files to GitHub cannot preserve
+those guarantees. On the owner-controlled second machine, run the release
+packer against the original evidence paths after both standalone validators
+have passed:
+
+```bash
+python3 -B tools/current-cpa-audit/second_machine_release_admission.py pack \
+  --manifest /srv/cag-audit/evidence/corpus-manifest.json \
+  --evidence /srv/cag-audit/evidence/machine-evidence.json \
+  --results /srv/cag-audit/evidence/transport-results.jsonl \
+  --run-config /srv/cag-audit/run-config.json \
+  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
+  --candidate-artifact-size 12345678 \
+  --workload-manifest /srv/cag-audit/host-performance-workloads.json \
+  --performance-config /srv/cag-audit/host-performance-config.json \
+  --measurements /srv/cag-audit/host-performance-measurements.json \
+  --performance-evidence /srv/cag-audit/host-performance-evidence.json \
+  --output /srv/cag-audit/second-machine-release-admission.json
+```
+
+`--candidate-artifact-size` is the positive size from the exact GitHub Actions
+artifact API response. Its ID, digest, run, attempt, workflow, commit, tree, and
+SO identity already come from the candidate provenance in `run-config.json`.
+The packer re-runs the corpus policy, machine evidence, run-config/candidate,
+Host measurements, and Host evidence validators. It also rehashes the exact
+nine downloaded candidate files, checks both SHA sidecars and `checksums.txt`,
+opens the Store ZIP and compares its root SO bytes, and verifies the reused
+metadata/ruleset/SBOM source identities.
+
+The resulting
+`cyber-abuse-guard.second-machine-release-admission.v1` report is canonical
+JSON with one newline and a fixed 24-hour lifetime. It contains no repository
+source text. It retains input-file hashes; CAG/CPA/candidate identities; the CI
+artifact coordinates; five repository commit/tree pins and the one ZIP source
+hash; 19 cases by all three modes; zero-false-positive, 100%-malicious-recall,
+side-effect, third-party-execution, cleanup, and current Host-performance gate
+details; and both tool-bundle hashes. The GitHub validator recomputes all
+summaries and gates rather than trusting the report's `status` field.
+
+Create a draft staging Release with tag name
+`v1.0.0-rc.1-second-machine-admission`, set `target_commitish` to the exact
+protected `main` commit, and upload the report with the fixed asset name
+`second-machine-release-admission.json`. The report cannot contain its own
+asset ID/digest without a circular hash. `release-rc.yml` therefore closes that
+last edge from GitHub API data: it accepts only the numeric draft Release ID,
+numeric asset ID, and lowercase report SHA-256; proves exact membership/name/
+upload state/API digest/size; downloads and rehashes the real bytes; checks the
+expiry; and runs the validator from the exact signed tag.
+
+This portable report is owner-run release admission only. The original full
+bundle remains the diagnostic evidence, and neither artifact is independent
+proof. Do not delete the original evidence when staging the report.
 
 ## Local unit verification
 
@@ -694,6 +829,7 @@ python3 -B -m py_compile \
   tools/current-cpa-audit/host_performance.py \
   tools/current-cpa-audit/make_run_config.py \
   tools/current-cpa-audit/run.py \
+  tools/current-cpa-audit/second_machine_release_admission.py \
   tools/current-cpa-audit/validate.py
 ```
 
@@ -707,6 +843,7 @@ python -B -m py_compile `
   tools/current-cpa-audit/host_performance.py `
   tools/current-cpa-audit/make_run_config.py `
   tools/current-cpa-audit/run.py `
+  tools/current-cpa-audit/second_machine_release_admission.py `
   tools/current-cpa-audit/validate.py
 ```
 

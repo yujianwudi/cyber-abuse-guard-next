@@ -8793,7 +8793,11 @@ func directiveBoundaryAt(text []rune, index int) (int, directiveBoundaryKind) {
 	r := text[index]
 	if r == compactHardBoundary {
 		// The valid internal sentinel survives rune-to-string round trips without
-		// conflating a literal U+FFFD in user content with a strong boundary.
+		// conflating a literal U+FFFD in user content with a strong boundary. A
+		// bounded lexical split is one token, not a new directive clause.
+		if boundedLexicalFragmentsAround(text, index) {
+			return 0, directiveBoundaryNone
+		}
 		return 1, directiveBoundaryStrong
 	}
 	switch r {

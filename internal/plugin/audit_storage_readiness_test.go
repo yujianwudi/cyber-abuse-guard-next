@@ -209,8 +209,11 @@ func TestAuditStorageGateNilUnarmedAndLatchedPathsDoNotProbe(t *testing.T) {
 		calls.Add(1)
 		return baseline
 	})
-	if status := gate.verification(); !status.PersistenceVerified || calls.Load() != 0 {
+	if status := gate.verification(); status.PersistenceVerified || status.PersistenceReason != auditStorageGateUnarmedReason || calls.Load() != 0 {
 		t.Fatalf("unarmed verification status=%#v calls=%d", status, calls.Load())
+	}
+	if err := gate.access(); err == nil || calls.Load() != 0 {
+		t.Fatalf("unarmed access error=%v calls=%d, want fail-closed without cached/baseline admission", err, calls.Load())
 	}
 	failure := baseline
 	failure.PersistenceVerified = false
@@ -222,6 +225,77 @@ func TestAuditStorageGateNilUnarmedAndLatchedPathsDoNotProbe(t *testing.T) {
 	var nilGate *auditStorageGate
 	if status := nilGate.verification(); status.State != "disabled" {
 		t.Fatalf("nil gate verification=%#v", status)
+	}
+}
+
+func TestAuditStorageActivationGateForcesRealtimeProbeFromUnarmedAndCachedStates(t *testing.T) {
+	baseline := verifiedAuditStorageInspectorForTest(filepath.Join(t.TempDir(), "events.db"), true, true, 1)
+	failure := baseline
+	failure.State = "read_only"
+	failure.PersistenceVerified = false
+	failure.PersistenceReason = "read_only"
+	failure.Writable = false
+
+	t.Run("unarmed", func(t *testing.T) {
+		var calls atomic.Uint64
+		gate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+			calls.Add(1)
+			return failure
+		})
+		if err := gate.activationAccess(); err == nil || calls.Load() != 1 {
+			t.Fatalf("unarmed activation error=%v calls=%d, want one forced failing probe", err, calls.Load())
+		}
+		if err := gate.access(); err == nil {
+			t.Fatal("failed activation gate did not latch ordinary storage access")
+		}
+	})
+
+	t.Run("cached-write-verdict", func(t *testing.T) {
+		var calls atomic.Uint64
+		var failed atomic.Bool
+		gate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+			calls.Add(1)
+			if failed.Load() {
+				return failure
+			}
+			return baseline
+		})
+		gate.arm(baseline)
+		if err := gate.access(); err != nil || calls.Load() != 1 {
+			t.Fatalf("prime cached write verdict error=%v calls=%d", err, calls.Load())
+		}
+		failed.Store(true)
+		if err := gate.activationAccess(); err == nil || calls.Load() != 2 {
+			t.Fatalf("cached activation error=%v calls=%d, want cache-bypassing probe", err, calls.Load())
+		}
+	})
+}
+
+func TestAuditStorageSensitiveReadGateIsIndependentFromWriteCache(t *testing.T) {
+	baseline := verifiedAuditStorageInspectorForTest(filepath.Join(t.TempDir(), "events.db"), true, true, 1)
+	failure := baseline
+	failure.State = "identity_changed"
+	failure.PersistenceVerified = false
+	failure.PersistenceReason = "database_identity_changed"
+	var calls atomic.Uint64
+	var replaced atomic.Bool
+	gate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+		calls.Add(1)
+		if replaced.Load() {
+			return failure
+		}
+		return baseline
+	})
+	gate.arm(baseline)
+	if err := gate.access(); err != nil || calls.Load() != 1 {
+		t.Fatalf("prime write cache error=%v calls=%d", err, calls.Load())
+	}
+	replaced.Store(true)
+	if err := gate.readAccess(); err == nil || calls.Load() != 2 {
+		t.Fatalf("sensitive read error=%v calls=%d, want independent realtime probe", err, calls.Load())
+	}
+	if err := gate.access(); err == nil {
+		t.Fatal("sensitive read identity failure did not latch later writes")
 	}
 }
 
@@ -446,6 +520,52 @@ func TestPostOpenStorageIdentityReplacementDiscardsStoreBeforePublication(t *tes
 	}
 	if calls.Load() < 2 {
 		t.Fatalf("storage inspector calls=%d, want pre- and post-open verification", calls.Load())
+	}
+}
+
+func TestRawCapturePostOpenStorageBlockPublishesDiscardedErrorState(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	dataDir := t.TempDir()
+	var calls atomic.Uint64
+	p.auditStorageInspect = func(path string, explicit, expected bool, _ int64) auditStorageVerification {
+		call := calls.Add(1)
+		inode := uint64(401)
+		if call >= 2 {
+			inode = 402
+		}
+		return auditStorageVerification{
+			StorageType:         "ext4",
+			State:               "persistent_candidate",
+			PathSource:          "explicit",
+			DatabasePath:        path,
+			PersistenceExpected: expected,
+			PersistenceVerified: true,
+			SeparateMount:       true,
+			Writable:            true,
+			CapacityOK:          true,
+			identity: auditStorageIdentity{
+				directory: auditStorageObjectIdentity{present: true, device: 7, inode: inode},
+				mount:     "42:8:1",
+			},
+		}
+	}
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+filepath.ToSlash(dataDir)+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\nsubject_control:\n  enabled: false\n")
+
+	state := p.runtime.Load()
+	if state == nil || state.audit == nil {
+		t.Fatalf("storage-blocked raw-capture runtime lost its audit error state: %#v", state)
+	}
+	status := state.audit.Status()
+	if !status.Closed || !status.Degraded || !strings.Contains(status.LastError, audit.ErrStorageBlocked.Error()) {
+		t.Fatalf("discarded storage-blocked audit status=%#v", status)
+	}
+	if state.audit.IsActive() || state.audit.DatabaseAvailable() {
+		t.Fatalf("discarded audit remained active=%t available=%t", state.audit.IsActive(), state.audit.DatabaseAvailable())
+	}
+	management := managementJSON(t, p, http.MethodGet, managementBasePath+"/status", nil)
+	if management["audit_degraded"] != true || management["operational_ready"] != false {
+		t.Fatalf("storage-blocked management status=%#v", management)
 	}
 }
 

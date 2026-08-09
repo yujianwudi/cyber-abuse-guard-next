@@ -797,10 +797,390 @@ func (c *Classifier) classifyProfiledGroupWithPolicy(
 	thresholds Thresholds,
 	policy Policy,
 ) Result {
+	var result Result
 	if profiledGroupAllowsExtendedGeneratedAgentWindow(group) {
-		return c.classifyTrustedCurrentUserWithPolicy(group.parts, mode, thresholds, policy)
+		result = c.classifyTrustedCurrentUserWithPolicy(group.parts, mode, thresholds, policy)
+	} else {
+		result = c.classifyWithPolicy(group.parts, mode, thresholds, policy, group.structuredTool)
 	}
-	return c.classifyWithPolicy(group.parts, mode, thresholds, policy, group.structuredTool)
+	if reconstructed, ok := c.boundedProfiledLexicalPartReconstructionForPolicy(
+		group.parts, group.refs, policy,
+	); ok {
+		var candidate Result
+		if profiledGroupAllowsExtendedGeneratedAgentWindow(group) {
+			candidate = c.classifyTrustedCurrentUserWithPolicy([]string{reconstructed}, mode, thresholds, policy)
+		} else {
+			candidate = c.classifyWithPolicy([]string{reconstructed}, mode, thresholds, policy, group.structuredTool)
+		}
+		if roleResultBetter(candidate, result) || profiledReconstructionSuppressesRawMultipartCandidate(candidate) {
+			// A complete reconstructed quote/inert proof is authoritative even when
+			// it lowers the raw multipart signal union. Other candidates retain normal
+			// ranking so an unrelated lexical-looking boundary cannot hide an
+			// independently complete original finding.
+			profiledCarrierRunClearOccurrenceOffsets(&candidate)
+			result = candidate
+		}
+	}
+	return result
+}
+
+func profiledReconstructionSuppressesRawMultipartCandidate(candidate Result) bool {
+	return candidate.DecisionExplanation != nil &&
+		candidate.DecisionExplanation.QuotedOrInertSuppressed
+}
+
+const maxCompactPartReconstructionBytes = maxClassifierInputBytes
+
+const compactPartHardSeparator = "\n.\n"
+
+const compactPartSoftSeparator = " "
+
+type compactLexicalPartEdges struct {
+	prefixClass  compactLexicalClass
+	suffixClass  compactLexicalClass
+	prefixRunes  int
+	suffixRunes  int
+	prefixLinker bool
+	suffixLinker bool
+	wholeLexical bool
+	nonEmpty     bool
+}
+
+func boundedLexicalPartReconstruction(parts []string) (string, bool) {
+	return boundedLexicalPartReconstructionWithBoundaries(parts, nil)
+}
+
+func boundedProfiledLexicalPartReconstruction(
+	parts []string,
+	refs []profiledSegmentRef,
+) (string, bool) {
+	if len(parts) != len(refs) || len(parts) < 2 {
+		return "", false
+	}
+	boundaries := make([]bool, len(parts)-1)
+	for index := range boundaries {
+		boundaries[index] = profiledLexicalPartBoundaryEligible(refs[index], refs[index+1])
+	}
+	return boundedLexicalPartReconstructionWithBoundaries(parts, boundaries)
+}
+
+func (c *Classifier) boundedProfiledLexicalPartReconstructionForPolicy(
+	parts []string,
+	refs []profiledSegmentRef,
+	policy Policy,
+) (string, bool) {
+	reconstructed, ok := boundedProfiledLexicalPartReconstruction(parts, refs)
+	if !ok || !c.profiledLexicalReconstructionCrossesSignal(parts, refs, reconstructed, policy) {
+		return "", false
+	}
+	return reconstructed, true
+}
+
+func (c *Classifier) profiledLexicalReconstructionCrossesSignal(
+	parts []string,
+	refs []profiledSegmentRef,
+	reconstructed string,
+	policy Policy,
+) bool {
+	if c == nil || len(parts) != len(refs) || len(parts) < 2 {
+		return false
+	}
+	edges := make([]compactLexicalPartEdges, len(parts))
+	normalizedLengths := make([]int, len(parts))
+	boundaries := make([]bool, len(parts)-1)
+	var normalizerScratch normalizationScratch
+	var runeBuffer []rune
+	for index, part := range parts {
+		if index > 0 {
+			boundaries[index-1] = profiledLexicalPartBoundaryEligible(refs[index-1], refs[index])
+		}
+		views := normalizePartsInto([]string{part}, runeBuffer, &normalizerScratch)
+		runeBuffer = views.standardRunes
+		if views.truncated || len(views.standardRunes) == 0 {
+			continue
+		}
+		edges[index] = compactLexicalEdgesForRunes(views.standardRunes)
+		normalizedLengths[index] = len(views.standardRunes)
+	}
+
+	acceptedBoundaries := make([]bool, len(boundaries))
+	for boundary := range boundaries {
+		acceptedBoundaries[boundary] = boundedLexicalPartBoundaryWithBoundaries(
+			edges, boundaries, boundary,
+		)
+	}
+	boundaryOffsets := make([]int, 0, len(acceptedBoundaries))
+	normalizedOffset := 0
+	for index := range parts {
+		normalizedOffset += normalizedLengths[index]
+		if index == len(acceptedBoundaries) {
+			continue
+		}
+		if acceptedBoundaries[index] {
+			boundaryOffsets = append(boundaryOffsets, normalizedOffset)
+			continue
+		}
+		normalizedOffset += utf8.RuneCountInString(compactLexicalPartSeparator(
+			edges, boundaries, acceptedBoundaries, index,
+		))
+	}
+	if len(boundaryOffsets) == 0 {
+		return false
+	}
+
+	joined := normalizeParts([]string{reconstructed})
+	if joined.truncated || normalizedOffset != len(joined.standardRunes) {
+		return false
+	}
+	analysis := c.analyzeDirectives(joined.standardRunes, policy)
+	clauseSpans, complete := profiledAnalysisClauseSpans(joined.standardRunes, analysis)
+	if !complete {
+		return false
+	}
+	crosses := func(clause analyzedDirectiveClause) bool {
+		span, found := profiledClauseSpanByID(clauseSpans, clauseIDForOccurrence(clause))
+		if !found {
+			return false
+		}
+		for _, occurrence := range clause.occurrences {
+			start := span.start + int(occurrence.start)
+			end := span.start + int(occurrence.end)
+			for _, boundaryOffset := range boundaryOffsets {
+				if start < boundaryOffset && end > boundaryOffset {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, clause := range analysis.clauses {
+		if crosses(clause) {
+			return true
+		}
+	}
+	for _, clause := range analysis.overflowTail {
+		if crosses(clause) {
+			return true
+		}
+	}
+	return false
+}
+
+func profiledLexicalPartBoundaryEligible(left, right profiledSegmentRef) bool {
+	return profiledSegmentRefsPhysicallyAdjacent(left, right) &&
+		profiledSegmentsShareOwnerScope(left.segment, right.segment) &&
+		left.segment.ContentKind == extract.ContentKindNaturalLanguageDirective &&
+		right.segment.ContentKind == extract.ContentKindNaturalLanguageDirective
+}
+
+func boundedLexicalPartReconstructionWithBoundaries(
+	parts []string,
+	boundaries []bool,
+) (string, bool) {
+	if len(parts) < 2 || len(parts) > maxClassifierParts {
+		return "", false
+	}
+	if boundaries != nil && len(boundaries) != len(parts)-1 {
+		return "", false
+	}
+
+	// Bound the raw provider group before normalizing any part. The extractor
+	// defaults to 512 blocks and can be configured up to maxClassifierParts, so
+	// the lexical-run limit must apply to adjacent fragments rather than to the
+	// number of otherwise unrelated provider blocks.
+	rawGroupBytes := 0
+	for _, part := range parts {
+		if len(part) > maxCompactPartReconstructionBytes-rawGroupBytes {
+			return "", false
+		}
+		rawGroupBytes += len(part)
+	}
+
+	edges := make([]compactLexicalPartEdges, len(parts))
+	var normalizerScratch normalizationScratch
+	var runeBuffer []rune
+	for index, part := range parts {
+		views := normalizePartsInto([]string{part}, runeBuffer, &normalizerScratch)
+		runeBuffer = views.standardRunes
+		if views.truncated || len(views.standardRunes) == 0 {
+			// An unrelated empty or normalization-overflow block is a hard
+			// reconstruction barrier; it must not disable a later bounded pair.
+			continue
+		}
+		edges[index] = compactLexicalEdgesForRunes(views.standardRunes)
+	}
+
+	acceptedBoundaries := make([]bool, len(parts)-1)
+	hasSpan := false
+	for boundary := 0; boundary+1 < len(edges); boundary++ {
+		_, _, ok := boundedLexicalPartBoundarySpan(edges, boundaries, boundary)
+		if !ok {
+			continue
+		}
+		hasSpan = true
+		acceptedBoundaries[boundary] = true
+	}
+	if !hasSpan {
+		return "", false
+	}
+
+	candidateBytes := rawGroupBytes
+	for boundary := range acceptedBoundaries {
+		separatorBytes := len(compactLexicalPartSeparator(edges, boundaries, acceptedBoundaries, boundary))
+		if separatorBytes > maxCompactPartReconstructionBytes-candidateBytes {
+			return "", false
+		}
+		candidateBytes += separatorBytes
+	}
+
+	var joined strings.Builder
+	joined.Grow(candidateBytes)
+	for index, part := range parts {
+		if index > 0 {
+			joined.WriteString(compactLexicalPartSeparator(edges, boundaries, acceptedBoundaries, index-1))
+		}
+		joined.WriteString(part)
+	}
+	return joined.String(), true
+}
+
+func compactLexicalPartSeparator(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	acceptedBoundaries []bool,
+	boundary int,
+) string {
+	if boundary >= 0 && boundary < len(acceptedBoundaries) && acceptedBoundaries[boundary] {
+		return "\n"
+	}
+	if !compactLexicalBoundaryEnabled(boundaries, boundary) {
+		return compactPartHardSeparator
+	}
+	if boundary >= 0 && boundary+1 < len(edges) &&
+		(edges[boundary].nonEmpty && edges[boundary].suffixClass == compactLexicalNone ||
+			edges[boundary+1].nonEmpty && edges[boundary+1].prefixClass == compactLexicalNone) {
+		// Existing punctuation is already a lexical barrier. Do not inject a
+		// sentence break that would discard an enclosing quote or negation frame.
+		return ""
+	}
+	return compactPartSoftSeparator
+}
+
+func compactLexicalBoundaryEnabled(boundaries []bool, boundary int) bool {
+	return boundaries == nil || boundary >= 0 && boundary < len(boundaries) && boundaries[boundary]
+}
+
+func compactLexicalEdgesForRunes(runes []rune) compactLexicalPartEdges {
+	if len(runes) == 0 {
+		return compactLexicalPartEdges{}
+	}
+	prefixClass := compactLexicalClassOf(runes[0])
+	prefixRunes := 0
+	if prefixClass != compactLexicalNone {
+		for prefixRunes < len(runes) && compactLexicalClassOf(runes[prefixRunes]) == prefixClass {
+			prefixRunes++
+		}
+		if prefixRunes == len(runes) {
+			linker := prefixClass == compactLexicalASCII && compactFragmentIsIndependentLexeme(runes)
+			return compactLexicalPartEdges{
+				prefixClass: prefixClass, suffixClass: prefixClass,
+				prefixRunes: prefixRunes, suffixRunes: prefixRunes,
+				prefixLinker: linker, suffixLinker: linker, wholeLexical: true, nonEmpty: true,
+			}
+		}
+	}
+
+	suffixClass := compactLexicalClassOf(runes[len(runes)-1])
+	suffixRunes := 0
+	if suffixClass != compactLexicalNone {
+		for index := len(runes) - 1; index >= 0 && compactLexicalClassOf(runes[index]) == suffixClass; index-- {
+			suffixRunes++
+		}
+	}
+	return compactLexicalPartEdges{
+		prefixClass: prefixClass, suffixClass: suffixClass,
+		prefixRunes: prefixRunes, suffixRunes: suffixRunes,
+		prefixLinker: prefixClass == compactLexicalASCII &&
+			compactFragmentIsIndependentLexeme(runes[:prefixRunes]),
+		suffixLinker: suffixClass == compactLexicalASCII &&
+			compactFragmentIsIndependentLexeme(runes[len(runes)-suffixRunes:]),
+		nonEmpty: true,
+	}
+}
+
+func boundedLexicalPartBoundary(edges []compactLexicalPartEdges, boundary int) bool {
+	return boundedLexicalPartBoundaryWithBoundaries(edges, nil, boundary)
+}
+
+func boundedLexicalPartBoundaryWithBoundaries(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	boundary int,
+) bool {
+	_, _, ok := boundedLexicalPartBoundarySpan(edges, boundaries, boundary)
+	return ok
+}
+
+func boundedLexicalPartBoundarySpan(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	boundary int,
+) (start, end int, ok bool) {
+	if boundary < 0 || boundary+1 >= len(edges) {
+		return 0, 0, false
+	}
+	if !compactLexicalBoundaryEnabled(boundaries, boundary) {
+		return 0, 0, false
+	}
+	left := edges[boundary]
+	right := edges[boundary+1]
+	class := left.suffixClass
+	if class == compactLexicalNone || right.prefixClass != class ||
+		left.suffixRunes == 0 || right.prefixRunes == 0 ||
+		left.suffixLinker || right.prefixLinker ||
+		left.suffixRunes > maxCompactReconstructionFragmentRunes ||
+		right.prefixRunes > maxCompactReconstructionFragmentRunes ||
+		!compactFragmentPairLengthsAllowed(left.suffixRunes, right.prefixRunes) {
+		return 0, 0, false
+	}
+
+	start = boundary
+	end = boundary + 2
+	fragments := 2
+	totalRunes := left.suffixRunes + right.prefixRunes
+	for index := boundary; index > 0 && edges[index].wholeLexical; index-- {
+		if !compactLexicalBoundaryEnabled(boundaries, index-1) {
+			break
+		}
+		fragment := edges[index-1]
+		if fragment.suffixClass != class || fragment.suffixRunes == 0 ||
+			fragment.suffixRunes > maxCompactReconstructionFragmentRunes {
+			return 0, 0, false
+		}
+		fragments++
+		totalRunes += fragment.suffixRunes
+		if fragments > maxCompactReconstructionFragments || totalRunes > maxCompactReconstructionRunes {
+			return 0, 0, false
+		}
+		start = index - 1
+	}
+	for index := boundary + 1; index+1 < len(edges) && edges[index].wholeLexical; index++ {
+		if !compactLexicalBoundaryEnabled(boundaries, index) {
+			break
+		}
+		fragment := edges[index+1]
+		if fragment.prefixClass != class || fragment.prefixRunes == 0 ||
+			fragment.prefixRunes > maxCompactReconstructionFragmentRunes {
+			return 0, 0, false
+		}
+		fragments++
+		totalRunes += fragment.prefixRunes
+		if fragments > maxCompactReconstructionFragments || totalRunes > maxCompactReconstructionRunes {
+			return 0, 0, false
+		}
+		end = index + 2
+	}
+	return start, end, fragments <= maxCompactReconstructionFragments && totalRunes <= maxCompactReconstructionRunes
 }
 
 func hasProfiledSegmentMetadata(segments []extract.Segment) bool {
@@ -3708,6 +4088,68 @@ func profiledClauseSpans(text []rune, clauses []analyzedDirectiveClause) ([]prof
 	return spans, len(spans) != 0
 }
 
+func profiledAnalysisClauseSpans(
+	text []rune,
+	analysis analyzedDirectives,
+) ([]profiledClauseSpan, bool) {
+	spans, ok := profiledClauseSpans(text, analysis.clauses)
+	if !ok {
+		return nil, false
+	}
+	if len(analysis.overflowTail) == 0 {
+		return spans, true
+	}
+
+	byClauseID := make(map[int32]profiledClauseSpan, len(spans)+len(analysis.overflowTail))
+	for _, span := range spans {
+		byClauseID[span.clauseID] = span
+	}
+	cursor := len(text)
+	for index := len(analysis.overflowTail) - 1; index >= 0; index-- {
+		clause := analysis.overflowTail[index]
+		clauseID := clauseIDForOccurrence(clause)
+		if existing, found := byClauseID[clauseID]; found {
+			cursor = existing.start
+			continue
+		}
+		start := profiledRuneSliceLastIndex(text, clause.runes, cursor)
+		if start < 0 {
+			return nil, false
+		}
+		span := profiledClauseSpan{
+			clauseID: clauseID,
+			start:    start,
+			end:      start + len(clause.runes),
+		}
+		spans = append(spans, span)
+		byClauseID[clauseID] = span
+		cursor = start
+	}
+	return spans, true
+}
+
+func profiledRuneSliceLastIndex(text, target []rune, end int) int {
+	if len(target) == 0 || len(target) > len(text) {
+		return -1
+	}
+	if end > len(text) {
+		end = len(text)
+	}
+	for start := end - len(target); start >= 0; start-- {
+		matched := true
+		for offset := range target {
+			if text[start+offset] != target[offset] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return start
+		}
+	}
+	return -1
+}
+
 func profiledRuneSliceIndex(text, target []rune, start int) int {
 	if len(target) == 0 || len(target) > len(text) {
 		return -1
@@ -5468,6 +5910,135 @@ func (c *Classifier) profiledOccurrenceSourcesWithOptions(
 		if profiledOccurrenceCandidatesComplete(candidates) {
 			if _, complete := profiledOccurrenceAssignment(candidates); complete {
 				break
+			}
+		}
+	}
+
+	// A provider may encode one natural-language message as consecutive content
+	// blocks. Replay only a physically adjacent, extractor-proven owner run whose
+	// lexical chain is bounded by the same fragment/rune limits as classification.
+	// Each analyzed run contains at most maxCompactReconstructionFragments parts;
+	// the surrounding provider group remains bounded by maxClassifierParts.
+	if len(refs) >= 2 && len(refs) <= maxClassifierParts {
+		parts := make([]string, len(refs))
+		edges := make([]compactLexicalPartEdges, len(refs))
+		normalizedLengths := make([]int, len(refs))
+		boundaries := make([]bool, len(refs)-1)
+		for index, ref := range refs {
+			parts[index] = ref.segment.Text
+			if index > 0 {
+				boundaries[index-1] = profiledLexicalPartBoundaryEligible(refs[index-1], ref)
+			}
+			views := normalizePartsInto([]string{ref.segment.Text}, runeBuffer, &normalizerScratch)
+			runeBuffer = views.standardRunes
+			if views.storageUsed > maxRuneStorage {
+				maxRuneStorage = views.storageUsed
+			}
+			if views.truncated || len(views.standardRunes) == 0 {
+				continue
+			}
+			edges[index] = compactLexicalEdgesForRunes(views.standardRunes)
+			normalizedLengths[index] = len(views.standardRunes)
+		}
+
+		type lexicalRunSpan struct{ start, end int }
+		seenRuns := make(map[lexicalRunSpan]struct{})
+		for boundary := len(refs) - 2; boundary >= 0; boundary-- {
+			start, end, reconstruct := boundedLexicalPartBoundarySpan(edges, boundaries, boundary)
+			span := lexicalRunSpan{start: start, end: end}
+			if !reconstruct {
+				continue
+			}
+			if _, duplicate := seenRuns[span]; duplicate {
+				continue
+			}
+			seenRuns[span] = struct{}{}
+
+			reconstructed, ok := boundedLexicalPartReconstructionWithBoundaries(
+				parts[start:end], boundaries[start:end-1],
+			)
+			if !ok {
+				continue
+			}
+			joined := normalizeParts([]string{reconstructed})
+			if joined.truncated || len(joined.standardRunes) == 0 {
+				continue
+			}
+			type lexicalRunBoundary struct {
+				offset      int
+				sourceIndex int
+			}
+			joinedBoundaries := make([]lexicalRunBoundary, 0, end-start-1)
+			normalizedOffset := 0
+			for index := start; index < end; index++ {
+				normalizedOffset += normalizedLengths[index]
+				if index+1 == end {
+					continue
+				}
+				if boundedLexicalPartBoundaryWithBoundaries(edges, boundaries, index) {
+					joinedBoundaries = append(joinedBoundaries, lexicalRunBoundary{
+						offset: normalizedOffset, sourceIndex: index + 1,
+					})
+				} else {
+					normalizedOffset += utf8.RuneCountInString(compactLexicalPartSeparator(
+						edges, boundaries, nil, index,
+					))
+				}
+			}
+			if normalizedOffset != len(joined.standardRunes) || len(joinedBoundaries) == 0 {
+				continue
+			}
+
+			analysis := c.analyzeDirectives(joined.standardRunes, policy)
+			clauseSpans, spansComplete := profiledAnalysisClauseSpans(joined.standardRunes, analysis)
+			if !spansComplete {
+				continue
+			}
+			visitCrossing := func(clause analyzedDirectiveClause) {
+				clauseSpan, found := profiledClauseSpanByID(clauseSpans, clauseIDForOccurrence(clause))
+				if !found {
+					return
+				}
+				for _, matched := range clause.occurrences {
+					sourceIndex := -1
+					for _, runBoundary := range joinedBoundaries {
+						clauseOffset := runBoundary.offset - clauseSpan.start
+						if clauseOffset > 0 && clauseOffset < len(clause.runes) &&
+							int(matched.start) < clauseOffset && int(matched.end) > clauseOffset {
+							sourceIndex = runBoundary.sourceIndex
+						}
+					}
+					if sourceIndex < 0 {
+						continue
+					}
+					key := profiledOccurrenceKey{
+						refIndex: sourceIndex, clauseID: matched.clauseID,
+						start: matched.start, end: matched.end,
+					}
+					physical[key] = profiledOccurrenceSource{
+						valid: true, ref: refs[sourceIndex], occurrence: matched,
+					}
+					for evidenceIndex := range evidence {
+						if evidence[evidenceIndex].ClauseID >= 0 &&
+							evidence[evidenceIndex].ClauseID != int(matched.clauseID) ||
+							!c.signalSupportsProfiledEvidence(int(matched.signalID), evidence[evidenceIndex]) ||
+							profiledOccurrenceCandidateExists(candidates[evidenceIndex], key) {
+							continue
+						}
+						candidates[evidenceIndex] = append(candidates[evidenceIndex], key)
+					}
+				}
+			}
+			for _, clause := range analysis.clauses {
+				visitCrossing(clause)
+			}
+			for _, clause := range analysis.overflowTail {
+				visitCrossing(clause)
+			}
+			if profiledOccurrenceCandidatesComplete(candidates) {
+				if _, complete := profiledOccurrenceAssignment(candidates); complete {
+					break
+				}
 			}
 		}
 	}

@@ -6,7 +6,9 @@ verified through the GitHub API. They are **not claimed to be enabled merely
 because this document exists**.
 
 The branch-protection controls below were observed on 2026-08-04, but several
-Round 12 Actions and runner controls remain open. All settings must be
+Round 12 Actions and runner controls remain open. The Round 13 candidate adds
+one manual RC publication workflow; this checked-in change is not evidence that
+GitHub has already indexed or executed that workflow. All settings must be
 reverified after workflow or governance changes. Creating a required check
 before its successful context exists can lock the default branch.
 
@@ -39,19 +41,32 @@ retirement remains open until the second-machine work finishes.
 
 ## Active workflow inventory
 
+The Round 13 candidate contains exactly four executable repository-owned
+workflow files. The first three retain the five protected-branch check
+contexts; the fourth is a manual, exact-main RC publication lane and is not a
+required pull-request check.
+
 | Workflow file | Display name | Required-check contexts |
 |---|---|---|
 | `.github/workflows/ci.yml` | `CI` | `quality-and-artifacts`, `fuzz-long`, `reproducibility` |
 | `.github/workflows/codeql.yml` | `CodeQL` | `Analyze Go on Linux` |
 | `.github/workflows/policy-gate.yml` | `Policy and Corpus Gate` | `round9-policy-and-corpus` |
+| `.github/workflows/release-rc.yml` | `RC Release` | None; manual `workflow_dispatch` publication gate |
 
-No active workflow publishes Releases or uses a self-hosted runner. Historical
-release and Host workflow definitions remain available through Git history but
-are not executable from the default branch.
+Only `release-rc.yml` can publish a Release. It runs exclusively on pinned
+GitHub-hosted Linux runners and can create only the fixed `v1.0.0-rc.1`
+non-latest prerelease after exact protected-`main`, signed annotated-tag,
+required-check, provenance, and owner-run second-machine CPA v7.2.125 evidence
+checks pass. Its second-machine record is necessary owner evidence, not an
+independent audit or production approval. No active workflow uses a self-hosted
+runner. Historical release and Host workflow definitions remain available
+through Git history but are not executable from the default branch.
 
 The live API also exposes GitHub's generated `Dependency Graph` workflow. It
-does not change the three-file repository inventory and must not be omitted when
-reporting the raw API count.
+does not change the repository-owned four-file candidate inventory and must not
+be omitted when reporting the raw API count. Before this candidate merges, the
+live API may still report only the three current `main` files plus the generated
+record; after merge it must be reread rather than inferred from this document.
 
 ## Desired `main` protection
 
@@ -91,9 +106,12 @@ evidence:
 | Linux amd64 development verification artifacts | 14 days |
 | Go fuzz failure corpus | 7 days |
 | Round 9 policy-gate summary and output | 14 days |
+| RC publication-stage transfer artifact | 7 days |
 
-Expiry is intentional. None of these Actions artifacts is a stable plugin
-asset, rollback source, independent attestation, or production authorization.
+Expiry is intentional. None of these Actions artifacts is by itself a stable
+plugin asset, rollback source, independent attestation, or production
+authorization. A published RC Release is governed separately by the fixed
+asset, checksum, provenance, tag, and non-latest prerelease contracts.
 
 ## Verification
 

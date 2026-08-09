@@ -20,6 +20,8 @@ const (
 	// without colliding with legitimate replacement characters in user text.
 	compactHardBoundary     rune = '\uFDD0'
 	compactHardBoundaryText      = "\uFDD0"
+	compactJoinedBoundary   rune = '\uFDD1'
+	compactPartBoundary     rune = '\uFDD2'
 )
 
 type normalizedViews struct {
@@ -96,7 +98,7 @@ func normalizePartsInto(parts []string, destination []rune, scratch *normalizati
 			break
 		}
 		if partIndex > 0 {
-			runes = appendBoundary(runes)
+			runes = appendPartBoundary(runes)
 		}
 		consumedBytes := len(part)
 		if consumedBytes > remainingBytes {
@@ -121,7 +123,7 @@ func normalizePartsInto(parts []string, destination []rune, scratch *normalizati
 				if replacement, ok := commonHomoglyphReplacement(r); ok {
 					r = replacement
 				}
-				if r == compactHardBoundary {
+				if r == compactHardBoundary || r == compactJoinedBoundary || r == compactPartBoundary {
 					r = unicode.ReplacementChar
 				}
 				runes = append(runes, r)
@@ -177,7 +179,7 @@ func normalizeBytesInto(value []byte, destination []rune, scratch *normalization
 			if replacement, ok := commonHomoglyphReplacement(r); ok {
 				r = replacement
 			}
-			if r == compactHardBoundary {
+			if r == compactHardBoundary || r == compactJoinedBoundary || r == compactPartBoundary {
 				r = unicode.ReplacementChar
 			}
 			runes = append(runes, r)
@@ -206,10 +208,19 @@ func finishNormalizedViews(runes []rune, truncated bool) normalizedViews {
 	storageUsed := len(runes)
 	standard := runes[:0]
 	lastSpace := true
+	hasReconstructableBoundary := false
+	hasPartBoundary := false
 	for _, r := range runes {
 		if isLineBoundary(r) || r == compactHardBoundary {
 			standard = appendBoundary(standard)
 			lastSpace = true
+			hasReconstructableBoundary = true
+			continue
+		}
+		if r == compactPartBoundary {
+			standard = appendPartBoundary(standard)
+			lastSpace = true
+			hasPartBoundary = true
 			continue
 		}
 		if unicode.IsSpace(r) {
@@ -225,6 +236,32 @@ func finishNormalizedViews(runes []rune, truncated bool) normalizedViews {
 	for len(standard) > 0 && standard[len(standard)-1] == ' ' {
 		standard = standard[:len(standard)-1]
 	}
+	if !hasReconstructableBoundary && !hasPartBoundary {
+		return normalizedViews{standardRunes: standard, truncated: truncated, storageUsed: storageUsed}
+	}
+	// Remove only hard boundaries that split one bounded homogeneous lexical
+	// token. Downstream semantic and eligibility checks must see the same token
+	// reconstructed by the compact matcher; retaining the marker there would
+	// detect a rule but then downgrade its candidate as ambiguous.
+	if hasReconstructableBoundary {
+		for index := len(standard) - 1; index >= 0; index-- {
+			if standard[index] == compactHardBoundary && boundedLexicalFragmentsAround(standard, index) {
+				standard[index] = compactJoinedBoundary
+			}
+		}
+	}
+	write := 0
+	for _, r := range standard {
+		if r == compactJoinedBoundary {
+			continue
+		}
+		if r == compactPartBoundary {
+			r = compactHardBoundary
+		}
+		standard[write] = r
+		write++
+	}
+	standard = standard[:write]
 	return normalizedViews{standardRunes: standard, truncated: truncated, storageUsed: storageUsed}
 }
 
@@ -234,6 +271,20 @@ func appendBoundary(runes []rune) []rune {
 	}
 	if len(runes) == 0 || runes[len(runes)-1] != compactHardBoundary {
 		runes = append(runes, compactHardBoundary)
+	}
+	return runes
+}
+
+func appendPartBoundary(runes []rune) []rune {
+	for len(runes) > 0 && runes[len(runes)-1] == ' ' {
+		runes = runes[:len(runes)-1]
+	}
+	if len(runes) > 0 && runes[len(runes)-1] == compactHardBoundary {
+		runes[len(runes)-1] = compactPartBoundary
+		return runes
+	}
+	if len(runes) == 0 || runes[len(runes)-1] != compactPartBoundary {
+		runes = append(runes, compactPartBoundary)
 	}
 	return runes
 }

@@ -12,9 +12,9 @@ import (
 
 const (
 	cpaModulePath        = "github.com/router-for-me/CLIProxyAPI/v7"
-	cpaPinnedVersion     = "v7.2.116"
-	cpaPinnedCommit      = "a88197f845c979132c8978ea223c6af05cc81536"
-	cpaPinnedModuleSum   = "h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU="
+	cpaPinnedVersion     = "v7.2.125"
+	cpaPinnedCommit      = "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e"
+	cpaPinnedModuleSum   = "h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg="
 	cpaPinnedGoModSum    = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 	cpaPluginHostPackage = cpaModulePath + "/internal/pluginhost"
 	cpaHandlersPackage   = cpaModulePath + "/sdk/api/handlers"
@@ -62,6 +62,9 @@ var criticalCPAHostTests = []string{
 	"TestHostShutdownAllRetainsBlockedLoadTokenUntilCleanup",
 	"TestHostUnloadPluginContextDetachesBlockedCall",
 	"TestOwnsExecutorDistinguishesHostAdapters",
+	"TestPluginRefreshCompatExecutorDelegatesExecuteAndRefresh",
+	"TestPluginRefreshCompatExecutorErrorsWhenRefreshUnavailable",
+	"TestPluginRefreshCompatExecutorNoOpForAPIKeyAuth",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
 }
 
@@ -146,7 +149,7 @@ func TestCPAHostFailOpenFixtureContract(t *testing.T) {
 	if _, errFixtureStat := os.Stat(fixturePath); errFixtureStat != nil {
 		t.Fatalf("stat Host fixture: %v", errFixtureStat)
 	}
-	moduleCopy := filepath.Join(t.TempDir(), "cpa-v7.2.116")
+	moduleCopy := filepath.Join(t.TempDir(), "cpa-"+cpaPinnedVersion)
 	if errCopyModule := os.CopyFS(moduleCopy, os.DirFS(module.Dir)); errCopyModule != nil {
 		t.Fatalf("copy pinned CPA module for Host fixture: %v", errCopyModule)
 	}
@@ -175,6 +178,36 @@ func TestCPAHostFailOpenFixtureContract(t *testing.T) {
 	runGoCommandInDir(t, moduleCopy, goBinary,
 		"test", "-mod=mod", "-count=1", "-v",
 		"-run", "^"+fixtureTestName+"$", "./internal/pluginhost",
+	)
+}
+
+func TestCPAReleaseCandidatePluginStoreInstallContract(t *testing.T) {
+	goBinary, _, module := preparePinnedCPAModule(t)
+	fixturePath, errFixtureAbs := filepath.Abs(filepath.Join("testfixtures", "release_rc_install_overlay_test.go.txt"))
+	if errFixtureAbs != nil {
+		t.Fatalf("resolve RC Plugin Store fixture path: %v", errFixtureAbs)
+	}
+	fixtureData, errReadFixture := os.ReadFile(fixturePath)
+	if errReadFixture != nil {
+		t.Fatalf("read RC Plugin Store fixture: %v", errReadFixture)
+	}
+	moduleCopy := filepath.Join(t.TempDir(), "cpa-"+cpaPinnedVersion)
+	if errCopyModule := os.CopyFS(moduleCopy, os.DirFS(module.Dir)); errCopyModule != nil {
+		t.Fatalf("copy pinned CPA module for RC Plugin Store fixture: %v", errCopyModule)
+	}
+	targetPath := filepath.Join(moduleCopy, "internal", "pluginstore", "cyber_abuse_guard_rc_install_test.go")
+	if errWriteFixture := os.WriteFile(targetPath, fixtureData, 0o600); errWriteFixture != nil {
+		t.Fatalf("write ephemeral RC Plugin Store fixture: %v", errWriteFixture)
+	}
+	const fixtureTestName = "TestCyberAbuseGuardRCPluginStoreContract"
+	listed := runGoCommandInDir(t, moduleCopy, goBinary,
+		"test", "-mod=mod", "-list", "^"+fixtureTestName+"$", "./internal/pluginstore",
+	)
+	if !linePresent(listed, fixtureTestName) {
+		t.Fatalf("ephemeral CPA Plugin Store overlay does not list %q", fixtureTestName)
+	}
+	runGoCommandInDir(t, moduleCopy, goBinary,
+		"test", "-mod=mod", "-count=1", "-v", "-run", "^"+fixtureTestName+"$", "./internal/pluginstore",
 	)
 }
 

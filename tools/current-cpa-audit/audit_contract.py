@@ -28,8 +28,30 @@ POLICY_SCHEMA = "cag-current-cpa-source-policy/v2"
 RUN_CONFIG_SCHEMA = "cag-current-cpa-run-config/v1"
 CLAIM_BOUNDARY = "SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION"
 MOCK_CONTRACT = "cag-current-cpa-counted-mock/v1"
-CPA_TAG = "v7.2.116"
-CPA_COMMIT = "a88197f845c979132c8978ea223c6af05cc81536"
+CAG_SOURCE_VERSION = "1.0.0"
+CAG_SO_NAME = f"cyber-abuse-guard-v{CAG_SOURCE_VERSION}.so"
+CANDIDATE_MANIFEST_SCHEMA = "cyber-abuse-guard.audit-candidate-manifest.v1"
+CANDIDATE_MANIFEST_STATUS = (
+    "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE"
+)
+CANDIDATE_MANIFEST_NAME = "audit-candidate-manifest.json"
+CANDIDATE_ARTIFACT_NAME = "cyber-abuse-guard-linux-amd64-audit-candidate"
+CANDIDATE_REPOSITORY = "yujianwudi/cyber-abuse-guard-next"
+CANDIDATE_WORKFLOW_NAME = "CI"
+CANDIDATE_WORKFLOW_PATH = ".github/workflows/ci.yml"
+CANDIDATE_MAX_BYTES = 2 * 1024 * 1024
+CPA_TAG = "v7.2.125"
+CPA_COMMIT = "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e"
+CPA_MODULE_SUM = "h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg="
+CPA_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
+CPA_OFFICIAL_ASSET_NAME = "CLIProxyAPI_7.2.125_linux_amd64.tar.gz"
+CPA_OFFICIAL_ASSET_SIZE = 20_853_030
+CPA_OFFICIAL_ASSET_SHA256 = (
+    "4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233"
+)
+CPA_OFFICIAL_BINARY_SHA256 = (
+    "656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a"
+)
 
 ALLOWED_GITHUB_HOSTS = ("api.github.com", "raw.githubusercontent.com")
 MODES = ("audit", "balanced", "strict")
@@ -98,9 +120,15 @@ FIXED_SOURCE_RETENTION: dict[str, str] = {
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
+SHA256_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 REPO_DIGEST = re.compile(r"[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}")
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9_.-]{2,62}")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+GITHUB_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}")
+UTC_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]{1,6})?Z"
+)
 REQUEST_HASH_DOMAIN = b"cyber-abuse-guard/audit/request/v1\x00"
 MAX_JSON_BYTES = 64 * 1024 * 1024
 BLOCK_REFUSAL_MESSAGE = (
@@ -166,9 +194,13 @@ def sha256_bytes(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def sha256_file(path: Path, maximum: int = 1 << 31) -> str:
+def sha256_file(
+    path: Path, maximum: int = 1 << 31, *, require_single_link: bool = False
+) -> str:
     digest = hashlib.sha256()
-    descriptor, info = open_regular(path, "hash input")
+    descriptor, info = open_regular(
+        path, "hash input", require_single_link=require_single_link
+    )
     if info.st_size > maximum:
         os.close(descriptor)
         fail(f"hash input exceeds the reviewed byte bound: {path}")
@@ -421,12 +453,14 @@ def require_repo_digest(value: Any, label: str) -> str:
 
 def require_timestamp(value: Any, label: str) -> str:
     text = nonempty_string(value, label, 64)
+    if UTC_TIMESTAMP.fullmatch(text) is None:
+        fail(f"{label} must be a UTC ISO-8601 timestamp ending in Z")
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         fail(f"{label} must be ISO-8601")
-    if parsed.tzinfo is None:
-        fail(f"{label} must include a timezone")
+    if parsed.tzinfo is None or parsed.utcoffset() is None or parsed.utcoffset().total_seconds() != 0:
+        fail(f"{label} must use UTC")
     return text
 
 
@@ -1339,6 +1373,300 @@ def build_execution_plan(
     return result
 
 
+def positive_decimal(value: Any, label: str, maximum: int = 32) -> str:
+    text = nonempty_string(value, label, maximum)
+    if re.fullmatch(r"[1-9][0-9]*", text) is None:
+        fail(f"{label} must be a positive decimal string")
+    return text
+
+
+def safe_github_branch(value: Any, label: str) -> str:
+    branch = nonempty_string(value, label, 255)
+    if (
+        GITHUB_BRANCH.fullmatch(branch) is None
+        or branch.startswith("/")
+        or branch.endswith(("/", "."))
+        or "//" in branch
+        or ".." in branch
+        or "@{" in branch
+    ):
+        fail(f"{label} is not a safe GitHub branch name")
+    return branch
+
+
+def validate_candidate_manifest(
+    value: Any, cag_identity: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Validate the closed CI-produced eight-file candidate manifest."""
+
+    required_cag_identity = {"commit", "so_sha256", "tree"}
+    missing_cag_identity = sorted(required_cag_identity.difference(cag_identity))
+    if missing_cag_identity:
+        fail(
+            "candidate manifest CAG identity is missing required fields: "
+            f"{missing_cag_identity}"
+        )
+
+    manifest = exact_keys(
+        value,
+        {
+            "artifacts",
+            "commit",
+            "dirty",
+            "event",
+            "head_branch",
+            "head_sha",
+            "repository",
+            "run_attempt",
+            "run_id",
+            "schema",
+            "status",
+            "tree",
+            "version",
+            "workflow_name",
+            "workflow_path",
+        },
+        "candidate manifest",
+    )
+    if (
+        manifest["schema"] != CANDIDATE_MANIFEST_SCHEMA
+        or manifest["status"] != CANDIDATE_MANIFEST_STATUS
+    ):
+        fail("candidate manifest schema or diagnostic status is invalid")
+    if exact_bool(manifest["dirty"], "candidate manifest.dirty"):
+        fail("candidate manifest is dirty")
+
+    commit = require_hex(manifest["commit"], "candidate manifest.commit", HEX40)
+    tree = require_hex(manifest["tree"], "candidate manifest.tree", HEX40)
+    head_sha = require_hex(manifest["head_sha"], "candidate manifest.head_sha", HEX40)
+    if commit != cag_identity["commit"] or tree != cag_identity["tree"]:
+        fail("candidate manifest commit/tree drifted from the selected CAG source")
+    if manifest["version"] != CAG_SOURCE_VERSION:
+        fail(f"candidate manifest does not bind CAG source {CAG_SOURCE_VERSION}")
+
+    if manifest["repository"] != CANDIDATE_REPOSITORY:
+        fail("candidate manifest repository is not the reviewed repository")
+    if (
+        manifest["workflow_name"] != CANDIDATE_WORKFLOW_NAME
+        or manifest["workflow_path"] != CANDIDATE_WORKFLOW_PATH
+    ):
+        fail("candidate manifest workflow identity is not the reviewed CI workflow")
+    event = one_of(
+        manifest["event"], ("pull_request", "push"), "candidate manifest.event"
+    )
+    positive_decimal(manifest["run_id"], "candidate manifest.run_id")
+    positive_decimal(
+        manifest["run_attempt"], "candidate manifest.run_attempt", 20
+    )
+    safe_github_branch(
+        manifest["head_branch"], "candidate manifest.head_branch"
+    )
+    if event == "push" and head_sha != commit:
+        fail("push candidate manifest head SHA must equal the checked-out source commit")
+
+    expected_names = {
+        CAG_SO_NAME,
+        CAG_SO_NAME + ".sha256",
+        f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip",
+        "build-metadata.json",
+        "checksums.txt",
+        "ruleset-manifest.json",
+        "ruleset.sha256",
+        "sbom.cdx.json",
+    }
+    artifacts = exact_list(manifest["artifacts"], "candidate manifest.artifacts", 8)
+    if len(artifacts) != 8:
+        fail("candidate manifest must seal exactly eight base artifacts")
+    names: set[str] = set()
+    selected: dict[str, Any] | None = None
+    for index, raw in enumerate(artifacts):
+        label = f"candidate manifest.artifacts[{index}]"
+        item = exact_keys(raw, {"bytes", "name", "sha256"}, label)
+        name = nonempty_string(item["name"], f"{label}.name", 256)
+        if Path(name).name != name or name in {".", ".."} or name in names:
+            fail(f"{label}.name is unsafe or duplicated")
+        names.add(name)
+        exact_int(item["bytes"], f"{label}.bytes", 1)
+        require_hex(item["sha256"], f"{label}.sha256")
+        if name == CAG_SO_NAME:
+            selected = item
+    if names != expected_names:
+        fail("candidate manifest base-artifact name set is not exact")
+    if selected is None or selected["sha256"] != cag_identity["so_sha256"]:
+        fail("candidate manifest does not bind the selected CAG SO")
+    return manifest
+
+
+def candidate_identity(
+    manifest: Mapping[str, Any],
+    raw: bytes,
+    *,
+    artifact_id: Any,
+    artifact_name: Any,
+    artifact_digest: Any,
+) -> dict[str, Any]:
+    """Project manifest provenance plus post-upload GitHub admission metadata."""
+
+    selected_so_sha256 = next(
+        (
+            item["sha256"]
+            for item in manifest["artifacts"]
+            if item["name"] == CAG_SO_NAME
+        ),
+        None,
+    )
+    if selected_so_sha256 is None:
+        fail("candidate manifest does not bind the selected CAG SO")
+
+    identity = {
+        "artifact": {
+            "digest": artifact_digest,
+            "id": artifact_id,
+            "name": artifact_name,
+        },
+        "event": manifest["event"],
+        "head_branch": manifest["head_branch"],
+        "head_sha": manifest["head_sha"],
+        "manifest_sha256": sha256_bytes(raw),
+        "repository": manifest["repository"],
+        "run_attempt": manifest["run_attempt"],
+        "run_id": manifest["run_id"],
+        "schema": manifest["schema"],
+        "source": {
+            "commit": manifest["commit"],
+            "dirty": manifest["dirty"],
+            "tree": manifest["tree"],
+            "version": manifest["version"],
+        },
+        "so": {
+            "name": CAG_SO_NAME,
+            "sha256": selected_so_sha256,
+        },
+        "status": manifest["status"],
+        "workflow": {
+            "name": manifest["workflow_name"],
+            "path": manifest["workflow_path"],
+        },
+    }
+    validate_candidate_identity(
+        identity,
+        {
+            "commit": identity["source"]["commit"],
+            "so_name": identity["so"]["name"],
+            "so_sha256": identity["so"]["sha256"],
+            "source_version": identity["source"]["version"],
+            "tree": identity["source"]["tree"],
+        },
+        "candidate identity",
+    )
+    return identity
+
+
+def validate_candidate_identity(
+    value: Any, cag_identity: Mapping[str, Any], label: str
+) -> dict[str, Any]:
+    required_cag_identity = {
+        "commit",
+        "so_name",
+        "so_sha256",
+        "source_version",
+        "tree",
+    }
+    missing_cag_identity = sorted(required_cag_identity.difference(cag_identity))
+    if missing_cag_identity:
+        fail(
+            f"{label} CAG identity is missing required fields: "
+            f"{missing_cag_identity}"
+        )
+
+    candidate = exact_keys(
+        value,
+        {
+            "artifact",
+            "event",
+            "head_branch",
+            "head_sha",
+            "manifest_sha256",
+            "repository",
+            "run_attempt",
+            "run_id",
+            "schema",
+            "source",
+            "so",
+            "status",
+            "workflow",
+        },
+        label,
+    )
+    if (
+        candidate["schema"] != CANDIDATE_MANIFEST_SCHEMA
+        or candidate["status"] != CANDIDATE_MANIFEST_STATUS
+        or candidate["repository"] != CANDIDATE_REPOSITORY
+    ):
+        fail(f"{label} manifest/repository identity is invalid")
+    one_of(candidate["event"], ("pull_request", "push"), f"{label}.event")
+    positive_decimal(candidate["run_id"], f"{label}.run_id")
+    positive_decimal(candidate["run_attempt"], f"{label}.run_attempt", 20)
+    require_hex(candidate["head_sha"], f"{label}.head_sha", HEX40)
+    require_hex(candidate["manifest_sha256"], f"{label}.manifest_sha256")
+    safe_github_branch(candidate["head_branch"], f"{label}.head_branch")
+
+    workflow = exact_keys(candidate["workflow"], {"name", "path"}, f"{label}.workflow")
+    if (
+        workflow["name"] != CANDIDATE_WORKFLOW_NAME
+        or workflow["path"] != CANDIDATE_WORKFLOW_PATH
+    ):
+        fail(f"{label}.workflow is not the reviewed CI workflow")
+    artifact = exact_keys(
+        candidate["artifact"], {"digest", "id", "name"}, f"{label}.artifact"
+    )
+    positive_decimal(artifact["id"], f"{label}.artifact.id")
+    if artifact["name"] != CANDIDATE_ARTIFACT_NAME:
+        fail(f"{label}.artifact.name is not the reviewed CI artifact")
+    require_hex(artifact["digest"], f"{label}.artifact.digest", SHA256_DIGEST)
+
+    source = exact_keys(
+        candidate["source"], {"commit", "dirty", "tree", "version"}, f"{label}.source"
+    )
+    if exact_bool(source["dirty"], f"{label}.source.dirty"):
+        fail(f"{label}.source is dirty")
+    require_hex(source["commit"], f"{label}.source.commit", HEX40)
+    require_hex(source["tree"], f"{label}.source.tree", HEX40)
+    if source["version"] != CAG_SOURCE_VERSION:
+        fail(f"{label}.source.version is not {CAG_SOURCE_VERSION}")
+    if (
+        source["commit"] != cag_identity["commit"]
+        or source["tree"] != cag_identity["tree"]
+        or source["version"] != cag_identity["source_version"]
+    ):
+        fail(f"{label}.source drifted from the CAG identity")
+    so = exact_keys(candidate["so"], {"name", "sha256"}, f"{label}.so")
+    if so["name"] != CAG_SO_NAME or so["name"] != cag_identity["so_name"]:
+        fail(f"{label}.so.name is not the selected CAG SO")
+    require_hex(so["sha256"], f"{label}.so.sha256")
+    if so["sha256"] != cag_identity["so_sha256"]:
+        fail(f"{label}.so SHA drifted from the CAG identity")
+    if candidate["event"] == "push" and candidate["head_sha"] != source["commit"]:
+        fail(f"{label} push head SHA drifted from the source commit")
+    return candidate
+
+
+def read_candidate_manifest(
+    path: Path, cag_identity: Mapping[str, Any]
+) -> tuple[dict[str, Any], bytes]:
+    raw = read_regular_bytes(
+        path,
+        "CI audit candidate manifest",
+        CANDIDATE_MAX_BYTES,
+        require_single_link=True,
+    )
+    value = load_json_bytes(raw, "CI audit candidate manifest", CANDIDATE_MAX_BYTES)
+    manifest = validate_candidate_manifest(value, cag_identity)
+    if raw != canonical_bytes(manifest) + b"\n":
+        fail("CI audit candidate manifest must be canonical JSON with one terminal newline")
+    return manifest, raw
+
+
 def validate_run_config(value: Any) -> dict[str, Any]:
     """Validate the operator-supplied immutable identities for an isolated run."""
 
@@ -1379,6 +1707,7 @@ def validate_run_config(value: Any) -> dict[str, Any]:
     paths = exact_keys(
         config["paths"],
         {
+            "candidate_manifest",
             "cag_repository",
             "cag_so",
             "corpus_manifest",
@@ -1390,12 +1719,33 @@ def validate_run_config(value: Any) -> dict[str, Any]:
     )
     for key in paths:
         require_absolute_path(paths[key], f"run config.paths.{key}")
+    candidate_manifest_path = Path(paths["candidate_manifest"])
+    cag_so_path = Path(paths["cag_so"])
+    if candidate_manifest_path.name != CANDIDATE_MANIFEST_NAME:
+        fail("run config candidate manifest path has the wrong filename")
+    if candidate_manifest_path.parent != cag_so_path.parent:
+        fail("run config candidate manifest and CAG SO must share one artifact directory")
 
-    identities = exact_keys(config["identities"], {"cag", "cpa", "mock"}, "run config.identities")
-    cag = exact_keys(identities["cag"], {"commit", "so_sha256", "tree"}, "run config.identities.cag")
+    identities = exact_keys(
+        config["identities"],
+        {"candidate", "cag", "cpa", "mock"},
+        "run config.identities",
+    )
+    cag = exact_keys(
+        identities["cag"],
+        {"commit", "so_name", "so_sha256", "source_version", "tree"},
+        "run config.identities.cag",
+    )
     require_hex(cag["commit"], "run config.identities.cag.commit", HEX40)
     require_hex(cag["tree"], "run config.identities.cag.tree", HEX40)
     require_hex(cag["so_sha256"], "run config.identities.cag.so_sha256")
+    if cag["source_version"] != CAG_SOURCE_VERSION or cag["so_name"] != CAG_SO_NAME:
+        fail(f"run config does not bind CAG source {CAG_SOURCE_VERSION}")
+    if Path(paths["cag_so"]).name != cag["so_name"]:
+        fail("run config CAG SO path does not match the closed CAG identity")
+    validate_candidate_identity(
+        identities["candidate"], cag, "run config.identities.candidate"
+    )
 
     cpa = exact_keys(
         identities["cpa"],
@@ -1413,18 +1763,28 @@ def validate_run_config(value: Any) -> dict[str, Any]:
         "run config.identities.cpa",
     )
     if cpa["tag"] != CPA_TAG or cpa["commit"] != CPA_COMMIT:
-        fail("run config does not bind CPA v7.2.116")
+        fail(f"run config does not bind CPA {CPA_TAG}")
     require_hex(cpa["commit"], "run config.identities.cpa.commit", HEX40)
     require_hex(cpa["image_id"], "run config.identities.cpa.image_id", IMAGE_ID)
     repo_digest = require_repo_digest(cpa["repo_digest"], "run config.identities.cpa.repo_digest")
     if cpa["image_ref"] != repo_digest:
         fail("run config CPA image must use its exact RepoDigest")
     require_absolute_path(cpa["binary_path"], "run config.identities.cpa.binary_path")
-    require_hex(cpa["binary_sha256"], "run config.identities.cpa.binary_sha256")
+    binary_sha256 = require_hex(cpa["binary_sha256"], "run config.identities.cpa.binary_sha256")
+    if binary_sha256 != CPA_OFFICIAL_BINARY_SHA256:
+        fail(f"run config does not bind the official CPA {CPA_TAG} linux/amd64 binary")
     asset_name = nonempty_string(cpa["official_asset_name"], "run config.identities.cpa.official_asset_name", 256)
     if Path(asset_name).name != asset_name or asset_name in {".", ".."}:
         fail("run config CPA official asset name is unsafe")
-    require_hex(cpa["official_asset_sha256"], "run config.identities.cpa.official_asset_sha256")
+    asset_sha256 = require_hex(
+        cpa["official_asset_sha256"],
+        "run config.identities.cpa.official_asset_sha256",
+    )
+    if (
+        asset_name != CPA_OFFICIAL_ASSET_NAME
+        or asset_sha256 != CPA_OFFICIAL_ASSET_SHA256
+    ):
+        fail(f"run config does not bind the official CPA {CPA_TAG} linux/amd64 asset")
 
     mock = exact_keys(
         identities["mock"],
@@ -1441,6 +1801,41 @@ def validate_run_config(value: Any) -> dict[str, Any]:
     return config
 
 
+def validate_candidate_manifest_file(
+    config: Mapping[str, Any],
+) -> tuple[dict[str, Any], bytes]:
+    """Re-read and cross-bind the immutable candidate manifest and selected SO."""
+
+    candidate_path = Path(config["paths"]["candidate_manifest"])
+    cag_so_path = Path(config["paths"]["cag_so"])
+    try:
+        resolved_candidate = candidate_path.resolve(strict=True)
+        resolved_so = cag_so_path.resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        fail(f"candidate artifact input cannot be resolved: {type(exc).__name__}")
+    if resolved_candidate != candidate_path or resolved_so != cag_so_path:
+        fail("candidate manifest and CAG SO paths must already be resolved real paths")
+    if resolved_candidate.parent != resolved_so.parent:
+        fail("candidate manifest and CAG SO escaped their shared artifact directory")
+
+    cag = config["identities"]["cag"]
+    manifest, raw = read_candidate_manifest(resolved_candidate, cag)
+    configured_candidate = config["identities"]["candidate"]
+    expected = candidate_identity(
+        manifest,
+        raw,
+        artifact_id=configured_candidate["artifact"]["id"],
+        artifact_name=configured_candidate["artifact"]["name"],
+        artifact_digest=configured_candidate["artifact"]["digest"],
+    )
+    if expected != configured_candidate:
+        fail("candidate manifest content/provenance drifted from the run config")
+    regular_file_info(resolved_so, "selected CAG SO", require_single_link=True)
+    if sha256_file(resolved_so, require_single_link=True) != cag["so_sha256"]:
+        fail("selected CAG SO drifted from the candidate manifest and run config")
+    return manifest, raw
+
+
 def validate_evidence_run_config(
     evidence: Mapping[str, Any], config: Mapping[str, Any], config_raw: bytes
 ) -> None:
@@ -1452,6 +1847,8 @@ def validate_evidence_run_config(
         fail("machine evidence input config SHA does not match the supplied config bytes")
     if evidence["corpus"]["manifest_sha256"] != config["corpus_manifest_sha256"]:
         fail("machine evidence corpus identity drifted from the input config")
+    if evidence["identities"]["candidate"] != config["identities"]["candidate"]:
+        fail("machine evidence candidate provenance drifted from the input config")
     if evidence["identities"]["cag"] != config["identities"]["cag"]:
         fail("machine evidence CAG identity drifted from the input config")
     cpa_config = config["identities"]["cpa"]
@@ -2038,26 +2435,53 @@ def validate_machine_evidence(
     ):
         fail("machine evidence corpus must contain exactly 19 semantic cases")
 
-    identities = exact_keys(evidence["identities"], {"cag", "configuration", "cpa", "mock", "runner"}, "machine evidence.identities")
-    cag = exact_keys(identities["cag"], {"commit", "so_sha256", "tree"}, "machine evidence.identities.cag")
+    identities = exact_keys(
+        evidence["identities"],
+        {"candidate", "cag", "configuration", "cpa", "mock", "runner"},
+        "machine evidence.identities",
+    )
+    cag = exact_keys(
+        identities["cag"],
+        {"commit", "so_name", "so_sha256", "source_version", "tree"},
+        "machine evidence.identities.cag",
+    )
     require_hex(cag["commit"], "machine evidence.identities.cag.commit", HEX40)
     require_hex(cag["tree"], "machine evidence.identities.cag.tree", HEX40)
     require_hex(cag["so_sha256"], "machine evidence.identities.cag.so_sha256")
+    if cag["source_version"] != CAG_SOURCE_VERSION or cag["so_name"] != CAG_SO_NAME:
+        fail(f"machine evidence does not bind CAG source {CAG_SOURCE_VERSION}")
+    validate_candidate_identity(
+        identities["candidate"], cag, "machine evidence.identities.candidate"
+    )
     cpa = exact_keys(
         identities["cpa"],
         {"binary_path", "binary_sha256", "commit", "image_id", "official_asset_name", "official_asset_sha256", "repo_digest", "tag"},
         "machine evidence.identities.cpa",
     )
     if cpa["tag"] != CPA_TAG or cpa["commit"] != CPA_COMMIT:
-        fail("machine evidence does not bind CPA v7.2.116")
+        fail(f"machine evidence does not bind CPA {CPA_TAG}")
     require_hex(cpa["commit"], "machine evidence.identities.cpa.commit", HEX40)
     require_hex(cpa["image_id"], "machine evidence.identities.cpa.image_id", IMAGE_ID)
     require_repo_digest(cpa["repo_digest"], "machine evidence.identities.cpa.repo_digest")
     if not nonempty_string(cpa["binary_path"], "machine evidence.identities.cpa.binary_path", 512).startswith("/"):
         fail("machine evidence CPA binary path must be absolute")
-    require_hex(cpa["binary_sha256"], "machine evidence.identities.cpa.binary_sha256")
-    nonempty_string(cpa["official_asset_name"], "machine evidence.identities.cpa.official_asset_name", 256)
-    require_hex(cpa["official_asset_sha256"], "machine evidence.identities.cpa.official_asset_sha256")
+    binary_sha256 = require_hex(cpa["binary_sha256"], "machine evidence.identities.cpa.binary_sha256")
+    if binary_sha256 != CPA_OFFICIAL_BINARY_SHA256:
+        fail(f"machine evidence does not bind the official CPA {CPA_TAG} linux/amd64 binary")
+    asset_name = nonempty_string(
+        cpa["official_asset_name"],
+        "machine evidence.identities.cpa.official_asset_name",
+        256,
+    )
+    asset_sha256 = require_hex(
+        cpa["official_asset_sha256"],
+        "machine evidence.identities.cpa.official_asset_sha256",
+    )
+    if (
+        asset_name != CPA_OFFICIAL_ASSET_NAME
+        or asset_sha256 != CPA_OFFICIAL_ASSET_SHA256
+    ):
+        fail(f"machine evidence does not bind the official CPA {CPA_TAG} linux/amd64 asset")
     mock = exact_keys(identities["mock"], {"contract", "image_id", "repo_digest", "source_sha256"}, "machine evidence.identities.mock")
     if mock["contract"] != MOCK_CONTRACT:
         fail("machine evidence counted-Mock contract is invalid")

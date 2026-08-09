@@ -1,38 +1,65 @@
 # Documentation index
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
 are the shortest current-status entry points. The previously documented old
 repository and `v0.15` Release both returned GitHub API `404` on 2026-08-04;
 legacy availability is `UNAVAILABLE` and security support is `SUSPENDED`.
-The current project target is source validation on `main`, pinned to CPA
-v7.2.116. GitHub Actions no longer builds or publishes an RC or Release.
+The current project target is source `1.0.0` and planned prerelease
+`v1.0.0-rc.1`, pinned to CPA v7.2.125 at
+`2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`; C ABI 1 and RPC schema 2 are
+unchanged. The module sum is
+`h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=` and the go.mod sum is
+`h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The upstream Linux amd64
+archive SHA-256 is
+`4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`; its
+binary SHA-256 is
+`656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+GitHub Actions may publish only the gated Linux RC after the Round 13 checks.
 Owner-run server diagnostics are not independent evidence; production approval
 and release readiness are `NOT_PROVIDED`, and no stable `v0.16` exists.
 
-Commit `21267e742b624b29a75bd3683fd6914f76c764b5` is the confirmed green
-v7.2.116 engineering baseline. The supplied second-machine report is an input
-diagnostic only; RT12-05/06 against the final candidate remains
-`PENDING_FINAL_CANDIDATE_EXECUTION`. The current feature branch still requires
+Commit `21267e742b624b29a75bd3683fd6914f76c764b5` is a confirmed green
+historical v7.2.116 engineering baseline. The supplied v7.2.116 second-machine
+report and any five-repository data are historical diagnostic evidence only;
+they do not transfer to v7.2.125. The exact Round 13 final candidate still
+requires its own second-machine execution. The current feature branch also requires
 its own PR checks. Engineering CI validates source and development artifacts
 only; it does not establish a protected Host, independent-audit, release, or
 production PASS.
+
+CPA v7.2.125 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
+`RequestInterceptor`. The active lane therefore requires a new regression for
+the rewritten tool-schema/tool-payload boundary; no v7.2.116 report may be
+relabelled to satisfy it. Documents under `docs/reports/` retain their recorded
+point-in-time identities and are historical whenever they describe v7.2.116.
 
 This cleanup adds navigation without relocating frozen evaluation or Holdout
 evidence. Those files keep their existing paths so historical hashes and
 references remain stable.
 
-## Current v0.16 documents
+## Current Round 13 navigation
 
-Use these files for the current implementation and evidence state:
+- [Active Round 13 status and evidence boundary](ROUND13_STATUS.md)
+- [Active Round 13 CPA v7.2.125 / v1.0.0-rc.1 task book](ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md)
+- [Blocked-request review capture operator guide](RAW_CAPTURE.md)
+- [Release policy](RELEASE_POLICY.md)
+- [Active CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
+- [Active test overlay plus frozen history](reports/TEST_REPORT.md)
+- [Active release overlay plus frozen history](reports/RELEASE_EVIDENCE.md)
 
-- [Round 12 active status and evidence boundary](ROUND12_STATUS.md)
-- [Round 12 production-hardening task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md)
-- [Round 12 GitHub governance read-only snapshot](reports/ROUND12_GITHUB_GOVERNANCE_SNAPSHOT.md)
+## Historical v0.16 navigation
+
+The following entries preserve the Round 12 and earlier point-in-time identity;
+they do not define the active v7.2.125 implementation:
+
+- [Historical Round 12 v7.2.124 status and evidence boundary](ROUND12_STATUS.md)
+- [Historical Round 12 v7.2.124 production-hardening task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md)
+- [Historical Round 12 GitHub governance read-only snapshot](reports/ROUND12_GITHUB_GOVERNANCE_SNAPSHOT.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Historical v0.16 release admission policy](RELEASE_POLICY.md)
 - [Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)
@@ -40,8 +67,8 @@ Use these files for the current implementation and evidence state:
 - [Round 9 Linux old-SO rollback gate](ROUND9_OLD_SO_ROLLBACK_GATE.md)
 - [Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)
 - [Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)
-- [Current test status and exact-main engineering evidence](reports/TEST_REPORT.md)
-- [Local-package and publication evidence](reports/RELEASE_EVIDENCE.md)
+- [Round 13 test overlay plus frozen historical evidence](reports/TEST_REPORT.md)
+- [Round 13 release overlay plus frozen historical evidence](reports/RELEASE_EVIDENCE.md)
 - [Historical performance evidence and v0.16 acceptance table](reports/PERFORMANCE.md)
 - [Privacy boundary](reports/PRIVACY.md)
 - [Repository security-support policy](../SECURITY.md)
@@ -128,8 +155,8 @@ artifact, and created no GitHub Release. It is not moved or reused by RC4.
 
 These handoff documents contain point-in-time evidence. They remain at their
 original paths for audit continuity and must not be read as current v0.16
-release evidence. Use the root READMEs and the current-document list above for
-the active state.
+release evidence. Use the root READMEs plus `DESIGN.md`, `LIMITATIONS.md`, and
+the operator guides above for the active state.
 
 ## Engineering and historical evidence reports
 
@@ -137,15 +164,15 @@ Project baselines and engineering evidence:
 
 - [Classifier redesign baseline](reports/CLASSIFIER_REDESIGN_BASELINE.md)
 - [Regression corpus report](reports/CORPUS_REPORT.md)
-- [CPA integration report](reports/CPA_INTEGRATION.md)
+- [Active v7.2.125 CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
 - [CPA packaging and contract baseline](reports/PHASE0_CPA_CONTRACT.md)
 - [Performance report and v0.16 acceptance table](reports/PERFORMANCE.md)
 - [Privacy report](reports/PRIVACY.md)
 - [Prompt-injection defensive review](reports/PROMPT_INJECTION_REVIEW.md)
 - [Public jailbreak repository review](reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md)
-- [Release evidence](reports/RELEASE_EVIDENCE.md) — current v0.16 section plus
-  retained historical records
-- [Test report](reports/TEST_REPORT.md) — current v0.16 section plus retained
+- [Release evidence](reports/RELEASE_EVIDENCE.md) — active v7.2.125 boundary
+  plus retained historical records
+- [Test report](reports/TEST_REPORT.md) — active v7.2.125 boundary plus retained
   historical records
 
 Frozen evaluation reports:

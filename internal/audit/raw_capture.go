@@ -1,8 +1,10 @@
 package audit
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -30,12 +32,75 @@ const (
 	rawCaptureRedactionVersion        = "raw-redactor-v2"
 	priorRawCaptureRedactionVersion   = "raw-redactor-v1"
 	legacyRawCaptureRedactionVersion  = "legacy-boolean-v0"
+	rawCapturePurgeRecoveryTimeout    = 30 * time.Second
+	// Snapshotting is deliberately fail-closed before DELETE. The configured
+	// live-database cap may be as high as 10 GiB, which is not a safe transient
+	// heap allocation for a hot reconfiguration.
+	maxRawCapturePurgeSnapshotBytes int64 = 256 << 20
+	rawCapturePurgeRowOverheadBytes int64 = 256
+	maxRawCapturePurgeSnapshotRows  int64 = 100000
+)
+
+const rawCapturePurgeSelect = `SELECT
+    id, event_id, timestamp_ns, request_hash, subject_hash, action, decision,
+    truncated, redacted, raw_preview, raw_sha256, redaction_pattern_hits,
+    redaction_version, decision_kind, explanation_schema
+FROM raw_request_captures
+ORDER BY id`
+
+const restoreRawCaptureSQL = `INSERT OR IGNORE INTO raw_request_captures (
+    id, event_id, timestamp_ns, request_hash, subject_hash, action, decision,
+    truncated, redacted, raw_preview, raw_sha256, redaction_pattern_hits,
+    redaction_version, decision_kind, explanation_schema
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS TEXT), ?, ?, ?, ?, ?)`
+
+const rawCapturePurgeSnapshotSizeSQL = `SELECT COUNT(*), COALESCE(SUM(
+    256 +
+    length(CAST(id AS BLOB)) + length(CAST(event_id AS BLOB)) +
+    length(CAST(request_hash AS BLOB)) + length(CAST(subject_hash AS BLOB)) +
+    length(CAST(action AS BLOB)) + length(CAST(decision AS BLOB)) +
+    length(CAST(raw_preview AS BLOB)) + length(CAST(raw_sha256 AS BLOB)) +
+    length(CAST(redaction_version AS BLOB)) + length(CAST(decision_kind AS BLOB)) +
+    length(CAST(explanation_schema AS BLOB))
+), 0) FROM raw_request_captures`
+
+const rawCapturePurgeNonCanonicalRowsSQL = `SELECT COUNT(*)
+FROM raw_request_captures
+WHERE id IS NULL OR typeof(id) <> 'text'
+   OR event_id IS NULL OR typeof(event_id) <> 'text'
+   OR typeof(timestamp_ns) <> 'integer'
+   OR typeof(request_hash) <> 'text'
+   OR typeof(subject_hash) <> 'text'
+   OR typeof(action) <> 'text'
+   OR typeof(decision) <> 'text'
+   OR typeof(truncated) <> 'integer'
+   OR typeof(redacted) <> 'integer'
+   OR typeof(raw_preview) <> 'text'
+   OR typeof(raw_sha256) <> 'text'
+   OR typeof(redaction_pattern_hits) <> 'integer'
+   OR typeof(redaction_version) <> 'text'
+   OR typeof(decision_kind) <> 'text'
+   OR typeof(explanation_schema) <> 'text'`
+
+type rawCapturePurgeStage uint8
+
+const (
+	rawCapturePurgeAfterPreflight rawCapturePurgeStage = iota + 1
+	rawCapturePurgeBeforePreflightCheckpoint
+	rawCapturePurgeAfterPreflightCheckpoint
+	rawCapturePurgeBeforeCompensation
+	rawCapturePurgeBeforeCompensationCommit
+	rawCapturePurgeAfterCompensationCommit
+	rawCapturePurgeBeforeCompensationRollback
+	rawCapturePurgeFreshVerification
 )
 
 var (
 	ErrRawCaptureDisabled = errors.New("audit: raw request capture is disabled")
 	ErrInvalidRawCapture  = errors.New("audit: invalid raw request capture")
 )
+
+var errRawCaptureCompensationContractDrift = errors.New("audit: raw capture compensation storage contract drifted")
 
 // RawCaptureConfig bounds the explicit operator-only review capture. OnlyBlocked
 // and RedactSecrets are invariant safety switches: withDefaults forces both on
@@ -169,11 +234,18 @@ ON CONFLICT(raw_sha256) WHERE raw_sha256 <> '' DO NOTHING`
 // audit Event must be enqueued first with the same EventID; the shared queue
 // then preserves write order and the schema foreign key prevents orphan text.
 func (s *Store) RecordRawCapture(input RawCaptureInput) error {
-	if s == nil {
+	if s == nil || !s.activated.Load() {
 		return ErrUnavailable
 	}
+	s.rawAdmissionMu.RLock()
+	defer s.rawAdmissionMu.RUnlock()
 	if !s.cfg.RawCapture.Enabled {
 		return ErrRawCaptureDisabled
+	}
+	if s.rawCaptureWriteBlocked.Load() {
+		s.rejected.Add(1)
+		s.rawRejected.Add(1)
+		return ErrRawCapturePurgeUnrecovered
 	}
 	if err := s.rejectCapacityAdmission(1, 1); err != nil {
 		return err
@@ -221,11 +293,18 @@ func (s *Store) RecordRawCapture(input RawCaptureInput) error {
 // SQLite transaction. The bool reports whether the ordinary event was accepted;
 // on capture validation failure the event is still queued by itself.
 func (s *Store) EnqueueEventWithRawCapture(event Event, input RawCaptureInput) (bool, error) {
-	if s == nil {
+	if s == nil || !s.activated.Load() {
 		return false, ErrUnavailable
 	}
+	s.rawAdmissionMu.RLock()
+	defer s.rawAdmissionMu.RUnlock()
 	if !s.cfg.RawCapture.Enabled {
 		return false, ErrRawCaptureDisabled
+	}
+	if s.rawCaptureWriteBlocked.Load() {
+		s.rejected.Add(2)
+		s.rawRejected.Add(1)
+		return false, ErrRawCapturePurgeUnrecovered
 	}
 	if err := s.rejectCapacityAdmission(2, 1); err != nil {
 		return false, err
@@ -364,13 +443,31 @@ func (s *Store) QueryRawCaptures(ctx context.Context, query RawCaptureQuery) ([]
 	return page.Captures, nil
 }
 
+func rollbackRawCaptureTransactionOrDiscard(conn *sql.Conn) {
+	if conn == nil {
+		return
+	}
+	if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		// These transactions begin through raw SQL, so database/sql cannot know
+		// that a failed rollback left the driver connection in an indeterminate
+		// state. Mark it bad before Conn.Close can return it to the pool.
+		discardSQLiteConnection(conn)
+	}
+}
+
 // QueryRawCapturesPage returns recent sensitive previews while enforcing both
 // the 100-row API cap and a fixed 8 MiB cumulative raw-preview scan budget. SQL
 // is limited to one extra row so HasMore never requires materializing the rest
 // of a large result set.
 func (s *Store) QueryRawCapturesPage(ctx context.Context, query RawCaptureQuery) (RawCapturePage, error) {
-	if s == nil || s.db == nil {
-		return RawCapturePage{}, ErrUnavailable
+	if s == nil {
+		return RawCapturePage{}, fmt.Errorf("%w: raw capture Store is unavailable", ErrStorageBlocked)
+	}
+	s.sendMu.RLock()
+	closed := s.closed
+	s.sendMu.RUnlock()
+	if closed || !s.activated.Load() || s.db == nil {
+		return RawCapturePage{}, fmt.Errorf("%w: raw capture Store is not active", ErrStorageBlocked)
 	}
 	where, args, err := rawCaptureWhere(query)
 	if err != nil {
@@ -384,7 +481,32 @@ func (s *Store) QueryRawCapturesPage(ctx context.Context, query RawCaptureQuery)
 		limit = maxRawCaptureLimit
 	}
 	args = append(args, limit+1)
-	rows, err := s.db.QueryContext(ctx, `SELECT id, event_id, timestamp_ns, request_hash,
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return RawCapturePage{}, fmt.Errorf("%w: acquire raw capture read connection: %v", ErrStorageBlocked, err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "BEGIN"); err != nil {
+		discardSQLiteConnection(conn)
+		return RawCapturePage{}, fmt.Errorf("%w: begin raw capture read transaction: %v", ErrStorageBlocked, err)
+	}
+	transactionOpen := true
+	defer func() {
+		if transactionOpen {
+			rollbackRawCaptureTransactionOrDiscard(conn)
+		}
+	}()
+	// The independent read gate deliberately runs after BEGIN and on the same
+	// checked-out connection that executes the SELECT. Runtime implementations
+	// must force a fresh pathname/mount/object probe here; a cached write verdict
+	// is not authority to release sensitive previews.
+	if err := s.checkSensitiveReadStorageAccess(); err != nil {
+		_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
+		transactionOpen = false
+		discardSQLiteConnection(conn)
+		return RawCapturePage{}, err
+	}
+	rows, err := conn.QueryContext(ctx, `SELECT id, event_id, timestamp_ns, request_hash,
 subject_hash, action, decision, truncated, redacted, raw_preview, raw_sha256,
 redaction_pattern_hits, redaction_version, decision_kind, explanation_schema
 FROM raw_request_captures`+where+` ORDER BY timestamp_ns DESC, id DESC LIMIT ?`, args...)
@@ -424,6 +546,14 @@ FROM raw_request_captures`+where+` ORDER BY timestamp_ns DESC, id DESC LIMIT ?`,
 	if err := rows.Err(); err != nil {
 		return RawCapturePage{}, fmt.Errorf("audit: iterate raw request captures: %w", err)
 	}
+	if err := rows.Close(); err != nil {
+		return RawCapturePage{}, fmt.Errorf("audit: close raw request capture rows: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		discardSQLiteConnection(conn)
+		return RawCapturePage{}, fmt.Errorf("%w: commit raw capture read transaction: %v", ErrStorageBlocked, err)
+	}
+	transactionOpen = false
 	return page, nil
 }
 
@@ -435,52 +565,555 @@ func (s *Store) PurgeRawCaptures(ctx context.Context) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, ErrUnavailable
 	}
+	// Lock order is raw admission -> queue drain -> maintenance. Producers that
+	// include a raw preview cannot publish behind the drain barrier and cannot
+	// complete until purge/checkpoint/compensation has reached a final state.
+	s.rawAdmissionMu.Lock()
+	defer s.rawAdmissionMu.Unlock()
 	if err := s.checkStorageAccess(); err != nil {
 		return 0, err
 	}
 	if err := s.Flush(ctx); err != nil {
 		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: flush before raw capture purge: %w", err))
 	}
-	deleted, err := s.purgeRawCaptures(ctx)
+	s.maintenanceMu.Lock()
+	defer s.maintenanceMu.Unlock()
+	deleted, err := s.purgeRawCapturesLocked(ctx)
 	if err != nil {
 		return deleted, err
 	}
 	// The purge is already committed. A residual capacity condition remains
 	// visible through Status without turning successful sensitive-data removal
 	// into a misleading operation failure.
-	_ = s.remeasureCapacity(ctx)
+	_ = s.remeasureCapacityMaintenanceLocked(ctx)
 	return deleted, nil
 }
 
 // purgeRawCaptures is the startup form used before the writer goroutine starts.
 // Callers that may have queued work must use PurgeRawCaptures instead.
 func (s *Store) purgeRawCaptures(ctx context.Context) (int64, error) {
-	result, err := s.db.ExecContext(ctx, "DELETE FROM raw_request_captures")
+	s.maintenanceMu.Lock()
+	defer s.maintenanceMu.Unlock()
+	return s.purgeRawCapturesLocked(ctx)
+}
+
+func (s *Store) purgeRawCapturesLocked(ctx context.Context) (int64, error) {
+	conn, err := s.db.Conn(ctx)
 	if err != nil {
-		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: purge raw request captures: %w", err))
+		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: acquire raw capture purge connection: %w", err))
 	}
-	deleted, err := result.RowsAffected()
+	defer conn.Close()
+	if err := s.preflightRawCapturePurge(ctx, conn); err != nil {
+		return 0, s.rawCaptureMaintenanceFailure(err)
+	}
+	if err := s.runRawCapturePurgeHook(rawCapturePurgeAfterPreflight); err != nil {
+		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: raw capture purge pre-delete hook: %w", err))
+	}
+
+	// A truncating WAL checkpoint cannot participate in the transaction that
+	// deletes the rows. Keep an exact, process-memory-only copy of the already
+	// redacted and bounded previews until every post-commit privacy gate passes.
+	// If a later gate fails, a compensating transaction restores the visible
+	// table before the caller is told that the purge failed.
+	snapshot, deleted, err := deleteRawCapturesWithSnapshot(ctx, conn, maxRawCapturePurgeSnapshotBytes)
+	defer wipeRawCapturePurgeRows(snapshot)
 	if err != nil {
-		return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: count purged raw request captures: %w", err))
+		if snapshot == nil {
+			return 0, s.rawCaptureMaintenanceFailure(err)
+		}
+		return s.rollbackRawCapturePurge(conn, snapshot, deleted, err)
 	}
 	var busy, logFrames, checkpointedFrames int
-	if err := s.db.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
-		return deleted, s.rawCaptureMaintenanceFailure(fmt.Errorf("audit: checkpoint purged raw request captures: %w", err))
+	if err := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
+		return s.rollbackRawCapturePurge(conn, snapshot, deleted,
+			fmt.Errorf("audit: checkpoint purged raw request captures: %w", err))
 	}
 	if busy != 0 {
-		return deleted, s.rawCaptureMaintenanceFailure(errors.New("audit: raw request capture purge WAL checkpoint remained busy"))
+		return s.rollbackRawCapturePurge(conn, snapshot, deleted,
+			fmt.Errorf("audit: raw request capture purge WAL checkpoint remained busy (busy=%d log=%d checkpointed=%d)",
+				busy, logFrames, checkpointedFrames))
+	}
+	if logFrames != checkpointedFrames {
+		return s.rollbackRawCapturePurge(conn, snapshot, deleted,
+			fmt.Errorf("audit: raw request capture purge WAL checkpoint was incomplete (log=%d checkpointed=%d)",
+				logFrames, checkpointedFrames))
 	}
 	if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
-		return deleted, s.rawCaptureMaintenanceFailure(err)
+		// The logical rows can be restored, but a post-commit file-security
+		// failure means SQLite may already have copied sensitive pages into an
+		// unsafe artifact. Keep readiness failed and reject every later raw write.
+		s.rawCaptureWriteBlocked.Store(true)
+		return s.rollbackRawCapturePurge(conn, snapshot, deleted, err)
 	}
 	if deleted > 0 {
 		s.cleaned.Add(uint64(deleted))
 	}
-	if !s.overLimit.Load() {
+	if !s.overLimit.Load() && !s.rawCaptureWriteBlocked.Load() {
 		s.degraded.Store(false)
 		s.lastErr.Store("")
 	}
 	return deleted, nil
+}
+
+func (s *Store) preflightRawCapturePurge(ctx context.Context, conn *sql.Conn) error {
+	if err := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage); err != nil {
+		s.rawCaptureWriteBlocked.Store(true)
+		return fmt.Errorf("audit: purge raw request captures first preflight file security: %w", err)
+	}
+	if err := s.runRawCapturePurgeHook(rawCapturePurgeBeforePreflightCheckpoint); err != nil {
+		return fmt.Errorf("audit: raw capture purge before preflight checkpoint: %w", err)
+	}
+	var busy, logFrames, checkpointedFrames int
+	checkpointErr := conn.QueryRowContext(ctx, "PRAGMA wal_checkpoint(PASSIVE)").Scan(&busy, &logFrames, &checkpointedFrames)
+	hookErr := s.runRawCapturePurgeHook(rawCapturePurgeAfterPreflightCheckpoint)
+	securityErr := secureSQLiteFiles(s.cfg.Path, !s.cfg.RequirePersistentStorage)
+	if securityErr != nil {
+		s.rawCaptureWriteBlocked.Store(true)
+	}
+	var checkpointStateErr error
+	if checkpointErr == nil && (busy != 0 || logFrames != checkpointedFrames) {
+		checkpointStateErr = fmt.Errorf(
+			"audit: purge raw request captures preflight WAL checkpoint incomplete (busy=%d log=%d checkpointed=%d)",
+			busy, logFrames, checkpointedFrames,
+		)
+	}
+	if checkpointErr != nil {
+		return errors.Join(
+			fmt.Errorf("audit: purge raw request captures preflight WAL checkpoint: %w", checkpointErr),
+			wrapRawCapturePurgeHookError("after preflight checkpoint", hookErr),
+			wrapRawCapturePurgeSecurityError("second preflight file security", securityErr),
+		)
+	}
+	if err := errors.Join(
+		wrapRawCapturePurgeHookError("after preflight checkpoint", hookErr),
+		wrapRawCapturePurgeSecurityError("second preflight file security", securityErr),
+		checkpointStateErr,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+func wrapRawCapturePurgeHookError(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("audit: raw capture purge %s: %w", stage, err)
+}
+
+func wrapRawCapturePurgeSecurityError(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("audit: purge raw request captures %s: %w", stage, err)
+}
+
+func (s *Store) runRawCapturePurgeHook(stage rawCapturePurgeStage) error {
+	if s.rawCapturePurgeHook == nil {
+		return nil
+	}
+	return s.rawCapturePurgeHook(stage)
+}
+
+type rawCapturePurgeRow struct {
+	id                   string
+	eventID              string
+	timestampNS          int64
+	requestHash          string
+	subjectHash          string
+	action               string
+	decision             string
+	truncated            int64
+	redacted             int64
+	rawPreview           []byte
+	rawSHA256            string
+	redactionPatternHits int64
+	redactionVersion     string
+	decisionKind         string
+	explanationSchema    string
+}
+
+func deleteRawCapturesWithSnapshot(
+	ctx context.Context,
+	conn *sql.Conn,
+	snapshotLimit int64,
+) ([]rawCapturePurgeRow, int64, error) {
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return nil, 0, fmt.Errorf("audit: begin purge raw request captures transaction: %w", err)
+	}
+	transactionOpen := true
+	defer func() {
+		if transactionOpen {
+			rollbackRawCaptureTransactionOrDiscard(conn)
+		}
+	}()
+
+	if err := validateRawCapturePurgeDataContract(ctx, conn); err != nil {
+		return nil, 0, err
+	}
+	var rowCount, snapshotBytes int64
+	if err := conn.QueryRowContext(ctx, rawCapturePurgeSnapshotSizeSQL).Scan(&rowCount, &snapshotBytes); err != nil {
+		return nil, 0, fmt.Errorf("audit: size raw capture purge snapshot: %w", err)
+	}
+	if rowCount < 0 || rowCount > maxRawCapturePurgeSnapshotRows ||
+		snapshotBytes < 0 || snapshotBytes > snapshotLimit {
+		return nil, 0, fmt.Errorf(
+			"audit: raw capture purge snapshot exceeds in-memory safety bound (rows=%d bytes=%d limit=%d)",
+			rowCount, snapshotBytes, snapshotLimit,
+		)
+	}
+	snapshot, err := readRawCapturePurgeRows(ctx, conn, int(rowCount), snapshotLimit)
+	if err != nil {
+		return nil, 0, err
+	}
+	result, err := conn.ExecContext(ctx, "DELETE FROM raw_request_captures")
+	if err != nil {
+		wipeRawCapturePurgeRows(snapshot)
+		return nil, 0, fmt.Errorf("audit: purge raw request captures: %w", err)
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		wipeRawCapturePurgeRows(snapshot)
+		return nil, 0, fmt.Errorf("audit: count purged raw request captures: %w", err)
+	}
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		transactionOpen = false
+		rollbackRawCaptureTransactionOrDiscard(conn)
+		return snapshot, deleted, fmt.Errorf("audit: commit purged raw request captures: %w", err)
+	}
+	transactionOpen = false
+	return snapshot, deleted, nil
+}
+
+func validateRawCapturePurgeDataContract(ctx context.Context, conn *sql.Conn) error {
+	var nonCanonicalRows int64
+	if err := conn.QueryRowContext(ctx, rawCapturePurgeNonCanonicalRowsSQL).Scan(&nonCanonicalRows); err != nil {
+		return fmt.Errorf("audit: inspect raw capture purge storage classes: %w", err)
+	}
+	if nonCanonicalRows != 0 {
+		return fmt.Errorf("audit: raw capture purge rejected %d rows with non-canonical SQLite storage classes", nonCanonicalRows)
+	}
+	// The project schema deliberately owns no SQLite triggers. A trigger can run
+	// unreviewed side effects during either the DELETE or compensating INSERT, so
+	// every trigger is non-project state and invalidates this fail-closed
+	// contract. Do not add an allowlist unless a migration introduces and schema
+	// validation closes over an actual reviewed project trigger.
+	var triggerName string
+	err := conn.QueryRowContext(ctx, `SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name LIMIT 1`).Scan(&triggerName)
+	if err == nil {
+		return fmt.Errorf("audit: raw capture purge rejected non-project SQLite trigger %q", triggerName)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("audit: inspect raw capture purge triggers: %w", err)
+	}
+	return nil
+}
+
+func readRawCapturePurgeRows(
+	ctx context.Context,
+	conn *sql.Conn,
+	rowCount int,
+	snapshotLimit int64,
+) ([]rawCapturePurgeRow, error) {
+	rows, err := conn.QueryContext(ctx, rawCapturePurgeSelect)
+	if err != nil {
+		return nil, fmt.Errorf("audit: snapshot raw request captures before purge: %w", err)
+	}
+	defer rows.Close()
+
+	snapshot := make([]rawCapturePurgeRow, 0, rowCount)
+	var snapshotBytes int64
+	for rows.Next() {
+		var row rawCapturePurgeRow
+		if err := rows.Scan(
+			&row.id, &row.eventID, &row.timestampNS, &row.requestHash, &row.subjectHash,
+			&row.action, &row.decision, &row.truncated, &row.redacted, &row.rawPreview,
+			&row.rawSHA256, &row.redactionPatternHits, &row.redactionVersion,
+			&row.decisionKind, &row.explanationSchema,
+		); err != nil {
+			wipeBytes(row.rawPreview)
+			wipeRawCapturePurgeRows(snapshot)
+			return nil, fmt.Errorf("audit: scan raw request capture purge snapshot: %w", err)
+		}
+		if len(row.rawPreview) > maxRawCaptureBytes {
+			wipeBytes(row.rawPreview)
+			wipeRawCapturePurgeRows(snapshot)
+			return nil, fmt.Errorf("audit: raw capture purge snapshot row exceeds %d bytes", maxRawCaptureBytes)
+		}
+		rowBytes := row.memoryBytes()
+		if rowBytes < 0 || snapshotBytes > snapshotLimit-rowBytes {
+			wipeBytes(row.rawPreview)
+			wipeRawCapturePurgeRows(snapshot)
+			return nil, fmt.Errorf("audit: raw capture purge snapshot exceeds %d in-memory bytes", snapshotLimit)
+		}
+		snapshotBytes += rowBytes
+		snapshot = append(snapshot, row)
+	}
+	if err := rows.Err(); err != nil {
+		wipeRawCapturePurgeRows(snapshot)
+		return nil, fmt.Errorf("audit: iterate raw request capture purge snapshot: %w", err)
+	}
+	return snapshot, nil
+}
+
+func (s *Store) rollbackRawCapturePurge(
+	conn *sql.Conn,
+	snapshot []rawCapturePurgeRow,
+	deleted int64,
+	cause error,
+) (int64, error) {
+	recoveryCtx, cancel := context.WithTimeout(context.Background(), rawCapturePurgeRecoveryTimeout)
+	defer cancel()
+	recoveryErr := s.runRawCapturePurgeHook(rawCapturePurgeBeforeCompensation)
+	if recoveryErr == nil {
+		recoveryErr = s.restoreRawCapturePurgeRows(recoveryCtx, conn, snapshot)
+	}
+	if recoveryErr != nil {
+		s.rawCaptureWriteBlocked.Store(true)
+		return deleted, s.rawCaptureMaintenanceFailure(errors.Join(
+			fmt.Errorf("%w after deleting %d rows", ErrRawCapturePurgeUnrecovered, deleted),
+			cause,
+			fmt.Errorf("audit: raw capture purge compensation: %w", recoveryErr),
+		))
+	}
+	return 0, s.rawCaptureMaintenanceFailure(fmt.Errorf(
+		"audit: raw request capture purge rolled back after deleting %d rows: %w", deleted, cause,
+	))
+}
+
+func (s *Store) restoreRawCapturePurgeRows(ctx context.Context, conn *sql.Conn, snapshot []rawCapturePurgeRow) error {
+	autoCommit, stateErr := sqliteConnectionAutoCommit(conn)
+	if stateErr != nil {
+		discardSQLiteConnection(conn)
+		return fmt.Errorf("audit: inspect purge connection before compensation: %w", stateErr)
+	}
+	if !autoCommit {
+		rollbackErr := s.rollbackRawCaptureCompensation(ctx, conn)
+		autoCommit, stateErr = sqliteConnectionAutoCommit(conn)
+		if stateErr != nil || !autoCommit {
+			discardSQLiteConnection(conn)
+			return errors.Join(
+				errors.New("audit: purge connection could not recover autocommit before compensation"),
+				rollbackErr,
+				stateErr,
+			)
+		}
+	}
+	matches, err := s.freshRawCapturePurgeSnapshotVisible(ctx, snapshot)
+	if err != nil {
+		return fmt.Errorf("audit: verify persisted rows before purge compensation: %w", err)
+	}
+	if matches {
+		return nil
+	}
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return fmt.Errorf("audit: begin raw capture purge compensation: %w", err)
+	}
+	autoCommit, stateErr = sqliteConnectionAutoCommit(conn)
+	if stateErr != nil || autoCommit {
+		return s.abortRawCaptureCompensation(ctx, conn, errors.Join(
+			errors.New("audit: raw capture purge compensation did not enter a transaction"),
+			stateErr,
+		))
+	}
+	// BEGIN IMMEDIATE excludes every concurrent schema/trigger writer for the
+	// remainder of compensation. Revalidate the complete current schema and the
+	// row/trigger contract on this exact connection and transaction before the
+	// first INSERT. The pre-delete validation is intentionally not reused: a
+	// different process can commit a trigger or schema change after DELETE.
+	if err := validateRawCaptureCompensationContract(ctx, conn); err != nil {
+		abortErr := s.abortRawCaptureCompensation(ctx, conn, fmt.Errorf("%w: %v", errRawCaptureCompensationContractDrift, err))
+		// A connection that observed compensation-boundary drift is never returned
+		// to the pool, even when ROLLBACK itself succeeded.
+		discardSQLiteConnection(conn)
+		return abortErr
+	}
+	statement, err := conn.PrepareContext(ctx, restoreRawCaptureSQL)
+	if err != nil {
+		return s.abortRawCaptureCompensation(ctx, conn,
+			fmt.Errorf("audit: prepare raw capture purge compensation: %w", err))
+	}
+	for index := range snapshot {
+		row := &snapshot[index]
+		if _, err := statement.ExecContext(ctx,
+			row.id, row.eventID, row.timestampNS, row.requestHash, row.subjectHash,
+			row.action, row.decision, row.truncated, row.redacted, row.rawPreview,
+			row.rawSHA256, row.redactionPatternHits, row.redactionVersion,
+			row.decisionKind, row.explanationSchema,
+		); err != nil {
+			_ = statement.Close()
+			return s.abortRawCaptureCompensation(ctx, conn,
+				fmt.Errorf("audit: restore raw capture purge snapshot row %d: %w", index, err))
+		}
+	}
+	if err := statement.Close(); err != nil {
+		return s.abortRawCaptureCompensation(ctx, conn,
+			fmt.Errorf("audit: close raw capture purge compensation statement: %w", err))
+	}
+	commitErr := s.commitRawCaptureCompensation(ctx, conn)
+	autoCommit, stateErr = sqliteConnectionAutoCommit(conn)
+	var rollbackErr error
+	if stateErr == nil && !autoCommit {
+		rollbackErr = s.rollbackRawCaptureCompensation(ctx, conn)
+		autoCommit, stateErr = sqliteConnectionAutoCommit(conn)
+	}
+	// Keep conn checked out while a different pooled connection verifies what
+	// is durably visible. The transaction connection must never validate its own
+	// uncommitted writes after an ambiguous COMMIT.
+	matches, verifyErr := s.freshRawCapturePurgeSnapshotVisible(ctx, snapshot)
+	if stateErr == nil && autoCommit && verifyErr == nil && matches {
+		return nil
+	}
+	if stateErr != nil || !autoCommit {
+		discardSQLiteConnection(conn)
+	}
+	return errors.Join(
+		errors.New("audit: raw capture purge compensation was not durably visible from a fresh connection"),
+		commitErr,
+		rollbackErr,
+		stateErr,
+		verifyErr,
+	)
+}
+
+func validateRawCaptureCompensationContract(ctx context.Context, conn *sql.Conn) error {
+	version, err := detectSchemaVersion(migrationConnection{ctx: ctx, conn: conn})
+	if err != nil {
+		return fmt.Errorf("detect compensation schema version: %w", err)
+	}
+	if version != currentSchemaVersion {
+		return fmt.Errorf("compensation schema version is %d, want %d", version, currentSchemaVersion)
+	}
+	locked := migrationConnection{ctx: ctx, conn: conn}
+	if err := validateSchemaContract(locked, currentSchemaVersion); err != nil {
+		return fmt.Errorf("validate compensation schema contract: %w", err)
+	}
+	if err := validateRawCapturePurgeDataContract(ctx, conn); err != nil {
+		return fmt.Errorf("validate compensation row and trigger contract: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) commitRawCaptureCompensation(ctx context.Context, conn *sql.Conn) error {
+	if err := s.runRawCapturePurgeHook(rawCapturePurgeBeforeCompensationCommit); err != nil {
+		return fmt.Errorf("audit: injected pre-commit compensation failure: %w", err)
+	}
+	_, commitErr := conn.ExecContext(ctx, "COMMIT")
+	hookErr := s.runRawCapturePurgeHook(rawCapturePurgeAfterCompensationCommit)
+	return errors.Join(commitErr, hookErr)
+}
+
+func (s *Store) rollbackRawCaptureCompensation(ctx context.Context, conn *sql.Conn) error {
+	if err := s.runRawCapturePurgeHook(rawCapturePurgeBeforeCompensationRollback); err != nil {
+		return fmt.Errorf("audit: injected compensation rollback failure: %w", err)
+	}
+	_, err := conn.ExecContext(ctx, "ROLLBACK")
+	return err
+}
+
+func (s *Store) abortRawCaptureCompensation(ctx context.Context, conn *sql.Conn, cause error) error {
+	rollbackErr := s.rollbackRawCaptureCompensation(ctx, conn)
+	autoCommit, stateErr := sqliteConnectionAutoCommit(conn)
+	if stateErr != nil || !autoCommit {
+		discardSQLiteConnection(conn)
+	}
+	return errors.Join(cause, rollbackErr, stateErr)
+}
+
+func (s *Store) freshRawCapturePurgeSnapshotVisible(ctx context.Context, snapshot []rawCapturePurgeRow) (bool, error) {
+	if err := s.runRawCapturePurgeHook(rawCapturePurgeFreshVerification); err != nil {
+		return false, err
+	}
+	fresh, err := s.db.Conn(ctx)
+	if err != nil {
+		return false, fmt.Errorf("audit: acquire fresh purge verification connection: %w", err)
+	}
+	defer fresh.Close()
+	return rawCapturePurgeSnapshotVisible(ctx, fresh, snapshot)
+}
+
+func rawCapturePurgeSnapshotVisible(ctx context.Context, conn *sql.Conn, snapshot []rawCapturePurgeRow) (bool, error) {
+	rows, err := conn.QueryContext(ctx, rawCapturePurgeSelect)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	snapshotIndex := 0
+	for rows.Next() {
+		var current rawCapturePurgeRow
+		if err := rows.Scan(
+			&current.id, &current.eventID, &current.timestampNS, &current.requestHash,
+			&current.subjectHash, &current.action, &current.decision, &current.truncated,
+			&current.redacted, &current.rawPreview, &current.rawSHA256,
+			&current.redactionPatternHits, &current.redactionVersion,
+			&current.decisionKind, &current.explanationSchema,
+		); err != nil {
+			wipeBytes(current.rawPreview)
+			return false, err
+		}
+		if snapshotIndex >= len(snapshot) {
+			wipeBytes(current.rawPreview)
+			continue
+		}
+		wanted := snapshot[snapshotIndex]
+		if current.id < wanted.id {
+			wipeBytes(current.rawPreview)
+			continue
+		}
+		if current.id > wanted.id {
+			wipeBytes(current.rawPreview)
+			return false, nil
+		}
+		matches := current.equal(wanted)
+		wipeBytes(current.rawPreview)
+		if !matches {
+			return false, nil
+		}
+		snapshotIndex++
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	return snapshotIndex == len(snapshot), nil
+}
+
+func (row rawCapturePurgeRow) equal(other rawCapturePurgeRow) bool {
+	return row.id == other.id &&
+		row.eventID == other.eventID &&
+		row.timestampNS == other.timestampNS &&
+		row.requestHash == other.requestHash &&
+		row.subjectHash == other.subjectHash &&
+		row.action == other.action &&
+		row.decision == other.decision &&
+		row.truncated == other.truncated &&
+		row.redacted == other.redacted &&
+		bytes.Equal(row.rawPreview, other.rawPreview) &&
+		row.rawSHA256 == other.rawSHA256 &&
+		row.redactionPatternHits == other.redactionPatternHits &&
+		row.redactionVersion == other.redactionVersion &&
+		row.decisionKind == other.decisionKind &&
+		row.explanationSchema == other.explanationSchema
+}
+
+func (row rawCapturePurgeRow) memoryBytes() int64 {
+	return rawCapturePurgeRowOverheadBytes + int64(
+		len(row.id)+len(row.eventID)+len(row.requestHash)+len(row.subjectHash)+
+			len(row.action)+len(row.decision)+len(row.rawPreview)+len(row.rawSHA256)+
+			len(row.redactionVersion)+len(row.decisionKind)+len(row.explanationSchema),
+	)
+}
+
+func wipeRawCapturePurgeRows(rows []rawCapturePurgeRow) {
+	for index := range rows {
+		wipeBytes(rows[index].rawPreview)
+		rows[index].rawPreview = nil
+	}
+}
+
+func wipeBytes(value []byte) {
+	for index := range value {
+		value[index] = 0
+	}
 }
 
 func (s *Store) rawCaptureMaintenanceFailure(err error) error {

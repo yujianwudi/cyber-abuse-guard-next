@@ -76,9 +76,9 @@ fi
 set_profile_identity() {
   case "$1" in
     primary)
-      cpa_version='v7.2.116'
-      cpa_commit='a88197f845c979132c8978ea223c6af05cc81536'
-      cpa_module_sum='h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU='
+      cpa_version='v7.2.125'
+      cpa_commit='2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e'
+      cpa_module_sum='h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg='
       cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
       ;;
     *)
@@ -182,15 +182,15 @@ fi
 
 assert_checked_in_module_identity \
   "$root" root \
-  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
+  v7.2.125 h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/cpalatestcontract" cpalatestcontract \
-  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
+  v7.2.125 h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/pluginstorecontract" pluginstorecontract \
-  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
+  v7.2.125 h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 verify_primary_latest=0

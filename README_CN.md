@@ -1,8 +1,30 @@
 # CPA Cyber Abuse Guard
 
+## 当前 v1.0.0-rc.1 候选版
+
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_source_version: 1.0.0
+current_rc_tag: v1.0.0-rc.1
+current_rc_plugin_store_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / 根 cyber-abuse-guard.so / 审计 payload 复用
+current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_2
+current_platform: linux-amd64
+current_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_MERGE / NO_RELEASE
+```
+
+Cyber-Abuse-Guard Next 是
+[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) 的原生风控与审计插件。
+当前工作以[第十三轮任务书](docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md)和
+[状态页](docs/ROUND13_STATUS.md)为准：优先保证正常、防御性和明确授权请求零误拦，
+同时阻断语义完整、当前执行且明确未授权的有害请求。`v1.0.0-rc.1` 仅是计划中的
+预发行候选版，不代表稳定生产批准。
+
+下方第十二轮状态仅保留为 CPA v7.2.124 历史证据，不能覆盖第十三轮身份，也不能把
+旧 PASS 转移到 CPA v7.2.125。
+
+```text
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
 <!-- round12-status:start -->
@@ -10,12 +32,15 @@ current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b6
 round12_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_RELEASE
 round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
 round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
-round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
+round12_cpa_target: v7.2.124 / 197f520426374e514218ed155933ac546c98d345
+round12_cpa_linux_asset_sha256: bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176
+round12_cpa_contract: C_ABI_1 / RPC_SCHEMA_2 / UNCHANGED_FROM_V7.2.116
 round12_go_platform: go1.26.4 / linux-amd64
-round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
-round12_working_candidate_engineering_ci: PENDING_FINAL_CANDIDATE
-round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-round12_final_candidate_second_machine: PENDING_FINAL_CANDIDATE_EXECUTION
+round12_baseline_engineering_ci: PASS / HISTORICAL_V7.2.116_EXACT_MAIN_ONLY / NOT_TRANSFERABLE
+round12_working_candidate_engineering_ci: PENDING_EXACT_V7.2.124_CANDIDATE
+round12_input_second_machine_report: HISTORICAL_V7.2.116_DIAGNOSTIC_ONLY / NOT_TRANSFERABLE
+round12_final_candidate_second_machine: PENDING_EXACT_V7.2.124_CANDIDATE_EXECUTION
+round12_multi_agent_v2_responses_regression: PENDING
 round12_protected_host: NOT_PROVIDED
 round12_independent_attestation: NOT_PROVIDED
 round12_production_approved: NOT_PROVIDED
@@ -26,8 +51,8 @@ legacy_v0.15_support: SUSPENDED
 ```
 <!-- round12-status:end -->
 
-精确区分绿色基线、输入诊断与仍待执行的最终候选门禁，见
-[第十二轮当前状态与证据边界](docs/ROUND12_STATUS.md)。
+上方第十二轮状态块与[第十二轮状态](docs/ROUND12_STATUS.md)是冻结的历史快照。
+当前边界只由本文件顶部的第十三轮身份与[第十三轮状态](docs/ROUND13_STATUS.md)定义。
 
 > **仓库沿革：** 这是采用全新 Git 历史的后续项目。此前记录的旧仓库
 > [`yujianwudi/cyber-abuse-guard`](https://github.com/yujianwudi/cyber-abuse-guard)，
@@ -36,24 +61,26 @@ legacy_v0.15_support: SUSPENDED
 > 仍可下载或可独立验证。
 
 > **当前开发状态：** 仅维护 `main` 源码线。固定源码/编译目标为 CPA
-> `v7.2.116`，并仅使用 C ABI 1 / RPC schema 2。GitHub Actions 只执行 CI、CodeQL
-> 和策略/语料验证，不创建 RC 或 Release；服务器沙盒诊断由所有者另行执行，
+> `v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`，并仅使用保持不变的
+> C ABI 1 / RPC schema 2。GitHub Actions 执行 CI、CodeQL、策略/语料验证，
+> 并提供严格门禁的 Linux RC 发布路径；服务器沙盒诊断由所有者另行执行，
 > 不属于独立证据。
 > 尚未获得生产批准，也不得据此自动重新开启生产 Balanced。
 >
-> 精确 `main@21267e742b624b29a75bd3683fd6914f76c764b5` 的 CI
+> 历史精确 `main@21267e742b624b29a75bd3683fd6914f76c764b5` 的 CI
 > `30880739397`、Policy and Corpus Gate `30880739368`、CodeQL
 > `30880739360` 已对 CPA v7.2.116 成功。后续所有者运行的 1,320 次传输执行报告只保留为
 > `SECOND-MACHINE DIAGNOSTIC / NOT INDEPENDENT ATTESTATION`；它不是最终候选
-> RT12-05/06 执行，也不能关闭受保护 Host、独立审计、发布或生产门禁。最终候选
-> 二号机执行仍为 `PENDING_FINAL_CANDIDATE_EXECUTION`。
+> RT12-05/06 执行，也不能关闭受保护 Host、独立审计、发布或生产门禁。这些 CI 与
+> 二号机结果仅是 v7.2.116 历史证据，不得重标为 v7.2.124。精确 v7.2.124 最终候选
+> 的二号机执行仍为 `PENDING_FINAL_CANDIDATE_EXECUTION`。
 >
 > 已冻结的 CPA v7.2.113 第十一轮从精确 `main` 提交
 > `aaa71d9924bef935196790976c838968408dcdeb` 开始，最终结束于
 > `a9fba4e32bfa8f7ce4b5db35e69183400c3de5b4`；最终提交的 CI
 > `30851294941`、Policy and Corpus Gate `30851294902`、CodeQL
-> `30851294956` 均成功。这些工程结果仅属于 v7.2.113 历史；v7.2.116
-> 必须重新检查，且不声称存在二号机 watchdog PASS。工程 CI 不等于 Host、
+> `30851294956` 均成功。这些工程结果仅属于 v7.2.113 历史；后续 v7.2.116
+> 结果如今也只是历史，且不声称存在 v7.2.124 二号机 watchdog PASS。工程 CI 不等于 Host、
 > 独立审计、沙盒或生产 PASS。
 
 > [!CAUTION]
@@ -72,7 +99,7 @@ legacy_v0.15_support: SUSPENDED
 > 并已绑定精确 `main` 提交 `aaa71d9924bef935196790976c838968408dcdeb`；
 > 工程运行 `30697468074`、`30697468078`、`30697468079` 均成功。隔离沙盒
 > 复核仍为 **PENDING**。后续第十一轮运行时可信度工作冻结在 CPA v7.2.113 /
-> `main@a9fba4e`，不属于 v7.2.116 证据。
+> `main@a9fba4e`，不属于 v7.2.124 证据。
 
 [![CI](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/ci.yml)
 [![Policy Gate](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml/badge.svg)](https://github.com/yujianwudi/cyber-abuse-guard-next/actions/workflows/policy-gate.yml)
@@ -94,21 +121,24 @@ legacy_v0.15_support: SUSPENDED
 
 CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInterceptor，在账号认证调度、Provider 执行、用量记账、SSE 建立和上游请求之前检查受支持的模型请求。命中时直接返回 HTTP 403；旧的本地 Executor 仅作为纵深防御保留。请求内容只在进程内判断，不发送给公网分类器。
 
-## 当前 v0.16 开发状态
+## 历史 v0.16 / 第十二轮快照
+
+下表为保持审计连续性而保留；其中“当前”“活动”等措辞只属于已冻结的第十二轮，
+不得覆盖本文件顶部的第十三轮状态。
 
 | 项目 | 状态 |
 |---|---|
 | 源码版本 / 发布模式 | `0.16` 开发版，仅维护 `main`；仓库不再提供自动 RC 或 Release 工作流 |
 | 历史候选 | `v0.16-rc.1`、不可变的第八轮 `v0.16-rc.2`，以及 Phase 1 失败且不可移动的 `v0.16-rc.3` 仅保留为历史证据，不得覆盖、改名或复用 |
 | GitHub 发布 | 旧 `v0.15` 仓库/Release 当前不可用；Actions 只验证源码和有期限的开发产物，不能创建或修改 Release |
-| 当前已提交基线 | `main@21267e742b624b29a75bd3683fd6914f76c764b5`；classifier `classifier-policy-v11` / `f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`；CPA v7.2.116 |
-| 工程 CI | 精确 `main@21267e7` 的 CI `30880739397`、Policy and Corpus Gate `30880739368`、CodeQL `30880739360` 均 **PASS**；后续候选必须取得自己的精确提交结果，且这不是生产批准 |
+| 历史绿色基线 | `main@21267e742b624b29a75bd3683fd6914f76c764b5`；classifier `classifier-policy-v11` / `f1b4665c751306a1a30c96a58ddb84714541e6e476c66db8ad436480e4c98f55`；CPA v7.2.116；它不是当前 v7.2.124 目标 |
+| 历史工程 CI | 精确 `main@21267e7` 在 CPA v7.2.116 上的 CI `30880739397`、Policy and Corpus Gate `30880739368`、CodeQL `30880739360` 均 **PASS**；v7.2.124 候选必须取得自身精确提交结果，且这不是生产批准 |
 | 历史失败审计 | 精确 `150c25e6` / CPA v7.2.104 保持 **FAIL / BLOCKED**：287 个 complete 恶意 fail-open、36 个恶意 incomplete HTTP 403、2 个 complete 正常误报 |
-| 输入二号机诊断 | 已提供的 CPA v7.2.116 报告记录 1,320 次传输执行；它是 `DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`，传输排列不等于独立语义样本，也不能关闭第十二轮门禁 |
-| 第十二轮最终候选二号机 | **PENDING_FINAL_CANDIDATE_EXECUTION**；RT12-05/06 尚未针对最终候选 commit/tree/SO 执行，不声称本轮二号机 PASS |
-| CPA 源码/编译目标 | 固定 `v7.2.116`（`a88197f845c979132c8978ea223c6af05cc81536`），C ABI 1 / RPC schema 2；精确基线 GitHub 门禁已通过，所有后续候选仍须取得自身结果，受保护运行时验证仍待执行 |
-| 历史第九轮受保护 evaluator | 仅为已冻结 CPA v7.2.113 的回归合同。其无 checkout 的 root-owned broker 使用 Docker 29 兼容 internal-only bridge 且不向 Host 发布 CPA/counted-Mock 端口；evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、external counted-Mock v1、CPA sandbox descriptor v2 均为历史 schema，不是 v7.2.116 lane |
-| CPA v7.2.116 受保护 Host/评估 | **NOT_PROVIDED**；所有者输入诊断不提供签名受保护 lane、独立 evaluator 或账本证明。任何未来 lane 都必须使用 internal-only bridge，不向 Host 发布 CPA 或 counted-Mock 端口，并记录 `host_ip=internal-only, host_port=0, container_port=8317`；Host 只能访问经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4，任何 Host binding、额外容器或非内部网络均不准入 |
+| 历史输入二号机诊断 | 已提供的 CPA v7.2.116 报告记录 1,320 次传输执行；它是 `HISTORICAL_ONLY / DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`，传输排列不等于独立语义样本，不能关闭第十二轮门禁，也不能转移给 v7.2.124 |
+| 第十二轮最终候选二号机 | **PENDING_FINAL_CANDIDATE_EXECUTION**；RT12-05/06 尚未针对精确 v7.2.124 最终候选 commit/tree/SO 执行，不声称本轮二号机 PASS |
+| CPA 源码/编译目标 | 固定 `v7.2.124`（`197f520426374e514218ed155933ac546c98d345`），C ABI 1 / RPC schema 2 保持不变；上游 Linux amd64 资产 SHA-256 为 `bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`；当前候选仍须取得自身结果 |
+| 历史第九轮受保护 evaluator | 仅为已冻结 CPA v7.2.113 的回归合同。其无 checkout 的 root-owned broker 使用 Docker 29 兼容 internal-only bridge 且不向 Host 发布 CPA/counted-Mock 端口；evaluator aggregate v3、ledger event v3、受保护 Git ledger proof v1、external counted-Mock v1、CPA sandbox descriptor v2 均为历史 schema，不是 v7.2.124 lane |
+| CPA v7.2.124 受保护 Host/评估 | **NOT_PROVIDED**；历史 v7.2.116 CI、二号机与五仓数据不提供签名 v7.2.124 受保护 lane、独立 evaluator 或账本证明。任何未来 lane 都必须使用 internal-only bridge，不向 Host 发布 CPA 或 counted-Mock 端口，并记录 `host_ip=internal-only, host_port=0, container_port=8317`；Host 只能访问经 Docker inspect 验证、彼此不同的两个 RFC1918 bridge IPv4，任何 Host binding、额外容器或非内部网络均不准入 |
 | 公开对抗语料 | 当前为 `round9-public-adversarial-v13` / 481,448 bytes / SHA-256 `91a32766c17924c31365f641b2f8fed791d034524f3d3897119f721eb56fecd6`；199 个 GitHub Release 资产只记录元数据与摘要，未下载、未打开二进制资产；v12/v11/v10/v9 作为有效冻结历史保留，精确公布的 v8 作为 immutable-invalid 历史保留，误将修正摘要原位绑定到 v8 的 105,298-byte 快照作为 rejected rebind 保留，v7 与 v6 继续作为历史；仅为可见开发回归，不是独立 holdout，也不执行第三方仓库代码 |
 | 独立审计 | 2026-07-29 对精确基线 `150c25e6` 的隔离审计为安全 **FAIL / BLOCKED**，失败计数见上；当前修复尚未接受独立重审 |
 | 独立证明 / 生产批准 / Release Ready | **NOT_PROVIDED**；不存在稳定版 `v0.16`，不能自动重新准入 Balanced，本轮也不创建 tag 或 Release |
@@ -116,28 +146,27 @@ CPA 加载并注册插件后，Guard 通过 schema 2 的 before-auth RequestInte
 | 静态分析治理 | `.github/workflows/codeql.yml` 在经过审查的稀疏源码边界内，以最小权限在 Ubuntu 上分析 Go；CodeQL 结果不能授权发布 |
 | 验证平台 | 仅 Linux amd64；产物引用的数字型 GLIBC ABI 版本必须 `<= 2.34` |
 | 不在范围 | Windows、macOS、musl/Alpine、真实 Provider、生产部署/验证 |
-| CPA 固定目标 | 当前目标仅 v7.2.116、Linux amd64、隔离 counted Mock。精确 `main@21267e7` 的工程 `.so` load 已由 GitHub CI 通过，已有 1,320 次传输执行仅为所有者运行的输入诊断；针对第十二轮最终候选的 RT12-05/06 二号机执行仍为 **PENDING_FINAL_CANDIDATE_EXECUTION** |
+| CPA 固定目标 | 当前目标仅 v7.2.124、Linux amd64、隔离 counted Mock。v7.2.116 精确 `main@21267e7` 的工程 `.so` load、1,320 次二号机传输执行与任何五仓数据仅为历史证据；针对 v7.2.124 最终候选的 RT12-05/06 与 Multi-Agent v2 `/v1/responses` 工具定义回归仍为 **PENDING** |
 | 外部 CPA 评估 / 当前源码独立审计 | 历史 `150c25e6` 隔离审计仍为 **FAIL / BLOCKED**；当前 `21267e7` 报告不是独立重审。受保护 Host、独立证明、生产批准与 release readiness 均为 `NOT_PROVIDED` |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | 当前工作源码快照为 `classifier-policy-v12` / `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`；第十二轮同时修改 role/streaming 防御所有权语义与 CPA 绑定源码身份；精确提交 GitHub 与最终候选二号机绑定仍待完成 |
+| Classifier policy | 当前工作源码快照为 `classifier-policy-v12` / `2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`；第十二轮同时修改 role/streaming 防御所有权语义与 CPA 绑定源码身份；精确提交 GitHub 与最终候选二号机绑定仍待完成 |
 | 内嵌 YAML ruleset | 当前 main 快照为 `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`；最终候选绑定仍待完成 |
 | 审计 schema | v6；decision kind 与 explanation variant 为闭集，v5→v6 强制创建迁移前备份，raw capture 默认关闭；`audit.max_db_mb` 在每个有界写批次后执行原文优先清理，无法恢复时公开容量降级并拒绝后续审计写入，但不改变请求分类 |
 
-### 已冻结的 CPA v7.2.113 修复与当前 v7.2.116 兼容增量
+### 已冻结的 CPA v7.2.113 修复与历史 v7.2.116/v7.2.124 证据
 
-除明确描述 v7.2.116 兼容增量的条目外，下述行为与测试结论均为已冻结的
-v7.2.113 第十/十一轮证据，不得重标为 v7.2.116 结果。
+下述行为与测试结论均为已冻结的第十至十二轮证据，不得重标为 v7.2.125 结果。
 
 - 第十轮要求当前可信用户指令同时包含执行动作与明确指代，才可激活唯一关联的历史工具结果；`Proceed`、`Provide code` 等无指代或无关续写保持完整放行。未知格式和超大 RPC 等早退路径统一进入原子 request/reason/disposition 账本，并提供有界的 reason×role×content-kind×position 归因。生产审计目录可强制要求显式验证的 Linux 持久卷，实时 readiness 不会向未认证调用方泄露数据库路径。
-- 当前兼容目标已升级到官方 CPA `v7.2.116` / `a88197f845c979132c8978ea223c6af05cc81536`，模块校验和为 `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`。经审查的 v7.2.113→v7.2.116 范围内，C ABI 1、RPC schema 2 以及 235 个限定范围内的插件 blob 均保持字节不变。上游标准 Linux amd64 资产 `CLIProxyAPI_7.2.116_linux_amd64.tar.gz` 的 SHA-256 为 `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`；这里只记录上游输入身份，不代表 CAG 资产或 Host PASS。Linux CI 会执行完整上游 Host 测试和公开插件 ABI/API 测试，校验精确且不可变的 tag、commit 与模块校验和，并通过真实 CPA Host 路径加载构建出的候选 `.so`；随上游变化的 GitHub `releases/latest` 校验仅作为显式启用的可选漂移监控。历史第六/八轮及 v0.15/v0.16-rc.2 证据仍保留原始 CPA v7.2.95 身份。
-- CPA v7.2.116 遇到 Home OAuth 401 时，可以在同一个逻辑请求内刷新已选凭据并最多重试一次；该重试复用已经过拦截的请求，不创建第二个 CAG request lifecycle。Claude 路径先运行 request interceptors，再由 executor 生成最终上游 wire headers，因此这些后生成 header 不属于 CAG 拦截器可见指纹。CAG 注册 RequestInterceptor 与 request lifecycle，但不注册 `UsagePlugin`；Home 的 result-only usage record 不会回调 CAG。
+- 当前兼容目标已升级到官方 CPA `v7.2.124` / `197f520426374e514218ed155933ac546c98d345`，模块校验和为 `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=`；C ABI 1 与 RPC schema 2 相对 v7.2.116 保持不变。上游标准 Linux amd64 资产 `CLIProxyAPI_7.2.124_linux_amd64.tar.gz` 的 SHA-256 为 `bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`；这里只记录上游输入身份，不代表 CAG 资产或 Host PASS。历史 v7.2.116 CI、二号机与五仓数据保留原身份，不能转移。Linux CI 必须重新执行完整上游 Host 与公开插件 ABI/API 测试，校验精确 tag、commit 和模块校验和，并通过真实 CPA Host 路径加载候选 `.so`。CPA v7.2.124 的 Multi-Agent v2 会在 `RequestInterceptor` 前改写 `/v1/responses` 工具定义，因此改写后的 tool schema/tool payload 边界必须新增精确目标回归。随上游变化的 GitHub `releases/latest` 校验仍仅是显式可选的漂移监控。
+- 历史 CPA v7.2.116 兼容审查记录：Home OAuth 401 可在同一个逻辑请求内刷新已选凭据并最多重试一次；该重试复用已经过拦截的请求，不创建第二个 CAG request lifecycle。Claude 路径先运行 request interceptors，再由 executor 生成最终上游 wire headers，因此这些后生成 header 不属于 CAG 拦截器可见指纹。CAG 注册 RequestInterceptor 与 request lifecycle，但不注册 `UsagePlugin`；Home 的 result-only usage record 不会回调 CAG。这些观察仍是 v7.2.116 历史证据，v7.2.124 准入前必须重新回归。
 - 普通模型请求的生产主链已迁移到 RPC schema 2 的 RequestInterceptor 与 request lifecycle。before-auth 会完成分类，恶意 batch/stream 会在 Auth、Provider、Usage、Executor、Mock upstream 和 SSE 之前直接 403；生命周期缓存只保留 `RequestID` 与覆盖规范化 SourceFormat、body、大小写归一的 header 名、保持原值及顺序的 header values、stream 的进程随机密钥、RequestID 域分离 HMAC-SHA256 指纹，相同输入的 after-auth 只计算指纹并跳过重复分类/审计/风险副作用，任一安全相关输入变化都会重新分类。before-auth 若发生可放行的运行时故障则不写入“已检查”缓存，after-auth 仍会重试。完成回调清理有界、带 TTL 的 ID/指纹状态。已冻结的 CPA v7.2.113 两条 Alpha Search 路由不调用该拦截链，因此 CAG 额外注册一个仅处理 `codex-alpha-search` 的窄 ModelRouter：安全搜索继续走 Codex，本地判恶意时在 Codex 认证和上游之前失败关闭；受该历史 CPA handler 限制，该路径返回 503 而不是插件原生 403。
 - 已补齐 `prompt`、`induce`、`receive`、`solicit` 及其时态，防止训练 telemetry 遮蔽真实凭据索取；四角色批处理/流式回归都要求完整钓鱼阻断。重复入侵告警降噪、监控维护和退役规则审计保持放行，只有明确用于隐藏恶意软件、未授权访问等敌意目的时才按规避阻断。
 - 精确支持“仅做防御性事件响应训练/分析、解释风险、提供检测与修复建议、明确不要执行”的单一闭合引用审查。
 - 该修复只扩展有限英文引导语，不会把泛化的“防御、训练、事件响应”关键词当作放行条件；第二引用、超预算、跨字段/跨 scope、缺少终止边界和后续执行指令仍不能获得抑制。
 - 已补批处理、内容类型拆分、整段/二分/逐字节流式，以及 Balanced/Strict × OpenAI Chat/Responses/Claude/Gemini 模拟路由回归；仍不等同于最终 `.so` 或 CPA Host 证据。
 - provider-native tool result 只有在请求内完整事务被证明后才具有 request-local 权限。Gemini 整组只能是全显式 ID 匹配，或全无 ID 且按 name+ordinal 完整匹配；混合、缺项、错 owner、非终端和孤立结果均无权。只有 `previous_response_id` 的 Responses continuation 仍无权，因为插件无法验证 Host 的 pending call、已消费状态与防重放状态。
-- 去武器化 NERV 回归已覆盖凭证/会话窃取、持久化/C2/规避、勒索、钓鱼、隐蔽键盘记录、未授权利用和入侵后外传，并覆盖四 Provider 约 7 KiB 前/中/后 system 与终端 tool 路由；仓库名、授权运维、检测工程和闭合防御分析近邻保持不阻断。当前仍只是源码回归，精确 main 的五仓 counted-Mock 复测尚未提供。
+- 去武器化 NERV 回归已覆盖凭证/会话窃取、持久化/C2/规避、勒索、钓鱼、隐蔽键盘记录、未授权利用和入侵后外传，并覆盖四 Provider 约 7 KiB 前/中/后 system 与终端 tool 路由；仓库名、授权运维、检测工程和闭合防御分析近邻保持不阻断。当前仍只是源码回归；任何 v7.2.116 五仓数据均为历史，精确 v7.2.124 候选的五仓 counted-Mock 复测尚未提供。
 
 ## 历史 v0.15 发布记录 — 当前不可用
 
@@ -279,7 +308,7 @@ data exfiltration、service disruption 和 defense evasion。它不是通用内�
 - 已冻结的准入生产部署合同要求 CPA v7.2.113 使用绝对 `WRITABLE_PATH`、专用空日志
   bind mount 和真实 CPA 直连 listener；watchdog 只机械验证其中可观测的部分。初始/最终 status、两个 classifier
   health probe、challenge 签发、ResourceRoute 回执与确认必须携带同一个随机
-  256-bit 插件进程 identity。将该合同应用到 v7.2.116 前，必须重新执行绑定
+  256-bit 插件进程 identity。将该合同应用到 v7.2.124 前，必须重新执行绑定
   精确目标的 watchdog 与 Host 验证。
   会改写该 identity、保留 hop-by-hop header 或把小写 `get` 规范化的同机代理
   超出插件 ABI 能证明的边界；见[Docker 安装](docs/INSTALL_DOCKER.md#7-restart-and-baseline-checks)。
@@ -332,7 +361,7 @@ curl -H "X-Management-Key: $CPA_MANAGEMENT_KEY" \
   "http://127.0.0.1:8317/v0/management/plugins/cyber-abuse-guard/raw-captures?limit=20"
 ```
 
-已冻结的 CPA v7.2.113 lane 会对旧字段 `raw_preview` 做 HTML 转义；v7.2.116
+已冻结的 CPA v7.2.113 lane 会对旧字段 `raw_preview` 做 HTML 转义；v7.2.124
 仍须重新验证该传输行为。该字段仅为旧客户端兼容而
 保留，并已明确弃用；新客户端应使用规范字段 `raw_preview_b64`。Base64 只是传输
 编码，不是加密或额外脱敏，解码后仍是敏感的用户原文。解码结果只能作为纯文本

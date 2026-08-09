@@ -1,13 +1,59 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
-Source-tree status updated: 2026-08-08 (Asia/Shanghai)
+Source-tree status updated: 2026-08-09 (Asia/Shanghai)
 
-## Unreleased - v0.16 main development
+## Unreleased - v1.0.0-rc.1
+
+- Pin the sole active Host contract to official CLIProxyAPI `v7.2.125` at
+  `2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`, Go module sum
+  `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, go.mod sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1 and RPC schema 2.
+  The official Linux amd64 archive SHA-256 is
+  `4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`;
+  its `cli-proxy-api` binary SHA-256 is
+  `656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+- Add source-contract and targeted unit coverage for v7.2.125 no-copy payload
+  invariants, large Antigravity requests, official Codex Multi-Agent v2,
+  Responses `response.failed`, Codex `Originator`, and Claude replay behavior.
+  The native Host lane that must prove pre-provider CAG blocks emit no SSE and
+  zero Provider/Auth/Executor/Usage/counted-Mock side effects remains pending.
+- Make hot reconfiguration generation-safe. Subject state is prepared in an
+  independent controller before candidate database work, failed reconfiguration
+  cannot mutate the active controller, and a successful swap clears old
+  request-lifecycle entries so after-auth cannot reuse an old-policy result.
+  Enabled audit storage cannot change `audit.data_dir` by hot reload; the
+  candidate is rejected before directory creation or SQLite migration and must
+  instead use a controlled restart.
+- Advance the classifier contract to `classifier-policy-v15` /
+  `12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9`.
+  Bounded same-owner lexical reconstruction closes partial-word newline,
+  streaming-chunk, and adjacent provider content-block splits such as
+  `ste\nal` and `窃\n取`, while role, turn, scope, provenance, fragment-count,
+  rune, script, and replay-work limits prevent cross-owner composition.
+- Move the active source identity from historical `0.16` development to strict
+  three-component SemVer `1.0.0`; the only authorized publication in this round
+  is Linux prerelease tag/artifact `v1.0.0-rc.1` with `latest=false`.
+
+## Historical unreleased - v0.16 main development
+
+- Advance the sole active CPA contract from official `v7.2.116` to official
+  `v7.2.124` (`197f520426374e514218ed155933ac546c98d345`) with module sum
+  `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=` and unchanged C ABI 1 / RPC
+  schema 2. The standard plugin-capable Linux amd64 asset is
+  `CLIProxyAPI_7.2.124_linux_amd64.tar.gz`, 20,833,216 bytes, SHA-256
+  `bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`;
+  `_no-plugin` cannot load CAG. The reviewed 87 existing ABI/API/Host blobs are
+  byte-identical. New source contracts cover the plugin OAuth refresh wrapper,
+  while the native Host contract adds official Codex Desktop/TUI/CLI-RS,
+  HTTP/SSE Multi-Agent v2 tool-preparation allow/block and zero-side-effect
+  cases. Historical v7.2.116 CI, second-machine, and five-repository results are
+  not relabelled as v7.2.124 evidence; exact-commit CI, native `.so` Host load,
+  and second-machine validation remain separate gates.
 
 - Complete the Round 12 working-tree implementation without claiming final
   acceptance or a release. SQLite audit writes now enforce the configured live
@@ -23,7 +69,7 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
   `X-API-Key` values resolve to a deterministic conflict identity. The
   classifier advances to `classifier-policy-v12` /
-  `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`:
+  `2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`:
   an outer defensive owner suppresses only its own inert carrier, and a later
   explicit activation must be in the same scope and a distinct logical field;
   missing paths or exhausted proof budgets remain incomplete rather than
@@ -92,20 +138,20 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   and expected-failure `--env-file` paths; it retained no file/container and
   found zero credential-field mentions in the unit journal. The current runner
   now gives only its descriptor-bound, per-cold-start `/cag/config` directory
-  write access because CPA v7.2.116 persists plugin config before hot reload;
+  write access because CPA v7.2.124 persists plugin config before hot reload;
   it rejects any config-directory file-set, owner, link-count, size, or mount
   access drift before and after each Audit/Balanced/Strict transition. The current runner
   identity closure is:
 
   ```text
-  current_audit_runner_bundle_sha256: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
-  current_audit_contract_sha256: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
-  current_audit_run_source_sha256: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
-  current_audit_machine_schema_sha256: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
-  current_audit_tool_test_count: 145
+  current_audit_runner_bundle_sha256: 6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae2f41e00c017a4
+  current_audit_contract_sha256: 0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680
+  current_audit_run_source_sha256: cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73
+  current_audit_machine_schema_sha256: 063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060
+  current_audit_tool_test_count: 181
   ```
 
-  Linux audit-tool verification is 145/145 PASS. The diagnostic harness explicitly
+  Linux audit-tool verification is 181/181 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
   final local Go 1.26.4 Linux race lane completed in 977.8 seconds without a

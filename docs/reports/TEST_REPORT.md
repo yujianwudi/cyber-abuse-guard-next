@@ -1,36 +1,92 @@
-# Test Report — CPA v7.2.116 active validation and frozen historical evidence
+# Test Report — CPA v7.2.125 Round 13 and frozen historical evidence
+
+## Round 13 current test boundary
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+round13_source_version: 1.0.0
+round13_rc_tag: v1.0.0-rc.1
+round13_cpa: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
+round13_platform: linux-amd64
+round13_local_source_matrix: PASS
+round13_local_native_host: NOT_RUN
+round13_exact_head_github_checks: NOT_RUN
+round13_second_machine: NOT_RUN
+round13_release: NOT_CREATED
 ```
 
-Last updated: 2026-08-08 (Asia/Shanghai)
+The following commands passed on 2026-08-09 for this working tree:
 
-## CPA v7.2.116 active target — baseline PASS, superseded candidate fail-closed, remediation pending
+| Round 13 contract command | Result |
+|---|---|
+| `bash scripts/release-doc-consistency.sh` | `PASS` |
+| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 376.79s` |
+| `bash scripts/release-rc-contract-test.sh` | `PASS` |
+| `bash scripts/release-candidate-contract-test.sh` | `PASS` |
+| `make unit-test` | `PASS / 353.40s` |
+| `make race` | `PASS / 1153.73s / NO DATA RACE` |
+| `make round6-vet` | `PASS` |
+| `make fuzz-smoke` and `make round9-fuzz ROUND9_FUZZTIME=1s` | `PASS` |
+| `make corpus-regression development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus` | `PASS` |
+| cached `actionlint v1.7.12` over all four active workflows | `PASS`; the equivalent `go run` wrapper separately hit a dependency-download timeout before lint execution |
+| `make round6-benchmark` | `PASS / 204.93s` |
+| `make round10-performance` | `SOURCE-ONLY PASS / ordinary p95 2.395298 ms / five-repository surrogate p95 134.449820 ms / public p95/p99 9.161171/9.392444 ms / failures+panics 0` |
+| `bash scripts/check-production-health-test.sh` | `PASS` |
+| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `184/184 PASS / LINUX` |
+| `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` | `PASS` |
 
-The current source/compile target is
-`v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
-with module sum `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`. The standard upstream
-Linux amd64 asset `CLIProxyAPI_7.2.116_linux_amd64.tar.gz` is identified by
-SHA-256 `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`.
-That asset identity is an upstream input record only; it was not downloaded or
-executed for this documentation update and is not CAG Host evidence.
+Round 13 coverage status is deliberately split: no-copy is
+`SOURCE_CONTRACT_PASS / SOURCE_TEST_ADDED_AND_EXECUTED / NATIVE_HOST_PENDING`;
+`response.failed` and Codex `Originator` are each
+`SOURCE_CONTRACT_PASS / NATIVE_HOST_TEST_ADDED / NATIVE_HOST_PENDING`; Claude
+replay is `SOURCE_CONTRACT_PASS / NATIVE_HOST_TEST_ADDED / NATIVE_HOST_PENDING`.
+The Claude native test covers batch/stream restoration, single-lifecycle
+CAG/Auth/Provider counts, and clearing after an upstream bad request, but only
+its integration-tag compile has passed; the real Host execution is pending.
+
+These are source, fixture, lint, audit-harness, unit, race, vet, fuzz, corpus,
+and in-process performance results. No current native CPA Host was run locally;
+the isolated persistent-audit mount requires passwordless sudo, which this WSL
+instance does not provide. The exact clean native Host, exact-head GitHub and
+reproducibility lanes, second-machine, independent-attestation, release, and
+production gates remain pending or not provided.
+
+Only newly recorded results tied to the exact Round 13 commit/tree/SO may
+change these fields. All v7.2.124 and earlier results below are historical and
+non-transferable. See [Round 13 status](../ROUND13_STATUS.md).
+
+```text
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+```
+
+Last updated: 2026-08-09 (Asia/Shanghai)
+
+## Frozen CPA v7.2.124 target — local source/compile PASS, exact candidate pending
+
+The frozen Round 12 source/compile target was
+`v7.2.124@197f520426374e514218ed155933ac546c98d345`, C ABI 1 / RPC schema 2,
+with module sum `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=`. The standard plugin-capable
+Linux amd64 asset `CLIProxyAPI_7.2.124_linux_amd64.tar.gz` is 20,833,216 bytes
+and is identified by SHA-256
+`bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`.
+That identity is an upstream input record only, not CAG Host evidence; the
+`_no-plugin` asset cannot load CAG.
 The top `current_classifier_policy_*` prologue identifies the active working
-tree; it is not metadata for the frozen v7.2.113 evidence sections below.
+tree; it is not metadata for the frozen v7.2.124 and v7.2.116 evidence sections
+below.
 
-The canonical current boundary is
-[Round 12 active status](../ROUND12_STATUS.md). Exact baseline
+The canonical frozen boundary is
+[Round 12 status](../ROUND12_STATUS.md). Exact baseline
 `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed the five required
 GitHub engineering contexts through CI `30880739397`, Policy and Corpus Gate
-`30880739368`, and CodeQL `30880739360`. These are exact-main baseline results,
-not results for the Round 12 working candidate and not protected Host,
+`30880739368`, and CodeQL `30880739360`. These are historical v7.2.116
+exact-main baseline results, not results for the v7.2.124 working candidate and not protected Host,
 independent, release, or production evidence.
 
-The supplied 1,320-transport second-machine report is an owner-run input
-diagnostic only. It is not the RT12-05/06 final-candidate run and is not an
-independent attestation. Final-candidate execution remains
-`PENDING_REMEDIATED_HEAD_EXECUTION`.
+The supplied 1,320-transport second-machine report is an owner-run historical
+v7.2.116 input diagnostic only. It is not the RT12-05/06 v7.2.124
+final-candidate run and is not an independent attestation. The v7.2.124
+final-candidate execution is `NOT_RUN / PENDING_EXACT_HEAD_EXECUTION`.
 
 Superseded PR head `9782eaf9da37d466ffc0b644b052d3c842f7f1ca` passed CI
 `31016759352`, Policy and Corpus Gate `31016760807`, and CodeQL `31016759262`.
@@ -88,13 +144,48 @@ It retained no env file or labelled container, and the unit journal contained
 zero occurrences of either Mock credential field name. This is a handoff
 compatibility result, not final-candidate machine evidence.
 
-The reviewed v7.2.113-to-v7.2.116 range retains C ABI 1, RPC schema 2, and all
+The reviewed v7.2.124-to-v7.2.125 range retains C ABI 1 and RPC schema 2 and
+introduces no new CAG `AuthProvider` path; the retained OAuth refresh wrapper
+still does not apply because CAG registers no `AuthProvider`. The relevant
+changes are no-copy/in-place payload reuse and large-payload guards, public
+official-Codex Multi-Agent v2 client recognition/tool preparation, Codex
+Responses `response.failed`/`Originator`, request-session identity, and Claude
+thinking replay. Their named source contracts pass. Native Host tests were
+added for the response, Multi-Agent, and Claude paths, but their exact-clean
+CPA Host execution remains pending, so these facts are not Host evidence.
+
+The reviewed v7.2.116-to-v7.2.124 range retains C ABI 1 and RPC schema 2, with
+all 87 previously tracked ABI/API/Host blobs byte-identical. The new OAuth
+refresh compatibility executor does not apply to CAG because CAG registers no
+`AuthProvider`. Multi-Agent v2 now prepares eligible official Codex tool
+definitions before `RequestInterceptor`, so HTTP/SSE normal-user nonblocking
+and malicious current-user zero-side-effect termination require fresh native
+Host coverage. These are static delta facts, not executed v7.2.124 results.
+
+The historical v7.2.113-to-v7.2.116 range retained C ABI 1, RPC schema 2, and all
 235 scoped plugin blobs byte-identically. It adds Home's at-most-once OAuth 401
 refresh/retry within the same logical request and changes Claude executor
 behavior outside the interceptor ABI; Claude's final upstream wire headers are
 generated after request interceptors. CAG does not register `UsagePlugin`, so
-Home's result-only usage record is not a new CAG callback. These are reviewed
-delta facts, not executed v7.2.116 results.
+Home's result-only usage record is not a new CAG callback. These reviewed delta
+facts remain historical v7.2.116 context.
+
+```text
+cpa_v7.2.124_local_source_compile: PASS / GO1.26.4 / LINUX_AMD64 / FULL_LOCAL_MATRIX / PROFILES_PRIMARY / REMOTE_TAG_CHECK_SKIPPED / REMOTE_LATEST_CHECK_SKIPPED
+cpa_v7.2.124_remote_latest_release_api: PASS / v7.2.124 / INDEPENDENT_API_VERIFICATION
+cpa_v7.2.124_remote_tag_ref_api: PASS / 197f520426374e514218ed155933ac546c98d345 / COMMIT_VERIFIED / INDEPENDENT_API_VERIFICATION
+cpa_v7.2.124_remote_combined_make_gate: NETWORK_FAILED / GITHUB_GIT_CURL_52 / NOT_CODE_FAILURE
+cpa_v7.2.124_exact_candidate_ci: NOT_RUN / PENDING_EXACT_HEAD
+cpa_v7.2.124_native_host_so: NOT_RUN / LOCAL_DEPLOYMENT_PROHIBITED
+cpa_v7.2.124_second_machine: NOT_RUN / PENDING_EXACT_HEAD_EXECUTION
+cpa_v7.2.124_protected_host: NOT_PROVIDED
+cpa_v7.2.124_independent_attestation: NOT_PROVIDED
+cpa_v7.2.124_production_approval: NOT_PROVIDED
+cpa_v7.2.124_release_ready: NOT_PROVIDED
+cpa_v7.2.124_tag_and_release: NOT_CREATED / NOT_AUTHORIZED
+```
+
+### Frozen CPA v7.2.116 execution records
 
 ```text
 cpa_v7.2.116_local_source_compile: PASS / LINUX_AMD64 / GO1.26.4 / PINNED_MODULE_ORIGIN_AND_SUMS
@@ -123,7 +214,7 @@ cpa_v7.2.116_tag_and_release: NOT_CREATED / NOT_AUTHORIZED
 The current working tree implements the Round 12 capacity, subject-admission,
 classifier, repository-governance, and five-repository audit-tool changes. Its
 classifier identity is exactly `classifier-policy-v12` /
-`795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`.
+`2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`.
 The current approved five-repository source policy and runner identities are:
 
 ```text
@@ -131,26 +222,26 @@ reviewed_repositories: 5
 reviewed_sources: 11
 reviewed_semantic_cases: 19
 source_policy_sha256: 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
-runner_bundle_sha256: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
-audit_contract_sha256: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
-run_source_sha256: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
-machine_schema_sha256: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
+runner_bundle_sha256: 6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae2f41e00c017a4
+audit_contract_sha256: 0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680
+run_source_sha256: cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73
+machine_schema_sha256: 063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060
 ```
 
 | Working-tree check | Result and evidence boundary |
 |---|---|
-| Current CPA audit tool | **PASS**, Linux 145/145. Includes pending/approved review separation, exact source pins, the distinct `audit_malicious_text` disposition and `audit_eligible_malicious_text` decision-kind contract, hardlink/directory-swap/rename cleanup, closed functional and Host A/B performance evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. CPA v7.2.116 mode changes use only the isolated writable `/cag/config` bind and fail closed on config file-set, owner, hardlink, size, or access-mode drift. The Host A/B lane now binds six executable/schema sources plus their bundle hash, enforces 3,601-3,602 one-second warm samples, conserves planned/completed/success/error outcomes, and rejects schema/validator identity drift. Semantic run configuration requires a clean exact eight-file CI candidate manifest and rejects tracked or untracked repository drift. Descriptor safety checks remain active under optimized Python, counted-Mock accepted sockets have a finite idle timeout, and cleanup cannot replace an already-propagating primary failure. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. Runner operations serialize in-process read/write/verify/unlink/cleanup/close transitions; Linux still has no ordinary-file unlink-by-descriptor API, so a hostile process sharing the dedicated UID remains outside the harness threat model. No third-party repository code was executed by these unit tests. |
+| Current CPA audit tool | **PASS**, Linux 148/148. Includes pending/approved review separation, exact v7.2.124 source and official plugin-capable asset pins, the distinct `audit_malicious_text` disposition and `audit_eligible_malicious_text` decision-kind contract, hardlink/directory-swap/rename cleanup, closed functional and Host A/B performance evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. CPA mode changes use only the isolated writable `/cag/config` bind and fail closed on config file-set, owner, hardlink, size, or access-mode drift. The Host A/B lane now binds six executable/schema sources plus their bundle hash, enforces 3,601-3,602 one-second warm samples, conserves planned/completed/success/error outcomes, and rejects schema/validator identity drift. Semantic run configuration requires a clean exact eight-file CI candidate manifest and rejects tracked or untracked repository drift. Descriptor safety checks remain active under optimized Python, counted-Mock accepted sockets have a finite idle timeout, and cleanup cannot replace an already-propagating primary failure. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. Runner operations serialize in-process read/write/verify/unlink/cleanup/close transitions; Linux still has no ordinary-file unlink-by-descriptor API, so a hostile process sharing the dedicated UID remains outside the harness threat model. No third-party repository code was executed by these unit tests. |
 | Audit database capacity | **PASS**: subject-snapshot replacement streams bounded rows inside the transaction, measures tentative live pages, and rejects overflow without replacing prior state or deleting audit events. Committed event deletion, Raw Capture purge, and subject-state deletion remeasure capacity without evicting evidence outside the requested maintenance scope. |
 | Safe development inventory | **PASS**, `packages=20`, `classifier_entries=582`, `round12_entries=15`. |
-| Complete unit lane | **PASS** with exact Go 1.26.4 on Linux: `make unit-test` completed in 313.5 seconds across the safe packages, classifier, and counted-Mock module. This is functional development evidence only and is not a performance baseline. |
-| Format/diff/module/vet | **PASS** on Linux; all root and integration module sums verified and the closed package set passed vet. |
-| Local CodeRabbit review | **INITIAL REVIEW COMPLETE / 12 ISSUES REMEDIATED**. CLI 0.7.2 reviewed `main...working-tree` and raised six major plus six minor issues. Every issue was checked against the source and remediated; the fixes are covered by the Linux unit/race and 145-test audit-tool lanes above. A follow-up against the final committed SHA is still required, so this is not a CodeRabbit approval or an exact-candidate PASS. |
+| Complete unit lane | **HISTORICAL PRE-v7.2.124 PASS / REVALIDATION REQUIRED**. `make unit-test` completed in 313.5 seconds with exact Go 1.26.4 on Linux before the CPA pin and classifier source identity changed. It is not transferred to the v7.2.124 working tree. |
+| CPA v7.2.124 module and selected-package validation | **PASS** on Linux. All three module closures passed `go mod verify` and `go mod tidy -diff`; integration compile-only, classifier, config, SDK ABI/API, complete upstream pluginhost, OAuth refresh wrapper, Responses Multi-Agent HTTP/SSE/WebSocket, Interactions, Raw Capture Host, request logging, and plugin Store contract groups passed. This is not a full root unit or race PASS. |
+| Local CodeRabbit review | **INITIAL REVIEW COMPLETE / 12 ISSUES REMEDIATED BEFORE THE CPA PIN**. CLI 0.7.2 reviewed `main...working-tree` and raised six major plus six minor issues. The remediation passed its then-current Linux unit/race lanes; the v7.2.124 update separately passed the 148-test audit-tool lane and CPA compatibility matrix. A follow-up against the final committed SHA is still required, so this is not a CodeRabbit approval or an exact-candidate PASS. |
 | Script and policy contracts | **PASS**: repository secret scan, actionlint, ShellCheck, Host/evaluation contracts, current audit tool tests, production-health isolation, Store archive, HMAC generation, and Safe Gate all passed. Safe Gate ran 211 tests with 91 retired-workflow skips and closed 3 entrypoints, 38 Make targets, and 47 scripts. CycloneDX versioned/unversioned main-component fixtures normalize byte-identically for exact candidate, annotated RC, formal, and dirty-development identities; malformed identity/dependency inputs fail closed. A synthetic independent `blob:none` sparse clone retained no excluded restricted blob before or after checkout and explicitly rejects Git older than 2.39 before relying on `GIT_NO_LAZY_FETCH`. |
 | Release-document consistency | **PASS**, including all negative mutation fixtures, for version 0.16 and the exact current classifier identity. |
-| Fuzz seeds and repository corpora | **PASS**: extract/classifier/config fuzz seeds, bounded one-second classifier/extract/audit fuzz runs, Balanced corpus contract, development public-jailbreak corpus, Round 9 corpus contract, and public corpus v13 gates. |
+| Fuzz seeds and repository corpora | **HISTORICAL PRE-v7.2.124 PASS / EXACT-HEAD REVALIDATION REQUIRED**: extract/classifier/config fuzz seeds, bounded one-second classifier/extract/audit fuzz runs, Balanced corpus contract, development public-jailbreak corpus, Round 9 corpus contract, and public corpus v13 gates passed before the CPA pin and classifier source identity changed. |
 | Historical 142-case Balanced benign corpus | **UNCHANGED FROM `main@21267e7`**: B028, B062, and B075 remain 3/142 historical false positives. The exact baseline rerun produced the same IDs, scores, and category; this is not a Round 12 regression and is not presented as zero global false positives. Round 12's named defensive critical controls remain complete non-blocks. |
-| Local race | **PASS** with Go 1.26.4 on Linux amd64 after the local CodeRabbit remediation: `make race` completed in 977.8 seconds with exit code 0, no `WARNING: DATA RACE`, no panic, and no timeout. This remains development evidence. |
-| CPA v7.2.116 compatibility and exact candidate CI | **LOCAL COMPATIBILITY PASS / REMEDIATED-HEAD GITHUB CI PENDING**. The local compatibility contract is fixed to `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`; exact candidate build/reproducibility, long fuzz, race, policy, and CodeQL evidence must still come from the new commit's GitHub lanes. |
+| Local race | **HISTORICAL PRE-v7.2.124 PASS / REVALIDATION REQUIRED**. `make race` completed in 977.8 seconds with Go 1.26.4 on Linux amd64 before the CPA pin and classifier source identity changed; it is not transferred to this working tree. |
+| CPA v7.2.124 compatibility and exact candidate CI | **LOCAL SOURCE/COMPILE MATRIX PASS / INDEPENDENT API IDENTITY PASS / REMOTE-ENABLED MAKE GATE NETWORK_FAILED / NEW-HEAD GITHUB CI PENDING**. The full local CPA compatibility matrix passed against `v7.2.124@197f520426374e514218ed155933ac546c98d345` with remote checks skipped; separate GitHub API verification confirmed the release and tag commit. The combined remote-enabled make gate encountered GitHub Git `curl 52`, not a code failure. Exact candidate build/reproducibility, native Host `.so`, long fuzz, race, policy, and CodeQL evidence must still come from the new commit's Linux lanes. |
 | RT12-05/06 second-machine run | **FOUR IMMUTABLE FAIL-CLOSED RECORDS / NEW HEAD PENDING**. `9782eaf` failed before traffic because runc rejected the proc-fd bind source. `30b613e` reached CPA startup, then rejected the CI dirty development SO at clean-candidate readiness. `cc6e9f2` reached its first transport and exposed the audit disposition/decision-kind harness drift, with zero third-party execution and complete labelled cleanup. `e624eea` passed all exact-SHA GitHub gates but acquisition then rejected MDX current-head drift before runner startup. None emitted machine evidence; runner attempts removed corpus text and exact run-labelled resources. No working-tree unit result is relabelled as CPA Host, side-effect, performance, or independent evidence. |
 
 The latest-head check on 2026-08-06 found four reviewed repositories unchanged

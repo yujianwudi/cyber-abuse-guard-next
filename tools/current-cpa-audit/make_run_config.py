@@ -8,25 +8,29 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 from acquire import validate_policy
 from audit_contract import (
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
     CPA_COMMIT,
     CPA_TAG,
     MOCK_CONTRACT,
     RUN_CONFIG_SCHEMA,
     ContractError,
+    candidate_identity,
     canonical_bytes,
     load_json_bytes,
     read_regular_bytes,
+    read_candidate_manifest,
+    regular_file_info,
     sha256_bytes,
     sha256_file,
     validate_corpus_manifest,
     validate_manifest_policy,
     validate_run_config,
 )
-from host_performance import validate_candidate_manifest
 
 
 ROOT = Path(__file__).resolve().parent
@@ -94,26 +98,29 @@ def require_git_clean(repository: Path) -> None:
 
 def validated_cag_candidate(
     repository: Path, cag_so: Path, candidate_manifest: Path
-) -> dict[str, str]:
+) -> tuple[dict[str, str], dict[str, Any], bytes]:
     """Bind local CAG bytes to one exact, clean CI audit candidate."""
 
     require_git_clean(repository)
+    regular_file_info(cag_so, "selected CAG SO", require_single_link=True)
     identity = {
         "commit": git_id(repository, "HEAD^{commit}"),
-        "so_sha256": sha256_file(cag_so),
+        "so_name": CAG_SO_NAME,
+        "so_sha256": sha256_file(cag_so, require_single_link=True),
+        "source_version": CAG_SOURCE_VERSION,
         "tree": git_id(repository, "HEAD^{tree}"),
     }
-    candidate_raw = read_regular_bytes(
-        candidate_manifest, "CI audit candidate manifest", 2 * 1024 * 1024
-    )
-    candidate_value = load_json_bytes(candidate_raw, "CI audit candidate manifest")
-    candidate = validate_candidate_manifest(candidate_value, identity)
+    candidate, candidate_raw = read_candidate_manifest(candidate_manifest, identity)
     artifact_name = f"cyber-abuse-guard-v{candidate['version']}.so"
     if cag_so.name != artifact_name:
         raise RuntimeError(
             "selected CAG SO filename does not match the CI audit candidate artifact_name"
         )
-    return identity
+    if candidate_manifest.parent != cag_so.parent:
+        raise RuntimeError(
+            "candidate manifest and selected CAG SO must share one artifact directory"
+        )
+    return identity, candidate, candidate_raw
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -127,6 +134,21 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--cag-repository", type=Path, required=True)
     parser.add_argument("--cag-so", type=Path, required=True)
     parser.add_argument("--candidate-manifest", type=Path, required=True)
+    parser.add_argument(
+        "--candidate-artifact-id",
+        required=True,
+        help="post-upload GitHub artifact-id admission value",
+    )
+    parser.add_argument(
+        "--candidate-artifact-name",
+        required=True,
+        help="post-upload GitHub artifact name",
+    )
+    parser.add_argument(
+        "--candidate-artifact-digest",
+        required=True,
+        help="post-upload GitHub artifact-digest admission value (sha256:<64-hex>)",
+    )
     parser.add_argument("--cpa-official-asset", type=Path, required=True)
     parser.add_argument(
         "--cpa-official-asset-sha256",
@@ -167,8 +189,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         cag_repository = args.cag_repository.resolve(strict=True)
         cag_so = args.cag_so.resolve(strict=True)
         candidate_manifest = args.candidate_manifest.resolve(strict=True)
-        cag_identity = validated_cag_candidate(
+        cag_identity, candidate_value, candidate_raw = validated_cag_candidate(
             cag_repository, cag_so, candidate_manifest
+        )
+        sealed_candidate_identity = candidate_identity(
+            candidate_value,
+            candidate_raw,
+            artifact_id=args.candidate_artifact_id,
+            artifact_name=args.candidate_artifact_name,
+            artifact_digest=args.candidate_artifact_digest,
         )
         asset = args.cpa_official_asset.resolve(strict=True)
         if sha256_file(asset) != args.cpa_official_asset_sha256:
@@ -178,6 +207,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         config = {
             "corpus_manifest_sha256": sha256_file(manifest),
             "identities": {
+                "candidate": sealed_candidate_identity,
                 "cag": cag_identity,
                 "cpa": {
                     "binary_path": args.cpa_binary_path,
@@ -199,6 +229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 },
             },
             "paths": {
+                "candidate_manifest": str(candidate_manifest),
                 "cag_repository": str(cag_repository),
                 "cag_so": str(cag_so),
                 "corpus_manifest": str(manifest),

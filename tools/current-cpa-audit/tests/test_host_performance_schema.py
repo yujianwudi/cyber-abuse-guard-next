@@ -12,6 +12,16 @@ SCHEMA_PATH = TOOL / "host-performance-evidence.schema.json"
 sys.path.insert(0, str(TOOL))
 sys.path.insert(0, str(HERE))
 
+from audit_contract import (
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
+    CPA_COMMIT,
+    CPA_OFFICIAL_BINARY_SHA256,
+    CPA_OFFICIAL_ASSET_NAME,
+    CPA_OFFICIAL_ASSET_SHA256,
+    CPA_TAG,
+)
+
 try:
     from jsonschema import Draft202012Validator
 except ImportError:  # pragma: no cover - optional local schema verifier
@@ -20,15 +30,16 @@ except ImportError:  # pragma: no cover - optional local schema verifier
 from host_performance_fixtures import clone, evidence_bundle
 
 METRICS = {
-    "ordinary_p95_ms",
+    "ordinary_plugin_overhead_p95_ms",
     "five_repository_activation_p95_ms",
-    "public_p95_ms",
-    "public_p99_ms",
+    "public_adversarial_p95_ms",
+    "public_adversarial_p99_ms",
     "fixed_workload_p99_regression_percent",
     "host_throughput_vs_cpa_only",
     "audit_queue_peak_ratio",
     "warm_rss_growth_60m_mib",
-    "unexpected_http_or_infra_errors",
+    "large_payload_full_copy_regression",
+    "unexpected_http_or_infrastructure_errors",
     "restart_oom_panic",
 }
 
@@ -38,12 +49,80 @@ def load_schema() -> dict[str, Any]:
 
 
 class HostPerformanceSchemaTests(unittest.TestCase):
+    def test_schema_pins_the_active_cpa_identity(self) -> None:
+        definitions = load_schema()["$defs"]
+        properties = definitions["cpa_identity"]["properties"]
+        self.assertEqual(
+            properties["binary_sha256"], {"const": CPA_OFFICIAL_BINARY_SHA256}
+        )
+        self.assertEqual(properties["commit"], {"const": CPA_COMMIT})
+        self.assertEqual(
+            properties["official_asset_name"], {"const": CPA_OFFICIAL_ASSET_NAME}
+        )
+        self.assertEqual(
+            properties["official_asset_sha256"],
+            {"const": CPA_OFFICIAL_ASSET_SHA256},
+        )
+        self.assertEqual(properties["tag"], {"const": CPA_TAG})
+        cag_properties = definitions["cag_identity"]["properties"]
+        self.assertEqual(cag_properties["so_name"], {"const": CAG_SO_NAME})
+        self.assertEqual(
+            cag_properties["source_version"], {"const": CAG_SOURCE_VERSION}
+        )
+        candidate_properties = definitions["candidate_identity"]["properties"]
+        self.assertEqual(
+            candidate_properties["artifact"]["properties"]["name"],
+            {"const": "cyber-abuse-guard-linux-amd64-audit-candidate"},
+        )
+        self.assertEqual(
+            candidate_properties["source"]["properties"]["version"],
+            {"const": CAG_SOURCE_VERSION},
+        )
+        self.assertEqual(
+            candidate_properties["so"]["properties"]["name"],
+            {"const": CAG_SO_NAME},
+        )
+
     @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
     def test_generated_evidence_validates_against_the_closed_schema(self) -> None:
         schema = load_schema()
         Draft202012Validator.check_schema(schema)
         evidence, *_ = evidence_bundle()
         Draft202012Validator(schema).validate(evidence)
+
+    @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
+    def test_schema_rejects_missing_or_extra_mount_projection_fields(self) -> None:
+        validator = Draft202012Validator(load_schema())
+        evidence, *_ = evidence_bundle()
+
+        missing = clone(evidence)
+        missing["mount_identity"].pop("cpa_only_mount_projection")
+        self.assertFalse(validator.is_valid(missing))
+
+        extra = clone(evidence)
+        extra["mount_identity"]["cpa_cag_mount_projection"][
+            "plaintext_source"
+        ] = "/must-not-be-emitted"
+        self.assertFalse(validator.is_valid(extra))
+
+    @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
+    def test_large_payload_evidence_is_required_and_cannot_claim_copy_count(self) -> None:
+        validator = Draft202012Validator(load_schema())
+        evidence, *_ = evidence_bundle()
+
+        missing = clone(evidence)
+        missing.pop("large_payload_resident_memory")
+        self.assertFalse(validator.is_valid(missing))
+
+        self_reported = clone(evidence)
+        self_reported["metrics"]["large_payload_full_copy_regression"] = False
+        self.assertFalse(validator.is_valid(self_reported))
+
+        false_boundary = clone(evidence)
+        false_boundary["large_payload_resident_memory"]["measurement_boundary"] = (
+            "EXACT COPY COUNT"
+        )
+        self.assertFalse(validator.is_valid(false_boundary))
 
     @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
     def test_candidate_github_identifier_boundaries_match_runtime_contract(
@@ -66,6 +145,24 @@ class HostPerformanceSchemaTests(unittest.TestCase):
             oversized["identities"]["candidate"][field] = "9" * length
             with self.subTest(field=field):
                 self.assertFalse(validator.is_valid(oversized))
+
+        for branch in ("main", "feature/release-1.2_candidate", "a" + "b" * 254):
+            with self.subTest(kind="branch-accepted", branch=branch):
+                accepted = clone(evidence)
+                accepted["identities"]["candidate"]["head_branch"] = branch
+                self.assertTrue(validator.is_valid(accepted))
+        for branch in (
+            "/leading",
+            "trailing/",
+            "trailing.",
+            "double//slash",
+            "double..dot",
+            "topic@{1",
+        ):
+            with self.subTest(kind="branch-rejected", branch=branch):
+                rejected = clone(evidence)
+                rejected["identities"]["candidate"]["head_branch"] = branch
+                self.assertFalse(validator.is_valid(rejected))
 
     def test_schema_is_2020_12_and_every_declared_object_is_closed(self) -> None:
         schema = load_schema()
@@ -181,8 +278,13 @@ class HostPerformanceSchemaTests(unittest.TestCase):
 
         for timestamp in (
             "2026-08-08T00:00:00Z",
+            "2026-08-08T00:00:00.1Z",
+            "2026-08-08T00:00:00.12Z",
+            "2026-08-08T00:00:00.1234Z",
+            "2026-08-08T00:00:00.12345Z",
             "2026-08-08T00:00:00.123456Z",
             "2026-08-08T00:00:00.123+00:00",
+            "2026-08-08T00:00:00.123-05:00",
             "x" * 24,
         ):
             value = clone(evidence)
@@ -224,6 +326,14 @@ class HostPerformanceSchemaTests(unittest.TestCase):
         )
         self.assertEqual(
             plan["properties"]["warm_rss_sample_interval_seconds"], {"const": 1}
+        )
+        self.assertEqual(plan["properties"]["large_payload_bytes"], {"const": 4194304})
+        self.assertEqual(
+            plan["properties"]["large_payload_request_count"], {"const": 16}
+        )
+        self.assertEqual(
+            plan["properties"]["large_payload_rss_sample_interval_ms"],
+            {"const": 20},
         )
 
         warm_rss = load_schema()["$defs"]["warm_rss_60m"]["properties"]
@@ -300,7 +410,7 @@ class HostPerformanceSchemaTests(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 self.assertFalse(validator.is_valid(value))
 
-    def test_metrics_and_gates_require_exactly_the_ten_rt12_metrics(self) -> None:
+    def test_metrics_and_gates_require_exactly_the_eleven_rt13_metrics(self) -> None:
         defs = load_schema()["$defs"]
         for name in ("metrics", "gates"):
             with self.subTest(name=name):

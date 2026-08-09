@@ -20,6 +20,17 @@ unbounded copy of every prompt.
   is accepted only after the old audit queue is drained, every preview is
   deleted, and the WAL truncation succeeds; otherwise the previous runtime
   remains active and the reconfiguration is reported as failed.
+  The purge preflights WAL progress and file permissions, then keeps a bounded
+  in-memory snapshot of already-redacted rows until the post-delete gates pass
+  (at most 256 MiB and 100,000 rows; larger snapshots fail before deletion).
+  A recoverable post-commit failure restores the exact visible row set before
+  rejection. An unrecoverable storage/I/O failure can also defeat compensation;
+  that condition latches audit readiness unhealthy and blocks further raw
+  writes, and is not claimed as byte-level rollback of failed media.
+- `audit.data_dir` is immutable across an enabled-to-enabled hot
+  reconfiguration. A path change is rejected before the candidate directory or
+  SQLite database is opened; move the audit store only through a controlled
+  restart and the operator backup/rollback procedure.
 - Migration backups are a separate rollback boundary. A schema-v6
   `<audit-db>.pre-v6-*.bak` is an exact snapshot and can retain sensitive
   request previews that existed before migration. Disabling Raw Capture purges
@@ -203,8 +214,10 @@ size of that complete CPA Host-visible body:
 }
 ```
 
-CPA v7.2.116 HTML-escapes every JSON string after the plugin returns. The legacy
-`raw_preview` field is therefore retained for existing clients but is explicitly
+Historical CPA v7.2.116 Host evidence HTML-escaped every JSON string after the
+plugin returned. That observation is not relabelled as v7.2.125 evidence; the
+exact v7.2.125 / CAG `1.0.0` lane must revalidate it. The legacy `raw_preview` field is retained
+for existing clients but is explicitly
 deprecated by `raw_preview_deprecated: true`; it may not be byte-identical to
 the stored redacted preview. `raw_preview_b64` is the canonical
 transport-stable field identified by `preferred_preview_field`. It contains the
@@ -231,9 +244,10 @@ query limit and the current `max_bytes` setting. This remains safe after a
 configuration downgrade when the database still contains older 1 MiB rows: a
 `limit=100` query cannot first materialize roughly 100 MiB of previews. The
 management encoder separately enforces an 8 MiB budget over the complete
-CPA-v7.2.116 Host-visible JSON body, including both preview fields and response
-metadata. The maximum single 1 MiB preview fits this budget even for the
-reviewed worst-case HTML-escaping fixture.
+predicted Host-visible JSON body, including both preview fields and response
+metadata. Its historical v7.2.116 Host-body result remains non-transferable;
+the exact v7.2.125 / CAG `1.0.0` regression must confirm the prediction. The maximum single
+1 MiB preview fits this budget for the reviewed worst-case HTML-escaping fixture.
 
 `returned_count` is the number of records in `captures`.
 `response_truncated: true` means the requested result may contain more records

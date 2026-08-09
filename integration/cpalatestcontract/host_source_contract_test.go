@@ -19,6 +19,14 @@ const (
 	cpaLatestPluginHostPackage = cpaLatestModulePath + "/internal/pluginhost"
 	cpaLatestResponsesPackage  = cpaLatestModulePath + "/internal/translator/openai/openai/responses"
 	cpaLatestResponsesHandler  = cpaLatestModulePath + "/sdk/api/handlers/openai"
+	cpaLatestServicePackage    = cpaLatestModulePath + "/sdk/cliproxy"
+	cpaLatestSessionPackage    = cpaLatestModulePath + "/sdk/cliproxy/session"
+	cpaLatestMultiAgentPackage = cpaLatestModulePath + "/internal/client/codex/optimize-multi-agent-v2"
+	cpaLatestUtilityPackage    = cpaLatestModulePath + "/internal/util"
+	cpaLatestAntigravityGemini = cpaLatestModulePath + "/internal/translator/antigravity/gemini"
+	cpaLatestGeminiTranslator  = cpaLatestModulePath + "/internal/translator/gemini/gemini"
+	cpaLatestCachePackage      = cpaLatestModulePath + "/internal/cache"
+	cpaLatestExecutorPackage   = cpaLatestModulePath + "/internal/runtime/executor"
 	cpaLatestFixtureSHA256     = "bce98b11218311554a05e582226d311609a49072c004a8bf62d96a5d8c01b5c8"
 
 	cpaCompatibilityProfileEnv = "CPA_COMPAT_PROFILE"
@@ -39,9 +47,9 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.116",
-	Commit:    "a88197f845c979132c8978ea223c6af05cc81536",
-	ModuleSum: "h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=",
+	Version:   "v7.2.125",
+	Commit:    "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e",
+	ModuleSum: "h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=",
 	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
@@ -87,12 +95,22 @@ var latestCriticalCPAHostTests = []string{
 	"TestHostShutdownAllRetainsBlockedLoadTokenUntilCleanup",
 	"TestHostUnloadPluginContextDetachesBlockedCall",
 	"TestOwnsExecutorDistinguishesHostAdapters",
+	"TestPluginRefreshCompatExecutorDelegatesExecuteAndRefresh",
+	"TestPluginRefreshCompatExecutorErrorsWhenRefreshUnavailable",
+	"TestPluginRefreshCompatExecutorNoOpForAPIKeyAuth",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
 }
 
 var latestCriticalCPAHandlerTests = []string{
 	"TestHandlerRequestInterceptorTerminatesBeforeAuth",
 	"TestHandlerRequestInterceptorTerminatesAfterAuth",
+}
+
+var latestCriticalCPAServiceTests = []string{
+	"TestRegisterExecutorForAuth_PluginAuthProviderWrapsOpenAICompatRefresh",
+	"TestRegisterExecutorForAuth_OpenAICompatWithoutPluginAuthProviderStaysBare",
+	"TestRegisterExecutorForAuth_OpenAICompatInfoPathAlsoWrapsPluginRefresh",
+	"TestUnregisterOpenAICompatExecutorRemovesPluginRefreshWrapper",
 }
 
 type latestResolvedCPAModule struct {
@@ -151,6 +169,14 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 			t.Fatalf("latest CPA handler package no longer lists required test %q", name)
 		}
 	}
+	serviceTests := runLatestGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", cpaLatestServicePackage,
+	)
+	for _, name := range latestCriticalCPAServiceTests {
+		if !linePresent(serviceTests, name) {
+			t.Fatalf("latest CPA service package no longer lists required test %q", name)
+		}
+	}
 
 	// Execute the complete upstream Host suite for the current platform. The
 	// required-name check above keeps the contract explicit, while running the
@@ -160,6 +186,10 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 	runLatestGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
 		cpaLatestPluginHostPackage,
+	)
+	runLatestGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+		"-run", "^("+strings.Join(latestCriticalCPAServiceTests, "|")+")$", cpaLatestServicePackage,
 	)
 	runLatestGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
@@ -187,6 +217,10 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		"TestNormalizeResponsesWebsocketRequestWithPreviousResponseIDIncremental",
 		"TestNormalizeResponsesWebsocketRequestInjectsPreviousResponseIDForIncremental",
 		"TestCodexLocalCompactionSummaryAdditionalToolsConstraints",
+		"TestPrepareCodexMultiAgentV2ToolsAtResponsesBoundary",
+		"TestResponsesPreparesCodexMultiAgentV2ToolsForHTTPAndSSE",
+		"TestResponsesWebsocketPreparesCodexMultiAgentV2Tools",
+		"TestPrepareCodexMultiAgentV2ToolsAtResponsesBoundarySkipsOtherClients",
 	}
 	for _, upstreamTest := range handlerTests {
 		listed = runLatestGoCommand(t, goBinary,
@@ -207,15 +241,29 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		t.Fatalf("read latest CPA Responses translator source: %v", err)
 	}
 	for _, required := range [][]byte{
-		[]byte(`item.Get("type").String() == "additional_tools"`),
-		[]byte(`appendChatTools(item.Get("tools"))`),
+		[]byte(`for _, chatTool := range mergeResponsesRequestChatTools(root)`),
+		[]byte(`chatCompletionsTools = append(chatCompletionsTools, gjson.ParseBytes(chatTool).Value())`),
 	} {
 		if !bytes.Contains(source, required) {
 			t.Fatalf("latest CPA Responses translator lost additional_tools contract marker %q", required)
 		}
 	}
+	toolsSourcePath := filepath.Join(module.Dir, "internal", "translator", "openai", "openai", "responses", "openai_openai-responses_tools.go")
+	toolsSource, err := os.ReadFile(toolsSourcePath)
+	if err != nil {
+		t.Fatalf("read latest CPA Responses tool-merge source: %v", err)
+	}
+	for _, required := range [][]byte{
+		[]byte(`func walkResponsesToolDeclarations(`),
+		[]byte(`if item.Get("type").String() == "additional_tools"`),
+		[]byte(`func mergeResponsesRequestChatTools(`),
+	} {
+		if !bytes.Contains(toolsSource, required) {
+			t.Fatalf("latest CPA Responses tool-merge source lost contract marker %q", required)
+		}
+	}
 
-	// CPA v7.2.116 keeps request normalization split out of the websocket transport
+	// CPA v7.2.125 keeps request normalization split out of the websocket transport
 	// file. Pin the semantic implementation file while the upstream behavior
 	// tests above continue to guard the public contract.
 	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")
@@ -230,6 +278,117 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 	} {
 		if !bytes.Contains(handlerSource, required) {
 			t.Fatalf("latest CPA Responses handler lost Responses Lite additional_tools marker %q", required)
+		}
+	}
+}
+
+func TestLatestCPANoCopyAndResponsesFailureContract(t *testing.T) {
+	goBinary, moduleArguments, module := prepareLatestCPAModule(t)
+	testGroups := []struct {
+		packagePath string
+		tests       []string
+	}{
+		{
+			packagePath: cpaLatestUtilityPackage,
+			tests: []string{
+				"TestNoInPlaceSJSONWrites",
+				"TestInPlaceByteWritesAreReviewed",
+				"TestGetGJSONBytesNoCopy",
+				"TestParseGJSONBytesNoCopyReferencesInput",
+			},
+		},
+		{
+			packagePath: cpaLatestAntigravityGemini,
+			tests: []string{
+				"TestFixCLIToolResponseReusesHistoryWithoutFunctionResponses",
+				"TestConvertGeminiRequestToAntigravityBoundsLargePayloadCopies",
+			},
+		},
+		{
+			packagePath: cpaLatestGeminiTranslator,
+			tests: []string{
+				"TestConvertGeminiRequestToGeminiReusesLargeNormalizedPayload",
+			},
+		},
+		{
+			packagePath: cpaLatestHandlersPackage,
+			tests: []string{
+				"TestBuildOpenAIResponsesStreamFailedChunkPreservesNestedError",
+			},
+		},
+		{
+			packagePath: cpaLatestResponsesHandler,
+			tests: []string{
+				"TestForwardResponsesStreamUsesResponseFailedForCodex",
+			},
+		},
+		{
+			packagePath: cpaLatestMultiAgentPackage,
+			tests: []string{
+				"TestIsCodexMultiAgentClient",
+				"TestPrepareCodexMultiAgentV2ToolsOnlyPreparesToolDefinitions",
+			},
+		},
+		{
+			packagePath: cpaLatestSessionPackage,
+			tests: []string{
+				"TestEnrichCarriesRequestPayloadIntoSelectionOptions",
+			},
+		},
+		{
+			packagePath: cpaLatestCachePackage,
+			tests: []string{
+				"TestClaudeThinkingReplayAppendsAssistantTurns",
+				"TestClaudeThinkingReplayClearDoesNotClearKimiState",
+			},
+		},
+		{
+			packagePath: cpaLatestExecutorPackage,
+			tests: []string{
+				"TestClaudeThinkingReplayEnabledRequiresCompatClaudeAPIKey",
+				"TestClaudeExecutorCompatThinkingReplayRestoresOmittedBlock",
+				"TestClaudeExecutorCompatThinkingReplayRestoresOmittedBlockInStream",
+				"TestClaudeExecutorCompatThinkingReplayClearsAfterUpstreamBadRequest",
+				"TestClaudeExecutorCompatThinkingReplayRestoresMultipleOmittedBlocks",
+			},
+		},
+	}
+
+	for _, group := range testGroups {
+		listed := runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", group.packagePath,
+		)
+		for _, name := range group.tests {
+			if !linePresent(listed, name) {
+				t.Fatalf("latest CPA package %s no longer lists required test %q", group.packagePath, name)
+			}
+		}
+		runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+			"-run", "^("+strings.Join(group.tests, "|")+")$", group.packagePath,
+		)
+	}
+
+	// CPA also recognizes official Codex clients from Originator when a proxy or
+	// SDK supplies a generic User-Agent. Upstream's behavior test currently
+	// exercises only User-Agent, so pin the alternate public request branch and
+	// cover it end-to-end in integration/host_integration_test.go.
+	handlerSourcePath := filepath.Join(
+		module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_handlers.go",
+	)
+	handlerSource, err := os.ReadFile(handlerSourcePath)
+	if err != nil {
+		t.Fatalf("read latest CPA Responses stream handler source: %v", err)
+	}
+	for _, required := range [][]byte{
+		[]byte(`c.GetHeader("Originator")`),
+		[]byte(`case "codex desktop", "codex-tui", "codex_cli_rs":`),
+		[]byte(`strings.HasPrefix(originator, "codex desktop/")`),
+		[]byte(`strings.HasPrefix(originator, "codex-tui/")`),
+		[]byte(`strings.HasPrefix(originator, "codex_cli_rs/")`),
+	} {
+		if !bytes.Contains(handlerSource, required) {
+			t.Fatalf("latest CPA Responses handler lost Originator Codex marker %q", required)
 		}
 	}
 }

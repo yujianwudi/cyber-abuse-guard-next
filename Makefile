@@ -3,7 +3,7 @@ SHELL := /bin/bash
 GO ?= go
 GOFMT ?= gofmt
 CC ?= cc
-VERSION ?= 0.16
+VERSION ?= 1.0.0
 CYCLONEDX_GOMOD ?= cyclonedx-gomod
 CYCLONEDX_GOMOD_VERSION ?= v1.9.0
 GOVULNCHECK ?= govulncheck
@@ -197,7 +197,8 @@ workflow-lint:
 	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) \
 		.github/workflows/ci.yml \
 		.github/workflows/codeql.yml \
-		.github/workflows/policy-gate.yml
+		.github/workflows/policy-gate.yml \
+		.github/workflows/release-rc.yml
 
 shellcheck-lint:
 	@set -euo pipefail; \
@@ -262,6 +263,9 @@ script-test: repository-secret-scan
 	python3 -B ./tools/round9-eval/cag_round9_eval_broker_test.py
 	python3 -B -m unittest discover -s ./tools/current-cpa-audit/tests -p 'test_*.py'
 	./scripts/release-candidate-contract-test.sh
+	bash -n ./scripts/release-rc.sh
+	python3 -B ./scripts/release_rc_github_admission_test.py
+	./scripts/release-rc-contract-test.sh
 	bash -n ./scripts/verify-external-release-attestation.sh
 	./scripts/verify-external-release-attestation-test.sh
 	bash -n ./scripts/source-release-exclusion-contract-test.sh

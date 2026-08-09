@@ -1,17 +1,20 @@
 # Contributing
 
 Contributions are welcome through pull requests. This project is a Linux amd64
-CPA plugin and currently targets Go 1.26.4 and CPA v7.2.116 RPC schema 2 as the only active
-source/compile and Host contract.
+CPA plugin and currently targets Go 1.26.4 and CPA v7.2.125 at
+`2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e` as the only active source/compile
+and Host contract. C ABI 1 and RPC schema 2 are unchanged.
 Windows, macOS, musl/Alpine, local deployment, and production deployment are
 outside the ordinary contribution and validation scope.
 
-Round 12 is source/test/audit work only. The green
-`main@21267e742b624b29a75bd3683fd6914f76c764b5` engineering baseline does not
+Round 13 prepares the explicitly authorized `v1.0.0-rc.1` prerelease. The green
+historical `main@21267e742b624b29a75bd3683fd6914f76c764b5` engineering baseline does not
 transfer to a later pull-request commit; the final candidate requires its own
 GitHub checks and second-machine execution. Protected Host, independent
 attestation, production approval, and release readiness remain `NOT_PROVIDED`.
-See [the active status boundary](docs/ROUND12_STATUS.md).
+The root README status block and
+[Round 13 status](docs/ROUND13_STATUS.md) are the active v7.2.125 boundary;
+all v7.2.124 and earlier results are explicitly historical and non-transferable.
 
 ## Restricted-data boundary
 
@@ -43,7 +46,11 @@ make round6-script-test
 
 Run `make round6-benchmark` for classifier, extraction, audit, queueing,
 management-response, or other performance-sensitive changes. Changes to CPA
-integration must update the exact v7.2.116 pin deliberately. Do not claim
+integration must update the exact v7.2.125 pin deliberately. CPA v7.2.125
+Multi-Agent v2 rewrites `/v1/responses` tool definitions before
+`RequestInterceptor`, so integration changes must include a regression for the
+rewritten tool-schema/tool-payload boundary. Historical v7.2.124 and earlier
+CI, second-machine, and five-repository data cannot satisfy that check. Do not claim
 Windows, macOS, production,
 real-Host, or release validation from these checks.
 
@@ -69,7 +76,8 @@ must not push release tags, dispatch publication workflows, publish artifacts,
 or change release evidence to claim external Host, audit, evaluation, or
 production approval.
 
-The current Round 12 scope explicitly forbids creating a tag, RC, plugin asset,
-or GitHub Release. The owner-run input diagnostic is not an independent
+The current Round 13 scope permits only the `v1.0.0-rc.1` prerelease after all
+documented gates pass. It does not authorize stable `v1.0.0`, production
+deployment, or an independent-attestation claim. The owner-run input diagnostic is not an independent
 attestation and must not be relabelled as the pending final-candidate
 second-machine result.

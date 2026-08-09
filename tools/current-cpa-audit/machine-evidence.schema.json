@@ -43,6 +43,7 @@
     "timestamp": {
       "type": "string",
       "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
       "minLength": 20,
       "maxLength": 64
     },
@@ -102,13 +103,89 @@
         "unique_semantic_cases": {"const": 19}
       }
     },
+    "candidate_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "event",
+        "head_branch",
+        "head_sha",
+        "manifest_sha256",
+        "repository",
+        "run_attempt",
+        "run_id",
+        "schema",
+        "source",
+        "so",
+        "status",
+        "workflow"
+      ],
+      "properties": {
+        "artifact": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["digest", "id", "name"],
+          "properties": {
+            "digest": {"type": "string", "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"},
+            "id": {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 32},
+            "name": {"const": "cyber-abuse-guard-linux-amd64-audit-candidate"}
+          }
+        },
+        "event": {"enum": ["pull_request", "push"]},
+        "head_branch": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^(?!.*(?:\\.\\.|//|@\\{))[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,253}[A-Za-z0-9_-])?$"
+        },
+        "head_sha": {"$ref": "#/$defs/sha1"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "repository": {"const": "yujianwudi/cyber-abuse-guard-next"},
+        "run_attempt": {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 20},
+        "run_id": {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 32},
+        "schema": {"const": "cyber-abuse-guard.audit-candidate-manifest.v1"},
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["commit", "dirty", "tree", "version"],
+          "properties": {
+            "commit": {"$ref": "#/$defs/sha1"},
+            "dirty": {"const": false},
+            "tree": {"$ref": "#/$defs/sha1"},
+            "version": {"const": "1.0.0"}
+          }
+        },
+        "so": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "sha256"],
+          "properties": {
+            "name": {"const": "cyber-abuse-guard-v1.0.0.so"},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "status": {"const": "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE"},
+        "workflow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "path"],
+          "properties": {
+            "name": {"const": "CI"},
+            "path": {"const": ".github/workflows/ci.yml"}
+          }
+        }
+      }
+    },
     "cag_identity": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["commit", "so_sha256", "tree"],
+      "required": ["commit", "so_name", "so_sha256", "source_version", "tree"],
       "properties": {
         "commit": {"$ref": "#/$defs/sha1"},
+        "so_name": {"const": "cyber-abuse-guard-v1.0.0.so"},
         "so_sha256": {"$ref": "#/$defs/sha256"},
+        "source_version": {"const": "1.0.0"},
         "tree": {"$ref": "#/$defs/sha1"}
       }
     },
@@ -127,13 +204,13 @@
       ],
       "properties": {
         "binary_path": {"type": "string", "pattern": "^/[^\\r\\n]*$"},
-        "binary_sha256": {"$ref": "#/$defs/sha256"},
-        "commit": {"const": "a88197f845c979132c8978ea223c6af05cc81536"},
+        "binary_sha256": {"const": "656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a"},
+        "commit": {"const": "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e"},
         "image_id": {"$ref": "#/$defs/image_id"},
-        "official_asset_name": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^/\\\\]+$"},
-        "official_asset_sha256": {"$ref": "#/$defs/sha256"},
+        "official_asset_name": {"const": "CLIProxyAPI_7.2.125_linux_amd64.tar.gz"},
+        "official_asset_sha256": {"const": "4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233"},
         "repo_digest": {"$ref": "#/$defs/repo_digest"},
-        "tag": {"const": "v7.2.116"}
+        "tag": {"const": "v7.2.125"}
       }
     },
     "mock_identity": {
@@ -184,8 +261,9 @@
     "identities": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["cag", "configuration", "cpa", "mock", "runner"],
+      "required": ["candidate", "cag", "configuration", "cpa", "mock", "runner"],
       "properties": {
+        "candidate": {"$ref": "#/$defs/candidate_identity"},
         "cag": {"$ref": "#/$defs/cag_identity"},
         "configuration": {"$ref": "#/$defs/configuration_identity"},
         "cpa": {"$ref": "#/$defs/cpa_identity"},

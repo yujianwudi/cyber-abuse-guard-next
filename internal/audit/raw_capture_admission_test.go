@@ -81,6 +81,7 @@ func TestRawCaptureQueueFullWinsBeforeBodyPreparation(t *testing.T) {
 		queueSlots: make(chan struct{}, 1),
 	}
 	store.lastErr.Store("")
+	store.activated.Store(true)
 	store.queueSlots <- struct{}{}
 
 	input := RawCaptureInput{

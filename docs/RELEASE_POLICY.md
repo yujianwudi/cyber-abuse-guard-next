@@ -1,15 +1,70 @@
+# Current v1.0.0-rc.1 release admission overlay
+
+```text
+current_source_version: 1.0.0
+current_binary_version: 1.0.0
+current_rc_tag: v1.0.0-rc.1
+current_release_artifact_version: 1.0.0-rc.1
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_rc_prerelease: true
+current_rc_make_latest: false
+current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
+current_platform: linux-amd64
+current_release_gate: ROUND13_EXACT_MAIN_CI_ARTIFACT_AND_STAGED_SECOND_MACHINE_REPORT_REQUIRED
+```
+
+The RC may be created only from the exact protected `main` commit that passed
+all required GitHub checks and the owner-run second-machine CPA v7.2.125
+isolation gate. Dispatch accepts no operator-authored status, commit, tree, SO
+hash, or result fields. It accepts only the three required run IDs, numeric IDs
+for a fixed-name report asset and its draft staging Release, the lowercase hash
+of that asset, and explicit authorization. GitHub API data and the downloaded
+canonical report are the evidence source.
+
+The admitted CI run must have exactly one live nine-file
+`cyber-abuse-guard-linux-amd64-audit-candidate` artifact. Its ID, digest, size,
+run, retention state, manifest, and all file bytes are closed before sealing.
+The RC reuses `cyber-abuse-guard-v1.0.0.so`, its audited-candidate Store ZIP,
+build metadata, ruleset files, SBOM, candidate checksums, and candidate manifest
+byte-for-byte. Candidate checksums are published as
+`audit-candidate-checksums.txt`. It must not recompile or rename the standalone
+binary to `v1.0.0-rc.1.so`. For CPA v7.2.125 installation it deterministically
+derives `cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip` with exactly one root
+`cyber-abuse-guard.so` entry whose payload is byte-identical to the audited SO,
+and generates CPA-facing `checksums.txt`. Source/binary version remain `1.0.0`;
+the RC identity is expressed by the signed tag, derived Store container, source
+archive, Release, and release manifest artifact version `1.0.0-rc.1`.
+
+The second-machine report is packed on the owner server only after the full
+path/inode-bound machine and Host-performance bundles pass their original
+validators. The portable report contains hashes and closed derived summaries,
+not third-party text. The publication workflow proves that its fixed-name
+asset belongs to a `draft=true` staging Release targeting the exact commit,
+checks the API digest/size, downloads the bytes, rehashes them, rejects the
+fixed 24-hour report after expiry, and recomputes every semantic/performance/
+side-effect/cleanup gate with code from the exact tag. This is owner-run
+release admission, not independent proof.
+
+The signed RC tag must be annotated, the GitHub Release must use
+`prerelease=true` and `make_latest=false`, and every Linux asset, checksum,
+SBOM and provenance record must bind the same commit/tree and the CI/staging
+artifact coordinates. A failed or published tag is immutable and must never
+be moved; a retry uses a new RC number. See the
+[Round 13 task book](ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md).
+
 # Historical v0.16 Round 9 release admission policy
 
 > [!IMPORTANT]
 > This publication design was retired by the workflow cleanup. The default
-> branch now
-> contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create
-> or modify a GitHub Release. Owner-run server diagnostics occur outside GitHub
-> Actions and are not independent evidence. The remainder of this document is a
-> point-in-time audit record, not an executable or current publication plan.
-> Current Round 12 status is defined in [ROUND12_STATUS.md](ROUND12_STATUS.md):
-> final-candidate second-machine execution remains pending, and this round does
-> not create a tag or Release.
+> branch historically contained only `ci.yml`, `codeql.yml`, and
+> `policy-gate.yml`; none could create or modify a GitHub Release. Round 13 adds
+> the separately reviewed manual `release-rc.yml` lane described by the active
+> overlay above. That new lane does not reactivate any Round 9 publication path.
+> Owner-run server diagnostics are not independent evidence. The remainder of
+> this document is a point-in-time historical audit record, not the executable
+> Round 13 plan. Historical Round 12 status remains defined in
+> [ROUND12_STATUS.md](ROUND12_STATUS.md).
 
 Field names beginning with `current_` below are preserved verbatim from that
 historical snapshot; they do not describe the active workflow inventory.

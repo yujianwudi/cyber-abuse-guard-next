@@ -12,6 +12,8 @@ old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce
 stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
+round13_classifier_policy_version="classifier-policy-v15"
+round13_classifier_policy_sha256="12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -107,8 +109,51 @@ documents=(
   docs/reports/CORPUS_REPORT.md
 )
 
-# Historical RELEASE_POLICY and ROUND8_CALIBRATION snapshots remain required
-# above, but intentionally do not use the fixed current-document prologue.
+round13_documents=(
+  README.md
+  README_CN.md
+  CHANGELOG.md
+  SECURITY.md
+  docs/AUDIT_HANDOFF.md
+  docs/DESIGN.md
+  docs/INSTALL_DOCKER.md
+  docs/LIMITATIONS.md
+  docs/RAW_CAPTURE.md
+  docs/README.md
+  docs/RELEASE_POLICY.md
+  docs/ROUND6_DEVELOPMENT_HANDOFF.md
+  docs/ROUND6_LIMITATIONS.md
+  docs/ROUND6_RELEASE_GATE.md
+  docs/ROUND6_CONFIG_MIGRATION.md
+  docs/ROUND6_STREAMING_SCANNER_DESIGN.md
+  docs/ROUND8_HOST_RUNNER.md
+  docs/ROUND9_AUDIT_SCHEMA_V6.md
+  docs/ROUND9_HOST_RUNNER.md
+  docs/ROUND9_OPERATOR_ROLLOUT.md
+  docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+  docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+  docs/ROUND12_STATUS.md
+  docs/RULES.md
+  docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md
+  docs/ROUND13_STATUS.md
+  docs/THREAT_MODEL.md
+  docs/reports/CPA_INTEGRATION.md
+  docs/reports/PHASE0_CPA_CONTRACT.md
+  docs/reports/PROMPT_INJECTION_REVIEW.md
+  docs/reports/RELEASE_EVIDENCE.md
+  docs/reports/ROUND8_RELEASE_READINESS.md
+  docs/reports/PERFORMANCE.md
+  docs/reports/PRIVACY.md
+  docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
+  docs/reports/ROUND8_CALIBRATION.md
+  docs/reports/ROUND9_EXECUTION_RECORD.md
+  docs/reports/TEST_REPORT.md
+  integration/cpalatestcontract/README.md
+  tools/current-cpa-audit/README.md
+)
+
+# Historical RELEASE_POLICY remains required above but intentionally does not
+# use the fixed current-document prologue. ROUND8_CALIBRATION now does use it.
 classifier_identity_documents=(
   README.md
   README_CN.md
@@ -429,6 +474,41 @@ run_gate() {
   env "${environment[@]}" "$gate"
 }
 
+make_round13_fixture() {
+  local fixture="$1" relative
+  mkdir -p "$fixture"
+  for relative in "${round13_documents[@]}"; do
+    mkdir -p "$(dirname "$fixture/$relative")"
+    cp -a -- "$root/$relative" "$fixture/$relative"
+  done
+}
+
+run_round13_gate() {
+  local fixture="$1"
+  local environment=(
+    "RELEASE_DOC_ROOT=$fixture"
+    "RELEASE_DOC_FIXTURE_MODE=1"
+    "CURRENT_RELEASE_VERSION=1.0.0"
+    "CURRENT_RULESET_SHA256=$ruleset_sha256"
+    "CURRENT_CLASSIFIER_POLICY_VERSION=$round13_classifier_policy_version"
+    "CURRENT_CLASSIFIER_POLICY_SHA256=$round13_classifier_policy_sha256"
+  )
+  env "${environment[@]}" "$gate"
+}
+
+round13_must_fail() {
+  local name="$1" fixture="$2" expected_diagnostic="$3"
+  if run_round13_gate "$fixture" >"$work/$name.log" 2>&1; then
+    printf 'Round 13 release document consistency fixture unexpectedly passed: %s\n' "$name" >&2
+    exit 1
+  fi
+  if ! grep -Fq -- "$expected_diagnostic" "$work/$name.log"; then
+    printf 'Round 13 release document consistency fixture emitted the wrong diagnostic: %s\n' "$name" >&2
+    exit 1
+  fi
+  printf 'Round 13 release document consistency fixture rejected as expected: %s\n' "$name"
+}
+
 must_fail() {
   local name="$1" fixture="$2" expected_diagnostic="$3"
   if run_gate "$fixture" >"$work/$name.log" 2>&1; then
@@ -444,6 +524,126 @@ must_fail() {
 
 make_fixture "$work/pass"
 run_gate "$work/pass"
+
+make_round13_fixture "$work/round13-pass"
+run_round13_gate "$work/round13-pass"
+
+for mutation in \
+  'docs/RULES.md:rules-active' \
+  'docs/reports/PRIVACY.md:privacy-overlay' \
+  'docs/reports/ROUND8_CALIBRATION.md:round8-calibration'; do
+  relative="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/round13-classifier-$name"
+  cp -a "$work/round13-pass" "$fixture"
+  sed -i '0,/current_classifier_policy_version: classifier-policy-v15/s//current_classifier_policy_version: classifier-policy-v12/' \
+    "$fixture/$relative"
+  round13_must_fail "round13-classifier-$name" "$fixture" \
+    "$relative lost the exact current classifier identity in its first 15 lines"
+done
+
+cp -a "$work/round13-pass" "$work/round13-stale-active-navigation"
+sed -i \
+  's/Active v7\.2\.125 CPA integration overlay/Active v7.2.124 CPA integration overlay/' \
+  "$work/round13-stale-active-navigation/docs/README.md"
+round13_must_fail round13-stale-active-navigation \
+  "$work/round13-stale-active-navigation" \
+  'Round 13 active document allowlist contains an unfrozen current/active v7.2.124 claim'
+
+cp -a "$work/round13-pass" "$work/round13-stale-active-overlay"
+printf '\n> current_formal_cpa: v7.2.124@197f520426374e514218ed155933ac546c98d345\n' \
+  >>"$work/round13-stale-active-overlay/docs/ROUND6_LIMITATIONS.md"
+round13_must_fail round13-stale-active-overlay \
+  "$work/round13-stale-active-overlay" \
+  'Round 13 active document allowlist contains an unfrozen current/active v7.2.124 claim'
+
+for mutation in \
+  'docs/DESIGN.md|## Frozen historical Round 12 design body|round13-stale-design-before-freeze' \
+  'docs/INSTALL_DOCKER.md|## Frozen historical Round 12 installation body|round13-stale-install-before-freeze' \
+  'docs/THREAT_MODEL.md|## Frozen historical Round 12 threat-model body|round13-stale-threat-model-before-freeze'; do
+  IFS='|' read -r relative marker name <<<"$mutation"
+  fixture="$work/$name"
+  cp -a "$work/round13-pass" "$fixture"
+  sed -i \
+    "0,/^${marker}$/s//Current CPA identity: v7.2.124 with an unfrozen active claim\\n\\n&/" \
+    "$fixture/$relative"
+  round13_must_fail "$name" "$fixture" \
+    'Round 13 active document allowlist contains an unfrozen current/active v7.2.124 claim'
+done
+
+cp -a "$work/round13-pass" "$work/round13-frozen-history"
+printf '\nThe then-current target was v7.2.124 in this explicitly frozen historical section.\n' \
+  >>"$work/round13-frozen-history/docs/LIMITATIONS.md"
+run_round13_gate "$work/round13-frozen-history"
+printf 'Round 13 release document consistency allowed explicit frozen v7.2.124 history\n'
+
+cp -a "$work/round13-pass" "$work/round13-binary-sha"
+sed -i \
+  's/656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  "$work/round13-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
+round13_must_fail round13-binary-sha "$work/round13-binary-sha" \
+  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.125 binary SHA-256'
+
+cp -a "$work/round13-pass" "$work/round13-cag-version"
+sed -i 's/cyber-abuse-guard-v1\.0\.0\.so/cyber-abuse-guard-v0.16.so/g' \
+  "$work/round13-cag-version/tools/current-cpa-audit/README.md"
+round13_must_fail round13-cag-version "$work/round13-cag-version" \
+  'current CPA audit README lost the closed CAG 1.0.0 SO name'
+
+for mutation in \
+  'docs/reports/CPA_INTEGRATION.md:round13-cpa-integration-audit-count' \
+  'docs/reports/TEST_REPORT.md:round13-test-report-audit-count'; do
+  relative="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/$name"
+  cp -a "$work/round13-pass" "$fixture"
+  sed -i '0,/184\/184 PASS/s//181\/181 PASS/' "$fixture/$relative"
+  round13_must_fail "$name" "$fixture" \
+    "$relative: active Round 13 overlay must contain exactly one 184/184 PASS result"
+done
+
+cp -a "$work/round13-pass" "$work/round13-duplicate-active-cpa-target"
+sed -i '/^active_cpa_target:/a active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' \
+  "$work/round13-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round13_must_fail round13-duplicate-active-cpa-target \
+  "$work/round13-duplicate-active-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.125 active_cpa_target'
+
+cp -a "$work/round13-pass" "$work/round13-conflicting-active-cpa-target"
+sed -i \
+  's|^active_cpa_target: v7\.2\.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e$|active_cpa_target: v7.2.125 / 197f520426374e514218ed155933ac546c98d345|' \
+  "$work/round13-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round13_must_fail round13-conflicting-active-cpa-target \
+  "$work/round13-conflicting-active-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.125 active_cpa_target'
+
+cp -a "$work/round13-pass" "$work/round13-active-key-in-frozen-block"
+printf '\nactive_cpa_remote_latest: PASS\n' \
+  >>"$work/round13-active-key-in-frozen-block/docs/reports/RELEASE_EVIDENCE.md"
+round13_must_fail round13-active-key-in-frozen-block \
+  "$work/round13-active-key-in-frozen-block" \
+  'docs/reports/RELEASE_EVIDENCE.md: frozen Round 12 block contains active_cpa_* keys: active_cpa_remote_latest'
+
+cp -a "$work/round13-pass" "$work/round13-missing-historical-cpa-target"
+sed -i '/^historical_round12_cpa_target:/d' \
+  "$work/round13-missing-historical-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round13_must_fail round13-missing-historical-cpa-target \
+  "$work/round13-missing-historical-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: frozen block must contain exactly one historical_round12_cpa_target'
+
+for mutation in \
+  'active_cpa_store_rc_asset:round13-missing-rc-store-asset-marker' \
+  'active_cpa_store_checksum_contract:round13-missing-rc-store-checksum-marker' \
+  'derived-container relationship explicitly:round13-missing-derived-container-marker'; do
+  marker="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/$name"
+  cp -a "$work/round13-pass" "$fixture"
+  sed -i "0,/${marker//\//\\/}/s//BROKEN_ROUND13_STORE_MARKER/" \
+    "$fixture/docs/reports/RELEASE_EVIDENCE.md"
+  round13_must_fail "$name" "$fixture" \
+    'docs/reports/RELEASE_EVIDENCE.md: active boundary must retain exactly one RC Store marker:'
+done
 
 mkdir -p "$work/python-exit-after-output"
 printf '%s\n' \

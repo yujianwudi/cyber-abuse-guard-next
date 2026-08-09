@@ -1,9 +1,18 @@
 # Docker Sandbox Installation, Staged Rollout, Rollback, and Cleanup
 
+> [!IMPORTANT]
+> For Round 13, substitute only the exact Linux amd64 `v1.0.0-rc.1` candidate
+> and CPA `v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`. The Round 12
+> v7.2.124 commands and hashes retained below are historical; they must not be
+> used as current artifacts or PASS evidence. Production deployment remains
+> outside this candidate runbook.
+
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
+
+## Frozen historical Round 12 installation body
 
 ## Current source status
 
@@ -12,8 +21,11 @@ plugin release, production approval, or Balanced-mode admission is implied.
 Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
 reuse or relabel them as a build of the current source.
 
-Linux amd64 and CPA v7.2.116
-(`a88197f845c979132c8978ea223c6af05cc81536`) are the only compatibility target.
+Linux amd64 and CPA v7.2.124
+(`197f520426374e514218ed155933ac546c98d345`) are the only compatibility target.
+C ABI 1 and RPC schema 2 are unchanged. The required upstream Linux amd64
+asset SHA-256 is
+`bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`.
 Runtime validation must use an isolated counted-Mock upstream with no real
 Provider or account pool. A sandbox PASS is engineering evidence only and does
 not replace independent source review or the external admission policy.
@@ -25,7 +37,7 @@ the candidate, and never include a capture database in CI or release assets.
 See [RELEASE_POLICY.md](RELEASE_POLICY.md) for the frozen release-policy
 snapshot. [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md) and
 [ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md) are historical
-CPA v7.2.113 references, not the v7.2.116 execution protocol. Any v7.2.116 Host
+CPA v7.2.113 references, not the v7.2.124 execution protocol. Any v7.2.124 Host
 run must create a newly versioned evidence lane rather than rewriting those
 records. Later v0.15/Round 8 command sequences are also historical operations
 references unless a future release-specific document explicitly supersedes
@@ -53,7 +65,7 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
 
 ## Preconditions
 
-- Run the candidate bytes against CPA v7.2.116 built with `CGO_ENABLED=1`.
+- Run the candidate bytes against CPA v7.2.124 built with `CGO_ENABLED=1`.
   Assets labelled `_no-plugin`
   cannot load native plugins. Source/compile compatibility does not substitute
   for loading the candidate `.so`. Earlier CPA checks are historical
@@ -71,6 +83,11 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
   obsolete `antigravity-coding-filter` after verifying this plugin. Routers at
   the same priority run by plugin ID ascending, so also inspect same-priority
   IDs for a lexicographically earlier handler.
+- Exercise Multi-Agent v2 on `/v1/responses`. CPA v7.2.124 rewrites tool
+  definitions before `RequestInterceptor`, so the Host evidence must bind the
+  rewritten schema-2 envelope and prove tool-schema inertness, tool-call/result
+  provenance, and allow/block behavior. Historical v7.2.116 CI,
+  second-machine, and five-repository data do not satisfy this precondition.
 - Only one `cyber-abuse-guard` `.so` may exist in the active plugin directory.
   CPA ABI v1 cannot enumerate ordering or detect duplicate versions for the
   plugin itself.
@@ -337,11 +354,12 @@ plugins:
 
 `log_original_text: true` is always rejected. There is no debug override.
 
-For CPA v7.2.116, `request-log: false` by itself is not a raw-body logging
-boundary: an installed request-logging middleware still captures request bodies
-and can retain an HTTP error-only log, including a Guard block on a normal model
-route. `commercial-mode: true` is the startup control that prevents that
-middleware from being installed.
+Historical CPA v7.2.116 analysis established that `request-log: false` by itself
+was not a raw-body logging boundary: an installed request-logging middleware
+could still capture request bodies and retain an HTTP error-only log, including
+a Guard block on a normal model route. The active v7.2.124 lane conservatively
+retains `commercial-mode: true` as the startup control and must revalidate the
+middleware behavior rather than relabel the v7.2.116 result.
 `logging-to-file: false` keeps ordinary CPA application logs on stdout instead
 of rotating files. The operational cost is the loss of CPA's detailed
 request/error artifacts for incident diagnosis; use container stdout, plugin
@@ -431,10 +449,10 @@ EXPECTED_MODE=observe \
 directory visible from the watchdog. For the admitted production contract, CPA
 must start with `WRITABLE_PATH` set to an absolute, dedicated directory and
 `CPA_LOG_DIR` must name the host-visible side of that exact
-`WRITABLE_PATH/logs` bind mount. Do not rely on CPA v7.2.116's relative `./logs`
-fallback: the request logger resolves a relative path against the configuration
-directory while the management inventory resolves it against the process
-working directory. Those roots can differ. No path component may be a symlink.
+`WRITABLE_PATH/logs` bind mount. Do not rely on the relative `./logs` fallback:
+historical v7.2.116 analysis found that the request logger and management
+inventory could resolve it against different roots, and the exact v7.2.124
+lane must recheck that boundary. No path component may be a symlink.
 
 `CPA_DIRECT_BASE_URL` is also mandatory. It must be the loopback HTTP/1.1
 listener of this exact CPA process, not Nginx or another reverse proxy. The
@@ -453,7 +471,8 @@ active resource proof deliberately marks its challenge header hop-by-hop; a
 conforming intermediary removes that header, so a proxied path fails closed
 instead of being mistaken for direct evidence.
 
-CPA v7.2.116's plugin ABI cannot cryptographically identify the owning listener
+CPA v7.2.124's unchanged ABI 1 cannot cryptographically identify the owning
+listener
 or detect a non-conforming same-host proxy that deliberately preserves the
 hop-by-hop challenge header while normalizing lowercase `get` to uppercase
 `GET`. Do not place such an intermediary on `CPA_DIRECT_BASE_URL`. The operator
@@ -508,10 +527,11 @@ and priority, build/ruleset identity, degradation, router/panic counters, and
 two built-in local probes. The malicious probe never enters a provider route,
 auth selector, usage queue, or upstream.
 
-The malicious built-in probe is a `/v0/management` 403. CPA v7.2.116 explicitly
-skips management paths in its request-logging middleware, so that 403 is not a
-startup proof. Immediately afterward the watchdog verifies the exact runtime
-headers for CPA `7.2.116` at commit `a88197f8` and uses the authenticated CAG
+The malicious built-in probe is a `/v0/management` 403. Historical CPA v7.2.116
+analysis found that management paths were skipped by request logging, so that
+old 403 is not a v7.2.124 startup proof. Immediately afterward the watchdog
+must verify the exact runtime headers for CPA `7.2.124` at commit `197f5204` and
+use the authenticated CAG
 management route on `CPA_BASE_URL` to issue two independent 256-bit challenges.
 The initial status, both built-in classifier probes, each challenge response,
 each ResourceRoute body, each confirmation, and the final status must carry one
@@ -525,9 +545,11 @@ request paths to one plugin process, subject to the listener-ownership and
 non-conforming-proxy boundary above.
 The complete request makes a stranded error-only logger produce an
 artifact; the intentionally incomplete request fails closed if the stranded
-middleware waits for the missing body. CPA 113 accepts the raw lowercase
+middleware waits for the missing body. Historical CPA v7.2.113 accepted the raw
+lowercase
 `get` resource method case-insensitively while its request logger skips only
-exact uppercase `GET`; source and Host contracts pin that behavior. Timeouts
+exact uppercase `GET`; the exact v7.2.124 source and Host contracts must recheck
+rather than inherit that behavior. Timeouts
 are reported only as inconclusive failures, never as proof that middleware was
 detected. Both requests are local, contain no user prompt or credential, and
 never enter `/v1`, an auth selector, usage accounting, a provider, or upstream.
@@ -560,10 +582,13 @@ Verify New API → CPA using an ordinary harmless request, confirm other plugins
 still behave normally, and compare the current CPA auth-file list with the saved
 inventory. Installation must not create, delete, or modify auth files.
 
-Any newly versioned CPA v7.2.116 Host matrix must cover OpenAI Chat, OpenAI Responses,
+Any newly versioned CPA v7.2.124 Host matrix must cover OpenAI Chat, OpenAI
+Responses,
 Claude, and Gemini allow/refusal paths, including streaming pre-SSE 403,
 Anthropic/Gemini token-count 403, and zero Auth Selector, Provider, Usage, and
-Mock Upstream counters for blocked requests. Ordinary CI does not execute that
+Mock Upstream counters for blocked requests. It must also cover the Multi-Agent
+v2 `/v1/responses` tool-definition rewrite before `RequestInterceptor`.
+Ordinary CI does not execute that
 harness. Earlier implementation-freeze Host results are historical only; all
 exact-candidate run and independent review remain `NOT RUN` before any
 release decision.

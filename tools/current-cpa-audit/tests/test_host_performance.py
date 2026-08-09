@@ -22,14 +22,20 @@ sys.path.insert(0, str(HERE))
 from audit_contract import ContractError, canonical_bytes, sha256_bytes
 from host_performance import (
     LinuxHostCollector,
+    PerformanceError,
     _require_logical_cpu_count,
     _require_runtime_secret,
     build_evidence,
     _cpu_delta,
+    _docker_arm_specific_mount_projection,
     _docker_comparable_projection,
+    _docker_mount_identity_projection,
+    _host_timestamp_value,
     _parse_size_mib,
     _proc_cpu_values,
     _proc_self_cpu_ticks,
+    _validate_arm_specific_backing_equivalence,
+    _validate_large_payload_cell,
     main as performance_main,
     parser as performance_parser,
     require_current_tool_identities,
@@ -100,6 +106,69 @@ class HostPerformanceContractTests(unittest.TestCase):
         self.assertGreaterEqual(validated["metrics"]["host_throughput_vs_cpa_only"], 0.90)
         self.assertLess(validated["metrics"]["audit_queue_peak_ratio"], 0.80)
         self.assertLessEqual(validated["metrics"]["warm_rss_growth_60m_mib"], 64)
+
+        partial_queue_summaries = copy.deepcopy(self.good_summaries)
+        nullable_group = next(
+            (
+                summary["phase"],
+                summary["workload"],
+                summary["concurrency"],
+            )
+            for summary in partial_queue_summaries
+            if summary["arm"] == "cpa_cag" and summary["phase"] != "warm_rss"
+        )
+        for summary in partial_queue_summaries:
+            if (
+                summary["arm"] == "cpa_cag"
+                and (
+                    summary["phase"],
+                    summary["workload"],
+                    summary["concurrency"],
+                )
+                == nullable_group
+            ):
+                summary["queue_peak_depth"] = None
+        with self.subTest(queue_ratio="partial-none"):
+            partial_queue_evidence = build_evidence(
+                self.good_config,
+                self.good_config_raw,
+                self.good_measurements,
+                self.good_measurements_raw,
+                partial_queue_summaries,
+                self.good_baseline,
+                self.good_extra,
+            )
+            candidate_ratios = [
+                row["audit_queue_peak_ratio"]
+                for row in partial_queue_evidence["matrix"]
+                if row["arm"] == "cpa_cag"
+            ]
+            self.assertIn(None, candidate_ratios)
+            observed_ratios = [
+                float(value) for value in candidate_ratios if value is not None
+            ]
+            self.assertTrue(observed_ratios)
+            self.assertEqual(
+                partial_queue_evidence["metrics"]["audit_queue_peak_ratio"],
+                max(observed_ratios),
+            )
+
+        empty_queue_summaries = copy.deepcopy(self.good_summaries)
+        for summary in empty_queue_summaries:
+            if summary["arm"] == "cpa_cag":
+                summary["queue_peak_depth"] = None
+        with self.subTest(queue_ratio="all-none"), self.assertRaisesRegex(
+            ContractError, r"CPA\+CAG audit queue peak ratio is unavailable"
+        ):
+            build_evidence(
+                self.good_config,
+                self.good_config_raw,
+                self.good_measurements,
+                self.good_measurements_raw,
+                empty_queue_summaries,
+                self.good_baseline,
+                self.good_extra,
+            )
 
     def test_tool_identity_manifest_is_closed_and_bundle_bound(self) -> None:
         approved = tool_identities()
@@ -383,11 +452,19 @@ class HostPerformanceContractTests(unittest.TestCase):
                 "order_index": order,
             }
         )
+        collector._measure_large_payload_cell = mock.Mock(
+            side_effect=lambda arm, repetition, order: {
+                "arm": arm,
+                "repetition": repetition,
+                "order_index": order,
+            }
+        )
         collector._measure_warm_rss = mock.Mock(return_value={"lane": "warm"})
         collector._host_identity = mock.Mock(return_value={"host": "unit"})
         result = collector.collect()
         self.assertEqual(len(result["paired_cells"]), 24)
-        self.assertEqual(len(result["absolute_cells"]), 36)
+        self.assertEqual(len(result["absolute_cells"]), 72)
+        self.assertEqual(len(result["large_payload_cells"]), 6)
         self.assertEqual(result["warm_rss"], {"lane": "warm"})
         for index in range(0, len(result["paired_cells"]), 2):
             pair = result["paired_cells"][index : index + 2]
@@ -487,6 +564,38 @@ class HostPerformanceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "exact three-container"):
             collector._docker_stats("cpa_cag")
 
+        collector = object.__new__(LinuxHostCollector)
+        collector.config = copy.deepcopy(self.good_config)
+        candidate = collector.config["identities"]["candidate"]
+        self.assertNotIn("artifact_name", candidate)
+        so_name = candidate["so"]["name"]
+        so_bytes = b"exact nested candidate SO bytes"
+        collector.config["identities"]["cag"]["so_sha256"] = sha256_bytes(so_bytes)
+        collector.names = {
+            "cpa_only": "unit-cpa-only",
+            "cpa_cag": "unit-cpa-cag",
+        }
+
+        def docker_run(command, **_kwargs):
+            destination = Path(command[-1])
+            if command[1].startswith("unit-cpa-only:"):
+                return SimpleNamespace(
+                    returncode=1,
+                    stdout="",
+                    stderr="no such file or directory",
+                )
+            expected = destination / "linux" / "amd64" / so_name
+            expected.parent.mkdir(parents=True)
+            expected.write_bytes(so_bytes)
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        collector.docker = SimpleNamespace(run=mock.Mock(side_effect=docker_run))
+        collector._verify_plugin_bytes()
+        self.assertEqual(
+            collector.observed_cag_so_sha256,
+            collector.config["identities"]["cag"]["so_sha256"],
+        )
+
     def test_sampler_threads_record_runtime_audit_failures(self) -> None:
         class RuntimeAuditFailure(RuntimeError):
             pass
@@ -523,6 +632,227 @@ class HostPerformanceContractTests(unittest.TestCase):
         )
         self.assertTrue(queue_stop.is_set())
         self.assertEqual(queue_errors, ["queue_sample:RuntimeAuditFailure"])
+
+    def test_real_time_large_payload_collector_output_validates(self) -> None:
+        collector = object.__new__(LinuxHostCollector)
+        collector.config = self.good_config
+        workload_map = {
+            item["id"]: item for item in self.good_workload["workloads"]
+        }
+        collector.workload_manifest = self.good_workload
+        collector.workloads = {
+            key: value["requests"] for key, value in workload_map.items()
+        }
+        collector._verify_arm_configuration = mock.Mock()
+        collector._warmup = mock.Mock(return_value=(0, []))
+        collector._drain_audit_queue = mock.Mock()
+        collector._reset_mock = mock.Mock()
+        zero = {"auth": 0, "mock": 0, "provider": 0}
+        observed = {"auth": 16, "mock": 16, "provider": 16}
+        collector._mock_snapshot = mock.Mock(side_effect=[zero, observed])
+        process_identity = {"pid": 4101, "start_time_ticks": 987654}
+        collector._process_identity = mock.Mock(return_value=process_identity)
+        collector._process_rss_mib = mock.Mock(return_value=100.0)
+        collector._runtime = mock.Mock(
+            return_value=copy.deepcopy(
+                next(
+                    cell["runtime"]
+                    for cell in self.good_measurements["large_payload_cells"]
+                    if cell["arm"] == "cpa_only"
+                )
+            )
+        )
+
+        deterministic_cell = copy.deepcopy(
+            next(
+                cell
+                for cell in self.good_measurements["large_payload_cells"]
+                if cell["arm"] == "cpa_only"
+            )
+        )
+        deterministic_validated, deterministic_summary = _validate_large_payload_cell(
+            deterministic_cell,
+            "deterministic large-payload cell",
+            config=self.good_config,
+            workload_map=workload_map,
+        )
+        self.assertEqual(deterministic_validated, deterministic_cell)
+        self.assertEqual(deterministic_summary["successful_samples"], 16)
+
+        genuine_gap = copy.deepcopy(deterministic_cell)
+        genuine_gap["rss_samples"][1]["elapsed_ms"] = 131.0
+        with self.assertRaisesRegex(ContractError, "observation gap"):
+            _validate_large_payload_cell(
+                genuine_gap,
+                "genuine large-payload deadline gap",
+                config=self.good_config,
+                workload_map=workload_map,
+            )
+
+        batch_delay_seconds = 0.150
+
+        def drive_batch(*_args, **_kwargs):
+            # Keep each batch alive for multiple production 20 ms sampling
+            # periods so the unit test does not race sampler shutdown on an
+            # ordinary loaded CI host. The production 30 ms maximum gap and
+            # all validation assertions remain unchanged.
+            time.sleep(batch_delay_seconds)
+            return [(True, False, batch_delay_seconds * 1000.0, None)] * 4
+
+        collector._drive_batch = drive_batch
+        sampler_error_ids: list[str] = []
+        original_rss_loop = collector._large_payload_rss_loop
+
+        def capture_rss_loop_errors(*args, **kwargs):
+            errors = args[-1] if args else kwargs["errors"]
+            try:
+                return original_rss_loop(*args, **kwargs)
+            finally:
+                sampler_error_ids[:] = errors
+
+        collector._large_payload_rss_loop = capture_rss_loop_errors
+        try:
+            cell = collector._measure_large_payload_cell("cpa_only", 1, 0)
+            validated, summary = _validate_large_payload_cell(
+                cell,
+                "real-time large-payload cell",
+                config=self.good_config,
+                workload_map=workload_map,
+            )
+        except ContractError as exc:
+            if not (
+                type(exc) is PerformanceError
+                and str(exc) == "Host performance large-payload RSS sampler failed"
+                and sampler_error_ids == ["large_payload_rss:MissedDeadline"]
+            ):
+                raise
+            self.skipTest(
+                "test-host scheduler stalled beyond the production RSS deadline"
+            )
+        self.assertEqual(validated, cell)
+        self.assertEqual(summary["successful_samples"], 16)
+        self.assertEqual(len(cell["rss_baseline_samples"]), 5)
+        self.assertGreaterEqual(len(cell["rss_samples"]), 3)
+
+    def test_large_payload_completion_excludes_post_rss_identity_inspection(
+        self,
+    ) -> None:
+        class FakeClock:
+            def __init__(self) -> None:
+                self.origin = 1_000.0
+                self.current = self.origin
+                self.wall = datetime(2026, 8, 9, tzinfo=timezone.utc)
+
+            def monotonic(self) -> float:
+                return self.current
+
+            def sleep(self, seconds: float) -> None:
+                self.current += max(0.0, seconds)
+
+            def now_iso(self) -> str:
+                value = self.wall + timedelta(seconds=self.current - self.origin)
+                return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+        workload_map = {
+            item["id"]: item for item in self.good_workload["workloads"]
+        }
+        process_identity = {"pid": 4101, "start_time_ticks": 987654}
+
+        def configured_collector(
+            clock: FakeClock,
+            *,
+            slow_identity_call: int | None = None,
+            drift_identity_call: int | None = None,
+        ):
+            collector = object.__new__(LinuxHostCollector)
+            collector.config = self.good_config
+            collector.workload_manifest = self.good_workload
+            collector.workloads = {
+                key: value["requests"] for key, value in workload_map.items()
+            }
+            collector._verify_arm_configuration = mock.Mock()
+            collector._warmup = mock.Mock(return_value=(0, []))
+            collector._drain_audit_queue = mock.Mock()
+            collector._reset_mock = mock.Mock()
+            request_count = collector.config["plan"]["large_payload_request_count"]
+            zero = {"auth": 0, "mock": 0, "provider": 0}
+            observed = {
+                "auth": request_count,
+                "mock": request_count,
+                "provider": request_count,
+            }
+            collector._mock_snapshot = mock.Mock(side_effect=[zero, observed])
+            calls = 0
+
+            def inspect_identity(_arm: str) -> dict[str, int]:
+                nonlocal calls
+                calls += 1
+                if calls == drift_identity_call:
+                    return {"pid": 4102, "start_time_ticks": 987655}
+                if calls == slow_identity_call:
+                    clock.sleep(0.050)
+                return dict(process_identity)
+
+            collector._process_identity = mock.Mock(side_effect=inspect_identity)
+            collector._process_rss_mib = mock.Mock(return_value=100.0)
+            collector._large_payload_rss_loop = mock.Mock()
+
+            def drive_batch(_executor, _arm, _requests, concurrency, offset):
+                clock.sleep(0.002)
+                count = min(concurrency, request_count - offset)
+                return [(True, False, 0.0, None)] * count
+
+            collector._drive_batch = drive_batch
+            collector._runtime = mock.Mock(
+                return_value=copy.deepcopy(
+                    next(
+                        cell["runtime"]
+                        for cell in self.good_measurements["large_payload_cells"]
+                        if cell["arm"] == "cpa_only"
+                    )
+                )
+            )
+            return collector
+
+        def measure(clock: FakeClock, collector: LinuxHostCollector):
+            with (
+                mock.patch("host_performance.time.monotonic", clock.monotonic),
+                mock.patch("host_performance.time.sleep", clock.sleep),
+                mock.patch("host_performance._now_iso", clock.now_iso),
+            ):
+                return collector._measure_large_payload_cell("cpa_only", 1, 0)
+
+        for identity_call, label in (
+            (2, "slow identity inspection before final RSS"),
+            (3, "slow identity inspection after final RSS"),
+        ):
+            with self.subTest(label):
+                clock = FakeClock()
+                collector = configured_collector(
+                    clock, slow_identity_call=identity_call
+                )
+                cell = measure(clock, collector)
+                _validate_large_payload_cell(
+                    cell,
+                    label,
+                    config=self.good_config,
+                    workload_map=workload_map,
+                )
+                self.assertGreaterEqual(
+                    (clock.current - clock.origin) - cell["elapsed_seconds"], 0.049
+                )
+
+        for identity_call, error_pattern in (
+            (2, r"process identity changed$"),
+            (3, "changed after final RSS"),
+        ):
+            with self.subTest(identity_drift_call=identity_call):
+                clock = FakeClock()
+                collector = configured_collector(
+                    clock, drift_identity_call=identity_call
+                )
+                with self.assertRaisesRegex(ContractError, error_pattern):
+                    measure(clock, collector)
 
     def test_collector_rejects_replaced_mock_runtime_identity(self) -> None:
         collector = object.__new__(LinuxHostCollector)
@@ -585,6 +915,24 @@ class HostPerformanceContractTests(unittest.TestCase):
                 )
 
     def test_docker_comparable_projection_detects_ab_runtime_bias(self) -> None:
+        def backing(
+            value: dict[str, object], *, device: str = "8:1"
+        ) -> dict[str, dict[str, object]]:
+            result: dict[str, dict[str, object]] = {}
+            for item in value["Mounts"]:  # type: ignore[index]
+                source = item["Source"]
+                result[source] = {
+                    "device": device,
+                    "filesystem_type": "ext4",
+                    "identity_sha256": sha256_bytes(
+                        f"{source}:{device}".encode("utf-8")
+                    ),
+                    "source_path_sha256": sha256_bytes(source.encode("utf-8")),
+                    "st_dev": 2049,
+                    "st_ino": 100,
+                }
+            return result
+
         baseline = {
             "Args": ["--config", "/cag/config.yaml"],
             "Config": {
@@ -616,7 +964,15 @@ class HostPerformanceContractTests(unittest.TestCase):
                     "RW": False,
                     "Source": "/host/baseline-config",
                     "Type": "bind",
-                }
+                },
+                {
+                    "Destination": "/cag/workloads",
+                    "Mode": "ro",
+                    "Propagation": "rprivate",
+                    "RW": False,
+                    "Source": "/host/shared-workloads",
+                    "Type": "bind",
+                },
             ],
             "Path": "/CLIProxyAPI",
             "Platform": "linux",
@@ -643,8 +999,26 @@ class HostPerformanceContractTests(unittest.TestCase):
             }
         )
         self.assertEqual(
-            _docker_comparable_projection(baseline),
-            _docker_comparable_projection(candidate),
+            _docker_comparable_projection(
+                baseline, backing_identities=backing(baseline)
+            ),
+            _docker_comparable_projection(
+                candidate, backing_identities=backing(candidate)
+            ),
+        )
+        self.assertIsNone(
+            _docker_arm_specific_mount_projection(
+                baseline,
+                "cpa_only",
+                backing_identities=backing(baseline),
+            )["cag_plugin_mount"]
+        )
+        self.assertIsNotNone(
+            _docker_arm_specific_mount_projection(
+                candidate,
+                "cpa_cag",
+                backing_identities=backing(candidate),
+            )["cag_plugin_mount"]
         )
 
         for label, mutate in (
@@ -669,9 +1043,71 @@ class HostPerformanceContractTests(unittest.TestCase):
             mutate(drifted)
             with self.subTest(label=label):
                 self.assertNotEqual(
-                    _docker_comparable_projection(baseline),
-                    _docker_comparable_projection(drifted),
+                    _docker_comparable_projection(
+                        baseline, backing_identities=backing(baseline)
+                    ),
+                    _docker_comparable_projection(
+                        drifted, backing_identities=backing(drifted)
+                    ),
                 )
+
+        different_source = copy.deepcopy(candidate)
+        shared_mount = next(
+            item
+            for item in different_source["Mounts"]
+            if item["Destination"] == "/cag/workloads"
+        )
+        shared_mount["Source"] = "/host/other-workloads"
+        self.assertNotEqual(
+            _docker_comparable_projection(
+                baseline, backing_identities=backing(baseline)
+            ),
+            _docker_comparable_projection(
+                different_source,
+                backing_identities=backing(different_source),
+            ),
+        )
+
+        different_backing = backing(candidate)
+        different_backing["/host/shared-workloads"]["device"] = "0:99"
+        with self.assertRaisesRegex(ContractError, "lacks a supplied backing identity"):
+            missing = backing(candidate)
+            missing.pop("/host/shared-workloads")
+            _docker_comparable_projection(candidate, backing_identities=missing)
+        self.assertNotEqual(
+            _docker_comparable_projection(
+                baseline, backing_identities=backing(baseline)
+            ),
+            _docker_comparable_projection(
+                candidate, backing_identities=different_backing
+            ),
+        )
+
+    def test_arm_specific_mounts_reject_different_filesystem_backing(self) -> None:
+        baseline = copy.deepcopy(
+            next(
+                cell["runtime"]["mount_identity_projection"]
+                for cell in self.good_measurements["paired_cells"]
+                if cell["arm"] == "cpa_only"
+            )
+        )
+        candidate = copy.deepcopy(
+            next(
+                cell["runtime"]["mount_identity_projection"]
+                for cell in self.good_measurements["paired_cells"]
+                if cell["arm"] == "cpa_cag"
+            )
+        )
+        _validate_arm_specific_backing_equivalence(baseline, candidate)
+        for filesystem_type in ("nfs", "fuse.sshfs"):
+            drifted = copy.deepcopy(candidate)
+            drifted["config_runtime_mounts"][0]["backing"][
+                "filesystem_type"
+            ] = filesystem_type
+            with self.subTest(filesystem_type=filesystem_type), self.assertRaisesRegex(
+                ContractError, "mount backing differs"
+            ):
+                _validate_arm_specific_backing_equivalence(baseline, drifted)
 
     def test_runtime_rereads_management_config_and_rejects_cell_drift(self) -> None:
         info = {
@@ -701,6 +1137,23 @@ class HostPerformanceContractTests(unittest.TestCase):
             "cpa_only": sha256_bytes(
                 canonical_bytes(_docker_comparable_projection(info))
             )
+        }
+        collector.observed_docker_arm_specific_mount_sha256 = {
+            "cpa_only": sha256_bytes(
+                canonical_bytes(
+                    _docker_arm_specific_mount_projection(info, "cpa_only")
+                )
+            )
+        }
+        mount_projection = _docker_mount_identity_projection(info, "cpa_only")
+        collector.observed_mount_identity_projection = {
+            "cpa_only": mount_projection
+        }
+        collector.observed_docker_common_mount_sha256 = {
+            "cpa_only": mount_projection["common_sha256"]
+        }
+        collector.observed_docker_mount_projection_sha256 = {
+            "cpa_only": sha256_bytes(canonical_bytes(mount_projection))
         }
         collector.observed_base_config_sha256 = {"cpa_only": "a" * 64}
         collector._verify_cpa_config = mock.Mock(return_value="b" * 64)
@@ -966,6 +1419,244 @@ class HostPerformanceContractTests(unittest.TestCase):
         raw = canonical_bytes(value) + b"\n"
         with self.assertRaisesRegex(ContractError, "matrix is incomplete"):
             validate_measurements(value, raw, self.good_config, self.good_config_raw, self.good_workload)
+
+    def test_ordinary_overhead_requires_a_paired_baseline_and_conserved_samples(
+        self,
+    ) -> None:
+        missing_baseline = copy.deepcopy(self.good_measurements)
+        baseline_index = next(
+            index
+            for index, cell in enumerate(missing_baseline["absolute_cells"])
+            if cell["workload"] == "ordinary" and cell["arm"] == "cpa_only"
+        )
+        missing_baseline["absolute_cells"].pop(baseline_index)
+        with self.assertRaisesRegex(ContractError, "matrix is incomplete"):
+            validate_measurements(
+                missing_baseline,
+                canonical_bytes(missing_baseline) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+        mismatched_samples = copy.deepcopy(self.good_measurements)
+        ordinary_baseline = next(
+            cell
+            for cell in mismatched_samples["absolute_cells"]
+            if cell["workload"] == "ordinary" and cell["arm"] == "cpa_only"
+        )
+        ordinary_baseline["latency_samples_ms"].pop()
+        with self.assertRaisesRegex(ContractError, "latency_samples_ms"):
+            validate_measurements(
+                mismatched_samples,
+                canonical_bytes(mismatched_samples) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+    def test_ordinary_overhead_is_conservative_and_raw_derived(self) -> None:
+        self.assertEqual(
+            self.good_evidence["metrics"]["ordinary_plugin_overhead_p95_ms"],
+            1.0,
+        )
+        for comparison in self.good_evidence["comparisons"]:
+            self.assertEqual(comparison["ordinary_cpa_cag_p95_ms"], 2.0)
+            self.assertEqual(comparison["ordinary_cpa_only_p50_ms"], 1.0)
+            self.assertEqual(comparison["ordinary_plugin_overhead_p95_ms"], 1.0)
+
+        forged = copy.deepcopy(self.good_evidence)
+        forged["metrics"]["ordinary_plugin_overhead_p95_ms"] = 0.0
+        with self.assertRaisesRegex(ContractError, "raw-derived closed result"):
+            validate_evidence_bundle(
+                forged,
+                self.good_config,
+                self.good_config_raw,
+                self.good_measurements,
+                self.good_measurements_raw,
+                self.good_summaries,
+                self.good_baseline,
+                self.good_extra,
+                require_pass=False,
+            )
+
+    def test_large_payload_requires_raw_rss_and_rejects_self_reported_boolean(
+        self,
+    ) -> None:
+        missing = copy.deepcopy(self.good_measurements)
+        missing["large_payload_cells"].pop()
+        with self.assertRaisesRegex(ContractError, "matrix is incomplete"):
+            validate_measurements(
+                missing,
+                canonical_bytes(missing) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+        no_rss = copy.deepcopy(self.good_measurements)
+        no_rss["large_payload_cells"][0].pop("rss_samples")
+        with self.assertRaisesRegex(ContractError, "must contain exactly"):
+            validate_measurements(
+                no_rss,
+                canonical_bytes(no_rss) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+        self_reported = copy.deepcopy(self.good_measurements)
+        self_reported["large_payload_cells"][0]["full_copy_regression"] = False
+        with self.assertRaisesRegex(ContractError, "must contain exactly"):
+            validate_measurements(
+                self_reported,
+                canonical_bytes(self_reported) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+    def test_large_payload_full_payload_equivalent_failure_cannot_be_forged(
+        self,
+    ) -> None:
+        value = copy.deepcopy(self.good_measurements)
+        candidate = next(
+            cell
+            for cell in value["large_payload_cells"]
+            if cell["repetition"] == 1 and cell["arm"] == "cpa_cag"
+        )
+        for sample in candidate["rss_samples"]:
+            sample["rss_mib"] = 107.0
+        raw = canonical_bytes(value) + b"\n"
+        validated, summaries, baseline, extra = validate_measurements(
+            value,
+            raw,
+            self.good_config,
+            self.good_config_raw,
+            self.good_workload,
+        )
+        evidence = build_evidence(
+            self.good_config,
+            self.good_config_raw,
+            validated,
+            raw,
+            summaries,
+            baseline,
+            extra,
+        )
+        self.assertEqual(evidence["metrics"]["large_payload_full_copy_regression"], 1)
+        self.assertEqual(
+            evidence["gates"]["large_payload_full_copy_regression"]["status"],
+            "FAIL",
+        )
+        self.assertEqual(evidence["status"], "FAIL")
+
+        forged = copy.deepcopy(evidence)
+        forged["metrics"]["large_payload_full_copy_regression"] = 0
+        forged["gates"]["large_payload_full_copy_regression"].update(
+            {"observed": 0, "status": "PASS"}
+        )
+        forged["large_payload_resident_memory"][
+            "full_payload_equivalent_regression_count"
+        ] = 0
+        forged["large_payload_resident_memory"]["comparisons"][0][
+            "full_payload_equivalent_regression"
+        ] = 0
+        with self.assertRaisesRegex(ContractError, "raw-derived closed result"):
+            validate_evidence_bundle(
+                forged,
+                self.good_config,
+                self.good_config_raw,
+                validated,
+                raw,
+                summaries,
+                baseline,
+                extra,
+                require_pass=False,
+            )
+
+    def test_large_payload_rss_identity_cadence_and_work_are_fail_closed(
+        self,
+    ) -> None:
+        cases: list[tuple[str, dict[str, object], str]] = []
+
+        sparse = copy.deepcopy(self.good_measurements)
+        sparse_cell = sparse["large_payload_cells"][0]
+        sparse_cell["rss_samples"] = sparse_cell["rss_samples"][::5]
+        cases.append(("100_ms_sparse_rss", sparse, "at least 31 entries"))
+
+        impossible_work = copy.deepcopy(self.good_measurements)
+        impossible_cell = impossible_work["large_payload_cells"][0]
+        started = datetime.fromisoformat(
+            impossible_cell["started_at"].replace("Z", "+00:00")
+        )
+        impossible_cell["elapsed_seconds"] = 0.001
+        impossible_cell["completed_at"] = (
+            (started + timedelta(milliseconds=1))
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+        impossible_cell["request_started_elapsed_ms"] = 0.0
+        cases.append(
+            (
+                "one_ms_cell_with_sixteen_ten_ms_latencies",
+                impossible_work,
+                "latency work cannot fit",
+            )
+        )
+
+        missing_timestamp = copy.deepcopy(self.good_measurements)
+        missing_timestamp["large_payload_cells"][0]["rss_baseline_samples"][0].pop(
+            "observed_at"
+        )
+        cases.append(
+            ("missing_baseline_timestamp", missing_timestamp, "must contain exactly")
+        )
+
+        pid_drift = copy.deepcopy(self.good_measurements)
+        pid_drift["large_payload_cells"][0]["rss_samples"][1]["pid"] += 1
+        cases.append(("pid_drift", pid_drift, "process identity drifted"))
+
+        starttime_drift = copy.deepcopy(self.good_measurements)
+        starttime_drift["large_payload_cells"][0]["rss_samples"][1][
+            "process_start_time_ticks"
+        ] += 1
+        cases.append(
+            ("process_starttime_drift", starttime_drift, "process identity drifted")
+        )
+
+        for case, value, message in cases:
+            with self.subTest(case=case), self.assertRaisesRegex(
+                ContractError, message
+            ):
+                validate_measurements(
+                    value,
+                    canonical_bytes(value) + b"\n",
+                    self.good_config,
+                    self.good_config_raw,
+                    self.good_workload,
+                )
+
+    def test_host_timestamp_requires_exact_three_digit_utc_shape(self) -> None:
+        accepted = "2026-08-09T12:34:56.123Z"
+        self.assertEqual(
+            _host_timestamp_value(accepted, "timestamp").isoformat(),
+            "2026-08-09T12:34:56.123000+00:00",
+        )
+        for rejected in (
+            "2026-08-09T12:34:56Z",
+            "2026-08-09T12:34:56.1Z",
+            "2026-08-09T12:34:56.12Z",
+            "2026-08-09T12:34:56.1234Z",
+            "2026-08-09T12:34:56.12345Z",
+            "2026-08-09T12:34:56.123456Z",
+            "2026-08-09T12:34:56.123+00:00",
+            "2026-08-09T12:34:56.123-05:00",
+        ):
+            with self.subTest(timestamp=rejected), self.assertRaisesRegex(
+                ContractError, "exactly three fractional UTC digits and Z"
+            ):
+                _host_timestamp_value(rejected, "timestamp")
 
     def test_workload_status_is_code_owned_and_rejects_fast_500(self) -> None:
         workload, _ = workload_manifest()
@@ -1270,9 +1961,13 @@ class HostPerformanceContractTests(unittest.TestCase):
             baseline,
             extra,
         )
-        self.assertEqual(evidence["metrics"]["unexpected_http_or_infra_errors"], 2)
         self.assertEqual(
-            evidence["gates"]["unexpected_http_or_infra_errors"]["status"],
+            evidence["metrics"]["unexpected_http_or_infrastructure_errors"], 2
+        )
+        self.assertEqual(
+            evidence["gates"]["unexpected_http_or_infrastructure_errors"][
+                "status"
+            ],
             "FAIL",
         )
         self.assertEqual(evidence["status"], "FAIL")
@@ -1353,6 +2048,20 @@ class HostPerformanceContractTests(unittest.TestCase):
     def test_container_security_must_remain_stable_across_cells_and_warm_lane(
         self,
     ) -> None:
+        validated, _, _, _ = validate_measurements(
+            self.good_measurements,
+            self.good_measurements_raw,
+            self.good_config,
+            self.good_config_raw,
+            self.good_workload,
+        )
+        self.assertEqual(
+            validated["warm_rss"]["runtime"]["docker_common_mount_sha256"],
+            validated["paired_cells"][0]["runtime"][
+                "docker_common_mount_sha256"
+            ],
+        )
+
         cross_cell = copy.deepcopy(self.good_measurements)
         cross_cell["absolute_cells"][0]["runtime"]["container_security"]["cpa"][
             "pids_limit"
@@ -1405,6 +2114,69 @@ class HostPerformanceContractTests(unittest.TestCase):
                 self.good_workload,
             )
 
+        arm_mount_drift = copy.deepcopy(self.good_measurements)
+        arm_mount_drift["absolute_cells"][0]["runtime"][
+            "docker_arm_specific_mount_sha256"
+        ] = "e" * 64
+        with self.assertRaisesRegex(ContractError, "mount projection hashes"):
+            validate_measurements(
+                arm_mount_drift,
+                canonical_bytes(arm_mount_drift) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+        forged_projection_hash = copy.deepcopy(self.good_measurements)
+        forged_projection_hash["paired_cells"][0]["runtime"][
+            "docker_mount_projection_sha256"
+        ] = "e" * 64
+        with self.assertRaisesRegex(ContractError, "mount projection hashes"):
+            validate_measurements(
+                forged_projection_hash,
+                canonical_bytes(forged_projection_hash) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+        warm_common_mount_drift = copy.deepcopy(self.good_measurements)
+        warm_runtime = warm_common_mount_drift["warm_rss"]["runtime"]
+        warm_projection = warm_runtime["mount_identity_projection"]
+        warm_projection["common_mounts"][0]["mode"] = "ro,warm-only-drift"
+        warm_projection["common_sha256"] = sha256_bytes(
+            canonical_bytes(warm_projection["common_mounts"])
+        )
+        warm_runtime["docker_common_mount_sha256"] = warm_projection[
+            "common_sha256"
+        ]
+        warm_runtime["docker_mount_projection_sha256"] = sha256_bytes(
+            canonical_bytes(warm_projection)
+        )
+        with self.assertRaisesRegex(
+            ContractError, "warm RSS lane common mount projection drifted from Host A/B"
+        ):
+            validate_measurements(
+                warm_common_mount_drift,
+                canonical_bytes(warm_common_mount_drift) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+        missing_projection = copy.deepcopy(self.good_measurements)
+        missing_projection["paired_cells"][0]["runtime"].pop(
+            "mount_identity_projection"
+        )
+        with self.assertRaisesRegex(ContractError, "must contain exactly"):
+            validate_measurements(
+                missing_projection,
+                canonical_bytes(missing_projection) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
         mock_container_drift = copy.deepcopy(self.good_measurements)
         mock_container_drift["paired_cells"][0]["runtime"][
             "mock_container_id"
@@ -1424,6 +2196,22 @@ class HostPerformanceContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "raw-derived"):
             validate_evidence_bundle(
                 value,
+                self.good_config,
+                self.good_config_raw,
+                self.good_measurements,
+                self.good_measurements_raw,
+                self.good_summaries,
+                self.good_baseline,
+                self.good_extra,
+            )
+
+        mount_identity = copy.deepcopy(self.good_evidence)
+        mount_identity["mount_identity"][
+            "common_docker_projection_sha256"
+        ] = "e" * 64
+        with self.assertRaisesRegex(ContractError, "raw-derived"):
+            validate_evidence_bundle(
+                mount_identity,
                 self.good_config,
                 self.good_config_raw,
                 self.good_measurements,
@@ -1911,14 +2699,40 @@ class HostPerformanceContractTests(unittest.TestCase):
                 str(root / "evidence.json"),
             ]
             output = io.StringIO()
-            with contextlib.redirect_stdout(output):
+            original_resolve = Path.resolve
+            configured_candidate = Path(run["paths"]["candidate_manifest"])
+
+            def resolve_candidate(path: Path, strict: bool = False) -> Path:
+                if path == configured_candidate:
+                    return original_resolve(root / "candidate.json", strict=True)
+                return original_resolve(path, strict=strict)
+
+            candidate_binding = mock.patch.object(
+                validator_cli,
+                "validate_candidate_manifest_file",
+                return_value=(candidate, candidate_raw),
+            )
+            path_binding = mock.patch.object(Path, "resolve", new=resolve_candidate)
+            with candidate_binding, path_binding, contextlib.redirect_stdout(output):
                 self.assertEqual(validator_cli.main(arguments), 0)
             self.assertIn('"status": "PASS"', output.getvalue())
 
             tampered = copy.deepcopy(evidence)
             tampered["identities"]["cpa"]["binary_sha256"] = "e" * 64
             (root / "evidence.json").write_bytes(canonical_bytes(tampered) + b"\n")
-            with contextlib.redirect_stderr(io.StringIO()):
+            with (
+                mock.patch.object(
+                    validator_cli,
+                    "validate_candidate_manifest_file",
+                    return_value=(candidate, candidate_raw),
+                ),
+                mock.patch.object(
+                    Path,
+                    "resolve",
+                    new=resolve_candidate,
+                ),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
                 self.assertEqual(validator_cli.main(arguments), 2)
 
 

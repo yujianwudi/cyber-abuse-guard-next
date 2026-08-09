@@ -1,0 +1,152 @@
+package pluginstore
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+const rcVersion = "1.0.0-rc.1"
+const rcTag = "v1.0.0-rc.1"
+const rcArchive = "cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip"
+
+func rcPlugin() Plugin {
+	return Plugin{
+		ID: "cyber-abuse-guard", Name: "Cyber Abuse Guard",
+		Description: "Release contract fixture.", Author: "yujianwudi",
+		Version: rcVersion, Repository: "https://github.com/yujianwudi/cyber-abuse-guard-next",
+	}
+}
+
+type recordingRCDoer struct {
+	data     map[string][]byte
+	requests []string
+}
+
+func (d *recordingRCDoer) Do(request *http.Request) (*http.Response, error) {
+	d.requests = append(d.requests, request.URL.String())
+	data, ok := d.data[request.URL.String()]
+	if !ok {
+		return &http.Response{StatusCode: http.StatusNotFound, Body: io.NopCloser(bytes.NewReader(nil)), Header: make(http.Header), Request: request}, nil
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(data)), Header: make(http.Header), Request: request}, nil
+}
+
+func TestCyberAbuseGuardRCPluginStoreContract(t *testing.T) {
+	payload := "audited-so-bytes"
+	release := Release{TagName: rcTag, Assets: []ReleaseAsset{
+		{Name: rcArchive}, {Name: "checksums.txt"},
+	}}
+	version, errVersion := ReleaseVersion(release)
+	if errVersion != nil || version != rcVersion {
+		t.Fatalf("ReleaseVersion() = %q, %v, want %q", version, errVersion, rcVersion)
+	}
+	if got := ArchiveName("cyber-abuse-guard", version, "linux", "amd64"); got != rcArchive {
+		t.Fatalf("ArchiveName() = %q, want %q", got, rcArchive)
+	}
+	archiveAsset, checksumAsset, errSelect := SelectReleaseAssets(release, "cyber-abuse-guard", version, "linux", "amd64")
+	if errSelect != nil || archiveAsset.Name != rcArchive || checksumAsset.Name != "checksums.txt" {
+		t.Fatalf("SelectReleaseAssets() = (%q, %q, %v)", archiveAsset.Name, checksumAsset.Name, errSelect)
+	}
+
+	for name, entries := range map[string]map[string]string{
+		"unversioned":        {"cyber-abuse-guard.so": payload},
+		"exact-rc-versioned": {"cyber-abuse-guard-v1.0.0-rc.1.so": payload},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			result, errInstall := InstallArchive(makeZip(t, entries), rcPlugin(), InstallOptions{
+				PluginsDir: root, GOOS: "linux", GOARCH: "amd64",
+			})
+			if errInstall != nil {
+				t.Fatalf("InstallArchive() error = %v", errInstall)
+			}
+			installed, errRead := os.ReadFile(filepath.Join(root, "linux", "amd64", "cyber-abuse-guard-v1.0.0-rc.1.so"))
+			if errRead != nil || string(installed) != payload || result.Version != rcVersion {
+				t.Fatalf("installed payload/result = %q/%#v, err=%v", installed, result, errRead)
+			}
+		})
+	}
+
+	_, errStableEntry := InstallArchive(
+		makeZip(t, map[string]string{"cyber-abuse-guard-v1.0.0.so": payload}),
+		rcPlugin(), InstallOptions{PluginsDir: t.TempDir(), GOOS: "linux", GOARCH: "amd64"},
+	)
+	if errStableEntry == nil || !strings.Contains(errStableEntry.Error(), "filename must be") {
+		t.Fatalf("base-versioned entry error = %v", errStableEntry)
+	}
+
+	for name, assets := range map[string][]ReleaseAsset{
+		"stable-only":            {{Name: "cyber-abuse-guard_1.0.0_linux_amd64.zip"}, {Name: "checksums.txt"}},
+		"missing-checksums":      {{Name: rcArchive}},
+		"release-checksums-only": {{Name: rcArchive}, {Name: "release-checksums.txt"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, _, err := SelectReleaseAssets(Release{TagName: rcTag, Assets: assets}, "cyber-abuse-guard", rcVersion, "linux", "amd64")
+			if err == nil {
+				t.Fatal("SelectReleaseAssets unexpectedly accepted incomplete RC assets")
+			}
+		})
+	}
+
+	archiveData := makeZip(t, map[string]string{"cyber-abuse-guard.so": payload})
+	digest := sha256.Sum256(archiveData)
+	releaseJSON := `{"tag_name":"` + rcTag + `","assets":[` +
+		`{"name":"` + rcArchive + `","browser_download_url":"https://downloads.example/` + rcArchive + `"},` +
+		`{"name":"checksums.txt","browser_download_url":"https://downloads.example/checksums.txt"}]}`
+	tagURL := "https://api.github.com/repos/yujianwudi/cyber-abuse-guard-next/releases/tags/" + rcTag
+	doer := &recordingRCDoer{data: map[string][]byte{
+		tagURL:                                   []byte(releaseJSON),
+		"https://downloads.example/" + rcArchive: archiveData,
+		"https://downloads.example/checksums.txt": []byte(hex.EncodeToString(digest[:]) + "  " + rcArchive + "\n"),
+	}}
+	client := Client{HTTPClient: doer}
+	root := t.TempDir()
+	manifest := Manifest{
+		SchemaVersion: SchemaVersionV2, ID: "cyber-abuse-guard", Name: "Cyber Abuse Guard",
+		Description: "Release contract fixture.", Author: "yujianwudi", Version: rcVersion,
+		ReleaseTag: rcTag, Repository: "https://github.com/yujianwudi/cyber-abuse-guard-next",
+		Install: InstallPlan{Type: InstallTypeGitHubRelease},
+	}
+	result, errInstall := client.InstallManifest(context.Background(), manifest, InstallOptions{
+		PluginsDir: root, GOOS: "linux", GOARCH: "amd64",
+	})
+	if errInstall != nil || result.ReleaseTag != rcTag || result.Version != rcVersion {
+		t.Fatalf("InstallManifest() = %#v, %v", result, errInstall)
+	}
+	if len(doer.requests) != 3 || doer.requests[0] != tagURL {
+		t.Fatalf("InstallManifest requests = %v, want exact tag metadata then two assets", doer.requests)
+	}
+	for _, requestURL := range doer.requests {
+		if strings.Contains(requestURL, "/releases/latest") {
+			t.Fatalf("InstallManifest incorrectly used latest endpoint: %v", doer.requests)
+		}
+	}
+	installed, errRead := os.ReadFile(result.Path)
+	if errRead != nil || string(installed) != payload {
+		t.Fatalf("InstallVersion payload = %q, %v", installed, errRead)
+	}
+
+	badClient := Client{HTTPClient: mapHTTPDoer{
+		"https://api.github.com/repos/yujianwudi/cyber-abuse-guard-next/releases/tags/" + rcTag: []byte(releaseJSON),
+		"https://downloads.example/" + rcArchive:                                                archiveData,
+		"https://downloads.example/checksums.txt":                                               []byte(strings.Repeat("0", 64) + "  " + rcArchive + "\n"),
+	}}
+	if _, errBad := badClient.InstallVersion(context.Background(), rcPlugin(), rcTag, rcVersion, InstallOptions{
+		PluginsDir: t.TempDir(), GOOS: "linux", GOARCH: "amd64",
+	}); errBad == nil || !strings.Contains(errBad.Error(), "checksum mismatch") {
+		t.Fatalf("wrong checksums.txt error = %v", errBad)
+	}
+
+	latest := Release{TagName: "v1.0.0", Assets: release.Assets}
+	if latestVersion, errLatest := ReleaseVersion(latest); errLatest != nil || latestVersion == rcVersion {
+		t.Fatalf("latest stable boundary = %q, %v", latestVersion, errLatest)
+	}
+}

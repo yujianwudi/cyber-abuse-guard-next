@@ -1,47 +1,101 @@
-# CPA v7.2.116 schema-2 active contract and frozen v7.2.113/v7.2.109/v7.2.104/v7.2.103/v7.2.102 validation
+# CPA v7.2.125 schema-2 active contract and frozen historical validation
+
+## Round 13 active compatibility overlay
+
+The sole active source/compile target is CLIProxyAPI
+`v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`, C ABI 1 / RPC schema 2,
+module sum `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, and go.mod sum
+`h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
+archive is 20,853,030 bytes with SHA-256
+`4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`;
+the contained binary SHA-256 is
+`656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+
+Round 13 source contracts and upstream-targeted tests cover no-copy/in-place
+payload reuse, Antigravity large-payload guards, Multi-Agent v2, Codex
+`response.failed` and `Originator`, Claude replay, session identity, public SDK
+ABI/API, and exact-tag CPA Plugin Store installation. Native Host tests were
+added for `response.failed`, Codex `Originator`, and Claude replay (including
+batch/stream restoration, single-lifecycle counters, and upstream bad-request
+clearing). The final dirty-development Router Host matrix passed locally, but
+the persistent-audit Host blackbox correctly stopped because this WSL instance
+has no passwordless sudo for its isolated bind mount. Unit, race, vet, fuzz, and
+Router results are development evidence only; the exact-clean native Host and
+release lanes remain open. See [Round 13 status](../ROUND13_STATUS.md).
+
+## Round 13 executed contract gates
+
+The following commands passed on 2026-08-09 for this working tree:
+
+- `bash scripts/release-doc-consistency.sh` — `PASS`;
+- `bash scripts/release-rc-contract-test.sh` — `PASS`;
+- `bash scripts/release-candidate-contract-test.sh` — `PASS`;
+- `make workflow-lint` — `PASS`;
+- `bash scripts/check-production-health-test.sh` — `PASS`;
+- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `184/184 PASS` on Linux;
+- `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` — `PASS`.
+
+These contract gates do not close the real native Host, race, complete Linux
+matrix, second-machine, independent-attestation, or production gates.
+
+Everything below this overlay is the frozen Round 12 / CPA v7.2.124 report and
+must not be read as current v7.2.125 evidence.
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
-## Active compatibility target
+## Frozen Round 12 compatibility target
 
 Cyber Abuse Guard pins the current source/compile lane to one exact
 identity of `github.com/router-for-me/CLIProxyAPI/v7`:
 
-- formal target: `v7.2.116` at
-  `a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2.
+- formal target: `v7.2.124` at
+  `197f520426374e514218ed155933ac546c98d345`, C ABI 1 / RPC schema 2.
 
 The checked-in module layout is:
 
-- root `go.mod`: v7.2.116 primary;
-- `integration/cpalatestcontract/go.mod`: v7.2.116;
-- `integration/pluginstorecontract/go.mod`: v7.2.116 Store reference.
+- root `go.mod`: v7.2.124 primary;
+- `integration/cpalatestcontract/go.mod`: v7.2.124;
+- `integration/pluginstorecontract/go.mod`: v7.2.124 Store reference.
 
 The reviewed module identities are:
 
 ```text
-primary_module_sum: h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=
+primary_module_sum: h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=
 primary_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
-upstream_linux_amd64_asset: CLIProxyAPI_7.2.116_linux_amd64.tar.gz
-upstream_linux_amd64_sha256: 469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b
+upstream_linux_amd64_asset: CLIProxyAPI_7.2.124_linux_amd64.tar.gz
+upstream_linux_amd64_size: 20833216
+upstream_linux_amd64_sha256: bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176
 ```
 
 `CPA_COMPAT_PROFILE=primary` is the only accepted profile and is the release
 default. Old observations remain historical and are not current Host evidence.
-The upstream asset hash records the standard release input identity only; this
-documentation update did not download or execute it and does not turn it into a
-CAG artifact, Host result, watchdog result, or release PASS. The working-tree
-Linux amd64 / Go 1.26.4 pinned source/compile matrix now passes with the fixed
-module Origin and sums, including the Home retry lifecycle overlay and the
-no-UsagePlugin registration check. The latest-Release and tag-ref APIs observed
-v7.2.116 at `a88197f845c979132c8978ea223c6af05cc81536`, whose commit verification is
-valid; the official Git endpoint timed out in two bounded local runs, so the
-script's exact remote Git gate remains a GitHub CI requirement. Exact-commit
-CI, Host, watchdog, sandbox, and production results remain **PENDING**.
+The upstream asset hash records the standard plugin-capable release input
+identity only; it is not a CAG artifact, Host result, watchdog result, or
+release PASS. The `_no-plugin` asset cannot load CAG. Exact-commit CI, native
+Host `.so` load, watchdog, second-machine, sandbox, and production results for
+v7.2.124 remain **PENDING** until their named lanes run.
 The top `current_classifier_policy_*` prologue identifies the active working
 tree; it does not replace the frozen v7.2.113 classifier identity below.
+
+## Reviewed v7.2.116-to-v7.2.124 compatibility delta
+
+The reviewed upstream range keeps C ABI 1 and RPC schema 2. The 87 previously
+tracked ABI/API/Host source blobs are byte-identical; the only new plugin-host
+surface is the OAuth refresh compatibility executor and its tests. CAG does not
+register `AuthProvider`, so that wrapper does not require a CAG runtime change.
+
+CPA now optionally prepares official Codex Multi-Agent v2 tool definitions at
+the `/v1/responses` boundary before `RequestInterceptor`. With
+`codex.optimize-multi-agent-v2=true`, CAG therefore sees the prepared tool
+schema for Codex Desktop, `codex-tui`, and `codex_cli_rs` clients. The active
+Linux Host contract must prove ordinary HTTP/SSE requests remain nonblocking,
+an independently malicious current-user request still terminates before
+Provider/Usage/Executor/Mock/SSE side effects, and inert schema descriptions do
+not become user-owned intent. Static source compatibility does not substitute
+for that native Host run.
 
 ## Reviewed v7.2.113-to-v7.2.116 compatibility delta
 
@@ -84,7 +138,7 @@ remained
 `BLOCKED`; the engineering PASS for `150c25e6` cannot be relabeled as a safety,
 Host-release, or production PASS.
 
-## Active validation commands
+## Frozen Round 12 validation commands
 
 Only the following CPA validation paths are supported:
 
@@ -99,7 +153,7 @@ make round6-cpa-store-contract
 With `CPA_COMPAT_VERIFY_REMOTE=1`, the compatibility contract verifies the
 fixed Git tag-to-commit identity directly against the official Git origin and
 binds the Go module Origin plus both checksums. All checked-in modules use the
-same v7.2.116 identity. No repository token is used. The target is intentionally
+same v7.2.124 identity. No repository token is used. The target is intentionally
 pinned, so a later upstream Release does not silently change the supported
 source or Host target. Upstream-latest monitoring is separate and explicit:
 the required CI compatibility lane uses `CPA_COMPAT_VERIFY_REMOTE=1` with
@@ -108,7 +162,7 @@ coupling the supported pin to GitHub's moving latest Release.
 `CPA_COMPAT_REQUIRE_LATEST=1` additionally queries the official unauthenticated
 GitHub `releases/latest` endpoint and fails when the fixed target is no longer
 latest; that monitoring result does not invalidate compatibility with the
-reviewed v7.2.116 pin.
+reviewed v7.2.124 pin.
 `ALLOW_DIRTY_BUILD=1` is a development-only override and is not release
 evidence.
 
@@ -250,28 +304,33 @@ The current single-primary-profile matrix covers:
 - official Home 401 refresh/retry contracts for one same-selection retry,
   concurrent newer-token reuse, no replay after a stream has started, and
   same-logical-request lifecycle ownership;
+- official plugin OAuth refresh compatibility-executor registration and
+  delegation contracts, while preserving CAG's no-`AuthProvider` boundary;
 - Claude final upstream wire-header construction after the request-interceptor
   boundary, plus the explicit fact that CAG does not register `UsagePlugin`;
+- official Codex Multi-Agent v2 HTTP/SSE/WebSocket tool-preparation source
+  contracts plus the native CAG Host HTTP/SSE allow/block and zero-side-effect
+  matrix;
 - checksum-pinned fail-open overlays applied only to an ephemeral CPA source
   copy;
 - Interactions route, handler, translator, auth-selection, and direct-executor
   format contracts;
 - Raw Capture management-response transport and HTML-sanitization contracts on
-  the pinned CPA v7.2.116 source;
-- official v7.2.116 Responses continuation selectors for
+  the pinned CPA v7.2.124 source;
+- official v7.2.124 Responses continuation selectors for
   `previous_response_id`, Gemini interactions function calls and response-name
   backfill, and Gemini-to-OpenAI FIFO/fallback/explicit-ID translation paths;
 - CPA Store archive naming, root layout, checksum, installation, repeat-install,
   overwrite, and published-artifact identity;
 - a native Linux integration target for plugin load and pre-upstream blocking;
   the frozen v7.2.113 final baseline passed exact-main engineering checks, but
-  v7.2.116 must rebuild and rerun independently;
+  v7.2.124 must rebuild and rerun independently;
 - a second pure-C Router/executor fixture for priority, tie-break, fallback, and
   target-readiness scenarios; the frozen v7.2.113 final baseline remains
-  historical, and v7.2.116 exact-commit evidence is pending.
+  historical, and v7.2.124 exact-commit evidence is pending.
 
 The shared test fixtures under `integration/pluginstorecontract/testfixtures/`
-remain the current v7.2.116 contract inputs. The pure-C schema-1 Router fixture
+remain the current v7.2.124 contract inputs. The pure-C schema-1 Router fixture
 is deliberately retained as a named legacy compatibility lane; it is not the
 production Guard enforcement path.
 
@@ -310,7 +369,7 @@ Store validation, integration compilation, and clean-tree verification. It did
 not run the native Host black-box or pure-C Router fixture targets.
 
 These commit, asset, and older CPA statements are retained only as historical
-baseline evidence. The current contract is fixed to CPA v7.2.116; exact
+baseline evidence. The current contract is fixed to CPA v7.2.124; exact
 tag/commit/tree, current CI, 17 asset hashes, and RC-versioned integration
 results are recorded at runtime in `rc-release-evidence.md` and
 `rc-release-manifest.json` rather than self-recorded in this source file.
@@ -325,7 +384,7 @@ this report is a claim that a production CPA process, real Provider, account
 pool, or production traffic was used.
 
 The remaining protected server evidence must load the clean exact Linux artifact
-in CPA v7.2.116 with a counted Mock upstream and reproduce zero deltas for
+in CPA v7.2.124 with a counted Mock upstream and reproduce zero deltas for
 locally blocked requests at Auth Selector, Provider execution, usage accounting,
 and Mock-upstream request layers. The local development blackbox proves a
 narrower boundary for its dirty `.so`: safe requests carry a CPA

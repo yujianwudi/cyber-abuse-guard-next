@@ -1,11 +1,11 @@
-# Performance Report — Round 10 source status and historical development evidence
+# Performance Report — Round 13 source status and historical development evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
-Last updated: 2026-08-08 (Asia/Shanghai)
+Last updated: 2026-08-09 (Asia/Shanghai)
 
 ## Round 10 bounded Linux concurrency runner
 
@@ -42,6 +42,27 @@ runner-profile-bound overload baseline exists. Missing, duplicate, or unexpected
 workload matrices fail closed. On a runner with at least 16 effective CPUs, all
 absolute gates still include c=16. This development runner remains explicitly
 non-equivalent to a production-capacity SLO.
+
+### Round 13 classifier-policy-v15 local source result
+
+The 2026-08-09 isolated WSL Linux amd64 / Go 1.26.4 working-tree run completed
+`make round6-benchmark` in 204.93 seconds and the Round 10 gate in 25.72
+seconds. The Round 10 JSON deliberately records
+`measured_tree=NOT_PROVIDED_DIRTY_WORKTREE`; it is source-development evidence,
+not an exact commit, CPA Host, container, Provider, or production result.
+
+| Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
+|---|---:|---|
+| ordinary | p95 `2.395298 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `134.449820 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `63.070076 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `9.161171/9.392444 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `1.268688 ms` at c=16; sampled queue max `30/256` | failure/panic count 0: `PASS` |
+
+All bounded operations reported zero failures and zero recovered panics. The
+fixed-workload p99 regression baseline, native CPA Host/container overhead,
+throughput ratio, 60-minute RSS lane, and second-machine evidence remain
+`NOT_PROVIDED`; no release or production performance PASS is inferred.
 
 ### Frozen pre-v7.2.113 classifier-policy-v10 local source result
 

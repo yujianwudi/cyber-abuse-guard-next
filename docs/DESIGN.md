@@ -1,9 +1,18 @@
-# CPA Cyber Abuse Guard v0.16 Round 12 Design
+# Cyber Abuse Guard Next design
+
+> [!IMPORTANT]
+> The active Round 13 source is `1.0.0`, targets CPA
+> `v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e` on Linux amd64, and plans
+> prerelease `v1.0.0-rc.1`. The detailed Round 12 text below is retained as a
+> frozen design baseline; [Round 13](ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md)
+> supersedes its version, release, compatibility, and evidence-status claims.
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
+
+## Frozen historical Round 12 design body
 
 ## Scope, release state, and invariants
 
@@ -17,16 +26,28 @@ be overwritten, relabeled, repaired, or republished as Round 12 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.116` at
-  `a88197f845c979132c8978ea223c6af05cc81536`, module sum
-  `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`, and `go.mod` sum
-  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
+- CPA `v7.2.124` at
+  `197f520426374e514218ed155933ac546c98d345`, module sum
+  `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=`, and `go.mod` sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. Its standard Linux amd64
+  asset SHA-256 is
+  `bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`.
 
 The root module, `integration/cpalatestcontract`, and
 `integration/pluginstorecontract` bind this same identity. A later CPA tag is
 not followed automatically.
 Source/compile contracts are not counted-Mock Host evidence, and neither is a
 substitute for independent review of the exact candidate bytes.
+
+C ABI 1 and RPC schema 2 are unchanged from v7.2.116, but that does not transfer
+runtime evidence. CPA v7.2.124 Multi-Agent v2 rewrites `/v1/responses` tool
+definitions before `RequestInterceptor`, so CAG observes the rewritten tool
+representation rather than assuming byte identity with the client-wire request.
+The active lane must freshly regress recognized and unknown tool definitions,
+tool-schema inertness, tool-call arguments, terminal tool results, budget and
+provenance boundaries, and allow/block parity through the exact v7.2.124 Host.
+Historical v7.2.116 CI, second-machine, and five-repository data cannot close
+that gate.
 
 Round 9 introduced the candidate-level Balanced false-positive boundary that
 Round 12 retains and hardens. The classifier does not treat a request as a bag
@@ -70,8 +91,8 @@ audit-migration, and operator-owned rollback designs are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Those records remain
-bound to their historical CPA v7.2.113 lane and are not rebound to v7.2.116.
-The active v7.2.116 source line still requires its own exact-commit CI,
+bound to their historical CPA v7.2.113 lane and are not rebound to v7.2.124.
+The active v7.2.124 source line still requires its own exact-commit CI,
 counted-Mock Host validation, second-machine review, and independent audit;
 self-tests do not authorize production Balanced mode.
 
@@ -94,7 +115,7 @@ Its JSON RPC registration uses schema version 2 and declares:
   has no untrusted mutator that runs after Guard at the final interceptor stage;
 - `request_lifecycle_plugin`: remove the bounded, TTL-limited opaque RequestID
   and fingerprint entry for succeeded, failed, rejected, or canceled requests;
-- `model_router: true`: only the CPA v7.2.116 `codex-alpha-search` compatibility
+- `model_router: true`: only the CPA v7.2.124 `codex-alpha-search` compatibility
   entry is handled because those two HTTP routes do not invoke
   RequestInterceptor. Host-originated Router callbacks for every other format
   return `Handled:false` without classification; ordinary enforcement remains
@@ -116,7 +137,7 @@ executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
 before Codex auth or upstream because that handler currently accepts only a
 `provider=codex` target.
 
-CPA v7.2.116, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
+CPA v7.2.124, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
 global capability rather than a source-format-scoped capability. Once CAG
 registers it for Alpha Search, an
 ordinary routed request still incurs CPA's body clone, JSON/Base64
@@ -895,7 +916,7 @@ The authenticated status exposes `loaded`, `enforcement_ready`,
 failures), `panics_recovered`, audit/HMAC/persistence degradation,
 reconfigure error, build/ruleset identity, and the classifier-policy
 version/hash. The loopback-only production watchdog checks those fields, runs
-built-in local probes, and actively proves the CPA v7.2.116 startup logging
+built-in local probes, and actively proves the CPA v7.2.124 startup logging
 boundary with one temporary root-bound marker plus two one-time, same-process
 CAG resource challenges over the direct CPA listener. The complete and partial
 lowercase-`get` probes are source-pinned to traverse CPA request logging without
@@ -929,7 +950,7 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-Both v7.2.116 compatibility contract modules first prove that the named critical
+Both v7.2.124 compatibility contract modules first prove that the named critical
 upstream Host tests still exist and then each executes the complete upstream
 `internal/pluginhost` package for the current platform. Their CI coverage is
 intentionally overlapping; it is neither an exact-name-only run nor a pair of
@@ -938,9 +959,15 @@ non-duplicative contracts. The plugin-store module also calls the official
 real build artifact. These checks cover store naming, root-only library layout,
 checksum, installed path/bytes, repeat installation, tamper repair, priority
 ordering, and documented Host fallback. They remain source/installer
-compatibility evidence. Current admission requires a newly versioned v7.2.116
+compatibility evidence. Current admission requires a newly versioned v7.2.124
 counted-Mock Host run on the same candidate and independent verification; the
 frozen Round 9 v7.2.113 evidence protocol cannot be relabelled or reused.
+
+The v7.2.124 Host run must additionally exercise Multi-Agent v2 on
+`/v1/responses` and bind the pre-interceptor tool-definition rewrite to the
+observed schema-2 envelope. A green v7.2.116 lane, including its CI,
+second-machine diagnostic, or five-repository data, is historical-only and is
+not accepted as this regression.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,
 starts a local mock OpenAI-compatible upstream, and starts CPA with the plugin.
@@ -998,8 +1025,10 @@ Missing `.so`, Store ZIP, metadata, checksums, or candidate manifest must fail;
 synthetic fallback cannot satisfy Host evidence.
 
 Whether the authorized sandbox and independent auditor ran the suite against the
-exact candidate is an evidence field, not an architectural property; consult
-the Round 12 status boundary for current claims. The Round 9 execution record,
+exact candidate is an evidence field, not an architectural property. The active
+v7.2.124 claims are stated in this design, the root README, and the active
+Round 12 status file. Historical v7.2.116 results inside that overlay do not
+transfer. The Round 9 execution record,
 Round 8 readiness report, and Round 6 handoff remain historical evidence only.
 Release verification inspects the ELF and rejects a binary whose imported glibc
 symbol version exceeds `GLIBC_2.34`. The published artifact therefore requires

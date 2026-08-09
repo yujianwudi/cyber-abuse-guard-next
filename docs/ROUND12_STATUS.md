@@ -1,8 +1,8 @@
 # Round 12 active status and evidence boundary
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
 ```
 
 This page is the short, current status overlay for
@@ -13,26 +13,31 @@ Round 12 working tree.
 
 <!-- round12-status:start -->
 ```text
-round12_status: LOCAL_REVALIDATION_PASS / EXACT_CANDIDATE_GATES_PENDING / ACCEPTANCE_INCOMPLETE / NO_RELEASE
+round12_status: CPA_V7.2.124_LOCAL_SOURCE_COMPILE_PASS / INDEPENDENT_API_IDENTITY_PASS / REMOTE_MAKE_GATE_NETWORK_FAILED / EXACT_CANDIDATE_GATES_PENDING / ACCEPTANCE_INCOMPLETE / NO_RELEASE
 round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
 round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
-round12_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
+round12_cpa_target: v7.2.124 / 197f520426374e514218ed155933ac546c98d345
 round12_go_platform: go1.26.4 / linux-amd64
-round12_classifier_policy: classifier-policy-v12 / 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+round12_local_cpa_source_compile: PASS / GO1.26.4 / LINUX_AMD64 / FULL_LOCAL_MATRIX / PROFILES_PRIMARY / REMOTE_TAG_CHECK_SKIPPED / REMOTE_LATEST_CHECK_SKIPPED
+round12_remote_latest_release_api: PASS / v7.2.124 / INDEPENDENT_API_VERIFICATION
+round12_remote_tag_ref_api: PASS / 197f520426374e514218ed155933ac546c98d345 / COMMIT_VERIFIED / INDEPENDENT_API_VERIFICATION
+round12_remote_combined_make_gate: NETWORK_FAILED / GITHUB_GIT_CURL_52 / NOT_CODE_FAILURE
+round12_native_host_so: NOT_RUN / LOCAL_DEPLOYMENT_PROHIBITED
+round12_classifier_policy: classifier-policy-v12 / 2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b
 round12_source_policy: APPROVED_EXACT_PINS / 9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225
-round12_audit_runner_bundle: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
-round12_audit_contract: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
-round12_audit_run_source: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
-round12_audit_machine_schema: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
-round12_local_audit_tool_tests: PASS / LINUX / 145_OF_145
+round12_audit_runner_bundle: 6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae2f41e00c017a4
+round12_audit_contract: 0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680
+round12_audit_run_source: cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73
+round12_audit_machine_schema: 063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060
+round12_local_audit_tool_tests: PASS / LINUX / 148_OF_148
 round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
 round12_local_safe_gate: PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
-round12_local_go_unit: PASS / GO1.26.4_LINUX / 313.5_SECONDS / DEVELOPMENT_EVIDENCE_ONLY
-round12_local_go_race: PASS / GO1.26.4_LINUX_AMD64 / 977.8_SECONDS / DEVELOPMENT_EVIDENCE_ONLY / EXACT_CI_REQUIRED
+round12_local_go_unit: HISTORICAL_PRE_CPA124 / GO1.26.4_LINUX / REVALIDATION_REQUIRED
+round12_local_go_race: HISTORICAL_PRE_CPA124 / GO1.26.4_LINUX_AMD64 / REVALIDATION_REQUIRED / EXACT_CI_REQUIRED
 round12_local_coderabbit: INITIAL_REVIEW_12_ISSUES / 6_MAJOR_6_MINOR / ALL_REMEDIATED / EXACT_COMMIT_FOLLOWUP_PENDING
 round12_host_performance_contract: PASS / SIX_SOURCE_TOOL_CLOSURE / WARM_CADENCE_3601_TO_3602 / REQUEST_OUTCOME_CONSERVATION
 round12_candidate_manifest_gate: PASS / CLEAN_EXACT_EIGHT_FILE_CI_SEAL / TRACKED_AND_UNTRACKED_CLEAN
-round12_baseline_engineering_ci: PASS / EXACT_MAIN_ONLY
+round12_baseline_engineering_ci: PASS / HISTORICAL_V7.2.116_EXACT_MAIN_ONLY / NOT_TRANSFERABLE
 round12_superseded_pr_head: 9782eaf9da37d466ffc0b644b052d3c842f7f1ca
 round12_superseded_pr_head_engineering_ci: PASS / CI_31016759352 / POLICY_31016760807 / CODEQL_31016759262
 round12_superseded_pr_head_second_machine: FAIL_CLOSED / ERROR_32a64d93ec0f3ed9 / NO_MACHINE_EVIDENCE
@@ -43,9 +48,10 @@ round12_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / 
 round12_current_remediation: MDX_V45_CLASSIFIER / HOST_PERFORMANCE_FALSE_PASS_CLOSURE / CI_CANDIDATE_BINDING / CLEAN_EXACT_MERGE_CANDIDATE_REQUIRED
 round12_sbom_repro_remediation: EXACT_IDENTITY_NORMALIZATION / TWO_INDEPENDENT_BLOBLESS_SPARSE_CLONES / LOCAL_CONTRACT_PASS / EXACT_CI_PENDING
 round12_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
-round12_working_candidate_engineering_ci: PENDING_NEW_HEAD
-round12_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-round12_final_candidate_second_machine: FAIL_CLOSED_SOURCE_DRIFT_ON_E624EEA / MDX_V45_REVIEWED / PENDING_NEW_HEAD_EXECUTION
+round12_working_candidate_engineering_ci: NOT_RUN / PENDING_EXACT_HEAD
+round12_input_second_machine_report: HISTORICAL_V7.2.116_DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
+round12_final_candidate_second_machine: NOT_RUN / PENDING_EXACT_HEAD_EXECUTION
+round12_historical_v7_2_116_final_candidate_second_machine: FAIL_CLOSED_SOURCE_DRIFT_ON_E624EEA / MDX_V45_REVIEWED / NO_MACHINE_EVIDENCE
 round12_protected_host: NOT_PROVIDED
 round12_independent_attestation: NOT_PROVIDED
 round12_production_approved: NOT_PROVIDED
@@ -58,7 +64,13 @@ legacy_v0.15_support: SUSPENDED
 
 ## What has passed
 
-The Round 12 implementation has passed its pre-final Linux development checks:
+The results below predate the v7.2.124 pin unless a line explicitly names the
+new target. They remain useful historical development evidence but do not
+transfer to the new source identity. The v7.2.124 update has independently
+revalidated the complete local CPA source/compile compatibility matrix, the
+three module closures, the integration compile-only path, and 148/148 Linux
+current-audit-tool tests; full root unit, race, exact-commit CI, native Host,
+and second-machine gates remain open.
 
 - the complete safe package, classifier, and counted-Mock unit lanes passed
   under the exact Go 1.26.4 Linux toolchain;
@@ -73,7 +85,7 @@ The Round 12 implementation has passed its pre-final Linux development checks:
   property binding, malformed-graph rejection, and a synthetic independent
   `blob:none` sparse-clone test in which the excluded restricted blob remained
   absent before and after checkout;
-- the current CPA audit harness passed 145/145 Linux tests, including the
+- the current CPA audit harness passed 148/148 Linux tests, including the
   concatenated-ZIP rejection, stopped-image Mock source verification,
   private-parent mode drift, symlink/ancestor/evidence/subdirectory replacement,
   normal-path Docker handoff, closed Source/Destination/RW/rprivate bind and
@@ -201,7 +213,7 @@ still pending and no `SECOND-MACHINE DIAGNOSTIC PASS` is claimed for Round 12.
   CI fuzz results must come from that candidate's GitHub jobs; local functional
   development evidence does not replace them.
 - RT12-05/06 must run against the remediated final candidate on CPA
-  `v7.2.116@a88197f845c979132c8978ea223c6af05cc81536` and close the functional,
+  `v7.2.124@197f520426374e514218ed155933ac546c98d345` and close the functional,
   security, side-effect, identity, database, and performance evidence schema.
 - Protected-Host evidence and independent attestation remain `NOT_PROVIDED`.
   An owner-run diagnostic is not independent evidence.
@@ -226,7 +238,8 @@ download, rollback, or support guarantee.
 `9782eaf` 的 CI、Policy Gate 和 CodeQL 也曾通过，但二号机正式 harness 因 runc
 拒绝 proc-fd bind source 而 fail closed：没有生成 `machine-evidence.json`，没有执行
 第三方仓库代码，私有 corpus 正文已经删除。当前 normal-path handoff 修复已完成本地
-145/145 Linux 审计工具回归、313.5 秒 unit 和 977.8 秒 Go 1.26.4 race；新的精确
+148/148 Linux 审计工具回归；313.5 秒 unit 和 977.8 秒 Go 1.26.4 race 属于
+v7.2.124 固定前的历史开发证据，不能转移；新的精确
 HEAD 门禁和二号机执行仍为
 `PENDING_NEW_HEAD_EXECUTION`。已有的 1,320 次传输执行报告只属于所有者运行
 的输入诊断，不是独立证明。受保护 Host、独立证明、生产批准与 Release Ready 均为

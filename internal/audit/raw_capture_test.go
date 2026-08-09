@@ -5,16 +5,100 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unicode/utf8"
 )
+
+type rawCaptureRollbackFailureDriver struct {
+	closed           atomic.Bool
+	rollbackAttempts atomic.Int32
+	queryErr         error
+	commitErr        error
+	rollbackErr      error
+}
+
+func (d *rawCaptureRollbackFailureDriver) Open(string) (driver.Conn, error) {
+	return &rawCaptureRollbackFailureConn{owner: d}, nil
+}
+
+type rawCaptureRollbackFailureConn struct {
+	owner *rawCaptureRollbackFailureDriver
+}
+
+func (c *rawCaptureRollbackFailureConn) Prepare(string) (driver.Stmt, error) {
+	return nil, errors.New("unexpected Prepare in raw capture rollback failure test")
+}
+
+func (c *rawCaptureRollbackFailureConn) Close() error {
+	c.owner.closed.Store(true)
+	return nil
+}
+
+func (*rawCaptureRollbackFailureConn) Begin() (driver.Tx, error) {
+	return nil, errors.New("unexpected driver transaction in raw capture rollback failure test")
+}
+
+func (c *rawCaptureRollbackFailureConn) ExecContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Result, error) {
+	switch strings.ToUpper(strings.TrimSpace(query)) {
+	case "BEGIN", "BEGIN IMMEDIATE":
+		return driver.RowsAffected(0), nil
+	case "DELETE FROM RAW_REQUEST_CAPTURES":
+		return driver.RowsAffected(0), nil
+	case "COMMIT":
+		return nil, c.owner.commitErr
+	case "ROLLBACK":
+		c.owner.rollbackAttempts.Add(1)
+		return nil, c.owner.rollbackErr
+	default:
+		return nil, fmt.Errorf("unexpected ExecContext query %q", query)
+	}
+}
+
+func (c *rawCaptureRollbackFailureConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	if c.owner.queryErr != nil {
+		return nil, c.owner.queryErr
+	}
+	normalized := strings.ToUpper(strings.Join(strings.Fields(query), " "))
+	switch {
+	case strings.HasPrefix(normalized, "SELECT COUNT(*) FROM RAW_REQUEST_CAPTURES WHERE"):
+		return &rawCaptureRollbackFailureRows{columns: []string{"non_canonical_rows"}, values: [][]driver.Value{{int64(0)}}}, nil
+	case strings.HasPrefix(normalized, "SELECT NAME FROM SQLITE_MASTER"):
+		return &rawCaptureRollbackFailureRows{columns: []string{"name"}}, nil
+	case strings.HasPrefix(normalized, "SELECT COUNT(*), COALESCE(SUM("):
+		return &rawCaptureRollbackFailureRows{columns: []string{"row_count", "snapshot_bytes"}, values: [][]driver.Value{{int64(0), int64(0)}}}, nil
+	case strings.HasPrefix(normalized, "SELECT ID, EVENT_ID, TIMESTAMP_NS"):
+		return &rawCaptureRollbackFailureRows{columns: make([]string, 15)}, nil
+	default:
+		return nil, fmt.Errorf("unexpected QueryContext query %q", query)
+	}
+}
+
+type rawCaptureRollbackFailureRows struct {
+	columns []string
+	values  [][]driver.Value
+}
+
+func (r *rawCaptureRollbackFailureRows) Columns() []string { return r.columns }
+func (*rawCaptureRollbackFailureRows) Close() error        { return nil }
+
+func (r *rawCaptureRollbackFailureRows) Next(dest []driver.Value) error {
+	if len(r.values) == 0 {
+		return io.EOF
+	}
+	copy(dest, r.values[0])
+	r.values = r.values[1:]
+	return nil
+}
 
 func TestPrepareRawCaptureRedactsSecretsBeforeUTF8Truncation(t *testing.T) {
 	t.Parallel()
@@ -290,6 +374,103 @@ func TestQueryRawCapturesPageStopsAfterOneBudgetSentinel(t *testing.T) {
 		if len(capture.RawPreview) != maxRawCaptureBytes {
 			t.Fatalf("returned historical preview bytes=%d, want %d", len(capture.RawPreview), maxRawCaptureBytes)
 		}
+	}
+}
+
+func TestQueryRawCapturesPageDiscardsConnectionWhenDeferredRollbackFails(t *testing.T) {
+	queryErr := errors.New("injected raw capture query failure")
+	rollbackErr := errors.New("injected raw capture rollback failure")
+	failingDriver := &rawCaptureRollbackFailureDriver{
+		queryErr:    queryErr,
+		rollbackErr: rollbackErr,
+	}
+	driverName := fmt.Sprintf("raw-capture-rollback-failure-%p", failingDriver)
+	sql.Register(driverName, failingDriver)
+	db, err := sql.Open(driverName, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store := &Store{db: db}
+	store.activated.Store(true)
+	_, err = store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 1})
+	if !errors.Is(err, queryErr) {
+		t.Fatalf("QueryRawCapturesPage error=%v, want injected query failure", err)
+	}
+	if !failingDriver.closed.Load() {
+		t.Fatal("failed deferred ROLLBACK returned an indeterminate connection to the pool")
+	}
+}
+
+func TestDeleteRawCapturesWithSnapshotDiscardsConnectionWhenCommitAndRollbackFail(t *testing.T) {
+	commitErr := errors.New("injected raw capture purge commit failure")
+	rollbackErr := errors.New("injected raw capture purge rollback failure")
+	failingDriver := &rawCaptureRollbackFailureDriver{
+		commitErr:   commitErr,
+		rollbackErr: rollbackErr,
+	}
+	driverName := fmt.Sprintf("raw-capture-purge-commit-rollback-failure-%p", failingDriver)
+	sql.Register(driverName, failingDriver)
+	db, err := sql.Open(driverName, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	snapshot, deleted, purgeErr := deleteRawCapturesWithSnapshot(context.Background(), conn, maxRawCapturePurgeSnapshotBytes)
+	wipeRawCapturePurgeRows(snapshot)
+	if deleted != 0 || !errors.Is(purgeErr, commitErr) {
+		t.Fatalf("deleteRawCapturesWithSnapshot deleted=%d error=%v, want commit failure", deleted, purgeErr)
+	}
+	if attempts := failingDriver.rollbackAttempts.Load(); attempts != 1 {
+		t.Fatalf("ROLLBACK attempts=%d, want 1 after COMMIT failure", attempts)
+	}
+	if !failingDriver.closed.Load() {
+		t.Fatal("failed COMMIT followed by failed ROLLBACK returned an indeterminate connection to the pool")
+	}
+}
+
+func TestRawCaptureSensitiveQueryReturnsStorageBlockedForInactiveClosedAndUntrustedStore(t *testing.T) {
+	deferred, err := Open(Config{
+		Path:                        filepath.Join(t.TempDir(), "deferred-read.db"),
+		SkipAllStartupMutation:      true,
+		AllowDeferredDatabaseCreate: true,
+		RawCapture:                  RawCaptureConfig{Enabled: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deferred.QueryRawCapturesPage(context.Background(), RawCaptureQuery{}); !errors.Is(err, ErrStorageBlocked) {
+		t.Fatalf("inactive sensitive query error=%v, want ErrStorageBlocked", err)
+	}
+	if err := deferred.Activate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := deferred.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := deferred.QueryRawCapturesPage(context.Background(), RawCaptureQuery{}); !errors.Is(err, ErrStorageBlocked) {
+		t.Fatalf("closed sensitive query error=%v, want ErrStorageBlocked", err)
+	}
+
+	readFailure := errors.New("synthetic realtime read identity failure")
+	untrusted, err := Open(Config{
+		Path:                  filepath.Join(t.TempDir(), "untrusted-read.db"),
+		RawCapture:            RawCaptureConfig{Enabled: true},
+		StorageReadAccessGate: func() error { return readFailure },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = untrusted.Close() })
+	if _, err := untrusted.QueryRawCapturesPage(context.Background(), RawCaptureQuery{}); !errors.Is(err, ErrStorageBlocked) || !strings.Contains(err.Error(), readFailure.Error()) {
+		t.Fatalf("untrusted sensitive query error=%v, want wrapped ErrStorageBlocked", err)
 	}
 }
 
@@ -575,6 +756,551 @@ func TestDisabledReopenFailsWhileExistingStoreIsLocked(t *testing.T) {
 	if err != nil || len(page.Captures) != 1 {
 		t.Fatalf("retained capture page=%#v error=%v, want one row after rejected purge", page, err)
 	}
+}
+
+func TestPurgeRawCapturesRestoresExactRowsWhenTruncatingCheckpointIsBusy(t *testing.T) {
+	now := time.Date(2026, 8, 9, 9, 0, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "checkpoint-rollback.db")
+	store, err := Open(Config{
+		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		QueueSize: 16, BusyTimeout: 25 * time.Millisecond, Now: func() time.Time { return now },
+		RawCapture: RawCaptureConfig{
+			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	raw := []byte(`{"messages":[{"role":"user","content":"checkpoint rollback review text"}]}`)
+	event := rawCaptureEvent("checkpoint-rollback-event", now, "block", "block_malicious_text", raw)
+	if accepted, err := store.EnqueueEventWithRawCapture(event, RawCaptureInput{
+		EventID: event.ID, Timestamp: event.Timestamp, RequestHash: event.RequestHash,
+		SubjectHash: event.SubjectHash, Action: event.Action, Decision: event.Decision, RawRequest: raw,
+	}); err != nil || !accepted {
+		t.Fatalf("EnqueueEventWithRawCapture() accepted=%t error=%v", accepted, err)
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(before.Captures) != 1 {
+		t.Fatalf("pre-purge captures=%#v error=%v", before, err)
+	}
+
+	reader, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(path)+"?_busy_timeout=25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	reader.SetMaxOpenConns(1)
+	readTx, err := reader.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	readOpen := true
+	defer func() {
+		if readOpen {
+			_ = readTx.Rollback()
+		}
+	}()
+	var readerCount int
+	if err := readTx.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&readerCount); err != nil {
+		t.Fatal(err)
+	}
+	if readerCount != 1 {
+		t.Fatalf("reader snapshot count=%d, want 1", readerCount)
+	}
+
+	deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+	if purgeErr == nil || deleted != 0 {
+		t.Fatalf("busy-checkpoint purge deleted=%d error=%v, want restored failure", deleted, purgeErr)
+	}
+	if message := purgeErr.Error(); !strings.Contains(message, "rolled back after deleting 1 rows") ||
+		!strings.Contains(message, "checkpoint remained busy") {
+		t.Fatalf("busy-checkpoint purge error=%q", message)
+	}
+	if err := readTx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	readOpen = false
+
+	after, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(after.Captures) != 1 || after.Captures[0] != before.Captures[0] {
+		t.Fatalf("compensated captures=%#v error=%v, want exact %#v", after, err, before)
+	}
+	if status := store.Status(); status.CleanupDeleted != 0 || status.QueueDepth != 0 {
+		t.Fatalf("compensated purge status=%#v, want no net deletion and drained queue", status)
+	}
+
+	deleted, err = store.PurgeRawCaptures(context.Background())
+	if err != nil || deleted != 1 {
+		t.Fatalf("unblocked purge deleted=%d error=%v", deleted, err)
+	}
+	page, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(page.Captures) != 0 {
+		t.Fatalf("successful purge captures=%#v error=%v", page, err)
+	}
+	var busy, logFrames, checkpointedFrames int
+	if err := store.db.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointedFrames); err != nil {
+		t.Fatal(err)
+	}
+	if busy != 0 || logFrames != 0 || checkpointedFrames != 0 {
+		t.Fatalf("post-success WAL state busy=%d log=%d checkpointed=%d", busy, logFrames, checkpointedFrames)
+	}
+}
+
+func TestPurgeRawCapturesLatchesOperationalFaultWhenCompensationFails(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "compensation-fault.db")
+	store, err := Open(Config{
+		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		QueueSize: 16, BusyTimeout: 25 * time.Millisecond, Now: func() time.Time { return now },
+		RawCapture: RawCaptureConfig{
+			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	raw := []byte(`{"messages":[{"role":"user","content":"compensation fault review text"}]}`)
+	event := rawCaptureEvent("compensation-fault-event", now, "block", "block_malicious_text", raw)
+	if accepted, err := store.EnqueueEventWithRawCapture(event, RawCaptureInput{
+		EventID: event.ID, Timestamp: event.Timestamp, RequestHash: event.RequestHash,
+		SubjectHash: event.SubjectHash, Action: event.Action, Decision: event.Decision, RawRequest: raw,
+	}); err != nil || !accepted {
+		t.Fatalf("EnqueueEventWithRawCapture() accepted=%t error=%v", accepted, err)
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(path)+"?_busy_timeout=25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	reader.SetMaxOpenConns(1)
+	readTx, err := reader.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	readOpen := true
+	defer func() {
+		if readOpen {
+			_ = readTx.Rollback()
+		}
+	}()
+	var readerCount int
+	if err := readTx.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&readerCount); err != nil {
+		t.Fatal(err)
+	}
+	if readerCount != 1 {
+		t.Fatalf("reader snapshot count=%d, want 1", readerCount)
+	}
+	store.rawCapturePurgeHook = func(stage rawCapturePurgeStage) error {
+		if stage == rawCapturePurgeBeforeCompensation {
+			return errors.New("injected compensation I/O failure")
+		}
+		return nil
+	}
+
+	deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+	if deleted != 1 || !errors.Is(purgeErr, ErrRawCapturePurgeUnrecovered) {
+		t.Fatalf("unrecovered purge deleted=%d error=%v", deleted, purgeErr)
+	}
+	status := store.Status()
+	if status.Healthy || !status.Degraded || !strings.Contains(status.LastError, ErrRawCapturePurgeUnrecovered.Error()) {
+		t.Fatalf("unrecovered purge status=%#v", status)
+	}
+	if err := store.RecordRawCapture(RawCaptureInput{
+		EventID: "blocked-after-compensation-fault", Action: "block", Decision: "block_malicious_text",
+		RawRequest: []byte("must not enter the raw capture queue"),
+	}); !errors.Is(err, ErrRawCapturePurgeUnrecovered) {
+		t.Fatalf("raw write after unrecovered purge error=%v", err)
+	}
+	if accepted, err := store.EnqueueEventWithRawCapture(
+		rawCaptureEvent("pair-after-compensation-fault", now, "block", "block_malicious_text", raw),
+		RawCaptureInput{EventID: "pair-after-compensation-fault", Action: "block", Decision: "block_malicious_text", RawRequest: raw},
+	); accepted || !errors.Is(err, ErrRawCapturePurgeUnrecovered) {
+		t.Fatalf("paired raw write after unrecovered purge accepted=%t error=%v", accepted, err)
+	}
+	if err := readTx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	readOpen = false
+}
+
+func TestRawCapturePurgeSnapshotBoundFailsBeforeDelete(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 15, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "snapshot-bound.db")
+	store, err := Open(Config{
+		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		QueueSize: 16, Now: func() time.Time { return now },
+		RawCapture: RawCaptureConfig{
+			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	raw := []byte(`{"messages":[{"role":"user","content":"snapshot bound review text"}]}`)
+	event := rawCaptureEvent("snapshot-bound-event", now, "block", "block_malicious_text", raw)
+	if accepted, err := store.EnqueueEventWithRawCapture(event, RawCaptureInput{
+		EventID: event.ID, Timestamp: event.Timestamp, RequestHash: event.RequestHash,
+		SubjectHash: event.SubjectHash, Action: event.Action, Decision: event.Decision, RawRequest: raw,
+	}); err != nil || !accepted {
+		t.Fatalf("EnqueueEventWithRawCapture() accepted=%t error=%v", accepted, err)
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := store.db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	snapshot, deleted, purgeErr := deleteRawCapturesWithSnapshot(context.Background(), conn, 1)
+	wipeRawCapturePurgeRows(snapshot)
+	if purgeErr == nil || deleted != 0 || snapshot != nil || !strings.Contains(purgeErr.Error(), "safety bound") {
+		t.Fatalf("bounded snapshot=%#v deleted=%d error=%v", snapshot, deleted, purgeErr)
+	}
+	page, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(page.Captures) != 1 {
+		t.Fatalf("snapshot bound changed captures=%#v error=%v", page, err)
+	}
+}
+
+func TestPurgeRawCapturesFreezesConcurrentRawAdmissionThroughCompensation(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 30, 0, 0, time.UTC)
+	store, path, before := openRawCapturePurgeFixture(t, "concurrent-admission", now)
+	readTx := holdRawCapturePurgeReader(t, path, 1)
+	readOpen := true
+	defer func() {
+		if readOpen {
+			_ = readTx.Rollback()
+		}
+	}()
+
+	compensationReached := make(chan struct{})
+	continueCompensation := make(chan struct{})
+	store.rawCapturePurgeHook = func(stage rawCapturePurgeStage) error {
+		if stage == rawCapturePurgeBeforeCompensation {
+			close(compensationReached)
+			<-continueCompensation
+		}
+		return nil
+	}
+	type purgeResult struct {
+		deleted int64
+		err     error
+	}
+	purgeDone := make(chan purgeResult, 1)
+	go func() {
+		deleted, err := store.PurgeRawCaptures(context.Background())
+		purgeDone <- purgeResult{deleted: deleted, err: err}
+	}()
+	<-compensationReached
+
+	rawB := []byte(`{"messages":[{"role":"user","content":"concurrent B review text"}]}`)
+	eventB := rawCaptureEvent("concurrent-admission-b", now.Add(time.Second), "block", "block_malicious_text", rawB)
+	type admissionResult struct {
+		accepted bool
+		err      error
+	}
+	admissionDone := make(chan admissionResult, 1)
+	go func() {
+		accepted, err := store.EnqueueEventWithRawCapture(eventB, RawCaptureInput{
+			EventID: eventB.ID, Timestamp: eventB.Timestamp, RequestHash: eventB.RequestHash,
+			SubjectHash: eventB.SubjectHash, Action: eventB.Action, Decision: eventB.Decision, RawRequest: rawB,
+		})
+		admissionDone <- admissionResult{accepted: accepted, err: err}
+	}()
+	select {
+	case result := <-admissionDone:
+		t.Fatalf("raw producer completed before compensation: %+v", result)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(continueCompensation)
+	result := <-purgeDone
+	if result.deleted != 0 || result.err == nil || !strings.Contains(result.err.Error(), "rolled back after deleting 1 rows") {
+		t.Fatalf("compensated purge=%+v", result)
+	}
+	admission := <-admissionDone
+	if !admission.accepted || admission.err != nil {
+		t.Fatalf("post-compensation admission=%+v", admission)
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := readTx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	readOpen = false
+
+	page, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(page.Captures) != 2 {
+		t.Fatalf("post-compensation A/B page=%#v error=%v", page, err)
+	}
+	seen := map[string]bool{}
+	for _, capture := range page.Captures {
+		seen[capture.EventID] = true
+	}
+	if !seen[before.Captures[0].EventID] || !seen[eventB.ID] {
+		t.Fatalf("post-compensation rows=%#v, want A and B", seen)
+	}
+}
+
+func TestRawCaptureCompensationCommitErrorAndRollbackErrorRequiresFreshVisibility(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 45, 0, 0, time.UTC)
+	store, path, _ := openRawCapturePurgeFixture(t, "uncertain-compensation", now)
+	readTx := holdRawCapturePurgeReader(t, path, 1)
+	defer func() { _ = readTx.Rollback() }()
+	var freshChecks int
+	store.rawCapturePurgeHook = func(stage rawCapturePurgeStage) error {
+		switch stage {
+		case rawCapturePurgeBeforeCompensationCommit:
+			return errors.New("injected commit transport error before COMMIT")
+		case rawCapturePurgeBeforeCompensationRollback:
+			return errors.New("injected rollback transport error")
+		case rawCapturePurgeFreshVerification:
+			freshChecks++
+		}
+		return nil
+	}
+
+	deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+	if deleted != 1 || !errors.Is(purgeErr, ErrRawCapturePurgeUnrecovered) {
+		t.Fatalf("uncertain compensation deleted=%d error=%v", deleted, purgeErr)
+	}
+	if freshChecks < 2 {
+		t.Fatalf("fresh verification count=%d, want pre-commit and post-error checks", freshChecks)
+	}
+	if status := store.Status(); status.Healthy || !status.Degraded {
+		t.Fatalf("uncertain compensation status=%#v", status)
+	}
+}
+
+func TestRawCaptureCompensationReportedCommitErrorAcceptsOnlyFreshCommittedRows(t *testing.T) {
+	now := time.Date(2026, 8, 9, 11, 0, 0, 0, time.UTC)
+	store, path, before := openRawCapturePurgeFixture(t, "committed-compensation", now)
+	readTx := holdRawCapturePurgeReader(t, path, 1)
+	readOpen := true
+	defer func() {
+		if readOpen {
+			_ = readTx.Rollback()
+		}
+	}()
+	var freshChecks int
+	store.rawCapturePurgeHook = func(stage rawCapturePurgeStage) error {
+		switch stage {
+		case rawCapturePurgeAfterCompensationCommit:
+			return errors.New("injected error reported after durable COMMIT")
+		case rawCapturePurgeFreshVerification:
+			freshChecks++
+		}
+		return nil
+	}
+
+	deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+	if deleted != 0 || purgeErr == nil || errors.Is(purgeErr, ErrRawCapturePurgeUnrecovered) {
+		t.Fatalf("durably committed compensation deleted=%d error=%v", deleted, purgeErr)
+	}
+	if freshChecks < 2 {
+		t.Fatalf("fresh verification count=%d, want durable visibility proof", freshChecks)
+	}
+	if err := readTx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	readOpen = false
+	after, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(after.Captures) != 1 || after.Captures[0] != before.Captures[0] {
+		t.Fatalf("durably committed compensation page=%#v error=%v", after, err)
+	}
+}
+
+func TestRawCapturePurgeRejectsNonCanonicalRowsAndTriggersBeforeDelete(t *testing.T) {
+	t.Run("storage-class", func(t *testing.T) {
+		now := time.Date(2026, 8, 9, 11, 15, 0, 0, time.UTC)
+		store, _, _ := openRawCapturePurgeFixture(t, "noncanonical-storage", now)
+		if _, err := store.db.Exec(`UPDATE raw_request_captures SET id = CAST(id AS BLOB)`); err != nil {
+			t.Fatal(err)
+		}
+		deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+		if deleted != 0 || purgeErr == nil || !strings.Contains(purgeErr.Error(), "non-canonical SQLite storage classes") {
+			t.Fatalf("noncanonical purge deleted=%d error=%v", deleted, purgeErr)
+		}
+		var count int
+		if err := store.db.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&count); err != nil || count != 1 {
+			t.Fatalf("noncanonical rows count=%d error=%v", count, err)
+		}
+	})
+
+	t.Run("trigger", func(t *testing.T) {
+		now := time.Date(2026, 8, 9, 11, 30, 0, 0, time.UTC)
+		store, _, _ := openRawCapturePurgeFixture(t, "noncanonical-trigger", now)
+		if _, err := store.db.Exec(`CREATE TRIGGER purge_side_effect AFTER DELETE ON raw_request_captures
+BEGIN
+    DELETE FROM audit_events WHERE id = OLD.event_id;
+END`); err != nil {
+			t.Fatal(err)
+		}
+		deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+		if deleted != 0 || purgeErr == nil || !strings.Contains(purgeErr.Error(), "non-project SQLite trigger") {
+			t.Fatalf("trigger purge deleted=%d error=%v", deleted, purgeErr)
+		}
+		var captures, events int
+		if err := store.db.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&captures); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.db.QueryRow("SELECT COUNT(*) FROM audit_events").Scan(&events); err != nil {
+			t.Fatal(err)
+		}
+		if captures != 1 || events != 1 {
+			t.Fatalf("trigger preflight changed captures=%d events=%d", captures, events)
+		}
+	})
+}
+
+func TestRawCaptureCompensationRevalidatesTriggerContractBeforeInsertAndPreservesConcurrentB(t *testing.T) {
+	now := time.Date(2026, 8, 9, 11, 45, 0, 0, time.UTC)
+	store, path, before := openRawCapturePurgeFixture(t, "compensation-trigger-drift", now)
+	if _, err := store.db.Exec(`CREATE TABLE raw_capture_compensation_copies (id TEXT NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	reader := holdRawCapturePurgeReader(t, path, 1)
+	readerOpen := true
+	t.Cleanup(func() {
+		if readerOpen {
+			_ = reader.Rollback()
+		}
+	})
+
+	original := before.Captures[0]
+	concurrentRaw := []byte(`{"messages":[{"role":"user","content":"concurrent B must survive compensation drift"}]}`)
+	concurrentSHA := sha256.Sum256(concurrentRaw)
+	var injected bool
+	store.rawCapturePurgeHook = func(stage rawCapturePurgeStage) error {
+		if stage != rawCapturePurgeBeforeCompensation || injected {
+			return nil
+		}
+		injected = true
+		if err := reader.Rollback(); err != nil {
+			return fmt.Errorf("release checkpoint reader: %w", err)
+		}
+		readerOpen = false
+		if _, err := store.db.Exec(`INSERT INTO audit_events (
+    id, timestamp_ns, action, mode, category, risk_score, rule_ids,
+    request_hash, subject_hash, model, source_format, stream,
+    text_bytes_scanned, classifier, decision, coverage, incomplete_reason,
+    scanner, latency_us, decision_explanation, disposition, explanation_schema
+) SELECT ?, timestamp_ns, action, mode, category, risk_score, rule_ids,
+    request_hash, subject_hash, model, source_format, stream,
+    text_bytes_scanned, classifier, decision, coverage, incomplete_reason,
+    scanner, latency_us, decision_explanation, disposition, explanation_schema
+FROM audit_events WHERE id = ?`, "concurrent-event-b", original.EventID); err != nil {
+			return fmt.Errorf("insert concurrent event B: %w", err)
+		}
+		if _, err := store.db.Exec(restoreRawCaptureSQL,
+			"concurrent-capture-b", "concurrent-event-b", now.Add(time.Second).UnixNano(),
+			HashRequest(concurrentRaw), original.SubjectHash, original.Action, original.Decision,
+			0, 1, concurrentRaw, "sha256:"+hex.EncodeToString(concurrentSHA[:]), 0,
+			rawCaptureRedactionVersion, original.DecisionKind, original.ExplanationSchema,
+		); err != nil {
+			return fmt.Errorf("insert concurrent capture B: %w", err)
+		}
+		if _, err := store.db.Exec(`CREATE TRIGGER compensation_copy_attack
+AFTER INSERT ON raw_request_captures
+BEGIN
+    INSERT INTO raw_capture_compensation_copies(id) VALUES (NEW.id);
+END`); err != nil {
+			return fmt.Errorf("install concurrent compensation trigger: %w", err)
+		}
+		return nil
+	}
+
+	deleted, purgeErr := store.PurgeRawCaptures(context.Background())
+	if deleted != 1 || !errors.Is(purgeErr, ErrRawCapturePurgeUnrecovered) ||
+		!strings.Contains(purgeErr.Error(), errRawCaptureCompensationContractDrift.Error()) {
+		t.Fatalf("compensation drift purge deleted=%d error=%v", deleted, purgeErr)
+	}
+	var captureID, preview string
+	if err := store.db.QueryRow(`SELECT id, raw_preview FROM raw_request_captures`).Scan(&captureID, &preview); err != nil {
+		t.Fatal(err)
+	}
+	if captureID != "concurrent-capture-b" || preview != string(concurrentRaw) {
+		t.Fatalf("concurrent B changed: id=%q preview=%q", captureID, preview)
+	}
+	var copies int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM raw_capture_compensation_copies`).Scan(&copies); err != nil {
+		t.Fatal(err)
+	}
+	if copies != 0 {
+		t.Fatalf("compensation executed attacker trigger copies=%d, want 0", copies)
+	}
+	if err := store.RecordRawCapture(RawCaptureInput{}); !errors.Is(err, ErrRawCapturePurgeUnrecovered) {
+		t.Fatalf("contract drift did not latch raw writes: %v", err)
+	}
+}
+
+func openRawCapturePurgeFixture(t testing.TB, name string, now time.Time) (*Store, string, RawCapturePage) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name+".db")
+	store, err := Open(Config{
+		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		QueueSize: 16, BusyTimeout: 25 * time.Millisecond, Now: func() time.Time { return now },
+		RawCapture: RawCaptureConfig{
+			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	raw := []byte(`{"messages":[{"role":"user","content":"` + name + ` A review text"}]}`)
+	event := rawCaptureEvent(name+"-a", now, "block", "block_malicious_text", raw)
+	if accepted, err := store.EnqueueEventWithRawCapture(event, RawCaptureInput{
+		EventID: event.ID, Timestamp: event.Timestamp, RequestHash: event.RequestHash,
+		SubjectHash: event.SubjectHash, Action: event.Action, Decision: event.Decision, RawRequest: raw,
+	}); err != nil || !accepted {
+		t.Fatalf("EnqueueEventWithRawCapture() accepted=%t error=%v", accepted, err)
+	}
+	if err := store.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	page, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil || len(page.Captures) != 1 {
+		t.Fatalf("fixture captures=%#v error=%v", page, err)
+	}
+	return store, path, page
+}
+
+func holdRawCapturePurgeReader(t testing.TB, path string, want int) *sql.Tx {
+	t.Helper()
+	reader, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(path)+"?_busy_timeout=25")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reader.Close() })
+	reader.SetMaxOpenConns(1)
+	tx, err := reader.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&count); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if count != want {
+		_ = tx.Rollback()
+		t.Fatalf("reader snapshot count=%d, want %d", count, want)
+	}
+	return tx
 }
 
 func rawCaptureEvent(id string, timestamp time.Time, action, decision string, raw []byte) Event {

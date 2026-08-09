@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the fixed five-repository corpus against CPA v7.2.116 in isolation.
+"""Run the fixed five-repository corpus against CPA v7.2.125 in isolation.
 
 The harness never executes corpus bytes.  It gives CPA exactly one internal
 counted-Mock upstream, publishes no host port, records no request text, and
@@ -36,6 +36,8 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 from acquire import validate_policy
 from audit_contract import (
     CLAIM_BOUNDARY,
+    CPA_OFFICIAL_ASSET_SIZE,
+    CPA_TAG,
     EVIDENCE_SCHEMA,
     FIXED_REPOSITORIES,
     MOCK_CONTRACT,
@@ -56,6 +58,7 @@ from audit_contract import (
     sha256_file,
     validate_allow_response,
     validate_block_response,
+    validate_candidate_manifest_file,
     validate_corpus_manifest,
     validate_machine_evidence,
     validate_manifest_policy,
@@ -750,7 +753,7 @@ def image_identity(docker: Docker, expected: Mapping[str, Any], role: str) -> di
         version = str(labels.get("org.opencontainers.image.version", ""))
         revision = str(labels.get("org.opencontainers.image.revision", "")).lower()
         if version.lstrip("v") != str(expected["tag"]).lstrip("v") or revision != expected["commit"]:
-            fail("CPA image labels do not bind v7.2.116")
+            fail(f"CPA image labels do not bind {CPA_TAG}")
     else:
         if (
             labels.get("io.cyber-abuse-guard.mock-contract") != MOCK_CONTRACT
@@ -1080,6 +1083,7 @@ class Harness:
         return {"Authorization": "Bearer " + self.control_token}
 
     def verify_static_inputs(self) -> None:
+        validate_candidate_manifest_file(self.config)
         require_private_directory(self.corpus_root, "acquisition root")
         require_private_directory(self.corpus_root / "corpus", "private corpus directory")
         manifest_path = Path(self.config["paths"]["corpus_manifest"])
@@ -1140,13 +1144,17 @@ class Harness:
         if self.cag_pre != (cag["commit"], cag["tree"]):
             fail("CAG source commit/tree does not match run config")
         cag_so = Path(self.config["paths"]["cag_so"])
-        if sha256_file(cag_so) != cag["so_sha256"]:
+        if sha256_file(cag_so, require_single_link=True) != cag["so_sha256"]:
             fail("CAG shared object SHA drifted")
 
         cpa = self.config["identities"]["cpa"]
         asset = Path(self.config["paths"]["cpa_official_asset"])
-        regular_file_info(asset, "CPA official release asset")
-        if asset.name != cpa["official_asset_name"] or sha256_file(asset) != cpa["official_asset_sha256"]:
+        asset_info = regular_file_info(asset, "CPA official release asset")
+        if (
+            asset.name != cpa["official_asset_name"]
+            or asset_info.st_size != CPA_OFFICIAL_ASSET_SIZE
+            or sha256_file(asset) != cpa["official_asset_sha256"]
+        ):
             fail("CPA official release asset identity drifted")
         image_identity(self.docker, cpa, "cpa")
         image_identity(self.docker, self.config["identities"]["mock"], "mock")
@@ -2343,9 +2351,12 @@ class Harness:
                 "unique_semantic_cases": self.manifest["unique_semantic_cases"],
             },
             "identities": {
+                "candidate": self.config["identities"]["candidate"],
                 "cag": {
                     "commit": self.config["identities"]["cag"]["commit"],
+                    "so_name": self.config["identities"]["cag"]["so_name"],
                     "so_sha256": self.config["identities"]["cag"]["so_sha256"],
+                    "source_version": self.config["identities"]["cag"]["source_version"],
                     "tree": self.config["identities"]["cag"]["tree"],
                 },
                 "configuration": {
@@ -2489,6 +2500,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         validate_corpus_manifest(manifest, manifest_path.parent)
         cleanup_manifest = (manifest, manifest_path.parent)
+        validate_candidate_manifest_file(config)
         policy_raw = read_regular_bytes(POLICY_PATH, "fixed source policy", 2 * 1024 * 1024)
         policy_sha256 = sha256_bytes(policy_raw)
         if (

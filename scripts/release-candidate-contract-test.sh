@@ -52,7 +52,7 @@ printf '%s\n' \
   'package buildinfo' \
   'const StreamingScannerIdentity = "streaming-scanner-v1"' \
   'var (' \
-  '  Version = "0.15"' \
+  '  Version = "1.0.0"' \
   '  RulesetVersion = "1.0.7"' \
   ')' \
   >"$fixture/internal/buildinfo/buildinfo.go"
@@ -134,7 +134,7 @@ candidate_success() {
   release_assert_tag
   release_assert_candidate_build
   [[ "$RELEASE_BUILD_KIND" == candidate ]]
-  [[ "$RELEASE_ARTIFACT_VERSION" == 0.15 ]]
+  [[ "$RELEASE_ARTIFACT_VERSION" == 1.0.0 ]]
   [[ "$RELEASE_DIRTY" == false ]]
 }
 
@@ -170,7 +170,7 @@ rc_case() {
   RELEASE_ROOT="$fixture"
   RELEASE_CANDIDATE_BUILD="${RELEASE_CANDIDATE_BUILD:-0}"
   RELEASE_RC_BUILD="${RELEASE_RC_BUILD:-1}"
-  RELEASE_RC_TAG="${RELEASE_RC_TAG:-v0.15-rc.3}"
+  RELEASE_RC_TAG="${RELEASE_RC_TAG:-v1.0.0-rc.1}"
   RELEASE_RC_EXPECTED_COMMIT="${RELEASE_RC_EXPECTED_COMMIT:-$commit}"
   RELEASE_RC_EXPECTED_TREE="${RELEASE_RC_EXPECTED_TREE:-$tree}"
   ALLOW_DIRTY_BUILD="${ALLOW_DIRTY_BUILD:-0}"
@@ -190,7 +190,7 @@ rc_success() {
   release_assert_tag
   release_assert_rc_build
   [[ "$RELEASE_BUILD_KIND" == rc ]]
-  [[ "$RELEASE_ARTIFACT_VERSION" == 0.15-rc.3 ]]
+  [[ "$RELEASE_ARTIFACT_VERSION" == 1.0.0-rc.1 ]]
   [[ "$RELEASE_DIRTY" == false ]]
 }
 
@@ -203,11 +203,11 @@ rc_wrong_tree() {
 }
 
 rc_zero_suffix() {
-  RELEASE_RC_TAG=v0.15-rc.0 rc_case
+  RELEASE_RC_TAG=v1.0.0-rc.0 rc_case
 }
 
 rc_leading_zero_suffix() {
-  RELEASE_RC_TAG=v0.15-rc.02 rc_case
+  RELEASE_RC_TAG=v1.0.0-rc.02 rc_case
 }
 
 rc_dirty_conflict() {
@@ -353,7 +353,7 @@ formal_with_annotated_tag() {
   RELEASE_RC_BUILD=0
   if [[ "${GITHUB_ACTIONS:-false}" == true ]]; then
     GITHUB_REF_TYPE=tag
-    GITHUB_REF_NAME=v0.15
+    GITHUB_REF_NAME=v1.0.0
     export GITHUB_REF_TYPE GITHUB_REF_NAME
   fi
   unset SOURCE_DATE_EPOCH
@@ -539,7 +539,7 @@ rc_sbom_identity_contract() {
   normalize_sbom_fixture "$raw" "$normalized"
   normalize_sbom_fixture "$unversioned" "$normalized_unversioned"
   cmp -s "$normalized" "$normalized_unversioned"
-  assert_normalized_sbom_identity "$normalized" v0.15-rc.3 rc
+  assert_normalized_sbom_identity "$normalized" v1.0.0-rc.1 rc
 }
 
 formal_sbom_identity_contract() {
@@ -548,7 +548,7 @@ formal_sbom_identity_contract() {
   formal_with_annotated_tag
   write_sbom_fixture "$raw" versioned
   normalize_sbom_fixture "$raw" "$normalized"
-  assert_normalized_sbom_identity "$normalized" v0.15 formal
+  assert_normalized_sbom_identity "$normalized" v1.0.0 formal
 }
 
 development_sbom_identity_contract() {
@@ -562,11 +562,11 @@ development_sbom_identity_contract() {
   unset SOURCE_DATE_EPOCH
   export RELEASE_ROOT ALLOW_DIRTY_BUILD RELEASE_CANDIDATE_BUILD RELEASE_RC_BUILD
   release_init
-  expected_version="v0.15-dirty.${RELEASE_GIT_COMMIT:0:12}"
+  expected_version="v1.0.0-dirty.${RELEASE_GIT_COMMIT:0:12}"
   write_sbom_fixture "$raw" unversioned
   normalize_sbom_fixture "$raw" "$normalized"
   assert_normalized_sbom_identity "$normalized" "$expected_version" development
-  [[ "$expected_version" != v0.15 ]]
+  [[ "$expected_version" != v1.0.0 ]]
 }
 
 run_must_pass clean-exact-candidate candidate_success
@@ -590,10 +590,10 @@ run_must_fail formal-build-without-tag formal_without_tag
 
 run_must_fail rc-build-without-tag rc_success
 run_must_fail_with rc-zero-suffix \
-  'RC builds require RELEASE_RC_TAG=v0.15-rc.N with N >= 1 and no leading zero' \
+  'RC builds require RELEASE_RC_TAG=v1.0.0-rc.N with N >= 1 and no leading zero' \
   rc_zero_suffix
 run_must_fail_with rc-leading-zero-suffix \
-  'RC builds require RELEASE_RC_TAG=v0.15-rc.N with N >= 1 and no leading zero' \
+  'RC builds require RELEASE_RC_TAG=v1.0.0-rc.N with N >= 1 and no leading zero' \
   rc_leading_zero_suffix
 run_must_fail mismatched-rc-commit rc_wrong_commit
 run_must_fail mismatched-rc-tree rc_wrong_tree
@@ -601,33 +601,33 @@ run_must_fail dirty-rc-conflict rc_dirty_conflict
 run_must_fail candidate-rc-conflict rc_candidate_conflict
 run_must_fail rc-source-date-override rc_wrong_epoch
 
-git -C "$fixture" tag v0.15
+git -C "$fixture" tag v1.0.0
 run_must_fail formal-build-with-lightweight-tag formal_without_tag
 run_must_fail candidate-after-lightweight-formal-tag candidate_success
-git -C "$fixture" tag -d v0.15 >/dev/null
+git -C "$fixture" tag -d v1.0.0 >/dev/null
 
-git -C "$fixture" tag v0.15-rc.3
+git -C "$fixture" tag v1.0.0-rc.1
 run_must_fail rc-build-with-lightweight-tag rc_success
-git -C "$fixture" tag -d v0.15-rc.3 >/dev/null
+git -C "$fixture" tag -d v1.0.0-rc.1 >/dev/null
 
-git -C "$fixture" tag -a v0.15-rc.3 -m 'sandbox v0.15-rc.3'
+git -C "$fixture" tag -a v1.0.0-rc.1 -m 'sandbox v1.0.0-rc.1'
 run_must_pass rc-build-with-annotated-tag rc_success
 run_must_pass rc-sbom-exact-tag-identity rc_sbom_identity_contract
 run_must_fail rc-cannot-run-formal-operation rc_cannot_run_formal_operation
 run_must_fail rc-cannot-run-candidate-operation rc_cannot_run_candidate_operation
 
-git -C "$fixture" tag -a v0.15 -m 'formal v0.15'
+git -C "$fixture" tag -a v1.0.0 -m 'formal v1.0.0'
 run_must_pass formal-build-with-annotated-tag formal_with_annotated_tag
 run_must_pass formal-sbom-exact-tag-identity formal_sbom_identity_contract
 run_must_fail candidate-after-formal-tag candidate_success
 run_must_fail rc-after-formal-tag rc_success
-git -C "$fixture" tag -d v0.15 >/dev/null
-git -C "$fixture" tag -d v0.15-rc.3 >/dev/null
+git -C "$fixture" tag -d v1.0.0 >/dev/null
+git -C "$fixture" tag -d v1.0.0-rc.1 >/dev/null
 run_must_pass development-sbom-cannot-claim-formal development_sbom_identity_contract
 
-sed -i 's/Version = "0\.15"/Version = "0.15.0"/' "$fixture/internal/buildinfo/buildinfo.go"
+sed -i 's/Version = "1\.0\.0"/Version = "1.0"/' "$fixture/internal/buildinfo/buildinfo.go"
 run_must_fail_with three-component-project-alias \
-  'cannot read the exact two-component source version from internal/buildinfo/buildinfo.go' \
+  'cannot read the exact three-component semantic source version from internal/buildinfo/buildinfo.go' \
   candidate_success
 git -C "$fixture" checkout -q -- internal/buildinfo/buildinfo.go
 

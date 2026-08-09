@@ -65,10 +65,12 @@ func (s *Store) SaveSubjectSnapshot(ctx context.Context, snapshot subject.Persis
 	// would weaken enforcement. Serialize its replacement with capacity checks
 	// and reject the uncommitted snapshot if its live pages would exceed the hard
 	// limit, preserving both the prior snapshot and ordinary audit evidence.
+	s.maintenanceMu.Lock()
 	s.capacityMu.Lock()
 	var capacityReport error
 	defer func() {
 		s.capacityMu.Unlock()
+		s.maintenanceMu.Unlock()
 		if capacityReport != nil {
 			s.report(capacityReport)
 		}

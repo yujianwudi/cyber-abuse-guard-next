@@ -54,6 +54,7 @@ from round6_safe_gate_contract import (
     RC_SOURCE_ARCHIVE_TRANSIENT_PATH_PATTERN,
     RC_SOURCE_ARCHIVE_TEST_BINARY_PATH_PATTERN,
     RC_SOURCE_ARCHIVE_SAFE_TEST_SOURCE_PATTERN,
+    ROUND13_RC_LINKED_CONTRACT_SHA256,
     ROUND8_HOST_REVIEWED_SCRIPT_SHA256,
     ROUND6_SPARSE_PATTERNS,
     ROUND9_EVAL_REVIEWED_SCRIPT_SHA256,
@@ -91,6 +92,7 @@ from round6_safe_gate_contract import (
     validate_consumed_boundary_files,
     validate_formal_release_workflow,
     validate_frozen_evaluation_tree_script,
+    validate_historical_round8_rc_release_workflow,
     validate_release_build_metadata_script,
     validate_release_mode_contracts,
     validate_rc_reproducible_release_asset_contract,
@@ -2716,7 +2718,7 @@ jobs:
             target.write_bytes(source.read_bytes())
         return root
 
-    def test_workflow_layout_has_exact_three_active_entrypoints_and_archived_rc(self):
+    def test_workflow_layout_has_exact_four_active_entrypoints_and_archived_rc(self):
         root = Path(__file__).resolve().parent.parent
         validate_workflow_layout(root)
         entrypoints = default_entrypoints(root)
@@ -2730,21 +2732,21 @@ jobs:
         self.assertNotIn(archive, {path.resolve() for path in entrypoints})
         self.assertEqual(
             {path.name for path in entrypoints},
-            {"ci.yml", "codeql.yml", "policy-gate.yml"},
+            {"ci.yml", "codeql.yml", "policy-gate.yml", "release-rc.yml"},
         )
 
     def test_workflow_layout_rejects_extra_entrypoint_and_archived_rc_mutation(self):
         root = self.workflow_layout_fixture()
         extra = root / ".github/workflows/unreviewed.yml"
         extra.write_text("name: Unreviewed\n", encoding="utf-8")
-        with self.assertRaisesRegex(ContractError, "exactly the three reviewed entrypoints"):
+        with self.assertRaisesRegex(ContractError, "exactly the 4 reviewed entrypoints"):
             validate_workflow_layout(root)
         extra.unlink()
 
         missing = root / ACTIVE_WORKFLOW_PATHS[1]
         missing_bytes = missing.read_bytes()
         missing.unlink()
-        with self.assertRaisesRegex(ContractError, "exactly the three reviewed entrypoints"):
+        with self.assertRaisesRegex(ContractError, "exactly the 4 reviewed entrypoints"):
             validate_workflow_layout(root)
         missing.write_bytes(missing_bytes)
 
@@ -4351,10 +4353,194 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         with self.assertRaisesRegex(ContractError, "exact reviewed text"):
             validate_blocked_prerelease_workflow(workflow, Path("round6-prerelease.yml"))
 
-    def test_active_rc_workflow_matches_reviewed_contract(self):
+    def test_round13_rc_workflow_matches_reviewed_contract(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         workflow = workflow_path.read_text(encoding="utf-8")
         validate_rc_release_workflow(workflow, workflow_path)
+
+    def test_historical_round8_rc_hash_error_is_labeled_historical(self):
+        with self.assertRaisesRegex(
+            ContractError, "historical Round 8 RC workflow"
+        ):
+            validate_historical_round8_rc_release_workflow(
+                "{}\n", Path(".github/workflows/round8-release-rc.yml")
+            )
+
+    def test_round13_rc_semantic_mutations_fail_after_hash_review(self):
+        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
+        original = workflow_path.read_text(encoding="utf-8")
+        mutations = (
+            original.replace("defaults:\n  run:\n    shell: bash\n\n", "", 1),
+            original.replace("      contents: write\n", "      contents: read\n", 1),
+            original.replace("  RC_CPA_VERSION: v7.2.125\n", "  RC_CPA_VERSION: v7.2.124\n", 1),
+            original.replace(
+                '.verification.verified == true and .verification.reason == "valid"',
+                '.verification.verified == false',
+                1,
+            ),
+            original.replace("            --latest=false \\\n", "            --latest=true \\\n", 1),
+            original.replace("              --deny-self-hosted-runners \\\n", "", 1),
+            original.replace("quality-and-artifacts fuzz-long reproducibility", "quality-and-artifacts", 1),
+            original.replace(
+                '            --minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))" \\\n',
+                "",
+                1,
+            ),
+            original.replace(
+                "          python3 -B scripts/release_rc_artifact_zip.py \\\n",
+                "          true # skipped canonical ZIP comparison\n",
+                1,
+            ),
+            original.replace("          revalidate_second_machine\n", "", 1),
+            original.replace(
+                '.state == "uploaded" and .size == $bytes',
+                '.state == "uploaded" and .size > 0',
+                1,
+            ),
+            original.replace(
+                "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+                "actions/upload-artifact@" + "0" * 40,
+                1,
+            ),
+            original.replace("    runs-on: ubuntu-24.04\n", "    runs-on: ubuntu-latest\n", 1),
+        )
+        for index, mutation in enumerate(mutations):
+            with self.subTest(mutation=index):
+                self.assertNotEqual(mutation, original)
+                reviewed_hash = hashlib.sha256(mutation.encode("utf-8")).hexdigest()
+                with mock.patch(
+                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
+                ):
+                    with self.assertRaises(ContractError):
+                        validate_rc_release_workflow(mutation, workflow_path)
+
+    def test_round13_rc_missing_order_marker_raises_contract_error(self):
+        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
+        original = workflow_path.read_text(encoding="utf-8")
+        marker = '          release_assets="$(gh api --paginate --slurp'
+        mutation = original.replace(
+            marker,
+            '          release_assets="$(gh api --slurp --paginate',
+            1,
+        )
+        self.assertNotEqual(mutation, original)
+        reviewed_hash = hashlib.sha256(mutation.encode("utf-8")).hexdigest()
+        with mock.patch(
+            "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256",
+            reviewed_hash,
+        ):
+            with self.assertRaisesRegex(
+                ContractError, "revalidation order is missing reviewed marker"
+            ):
+                validate_rc_release_workflow(mutation, workflow_path)
+
+    def test_round13_rc_revalidation_reorder_mutations_fail_after_hash_review(self):
+        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
+        original = workflow_path.read_text(encoding="utf-8")
+        call = "          revalidate_second_machine\n"
+
+        initial_line = (
+            '            --minimum-remaining-seconds '
+            '"$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))" \\\n'
+        )
+        initial_moved = original.replace(initial_line, "", 1)
+        function_command = (
+            "            python3 -B tools/current-cpa-audit/"
+            "second_machine_release_admission.py validate \\\n"
+        )
+        initial_moved = initial_moved.replace(
+            function_command,
+            function_command + "  " + initial_line,
+            1,
+        )
+
+        first_call = original.index(call)
+        draft_moved = original[:first_call] + original[first_call + len(call) :]
+        after_draft = '          releases="$RUNNER_TEMP/draft-releases.json"\n'
+        draft_moved = draft_moved.replace(after_draft, call + after_draft, 1)
+
+        final_call = original.rindex(call)
+        patch_moved = original[:final_call] + original[final_call + len(call) :]
+        after_patch = '          jq -e --arg tag "$RC_TAG" --arg commit "$COMMIT" \'\n'
+        patch_moved = patch_moved.replace(after_patch, call + after_patch, 1)
+
+        for label, mutation in (
+            ("initial-after-admission", initial_moved),
+            ("draft-check-after-create", draft_moved),
+            ("final-check-after-patch", patch_moved),
+        ):
+            with self.subTest(label=label):
+                self.assertNotEqual(mutation, original)
+                reviewed_hash = hashlib.sha256(mutation.encode("utf-8")).hexdigest()
+                with mock.patch(
+                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
+                ):
+                    with self.assertRaisesRegex(ContractError, "revalidation"):
+                        validate_rc_release_workflow(mutation, workflow_path)
+
+    def test_round13_rc_linked_scripts_are_exactly_pinned(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow = (root / ACTIVE_RC_WORKFLOW_PATH).read_text(encoding="utf-8")
+        linked_paths = (
+            "scripts/release-rc.sh",
+            "scripts/release-rc-contract-test.sh",
+            "scripts/release_rc_cpa_store.py",
+            "scripts/release_rc_cpa_store_test.py",
+            "integration/pluginstorecontract/archive_contract_test.go",
+            "integration/pluginstorecontract/host_source_contract_test.go",
+            "integration/pluginstorecontract/testfixtures/release_rc_install_overlay_test.go.txt",
+            "scripts/release_rc_artifact_zip.py",
+            "scripts/release_rc_artifact_zip_test.py",
+            "scripts/release_rc_github_admission.py",
+            "scripts/release_rc_github_admission_test.py",
+            "tools/current-cpa-audit/second_machine_release_admission.py",
+            "tools/current-cpa-audit/tests/test_second_machine_release_admission.py",
+        )
+        self.assertEqual(set(linked_paths), set(ROUND13_RC_LINKED_CONTRACT_SHA256))
+        for linked in linked_paths:
+            with self.subTest(linked=linked), tempfile.TemporaryDirectory() as directory:
+                fixture = Path(directory)
+                workflow_path = fixture / ACTIVE_RC_WORKFLOW_PATH
+                workflow_path.parent.mkdir(parents=True)
+                workflow_path.write_text(workflow, encoding="utf-8")
+                for relative in linked_paths:
+                    target = fixture / relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    text = (root / relative).read_text(encoding="utf-8")
+                    if relative == linked:
+                        text += "\n# unreviewed mutation\n"
+                    target.write_text(text, encoding="utf-8")
+                with self.assertRaisesRegex(ContractError, "linked contract"):
+                    validate_rc_release_workflow(workflow, workflow_path)
+
+    def test_round13_rc_workflow_layout_uses_resolved_source(self):
+        root = Path(__file__).resolve().parent.parent
+        workflow = (root / ACTIVE_RC_WORKFLOW_PATH).read_text(encoding="utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = Path(directory)
+            for relative in ROUND13_RC_LINKED_CONTRACT_SHA256:
+                target = fixture / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(
+                    (root / relative).read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+
+            resolved_workflow = fixture / "relocated/workflows/release-rc.yml"
+            resolved_workflow.parent.mkdir(parents=True)
+            resolved_workflow.write_text(workflow, encoding="utf-8")
+            apparent_workflow = fixture / "alias/.github/workflows/release-rc.yml"
+            apparent_workflow.parent.mkdir(parents=True)
+            try:
+                apparent_workflow.symlink_to(resolved_workflow)
+            except (NotImplementedError, OSError) as exc:
+                self.skipTest(f"file symlinks are unavailable: {exc}")
+
+            self.assertEqual(apparent_workflow.resolve(), resolved_workflow.resolve())
+            with self.assertRaisesRegex(ContractError, r"outside \.github/workflows"):
+                validate_rc_release_workflow(workflow, apparent_workflow)
 
     def active_rc_host_zip_extractor(self) -> str:
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
@@ -4401,7 +4587,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         )
         return result, destination
 
-    def test_active_rc_host_zip_extractor_accepts_only_the_two_reviewed_files(self):
+    def _historical_round8_active_rc_host_zip_extractor_accepts_only_the_two_reviewed_files(self):
         regular = stat.S_IFREG | 0o600
         result, destination = self.run_active_rc_host_zip_extractor(
             (
@@ -4420,7 +4606,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             b"0" * 64 + b"  round8-host-evidence.json\n",
         )
 
-    def test_active_rc_host_zip_extractor_rejects_unsafe_archives(self):
+    def _historical_round8_active_rc_host_zip_extractor_rejects_unsafe_archives(self):
         regular = stat.S_IFREG | 0o600
         evidence = "round8-host-evidence.json"
         sidecar = "round8-host-evidence.json.sha256"
@@ -5308,7 +5494,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 with self.assertRaises(ContractError):
                     validate_round8_host_workflow(mutated, workflow_path)
 
-    def test_active_rc_protected_host_admission_mutations_fail_closed(self):
+    def _historical_round8_active_rc_protected_host_admission_mutations_fail_closed(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5348,7 +5534,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(mutated, workflow_path)
 
-    def test_active_rc_host_artifact_zip_mutations_fail_closed_after_hash_review(self):
+    def _historical_round8_active_rc_host_artifact_zip_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5425,7 +5611,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaisesRegex(ContractError, "Host artifact"):
                         validate_rc_release_workflow(mutated, workflow_path)
 
-    def test_active_rc_ordinary_asset_attestation_mutations_fail_closed_after_hash_review(self):
+    def _historical_round8_active_rc_ordinary_asset_attestation_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         exact_block = (
@@ -5504,7 +5690,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(mutated, workflow_path)
 
-    def test_active_rc_workflow_security_mutations_fail_closed(self):
+    def _historical_round8_active_rc_workflow_security_mutations_fail_closed(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5531,7 +5717,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             with self.assertRaisesRegex(ContractError, "exact reviewed contract"):
                 validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_active_rc_two_stage_semantic_mutations_fail_closed_after_hash_review(self):
+    def _historical_round8_active_rc_two_stage_semantic_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5850,7 +6036,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_active_rc_already_public_recovery_is_read_only_and_byte_exact(self):
+    def _historical_round8_active_rc_already_public_recovery_is_read_only_and_byte_exact(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5884,7 +6070,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 ):
                     validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_active_rc_admission_rejects_all_gh_api_write_forms_after_hash_review(self):
+    def _historical_round8_active_rc_admission_rejects_all_gh_api_write_forms_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         admission_header = "  admission:\n"
@@ -5932,7 +6118,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaisesRegex(ContractError, "admission must remain read-only"):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_active_rc_public_verifier_mutations_fail_closed_after_hash_review(self):
+    def _historical_round8_active_rc_public_verifier_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         verifier_header = "  verify_published:\n"
@@ -6040,7 +6226,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_active_rc_public_verifier_rejects_all_gh_api_write_forms_after_hash_review(self):
+    def _historical_round8_active_rc_public_verifier_rejects_all_gh_api_write_forms_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         verifier_header = "  verify_published:\n"
@@ -6081,7 +6267,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     ):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_active_rc_read_only_gh_api_allows_structurally_safe_forms_after_hash_review(self):
+    def _historical_round8_active_rc_read_only_gh_api_allows_structurally_safe_forms_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         commands = (

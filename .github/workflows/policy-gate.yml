@@ -110,7 +110,7 @@ jobs:
             testdata/round9-development-paired-malicious-v3
       - name: Verify task-facing policy identities
         run: |
-          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v12"' internal/classifier/policy_identity.go
+          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v15"' internal/classifier/policy_identity.go
           grep -Fx 'version: "1.0.10"' rules/manifest.yaml
           grep -F '"internal/classifier/eligibility.go"' internal/classifier/policy_identity_test.go
           go test ./internal/classifier \
@@ -335,7 +335,7 @@ jobs:
           classifier_policy_sha256="$(sed -nE \
             's/^const ClassifierPolicySHA256 = "([0-9a-f]{64})"$/\1/p' \
             internal/classifier/policy_identity.go)"
-          [[ "$classifier_policy_version" == "classifier-policy-v12" ]]
+          [[ "$classifier_policy_version" == "classifier-policy-v15" ]]
           [[ "$classifier_policy_sha256" =~ ^[0-9a-f]{64}$ ]]
           printf '%s\n' \
             'schema=round9-policy-gate/v1' \

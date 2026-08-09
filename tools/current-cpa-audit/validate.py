@@ -16,6 +16,7 @@ from audit_contract import (
     load_json_file,
     read_regular_bytes,
     sha256_bytes,
+    validate_candidate_manifest_file,
     validate_corpus_manifest,
     validate_evidence_run_config,
     validate_machine_evidence,
@@ -68,7 +69,7 @@ def parser() -> argparse.ArgumentParser:
     evidence.add_argument("--results", type=Path, required=True)
     evidence.add_argument("--run-config", type=Path, required=True)
     performance = commands.add_parser(
-        "host-performance", help="validate RT12-06 CPA-only/CPA+CAG Host evidence"
+        "host-performance", help="validate RT13-06 CPA-only/CPA+CAG Host evidence"
     )
     performance.add_argument("--run-config", type=Path, required=True)
     performance.add_argument("--candidate-manifest", type=Path, required=True)
@@ -117,6 +118,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if manifest["policy_sha256"] != policy_sha256:
                 raise ContractError("corpus candidate was not acquired with this approved policy")
             validate_manifest_policy(manifest, policy, require_approved=True)
+            validate_candidate_manifest_file(config)
             output = {"policy_review_status": "approved", "valid": True}
         elif args.command == "evidence":
             manifest = load_json_file(args.manifest, "corpus manifest")
@@ -142,6 +144,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             config = validate_run_config(load_json_bytes(config_raw, "run config"))
             if config_raw != canonical_bytes(config) + b"\n":
                 raise ContractError("run config is not canonical JSON with one terminal newline")
+            validate_candidate_manifest_file(config)
             if Path(config["paths"]["evidence_directory"]).resolve(strict=True) != args.evidence.parent.resolve(strict=True):
                 raise ContractError("run config evidence directory does not match the supplied evidence")
             validate_evidence_run_config(validated, config, config_raw)
@@ -153,7 +156,6 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         else:
             from host_performance import (
-                validate_candidate_manifest,
                 validate_config as validate_performance_config,
                 validate_evidence_bundle,
                 validate_measurements,
@@ -170,13 +172,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ContractError(
                     "run config is not canonical JSON with one terminal newline"
                 )
-            candidate_raw = read_regular_bytes(
-                args.candidate_manifest, "candidate manifest", 2 * 1024 * 1024
-            )
-            candidate = validate_candidate_manifest(
-                load_json_bytes(candidate_raw, "candidate manifest"),
-                run_config["identities"]["cag"],
-            )
+            candidate, candidate_raw = validate_candidate_manifest_file(run_config)
+            if args.candidate_manifest.resolve(strict=True) != Path(
+                run_config["paths"]["candidate_manifest"]
+            ).resolve(strict=True):
+                raise ContractError(
+                    "supplied candidate manifest path does not match the run config"
+                )
             workload_raw = read_regular_bytes(
                 args.workload_manifest,
                 "performance workload manifest",

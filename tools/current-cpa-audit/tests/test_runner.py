@@ -13,7 +13,7 @@ sys.path.insert(0, str(TOOL))
 sys.path.insert(0, str(HERE))
 
 import run
-from audit_contract import canonical_bytes, sha256_bytes
+from audit_contract import CPA_COMMIT, CPA_TAG, canonical_bytes, sha256_bytes
 from fixtures import manifest
 
 
@@ -63,6 +63,7 @@ class RunnerPureTests(unittest.TestCase):
             self.assertFalse(owned.exists())
             self.assertTrue(Path(parent).exists())
 
+    @unittest.skipUnless(os.name == "posix", "Linux evidence dir-fd contract")
     def test_evidence_directory_binding_rejects_path_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as parent:
             root = Path(parent)
@@ -388,8 +389,8 @@ class RunnerPureTests(unittest.TestCase):
             "identities": {
                 "cag": {"commit": "1" * 40},
                 "cpa": {
-                    "commit": "a88197f845c979132c8978ea223c6af05cc81536",
-                    "tag": "v7.2.116",
+                    "commit": CPA_COMMIT,
+                    "tag": CPA_TAG,
                 },
             }
         }
@@ -423,8 +424,8 @@ class RunnerPureTests(unittest.TestCase):
             "raw_capture": {"enabled": False},
         }
         headers = {
-            "x-cpa-version": "v7.2.116",
-            "x-cpa-commit": "a88197f845c979132c8978ea223c6af05cc81536",
+            "x-cpa-version": CPA_TAG,
+            "x-cpa-commit": CPA_COMMIT,
         }
         with mock.patch.object(
             run,

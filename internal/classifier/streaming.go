@@ -326,6 +326,7 @@ type streamingFieldSummary struct {
 	tail                            []byte
 	sample                          []byte
 	sampleComplete                  bool
+	profiledLexicalRunSample        []byte
 	tailSafetyScoped                bool
 	inertQuotedReferent             Result
 	hasInertQuotedReferent          bool
@@ -750,6 +751,8 @@ type ScanSession struct {
 	profiledSawCurrentTurn             bool
 	profiledGroupKey                   profiledSegmentGroupKey
 	profiledGroupSet                   bool
+	profiledGroupBestBefore            Result
+	profiledGroupHadBestBefore         bool
 	profiledGroupPhysicalOrdinal       int
 	profiledGroupParts                 []string
 	profiledGroupRefs                  []profiledSegmentRef
@@ -1411,6 +1414,18 @@ func (s *ScanSession) finishField(field *streamingField) {
 		summary.sample = append([]byte(nil), field.roleSummary...)
 	}
 	if profiledField && !summary.sampleComplete &&
+		profiledTrustedCurrentUserNaturalLanguageDirective(fieldSegment) &&
+		field.totalBytes > 0 && field.totalBytes <= maxCompactIntentProofBytes &&
+		field.totalBytes == int64(len(field.buffer)) &&
+		profiledLexicalRunSampleEligible(field.buffer) {
+		// Preserve one exact current-user directive only for bounded lexical
+		// reconstruction with the next physical content block. This does not make
+		// the generic 512-byte role summary complete: the full field is available,
+		// capped by the classifier's direct-intent proof budget, and retains any
+		// defensive or negating prefix that must constrain the joined candidate.
+		summary.profiledLexicalRunSample = append([]byte(nil), field.buffer...)
+	}
+	if profiledField && !summary.sampleComplete &&
 		profiledStreamingCurrentReferentDirective(fieldSegment) &&
 		field.totalBytes <= maxMetaOverrideDirectControlWindowBytes &&
 		field.totalBytes == int64(len(field.buffer)) &&
@@ -1568,7 +1583,11 @@ func (s *ScanSession) finishField(field *streamingField) {
 		summary.sample = nil
 	}
 	if profiledField {
-		s.considerProfiledRoleSummary(summary, &field.riskFacts)
+		s.considerProfiledRoleSummary(
+			summary, &field.riskFacts, bestBeforeField, hadBestBeforeField,
+		)
+		clear(summary.profiledLexicalRunSample)
+		summary.profiledLexicalRunSample = nil
 		s.clearPrevious()
 	} else {
 		s.considerAdjacent(s.previous, summary)
@@ -1577,6 +1596,21 @@ func (s *ScanSession) finishField(field *streamingField) {
 		s.clearPrevious()
 		s.previous = summary
 	}
+}
+
+func profiledLexicalRunSampleEligible(value []byte) bool {
+	if len(value) == 0 || !utf8.Valid(value) {
+		return false
+	}
+	var scratch normalizationScratch
+	views := normalizeBytesInto(value, nil, &scratch)
+	defer scrubNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return false
+	}
+	edges := compactLexicalEdgesForRunes(views.standardRunes)
+	return edges.suffixClass != compactLexicalNone && edges.suffixRunes > 0 &&
+		edges.suffixRunes <= maxCompactReconstructionFragmentRunes
 }
 
 func (s *ScanSession) maybeApplyRefusedHistoryMaintenance(field *streamingField) {
@@ -2465,7 +2499,11 @@ func (field *streamingField) crossWindowQuotedReviewStructureProven() bool {
 		inertQuotedNonExecutionBoundary(clauses[1].text)
 }
 
-func (s *ScanSession) beginProfiledStreamingGroup(key profiledSegmentGroupKey) bool {
+func (s *ScanSession) beginProfiledStreamingGroup(
+	key profiledSegmentGroupKey,
+	bestBefore Result,
+	hadBestBefore bool,
+) bool {
 	if s == nil || s.coverage.State != CoverageComplete {
 		return false
 	}
@@ -2479,6 +2517,8 @@ func (s *ScanSession) beginProfiledStreamingGroup(key profiledSegmentGroupKey) b
 	if !s.profiledGroupSet {
 		s.profiledGroupKey = key
 		s.profiledGroupSet = true
+		s.profiledGroupBestBefore = bestBefore
+		s.profiledGroupHadBestBefore = hadBestBefore
 	}
 	return true
 }
@@ -2660,6 +2700,8 @@ func profiledStreamingGenericGroupView(
 func (s *ScanSession) considerProfiledRoleSummary(
 	current *streamingFieldSummary,
 	currentRisk *streamingFieldRiskFacts,
+	bestBeforeField Result,
+	hadBestBeforeField bool,
 ) {
 	if s == nil || current == nil || s.coverage.State != CoverageComplete {
 		return
@@ -2690,7 +2732,7 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		s.beginProfiledHistoricalScope(segment, int(current.id))
 	}
 	if historicalReferent && current.hasInertQuotedReferent && len(current.sample) == 0 {
-		if !s.beginProfiledStreamingGroup(key) {
+		if !s.beginProfiledStreamingGroup(key, bestBeforeField, hadBestBeforeField) {
 			return
 		}
 		// The exact review candidate is content-free at this point. Represent its
@@ -2732,8 +2774,23 @@ func (s *ScanSession) considerProfiledRoleSummary(
 				s.rememberProfiledPreviousUserRisk(segment, currentRisk, false)
 			}
 		}
+		if len(current.profiledLexicalRunSample) != 0 {
+			if !s.beginProfiledStreamingGroup(key, bestBeforeField, hadBestBeforeField) {
+				return
+			}
+			text := string(current.profiledLexicalRunSample)
+			segment.Text = text
+			s.appendProfiledStreamingGroupUnit(
+				int(current.id), physicalOrdinal, text, segment,
+				currentRisk != nil && currentRisk.hasRisk(), true,
+			)
+			if !s.trimProfiledStreamingGroup(segment) {
+				return
+			}
+			return
+		}
 		if historicalReferent {
-			if !s.beginProfiledStreamingGroup(key) {
+			if !s.beginProfiledStreamingGroup(key, bestBeforeField, hadBestBeforeField) {
 				return
 			}
 			// Preserve only coordinates for an overlong historical field. A
@@ -2751,7 +2808,7 @@ func (s *ScanSession) considerProfiledRoleSummary(
 			return
 		}
 		if requestLocalSystemCarrier {
-			if !s.beginProfiledStreamingGroup(key) {
+			if !s.beginProfiledStreamingGroup(key, bestBeforeField, hadBestBeforeField) {
 				return
 			}
 			s.quotedOrInertSuppressed = true
@@ -2832,7 +2889,7 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		clear(s.mappedToolControls)
 		s.mappedToolControls = s.mappedToolControls[:0]
 	}
-	if !s.beginProfiledStreamingGroup(key) {
+	if !s.beginProfiledStreamingGroup(key, bestBeforeField, hadBestBeforeField) {
 		return
 	}
 	s.appendProfiledStreamingGroupUnit(
@@ -2891,6 +2948,7 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	var candidate Result
 	ok := false
 	inlineToolCandidate := false
+	authoritativeReconstruction := false
 	if pendingTool && len(genericRefs) == 1 &&
 		enforcementScopeForProfiledGroup(genericRefs) == EnforcementScopeRequestLocalTool {
 		var complete bool
@@ -2905,11 +2963,29 @@ func (s *ScanSession) considerProfiledRoleSummary(
 		ok = inlineToolCandidate
 	}
 	if !inlineToolCandidate {
+		incompleteActionable := enforcementScopeForProfiledGroup(genericRefs) != EnforcementScopeNone
 		candidate, ok = batch.classifyWithIncompleteAuthority(
 			genericParts,
 			s.profiledGroupStructuredTool,
-			enforcementScopeForProfiledGroup(genericRefs) != EnforcementScopeNone,
+			incompleteActionable,
 		)
+		if reconstructed, reconstruct := s.classifier.boundedProfiledLexicalPartReconstructionForPolicy(
+			genericParts, genericRefs, s.policy,
+		); reconstruct {
+			reconstructedCandidate, reconstructedOK := batch.classifyWithIncompleteAuthority(
+				[]string{reconstructed},
+				s.profiledGroupStructuredTool,
+				incompleteActionable,
+			)
+			authoritative := reconstructedOK &&
+				profiledReconstructionSuppressesRawMultipartCandidate(reconstructedCandidate)
+			if reconstructedOK && (!ok || roleResultBetter(reconstructedCandidate, candidate) || authoritative) {
+				profiledCarrierRunClearOccurrenceOffsets(&reconstructedCandidate)
+				candidate = reconstructedCandidate
+				ok = true
+				authoritativeReconstruction = authoritative
+			}
+		}
 	}
 	if !ok {
 		if historicalReferent {
@@ -2943,6 +3019,13 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	candidate = s.prepareProfiledCandidate(
 		candidate, genericRefs, s.profiledGroupActiveDirective,
 	)
+	if authoritativeReconstruction {
+		// Every earlier field/group winner in this still-open physical group was
+		// classified without the now-proven lexical reconstruction. Replace that
+		// provisional view with the complete authoritative group candidate.
+		s.best = s.profiledGroupBestBefore
+		s.hasBest = s.profiledGroupHadBestBefore
+	}
 	if s.profiledStreamingClassifiable(segment) {
 		if systemCarrierGroup {
 			candidate = withRoleAwareFindingOriginAndScope(
@@ -5972,6 +6055,8 @@ func (s *ScanSession) clearProfiledGroup() {
 	}
 	s.profiledGroupKey = profiledSegmentGroupKey{}
 	s.profiledGroupSet = false
+	s.profiledGroupBestBefore = Result{}
+	s.profiledGroupHadBestBefore = false
 	clear(s.profiledGroupParts)
 	s.profiledGroupParts = nil
 	clear(s.profiledGroupRefs)

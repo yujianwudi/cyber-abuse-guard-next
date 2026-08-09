@@ -162,6 +162,68 @@ func (c *Controller) Reconfigure(cfg Config) error {
 	return nil
 }
 
+// CloneReconfigured prepares an independent controller with the current
+// bounded state and the requested configuration. The active controller is
+// never modified, so callers can complete other fallible reconfiguration work
+// before atomically publishing the clone. Entry order, idempotency receipts,
+// manual blocks, cooldowns and cumulative capacity counters are preserved.
+func (c *Controller) CloneReconfigured(cfg Config) (*Controller, error) {
+	if c == nil {
+		return nil, errors.New("subject: controller is unavailable")
+	}
+	if _, err := normalizeConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	clone := &Controller{
+		cfg:              c.cfg,
+		entries:          make(map[string]*entry, len(c.entries)),
+		manualSubjects:   c.manualSubjects,
+		evicted:          c.evicted,
+		rejectedCapacity: c.rejectedCapacity,
+	}
+	for element := c.evictable.Front(); element != nil; element = element.Next() {
+		subjectHash, ok := element.Value.(string)
+		if !ok {
+			continue
+		}
+		current, ok := c.entries[subjectHash]
+		if !ok || current == nil || current.manualBlocked || current.element != element {
+			continue
+		}
+		copied := cloneSubjectEntry(current)
+		copied.element = clone.evictable.PushBack(subjectHash)
+		clone.entries[subjectHash] = copied
+	}
+	for subjectHash, current := range c.entries {
+		if current == nil {
+			continue
+		}
+		if _, alreadyCopied := clone.entries[subjectHash]; alreadyCopied {
+			continue
+		}
+		clone.entries[subjectHash] = cloneSubjectEntry(current)
+	}
+	c.mu.Unlock()
+
+	if err := clone.Reconfigure(cfg); err != nil {
+		return nil, err
+	}
+	return clone, nil
+}
+
+func cloneSubjectEntry(current *entry) *entry {
+	if current == nil {
+		return nil
+	}
+	return &entry{
+		hits:          append([]hit(nil), current.hits...),
+		cooldownUntil: current.cooldownUntil,
+		manualBlocked: current.manualBlocked,
+	}
+}
+
 // Evaluate records and evaluates one classifier score. Scores below the audit
 // threshold are always safe, including while a subject is cooling down or
 // manually blocked; this prevents ordinary traffic from being permanently

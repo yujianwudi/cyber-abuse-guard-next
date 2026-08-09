@@ -2,7 +2,7 @@
 
 ## Direct build dependencies
 
-- CLIProxyAPI SDK v7.2.116 — MIT license.
+- CLIProxyAPI SDK v7.2.125 — MIT license.
 - `github.com/mattn/go-sqlite3` — MIT license.
 - `golang.org/x/sys` — BSD-3-Clause license.
 - `golang.org/x/text` — BSD-3-Clause license.
