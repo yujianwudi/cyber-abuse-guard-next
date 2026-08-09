@@ -3,12 +3,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from release_rc_cpa_store import (
     AUDIT_CHECKSUMS,
@@ -61,6 +64,33 @@ class CPAStoreReleaseTests(unittest.TestCase):
         )
         return root, payload
 
+    def assert_published_rc_store_archive(self, root: Path) -> None:
+        go = shutil.which("go")
+        if go is None:
+            self.skipTest("Go toolchain is not available")
+        repository = Path(__file__).resolve().parent.parent
+        result = subprocess.run(
+            [
+                go,
+                "test",
+                "./...",
+                "-run",
+                "^TestPublishedRCStoreArchive$",
+                "-count=1",
+                "-v",
+            ],
+            cwd=repository / "integration/pluginstorecontract",
+            env={**os.environ, "DIST_DIR": str(root)},
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertRegex(
+            result.stdout,
+            r"(?m)^--- PASS: TestPublishedRCStoreArchive \([0-9.]+s\)$",
+        )
+
     def test_deterministic_rc_zip_and_valid_release(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root, _ = self.fixture(Path(temporary))
@@ -72,19 +102,52 @@ class CPAStoreReleaseTests(unittest.TestCase):
     def test_generated_package_is_accepted_by_pinned_cpa_install_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root, _ = self.fixture(Path(temporary))
-            repository = Path(__file__).resolve().parent.parent
-            result = subprocess.run(
-                [
-                    "go", "test", "./...", "-run",
-                    "^TestPublishedRCStoreArchive$", "-count=1",
-                ],
-                cwd=repository / "integration/pluginstorecontract",
-                env={**os.environ, "DIST_DIR": str(root)},
-                text=True,
-                capture_output=True,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assert_published_rc_store_archive(root)
+
+    def test_pinned_cpa_archive_skips_without_go(self) -> None:
+        with mock.patch.object(shutil, "which", return_value=None):
+            with self.assertRaisesRegex(unittest.SkipTest, "Go toolchain"):
+                self.assert_published_rc_store_archive(Path("."))
+
+    def test_pinned_cpa_archive_rejects_zero_match_success(self) -> None:
+        zero_match = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="testing: warning: no tests to run\nPASS\nok  \tpackage\t0.001s [no tests to run]\n",
+            stderr="",
+        )
+        with (
+            mock.patch.object(shutil, "which", return_value="/usr/bin/go"),
+            mock.patch.object(subprocess, "run", return_value=zero_match),
+        ):
+            with self.assertRaisesRegex(AssertionError, "TestPublishedRCStoreArchive"):
+                self.assert_published_rc_store_archive(Path("."))
+
+    def test_cli_rejects_non_object_provenance_with_controlled_error(self) -> None:
+        script = Path(__file__).with_name("release_rc_cpa_store.py")
+        for name, provenance in (("list", []), ("scalar", "not-an-object")):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root, _ = self.fixture(Path(temporary))
+                (root / "release-provenance.json").write_text(
+                    json.dumps(provenance) + "\n", encoding="utf-8"
+                )
+                result = subprocess.run(
+                    [
+                        sys.executable,
+                        str(script),
+                        "verify-release",
+                        "--directory",
+                        str(root),
+                    ],
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(
+                    "error: release provenance must be a JSON object", result.stderr
+                )
+                self.assertNotIn("Traceback", result.stderr)
 
     def test_rejects_packaging_and_release_mutations(self) -> None:
         mutations = {

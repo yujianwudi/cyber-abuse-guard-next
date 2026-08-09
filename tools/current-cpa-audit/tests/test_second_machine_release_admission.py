@@ -10,6 +10,7 @@ import unittest
 import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 
 HERE = Path(__file__).resolve().parent
@@ -269,29 +270,45 @@ class PortableAdmissionTests(unittest.TestCase):
                 "identities": {"candidate": candidate},
                 "paths": {"evidence_directory": str(Path(directory).resolve())},
             }
-            report = build_report(
-                manifest=manifest,
-                manifest_raw=canonical_bytes(manifest) + b"\n",
-                machine=machine,
-                machine_raw=machine_raw,
-                results_path=results_path,
-                results_raw=results_path.read_bytes(),
-                run_config=run_config,
-                run_config_raw=canonical_bytes(run_config) + b"\n",
-                candidate_manifest=candidate_manifest,
-                candidate_raw=candidate_raw,
-                candidate_files=candidate_files,
-                candidate_artifact_size=123456,
-                workload_raw=b"{}\n",
-                performance_config_raw=b"{}\n",
-                measurements_raw=b"{}\n",
-                performance=performance,
-                performance_raw=canonical_bytes(performance) + b"\n",
-                generated_at=NOW,
-            )
+            results_raw = results_path.read_bytes()
+
+            def pack(raw: bytes) -> dict[str, Any]:
+                return build_report(
+                    manifest=manifest,
+                    manifest_raw=canonical_bytes(manifest) + b"\n",
+                    machine=machine,
+                    machine_raw=machine_raw,
+                    results_path=results_path,
+                    results_raw=raw,
+                    run_config=run_config,
+                    run_config_raw=canonical_bytes(run_config) + b"\n",
+                    candidate_manifest=candidate_manifest,
+                    candidate_raw=candidate_raw,
+                    candidate_files=candidate_files,
+                    candidate_artifact_size=123456,
+                    workload_raw=b"{}\n",
+                    performance_config_raw=b"{}\n",
+                    measurements_raw=b"{}\n",
+                    performance=performance,
+                    performance_raw=canonical_bytes(performance) + b"\n",
+                    generated_at=NOW,
+                )
+
+            report = pack(results_raw)
             self.assertEqual(report["status"], STATUS)
             self.assertEqual(report["source"]["so"]["name"], CAG_SO_NAME)
             self.assertEqual(report["summary"]["performance_gate_count"], len(THRESHOLDS))
+
+            missing_arm = machine["run"]["cold_start_count"]
+            incomplete_results_raw = b"".join(
+                line + b"\n"
+                for line in results_raw.splitlines()
+                if json.loads(line)["cold_start"] != missing_arm
+            )
+            with self.assertRaisesRegex(
+                AdmissionError, r"semantic summary cell .* is incomplete"
+            ):
+                pack(incomplete_results_raw)
 
     def test_candidate_directory_requires_exact_original_nine_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

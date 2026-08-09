@@ -365,7 +365,7 @@ def _performance_gate(metric: str, observed: int | float) -> dict[str, Any]:
 
 
 def derive_semantics(
-    manifest: Mapping[str, Any], results_raw: bytes
+    manifest: Mapping[str, Any], results_raw: bytes, cold_start_arms: Sequence[int]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     cases = {case["id"]: case for case in manifest["semantic_cases"]}
     rows = [
@@ -375,16 +375,22 @@ def derive_semantics(
     grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
         grouped[(row["semantic_case_id"], row["mode"])].append(row)
+    expected_matrix = {
+        (protocol, stream, cold_start)
+        for protocol in PROTOCOLS
+        for stream in STREAM_VALUES
+        for cold_start in cold_start_arms
+    }
     outcomes: list[dict[str, Any]] = []
     for case_id in sorted(cases):
         case = cases[case_id]
         malicious = case["label"] == "malicious_active"
         for mode in MODES:
             selected = grouped[(case_id, mode)]
-            expected_count = len(PROTOCOLS) * len(STREAM_VALUES) * len(
-                {row["cold_start"] for row in selected}
-            )
-            if not selected or len(selected) != expected_count:
+            observed_matrix = {
+                (row["protocol"], row["stream"], row["cold_start"]) for row in selected
+            }
+            if len(selected) != len(expected_matrix) or observed_matrix != expected_matrix:
                 fail(f"semantic summary cell {case_id}/{mode} is incomplete")
             expected_actions = {row["expected_action"] for row in selected}
             actual_actions = {row["actual_action"] for row in selected}
@@ -526,7 +532,8 @@ def build_report(
     generated_at: datetime,
 ) -> dict[str, Any]:
     del results_path
-    outcomes, semantic_summary = derive_semantics(manifest, results_raw)
+    cold_start_arms = tuple(range(1, int(machine["run"]["cold_start_count"]) + 1))
+    outcomes, semantic_summary = derive_semantics(manifest, results_raw, cold_start_arms)
     candidate = run_config["identities"]["candidate"]
     if not (
         candidate_manifest["event"] == "push"

@@ -108,6 +108,8 @@ def verify_release(directory: Path) -> None:
         if cpa[name] != hashlib.sha256((directory / name).read_bytes()).hexdigest():
             raise ValueError(f"checksums.txt hash differs for {name}")
     provenance = json.loads((directory / "release-provenance.json").read_bytes())
+    if not isinstance(provenance, dict):
+        raise ValueError("release provenance must be a JSON object")
     expected_derived = [{
         "name": RC_ZIP,
         "relationship": "cpa-plugin-store-container",
