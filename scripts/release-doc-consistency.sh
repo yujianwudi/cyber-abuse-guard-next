@@ -173,8 +173,8 @@ for digest in \
 done
 [[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
   fail "current CPA audit tool test count is invalid"
-[[ "$current_audit_tool_test_count" == 184 ]] || \
-  fail "current CPA audit harness must retain the reviewed 184-test closure"
+[[ "$current_audit_tool_test_count" == 229 ]] || \
+  fail "current CPA audit harness must retain the reviewed 229-test closure"
 [[ "$audit_cpa_module_sum" == "$round13_cpa_module_sum" ]] || \
   fail "current CPA audit harness module sum differs from the v7.2.125 authority"
 [[ "$audit_cpa_go_mod_sum" == "$round13_cpa_go_mod_sum" ]] || \
@@ -250,6 +250,7 @@ if [[
     docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
     docs/ROUND12_STATUS.md
     docs/RULES.md
+    docs/reports/CPA_INTEGRATION.md
     docs/reports/PERFORMANCE.md
     docs/reports/PRIVACY.md
     docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
@@ -496,8 +497,8 @@ for relative, marker in (
     ),
 ):
     active, _ = split_once(relative, marker)
-    if len(re.findall(r"(?<![0-9])184/184 PASS(?![0-9])", active)) != 1:
-        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 184/184 PASS result")
+    if len(re.findall(r"(?<![0-9])229/229 PASS(?![0-9])", active)) != 1:
+        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 229/229 PASS result")
 
 
 relative = "docs/reports/RELEASE_EVIDENCE.md"

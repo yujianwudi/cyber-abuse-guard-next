@@ -31,7 +31,7 @@ The following commands passed on 2026-08-09 for this working tree:
 | `make round6-benchmark` | `PASS / 204.93s` |
 | `make round10-performance` | `SOURCE-ONLY PASS / ordinary p95 2.395298 ms / five-repository surrogate p95 134.449820 ms / public p95/p99 9.161171/9.392444 ms / failures+panics 0` |
 | `bash scripts/check-production-health-test.sh` | `PASS` |
-| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `184/184 PASS / LINUX` |
+| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `229/229 PASS / LINUX` |
 | `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` | `PASS` |
 
 Round 13 coverage status is deliberately split: no-copy is

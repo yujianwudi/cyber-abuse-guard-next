@@ -90,6 +90,16 @@ are bound back to every candidate case. They become runnable ground truth only
 under an approved policy. A changed policy changes both its SHA and the runner
 bundle identity.
 
+A separately supplied complete Codex jailbreak ZIP is **not** part of the
+current five-repository, 11-source, 19-case denominator. Its implemented
+interface is an explicit `--supplemental-archive` input whose value names
+`/srv/cag-audit/supplemental/<authorized-codex-archive.zip>`, with its own source
+hash, case count, false-positive denominator, malicious-recall denominator,
+results, and cleanup status. Parser, runner, schemas, validators, and negative
+fixtures now fail closed together, but no real v7.2.125 candidate run has yet
+completed, so its truthful status remains `NOT_RUN`; the five-repository result
+must never be relabelled as a supplemental-archive PASS.
+
 `third_party_code_executions` counts execution of the five untrusted corpus
 repositories and must be zero. CPA/CAG and the repository-owned counted-Mock
 are the explicitly audited runtime, not corpus execution.
@@ -112,11 +122,32 @@ are the explicitly audited runtime, not corpus execution.
 - `host_performance.py` — RT13-06 Host A/B plan binder, integrated Linux
   collector, and raw-derived evidence assembler. It does not synthesize or
   substitute measurements.
+- `host_performance_workloads.py` — deterministic fixed-workload generator
+  bound to the validated five-repository manifest and the checked-in sanitized
+  public corpus. It writes canonical request bodies only; it never reads the
+  supplemental archive or executes third-party content.
 - `host-performance-evidence.schema.json` — closed JSON Schema 2020-12 for
   the derived Host performance evidence.
 - `tests/` — standard-library unit tests plus an optional `jsonschema` Draft
   2020-12 fixture check when that package is installed; no live Provider or
   GitHub access.
+
+Initialize one unique semantic run identity for the current pre-merge or
+post-main phase. Never reuse it for the other phase:
+
+```bash
+RUN_ID='<unique-premerge-or-postmain-run-id>'
+ACQUISITION_DIR="/srv/cag-audit/acquisition-$RUN_ID"
+CANDIDATE_DIR=/srv/artifacts/candidate
+UPSTREAM_DIR=/srv/artifacts/upstream
+EVIDENCE_DIR="/srv/cag-audit/evidence-$RUN_ID"
+SUPPLEMENTAL_DIR="/srv/cag-audit/supplemental-metadata-$RUN_ID"
+SUPPLEMENTAL_ARCHIVE='/srv/cag-audit/supplemental/Codex全破.zip'
+RUN_CONFIG="/srv/cag-audit/run-config-$RUN_ID.json"
+test ! -e "$ACQUISITION_DIR"
+test ! -e "$EVIDENCE_DIR"
+test ! -e "$RUN_CONFIG"
+```
 
 ## 1. Use the approved pins; review again on source drift
 
@@ -130,11 +161,20 @@ directory; any GitHub HEAD or source mismatch removes the new tree and fails.
 umask 077
 python3 -B tools/current-cpa-audit/acquire.py \
   --policy tools/current-cpa-audit/repository-policy.json \
-  --output /srv/cag-audit/acquisition-approved
+  --output "$ACQUISITION_DIR"
 
 python3 -B tools/current-cpa-audit/validate.py corpus \
-  --manifest /srv/cag-audit/acquisition-approved/corpus-manifest.json \
-  --corpus-root /srv/cag-audit/acquisition-approved
+  --manifest "$ACQUISITION_DIR/corpus-manifest.json" \
+  --corpus-root "$ACQUISITION_DIR"
+
+python3 -B tools/current-cpa-audit/acquire.py \
+  --supplemental-archive "$SUPPLEMENTAL_ARCHIVE" \
+  --supplemental-policy tools/current-cpa-audit/supplemental-zip-policy.json \
+  --output "$SUPPLEMENTAL_DIR"
+
+python3 -B tools/current-cpa-audit/acquire.py \
+  --validate-supplemental "$SUPPLEMENTAL_DIR/supplemental-zip-manifest.json" \
+  --supplemental-policy tools/current-cpa-audit/supplemental-zip-policy.json
 ```
 
 The acquisition still reports `artifact_status=candidate`, but now records
@@ -206,6 +246,52 @@ policy change and its exact bundle identity.
 
 ## 2. Prepare exact images and assets offline
 
+This runbook has two non-transferable executions:
+
+1. **Pre-merge diagnostic.** Download the successful `pull_request` artifact
+   built from GitHub's synthetic PR merge commit. The candidate manifest binds
+   the PR head separately from that synthetic merge commit/tree. Run the full
+   functional, five-repository, built-in ZIP, special-path, Host-performance,
+   side-effect, and cleanup diagnostics. A PASS permits the PR author to
+   squash-merge; it does not permit `pack`, a staging Release, a tag, or a
+   release-admission claim.
+2. **Post-main release admission.** After the authorized squash merge, wait for
+   all five required checks on the resulting protected-`main` `push` commit.
+   Download that `push` run's nine-file artifact and repeat the entire audit
+   under a new `RUN_ID` and new evidence directory. The build embeds the source
+   commit, so the squash commit changes the SO identity and bytes even when the
+   source tree is unchanged. No PR artifact, SO hash, evidence bundle, or PASS
+   transfers to this phase. Only this exact `push`/`main` rerun may be supplied
+   to the portable packer.
+
+For each phase, use the fresh per-phase paths initialized above. Preserve the
+pre-merge evidence under its unique evidence path, then recreate the fixed
+candidate directory as an empty directory before extracting the post-main
+artifact; never overlay or mix the two candidate sets. The upstream directory
+may be retained only when the same reviewed CPA tar is rehashed successfully.
+Acquisition and evidence directories, run-config paths, and `RUN_ID` values are
+never reused.
+
+Extract the exact nine candidate files directly into
+`/srv/artifacts/candidate`, with no additional directory level:
+
+```text
+audit-candidate-manifest.json
+build-metadata.json
+checksums.txt
+cyber-abuse-guard-v1.0.0.so
+cyber-abuse-guard-v1.0.0.so.sha256
+cyber-abuse-guard_1.0.0_linux_amd64.zip
+ruleset-manifest.json
+ruleset.sha256
+sbom.cdx.json
+```
+
+Place only the reviewed upstream CPA archive at
+`/srv/artifacts/upstream/CLIProxyAPI_7.2.125_linux_amd64.tar.gz`. Do not place
+candidate files in the upstream directory or the CPA archive in the candidate
+directory.
+
 Preload, do not pull during the audit:
 
 1. The exact-merge clean CAG audit candidate from the successful CI artifact
@@ -266,19 +352,22 @@ image-contained CPA binary identity explicitly.
 
 ```bash
 python3 -B tools/current-cpa-audit/make_run_config.py \
-  --output /srv/cag-audit/run-config.json \
-  --run-id rt13-cpa-20260809-001 \
+  --output "$RUN_CONFIG" \
+  --run-id "$RUN_ID" \
   --seed 1305 \
   --cold-start-count 3 \
-  --manifest /srv/cag-audit/acquisition-approved/corpus-manifest.json \
-  --evidence-directory /srv/cag-audit/evidence-rt13-cpa-20260809-001 \
+  --manifest "$ACQUISITION_DIR/corpus-manifest.json" \
+  --supplemental-archive "$SUPPLEMENTAL_ARCHIVE" \
+  --supplemental-zip-policy tools/current-cpa-audit/supplemental-zip-policy.json \
+  --supplemental-zip-manifest "$SUPPLEMENTAL_DIR/supplemental-zip-manifest.json" \
+  --evidence-directory "$EVIDENCE_DIR" \
   --cag-repository /srv/src/cyber-abuse-guard \
-  --cag-so /srv/artifacts/cyber-abuse-guard-v1.0.0.so \
-  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
+  --cag-so "$CANDIDATE_DIR/cyber-abuse-guard-v1.0.0.so" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
   --candidate-artifact-id '<GitHub artifact-id>' \
   --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
   --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
-  --cpa-official-asset /srv/artifacts/CLIProxyAPI_7.2.125_linux_amd64.tar.gz \
+  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.125_linux_amd64.tar.gz" \
   --cpa-official-asset-sha256 4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233 \
   --cpa-binary-path /CLIProxyAPI \
   --cpa-binary-sha256 656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a \
@@ -288,7 +377,7 @@ python3 -B tools/current-cpa-audit/make_run_config.py \
   --mock-image-id 'sha256:<64-hex>'
 
 python3 -B tools/current-cpa-audit/validate.py run-config \
-  --config /srv/cag-audit/run-config.json
+  --config "$RUN_CONFIG"
 ```
 
 The evidence binds the input config SHA, a separate runtime config SHA for
@@ -335,7 +424,7 @@ inputs remain read-only as well.
 
 ```bash
 python3 -B tools/current-cpa-audit/run.py \
-  --config /srv/cag-audit/run-config.json
+  --config "$RUN_CONFIG"
 ```
 
 For every semantic case it executes all three modes (`audit`, `balanced`,
@@ -380,10 +469,10 @@ evidence can be valid only when both it and that manifest record
 
 ```bash
 python3 -B tools/current-cpa-audit/validate.py evidence \
-  --manifest /srv/cag-audit/evidence-rt13-cpa-20260809-001/corpus-manifest.json \
-  --evidence /srv/cag-audit/evidence-rt13-cpa-20260809-001/machine-evidence.json \
-  --results /srv/cag-audit/evidence-rt13-cpa-20260809-001/transport-results.jsonl \
-  --run-config /srv/cag-audit/evidence-rt13-cpa-20260809-001/run-config.json
+  --manifest "$EVIDENCE_DIR/corpus-manifest.json" \
+  --evidence "$EVIDENCE_DIR/machine-evidence.json" \
+  --results "$EVIDENCE_DIR/transport-results.jsonl" \
+  --run-config "$EVIDENCE_DIR/run-config.json"
 ```
 
 The Python validator is authoritative for cross-file and cross-row
@@ -417,8 +506,11 @@ inputs:
   Host. The approval is a canonical JSON object with exactly
   `acquire_sha256`, `audit_contract_sha256`,
   `host_performance_schema_sha256`, `host_performance_source_sha256`,
-  `run_sha256`, `validator_sha256`, and `bundle_sha256`. The bundle SHA-256
-  binds the canonical object containing the other six source hashes.
+  `run_sha256`, `validator_sha256`, `workload_generator_sha256`, and
+  `bundle_sha256`. The bundle SHA-256 binds the canonical object containing the
+  other seven source hashes. This keeps the deterministic fixed-workload
+  generator inside the independently reviewed Host tool identity instead of
+  accepting an operator-crafted manifest as the approved baseline.
 
 Produce that approval only from an independently reviewed exact checkout, then
 transfer it to the Host as a reviewed input. Never regenerate or replace the
@@ -439,15 +531,37 @@ criteria. The validator owns the exact map: `fixed_workload`, `ordinary`,
 requires CPA-only 200 and CPA+CAG 403. A manifest that changes any expected
 status, including to a fast 5xx, fails before acquisition.
 
+Generate the fixed workload while the validated core corpus still exists and
+before `run.py` performs its exact text cleanup. Keep generated bodies outside
+the checkout and keep the manifest outside its private body root:
+
+```bash
+PERFORMANCE_WORKLOAD_ROOT="/srv/cag-audit/host-performance-workloads-$RUN_ID"
+PERFORMANCE_WORKLOAD_MANIFEST="/srv/cag-audit/host-performance-workloads-$RUN_ID.json"
+
+python3 -B tools/current-cpa-audit/host_performance_workloads.py generate \
+  --core-manifest "$ACQUISITION_DIR/corpus-manifest.json" \
+  --corpus-root "$ACQUISITION_DIR" \
+  --repository-root /srv/src/cyber-abuse-guard \
+  --output-root "$PERFORMANCE_WORKLOAD_ROOT" \
+  --manifest "$PERFORMANCE_WORKLOAD_MANIFEST"
+```
+
+The generator produces exactly 30 bodies: one fixed control, two ordinary
+controls, sixteen five-repository malicious-activation requests, ten sanitized
+public adversarial requests, and one exact 4 MiB wire body. The independently
+reviewed Host tool-identity approval must include the generator SHA-256; a
+hand-written lookalike manifest is not the approved fixed workload.
+
 Create the immutable plan before collecting samples:
 
 ```bash
 python3 -B tools/current-cpa-audit/host_performance.py make-config \
-  --run-config /srv/cag-audit/run-config.json \
-  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
-  --workload-manifest /srv/cag-audit/host-performance-workloads.json \
+  --run-config "$EVIDENCE_DIR/run-config.json" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --workload-manifest "$PERFORMANCE_WORKLOAD_MANIFEST" \
   --approved-tool-identities /srv/cag-audit/approved-host-performance-tool-identities.json \
-  --output /srv/cag-audit/host-performance-config.json \
+  --output "$EVIDENCE_DIR/host-performance-config.json" \
   --seed 1306 \
   --paired-repetitions 3 \
   --warmup-seconds 30 \
@@ -554,12 +668,12 @@ export CAG_HOST_PERF_CLIENT_KEY='<private-client-key>'
 export CAG_HOST_PERF_MANAGEMENT_KEY='<private-management-key>'
 export CAG_HOST_PERF_MOCK_CONTROL_TOKEN='<same-private-control-token-as-mock>'
 python3 -B tools/current-cpa-audit/host_performance.py collect \
-  --run-config /srv/cag-audit/run-config.json \
-  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
-  --workload-manifest /srv/cag-audit/host-performance-workloads.json \
-  --config /srv/cag-audit/host-performance-config.json \
-  --workload-root /srv/cag-audit/private-host-workloads \
-  --output /srv/cag-audit/host-performance-measurements.json
+  --run-config "$EVIDENCE_DIR/run-config.json" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --workload-manifest "$PERFORMANCE_WORKLOAD_MANIFEST" \
+  --config "$EVIDENCE_DIR/host-performance-config.json" \
+  --workload-root "$PERFORMANCE_WORKLOAD_ROOT" \
+  --output "$EVIDENCE_DIR/host-performance-measurements.json"
 unset CAG_HOST_PERF_CLIENT_KEY CAG_HOST_PERF_MANAGEMENT_KEY CAG_HOST_PERF_MOCK_CONTROL_TOKEN
 ```
 
@@ -715,20 +829,20 @@ Build and then independently revalidate the derived evidence:
 
 ```bash
 python3 -B tools/current-cpa-audit/host_performance.py summarize \
-  --run-config /srv/cag-audit/run-config.json \
-  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
-  --workload-manifest /srv/cag-audit/host-performance-workloads.json \
-  --config /srv/cag-audit/host-performance-config.json \
-  --measurements /srv/cag-audit/host-performance-measurements.json \
-  --output /srv/cag-audit/host-performance-evidence.json
+  --run-config "$EVIDENCE_DIR/run-config.json" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --workload-manifest "$PERFORMANCE_WORKLOAD_MANIFEST" \
+  --config "$EVIDENCE_DIR/host-performance-config.json" \
+  --measurements "$EVIDENCE_DIR/host-performance-measurements.json" \
+  --output "$EVIDENCE_DIR/host-performance-evidence.json"
 
 python3 -B tools/current-cpa-audit/validate.py host-performance \
-  --run-config /srv/cag-audit/run-config.json \
-  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
-  --workload-manifest /srv/cag-audit/host-performance-workloads.json \
-  --config /srv/cag-audit/host-performance-config.json \
-  --measurements /srv/cag-audit/host-performance-measurements.json \
-  --evidence /srv/cag-audit/host-performance-evidence.json
+  --run-config "$EVIDENCE_DIR/run-config.json" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --workload-manifest "$PERFORMANCE_WORKLOAD_MANIFEST" \
+  --config "$EVIDENCE_DIR/host-performance-config.json" \
+  --measurements "$EVIDENCE_DIR/host-performance-measurements.json" \
+  --evidence "$EVIDENCE_DIR/host-performance-evidence.json"
 ```
 
 Structural gaps (missing/duplicate cells, insufficient or discontinuous raw
@@ -739,48 +853,115 @@ standalone validator rejects it as a gate result. No Host measurement or PASS
 report is checked into this directory; a real second-machine run is still
 required.
 
+## Native CPA Host special-path evidence
+
+Run the repository-owned integration selection against the same exact clean
+checkout and nine-file candidate used by the semantic and Host-performance
+lanes. The JSONL parser retains only hashes and PASS identities; it does not
+copy `go test` output strings into its report:
+
+```bash
+NATIVE_HOST_LOG="$EVIDENCE_DIR/native-host-special-paths-go-test.jsonl"
+NATIVE_HOST_REPORT="$EVIDENCE_DIR/native-host-special-paths.json"
+
+go test -json -count=1 \
+  -run=^TestCPAPluginHostBlocksBeforeUpstream$ \
+  -tags=integration,sqlite_omit_load_extension \
+  ./integration >"$NATIVE_HOST_LOG"
+
+python3 -B tools/current-cpa-audit/native_host_special_paths.py pack \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --candidate-artifact-id '<GitHub artifact-id>' \
+  --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
+  --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
+  --candidate-artifact-size '<GitHub artifact-size>' \
+  --go-test-jsonl "$NATIVE_HOST_LOG" \
+  --checkout /srv/src/cyber-abuse-guard \
+  --output "$NATIVE_HOST_REPORT"
+
+python3 -B tools/current-cpa-audit/native_host_special_paths.py validate \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --candidate-artifact-id '<GitHub artifact-id>' \
+  --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
+  --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
+  --candidate-artifact-size '<GitHub artifact-size>' \
+  --go-test-jsonl "$NATIVE_HOST_LOG" \
+  --checkout /srv/src/cyber-abuse-guard \
+  --report "$NATIVE_HOST_REPORT"
+```
+
+The report must contain exactly 35 code-owned critical subtests covering
+no-copy/body limits, Multi-Agent v2, official Codex `response.failed` and
+Originator behavior, Claude thinking replay, and ordered-tool request shapes.
+Any FAIL, SKIP, missing test, candidate drift, dirty checkout, non-Linux-amd64
+runtime, or Go-version drift rejects the report. This remains owner-run
+evidence, not independent proof.
+
 ## Portable owner-run release admission
 
 The complete machine and Host-performance bundles intentionally bind absolute
 paths, real-path aliases, file metadata, directory device/inode identities, and
 raw measurements. Copying only their final JSON files to GitHub cannot preserve
-those guarantees. On the owner-controlled second machine, run the release
-packer against the original evidence paths after both standalone validators
+those guarantees. The pre-merge diagnostic must stop before this section and
+must not call `pack`. On the owner-controlled second machine, call the release
+packer only for the fresh post-squash protected-`main` `push` artifact, against
+that post-main run's original `evidence-$RUN_ID` paths, after all five main
+required checks and the semantic, Host-performance, and native Host validators
 have passed:
 
 ```bash
 python3 -B tools/current-cpa-audit/second_machine_release_admission.py pack \
-  --manifest /srv/cag-audit/evidence/corpus-manifest.json \
-  --evidence /srv/cag-audit/evidence/machine-evidence.json \
-  --results /srv/cag-audit/evidence/transport-results.jsonl \
-  --run-config /srv/cag-audit/run-config.json \
-  --candidate-manifest /srv/artifacts/audit-candidate-manifest.json \
+  --manifest "$EVIDENCE_DIR/corpus-manifest.json" \
+  --evidence "$EVIDENCE_DIR/machine-evidence.json" \
+  --results "$EVIDENCE_DIR/transport-results.jsonl" \
+  --run-config "$EVIDENCE_DIR/run-config.json" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
   --candidate-artifact-size 12345678 \
-  --workload-manifest /srv/cag-audit/host-performance-workloads.json \
-  --performance-config /srv/cag-audit/host-performance-config.json \
-  --measurements /srv/cag-audit/host-performance-measurements.json \
-  --performance-evidence /srv/cag-audit/host-performance-evidence.json \
-  --output /srv/cag-audit/second-machine-release-admission.json
+  --supplemental-archive "$SUPPLEMENTAL_ARCHIVE" \
+  --supplemental-manifest "$EVIDENCE_DIR/supplemental-zip-manifest.json" \
+  --supplemental-policy "$EVIDENCE_DIR/supplemental-zip-policy.json" \
+  --supplemental-results "$EVIDENCE_DIR/supplemental-zip-results.jsonl" \
+  --native-report "$NATIVE_HOST_REPORT" \
+  --native-go-test-jsonl "$NATIVE_HOST_LOG" \
+  --checkout /srv/src/cyber-abuse-guard \
+  --workload-manifest "$PERFORMANCE_WORKLOAD_MANIFEST" \
+  --performance-config "$EVIDENCE_DIR/host-performance-config.json" \
+  --measurements "$EVIDENCE_DIR/host-performance-measurements.json" \
+  --performance-evidence "$EVIDENCE_DIR/host-performance-evidence.json" \
+  --output "$EVIDENCE_DIR/second-machine-release-admission.json"
 ```
 
 `--candidate-artifact-size` is the positive size from the exact GitHub Actions
 artifact API response. Its ID, digest, run, attempt, workflow, commit, tree, and
 SO identity already come from the candidate provenance in `run-config.json`.
 The packer re-runs the corpus policy, machine evidence, run-config/candidate,
-Host measurements, and Host evidence validators. It also rehashes the exact
-nine downloaded candidate files, checks both SHA sidecars and `checksums.txt`,
-opens the Store ZIP and compares its root SO bytes, and verifies the reused
-metadata/ruleset/SBOM source identities.
+supplemental archive/evidence-copy/results, Host measurements/evidence, and
+native Host report/Go-JSONL validators. It rehashes the operator-owned archive
+before and after packing without extracting member text to disk, rebuilds its
+reviewed manifest in memory, and removes a failed output only when its original
+file identity is still present. It also rehashes the exact nine downloaded
+candidate files, checks both SHA sidecars and `checksums.txt`, opens the Store
+ZIP and compares its root SO bytes, and verifies the reused metadata/ruleset/
+SBOM source identities.
+
+The current packer accepts only a candidate whose manifest records
+`event=push`, `head_branch=main`, and identical `head_sha`, `commit`, and
+protected-main identity, from the exact successful main CI run. Keep this
+push/main-only restriction locked by parser/validator negative tests and
+contract pins; documentation alone is not an enforcement substitute.
 
 The resulting
-`cyber-abuse-guard.second-machine-release-admission.v1` report is canonical
+`cyber-abuse-guard.second-machine-release-admission.v2` report is canonical
 JSON with one newline and a fixed 24-hour lifetime. It contains no repository
 source text. It retains input-file hashes; CAG/CPA/candidate identities; the CI
 artifact coordinates; five repository commit/tree pins and the one ZIP source
-hash; 19 cases by all three modes; zero-false-positive, 100%-malicious-recall,
-side-effect, third-party-execution, cleanup, and current Host-performance gate
-details; and both tool-bundle hashes. The GitHub validator recomputes all
-summaries and gates rather than trusting the report's `status` field.
+hash; the independent core 19-case/684-execution and supplemental
+7-case/252-execution planes; zero-false-positive, 100%-malicious-recall,
+side-effect, third-party-execution, cleanup, current Host-performance, and
+native special-path gates; and four tool bundles (admission, machine,
+Host-performance, and native Host). The GitHub validator recomputes all
+summaries, denominators, and gates rather than trusting the report's `status`
+field.
 
 Create a draft staging Release with tag name
 `v1.0.0-rc.1-second-machine-admission`, set `target_commitish` to the exact
@@ -791,6 +972,12 @@ last edge from GitHub API data: it accepts only the numeric draft Release ID,
 numeric asset ID, and lowercase report SHA-256; proves exact membership/name/
 upload state/API digest/size; downloads and rehashes the real bytes; checks the
 expiry; and runs the validator from the exact signed tag.
+
+Before that dispatch, a real authorized signer who controls the corresponding
+private key must create `v1.0.0-rc.1` as a GitHub-verified signed annotated tag
+on the exact protected-main commit. An unsigned annotated tag, lightweight tag,
+Release-generated tag, unverified key, or signature that impersonates a
+maintainer is not acceptable.
 
 This portable report is owner-run release admission only. The original full
 bundle remains the diagnostic evidence, and neither artifact is independent
@@ -827,6 +1014,8 @@ python3 -B -m py_compile \
   tools/current-cpa-audit/audit_contract.py \
   tools/current-cpa-audit/counted_mock.py \
   tools/current-cpa-audit/host_performance.py \
+  tools/current-cpa-audit/host_performance_workloads.py \
+  tools/current-cpa-audit/native_host_special_paths.py \
   tools/current-cpa-audit/make_run_config.py \
   tools/current-cpa-audit/run.py \
   tools/current-cpa-audit/second_machine_release_admission.py \
@@ -841,6 +1030,8 @@ python -B -m py_compile `
   tools/current-cpa-audit/audit_contract.py `
   tools/current-cpa-audit/counted_mock.py `
   tools/current-cpa-audit/host_performance.py `
+  tools/current-cpa-audit/host_performance_workloads.py `
+  tools/current-cpa-audit/native_host_special_paths.py `
   tools/current-cpa-audit/make_run_config.py `
   tools/current-cpa-audit/run.py `
   tools/current-cpa-audit/second_machine_release_admission.py `

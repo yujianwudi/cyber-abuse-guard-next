@@ -9,7 +9,7 @@ its YAML file is present here.
 | `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.125 compatibility, tests, fuzzing, candidate `.so` loading, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
-| `release-rc.yml` | `RC Release` | Manual dispatch from the existing annotated `v1.0.0-rc.1` tag | Admission against exact protected-main checks and staged owner evidence, byte-for-byte candidate sealing, provenance attestation, and non-latest prerelease publication |
+| `release-rc.yml` | `RC Release` | Manual dispatch from the existing signed annotated `v1.0.0-rc.1` tag | Admission against exact protected-main checks and staged owner evidence, byte-for-byte candidate sealing, provenance attestation, and non-latest prerelease publication |
 
 `release-rc.yml` is the only active publication workflow. It is fixed to plugin
 version `1.0.0`, tag `v1.0.0-rc.1`, CPA `v7.2.125`, and Linux amd64. It does
@@ -19,8 +19,25 @@ recoverable from Git history.
 
 ## Fixed RC admission and publication
 
+The second-machine lane is deliberately two-stage. A `pull_request` CI artifact
+is built from GitHub's synthetic merge commit and is diagnostic only: after the
+PR's five required contexts succeed, it must receive the complete pre-merge
+function, safety, five-repository/ZIP, Host-performance, side-effect, and
+cleanup run. It may authorize only an author squash merge. It must not be
+packed, staged, tagged, or described as release admission.
+
+Squash merge creates a new protected-`main` commit. The SO embeds that commit,
+so its bytes and hash change even when the source tree is unchanged. After the
+squash, all five required contexts must succeed again on the exact `push`/main
+commit. The new main CI artifact must then receive a fresh full second-machine
+run with a new `RUN_ID` and `/srv/cag-audit/evidence-$RUN_ID`; candidate files
+reside only in `/srv/artifacts/candidate` and the reviewed CPA tar only in
+`/srv/artifacts/upstream`. Only this post-main run may produce the portable
+report accepted below. PR artifacts, run IDs, SO bytes, evidence, and PASS
+states are non-transferable.
+
 The workflow must be dispatched with the GitHub UI or API while the selected
-ref is the existing annotated `v1.0.0-rc.1` tag. The only evidence coordinates
+ref is the existing signed annotated `v1.0.0-rc.1` tag. The only evidence coordinates
 the operator supplies are the successful push-run IDs for `CI`, `CodeQL`, and
 `Policy and Corpus Gate`, plus a numeric draft Release ID, numeric asset ID,
 and lowercase SHA-256 for its fixed
@@ -39,6 +56,12 @@ protected-main check contexts succeeded on that exact commit:
 - `Analyze Go on Linux`
 - `round9-policy-and-corpus`
 
+The tag must be created by a real authorized signer who controls the
+corresponding private key. An unsigned annotated tag, lightweight tag, tag
+generated automatically by a Release, unverified key, or signature that
+impersonates a maintainer is not an admitted substitute, even when the target
+commit itself is verified.
+
 Repository-side branch protection remains the authority for `main`; the
 workflow mechanically binds the Release to the exact successful runs rather
 than attempting to mutate or replace branch protection.
@@ -56,14 +79,15 @@ the current Host-performance gates are derived only from the closed report.
 The status is `SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS` only when those
 details recompute to PASS.
 
-The report is produced server-side only after the original path/inode-bound
+The report is produced server-side only from the post-main run after the
+original path/inode-bound
 machine evidence and Host-performance measurements pass their full validators.
 It omits third-party text and is portable release admission, not a substitute
 for the non-portable full bundle. This remains owner-run corroboration on a
 second machine, not an independent audit or independent proof. This RC is not
 a stable release or production approval.
 
-The `CI` run must contain exactly one live artifact named
+The exact protected-main `push` `CI` run must contain exactly one live artifact named
 `cyber-abuse-guard-linux-amd64-audit-candidate`. Admission records its artifact
 ID, API digest, size, retention expiry, and run ID. The seal job uses the
 immutable-SHA `actions/download-artifact` action with that run ID, verifies the
@@ -72,6 +96,31 @@ does not invoke the Go compiler, regenerate metadata/SBOM, or rename the
 audited binary. Source and binary version remain `1.0.0`; only the tag, source
 archive, Release metadata, and release manifest carry artifact version
 `1.0.0-rc.1`.
+
+A PR CI run may contain an artifact with the same name, but its
+`event=pull_request` and synthetic merge identity make it ineligible for this
+workflow. The portable packer and admission validator require
+`event=push`, `head_branch=main`, and `head_sha=commit` on the exact protected
+main candidate.
+
+The separately supplied complete Codex jailbreak ZIP is outside the fixed
+five-repository 11-source/19-case denominator. Its explicit
+`--supplemental-archive` parser, memory-only runner, v2 evidence, validator, and
+negative-test surface now retain a separate 4-entry/7-case/252-execution plane.
+The portable v2 validator and this workflow require its fixed source SHA-256,
+zero false positives, complete Balanced/Strict malicious recall, Audit-only
+detection, zero third-party execution, and exact cleanup before publication.
+Its truthful live status remains `NOT_RUN` until the fresh exact-candidate
+second-machine run succeeds; core five-repository evidence can never be
+relabelled as its PASS.
+
+The same portable v2 report also binds the native CPA Host special-path report,
+its Go JSONL hash, checked-in integration-test source, 35 critical subtests,
+Linux amd64/Go identity, candidate commit/tree/SO/artifact, and zero FAIL/SKIP
+result. The workflow rejects any report whose supplemental status is not
+`SUPPLEMENTAL_ARCHIVE_PASS`, whose native status is not
+`NATIVE_HOST_SPECIAL_PATHS_PASS`, or whose archive SHA differs from the fixed
+operator-supplied ZIP identity.
 
 The exact assets before transfer are:
 

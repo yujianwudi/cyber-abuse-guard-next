@@ -29,12 +29,18 @@ from audit_contract import (
     PROTOCOLS,
     RESULT_SCHEMA,
     STREAM_VALUES,
+    SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY,
+    SUPPLEMENTAL_ZIP_CLAIM_BOUNDARY,
+    SUPPLEMENTAL_ZIP_MANIFEST_SCHEMA,
+    SUPPLEMENTAL_ZIP_RESULT_SCHEMA,
     TEMPLATE_SHA256,
     build_execution_plan,
+    build_supplemental_execution_plan,
     canonical_bytes,
     review_sha256,
     sha256_bytes,
 )
+from supplemental_zip import _reviewed_cases
 
 
 STAMP = "2026-08-04T00:00:00Z"
@@ -315,7 +321,72 @@ def manifest() -> dict[str, Any]:
     }
 
 
-def _event(expected: str, mode: str, request_hash: str, ordinal: int, malicious: bool) -> dict[str, Any] | None:
+def supplemental_manifest_fixture() -> tuple[dict[str, Any], dict[str, Any], bytes]:
+    policy_path = Path(__file__).resolve().parent.parent / "supplemental-zip-policy.json"
+    policy_raw = policy_path.read_bytes()
+    policy = json.loads(policy_raw)
+    approved: list[dict[str, Any]] = []
+    for index, entry in enumerate(policy["entries"]):
+        approved.append(
+            {
+                "compressed_bytes": entry["compressed_bytes"],
+                "compression_method": entry["compression_method"],
+                "content_sha256": entry["content_sha256"],
+                "crc32": entry["crc32"],
+                "data_offset": 1000 + index * 100000,
+                "encoding": entry["encoding"],
+                "entry_id": entry["entry_id"],
+                "flags": 0,
+                "local_header_offset": 900 + index * 100000,
+                "normalized_text_sha256": entry["normalized_text_sha256"],
+                "path": entry["path"],
+                "raw_name_sha256": entry["raw_name_sha256"],
+                "text_bytes": entry["uncompressed_bytes"],
+                "uncompressed_bytes": entry["uncompressed_bytes"],
+            }
+        )
+    supplemental = {
+        "acquired_at": STAMP,
+        "approved_entries": approved,
+        "archive": {
+            **SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY,
+            "aggregate_ratio_milli": 1745,
+            "data_descriptor_entries": 0,
+            "duplicate_normalized_names": 0,
+            "duplicate_raw_names": 0,
+            "encrypted_entries": 0,
+            "max_entry_ratio_milli": 7734,
+            "max_entry_uncompressed_bytes": 1673696,
+            "special_entries": 0,
+            "symlink_entries": 0,
+            "unicode_path_entries": 681,
+            "unsafe_paths": 0,
+            "utf8_flag_entries": 0,
+            "zip64_entries": 0,
+        },
+        "artifact_status": "candidate",
+        "claim_boundary": SUPPLEMENTAL_ZIP_CLAIM_BOUNDARY,
+        "code_executions": 0,
+        "member_text_files_created": 0,
+        "policy_review_status": "approved",
+        "policy_sha256": sha256_bytes(policy_raw),
+        "reviewed_cases": _reviewed_cases(policy, approved),
+        "schema": SUPPLEMENTAL_ZIP_MANIFEST_SCHEMA,
+        "selected_entry_count": 4,
+        "third_party_code_executions": 0,
+        "unique_reviewed_cases": 7,
+    }
+    return supplemental, policy, policy_raw
+
+
+def _event(
+    expected: str,
+    mode: str,
+    request_hash: str,
+    ordinal: int,
+    malicious: bool,
+    prefix: str = "event",
+) -> dict[str, Any] | None:
     if expected != "allow":
         if expected != "block_malicious_text":
             raise AssertionError(f"fixture only models malicious blocks, not {expected}")
@@ -326,7 +397,7 @@ def _event(expected: str, mode: str, request_hash: str, ordinal: int, malicious:
             "decision": "block_malicious_text",
             "decision_kind": "block_malicious_text",
             "explanation_schema": "decision-explanation-v2",
-            "id": f"event-{ordinal}",
+            "id": f"{prefix}-{ordinal}",
             "incomplete_reason": None,
             "mode": mode,
             "request_hash": request_hash,
@@ -339,7 +410,7 @@ def _event(expected: str, mode: str, request_hash: str, ordinal: int, malicious:
             "decision": "audit_malicious_text",
             "decision_kind": "audit_eligible_malicious_text",
             "explanation_schema": "decision-explanation-v2",
-            "id": f"event-{ordinal}",
+            "id": f"{prefix}-{ordinal}",
             "incomplete_reason": None,
             "mode": mode,
             "request_hash": request_hash,
@@ -436,6 +507,107 @@ def evidence_files(directory: Path) -> tuple[dict[str, Any], dict[str, Any], Pat
     results_path = directory / "results.jsonl"
     results_path.write_bytes(b"".join(canonical_bytes(row) + b"\n" for row in rows))
 
+    supplemental_manifest, supplemental_policy, supplemental_policy_raw = (
+        supplemental_manifest_fixture()
+    )
+    supplemental_cases = {
+        case["id"]: case for case in supplemental_manifest["reviewed_cases"]
+    }
+    supplemental_plan = build_supplemental_execution_plan(
+        supplemental_manifest, 1205, 3
+    )
+    supplemental_per_cold: dict[int, bytearray] = {
+        1: bytearray(),
+        2: bytearray(),
+        3: bytearray(),
+    }
+    supplemental_orders: dict[int, list[tuple[str, str, str, bool]]] = {
+        1: [],
+        2: [],
+        3: [],
+    }
+    supplemental_rows: list[dict[str, Any]] = []
+    for ordinal, entry in enumerate(supplemental_plan, start=1):
+        case = supplemental_cases[entry.semantic_case_id]
+        expected = case["expected_action_by_mode"][entry.mode]
+        request_identity = (
+            f"supplemental:{entry.semantic_case_id}:{entry.protocol}:{entry.stream}"
+        )
+        request_hash = "sha256:" + digest(f"audit-request:{request_identity}")
+        blocked = expected != "allow"
+        row = {
+            "actual_action": expected,
+            "audit_event": _event(
+                expected,
+                entry.mode,
+                request_hash,
+                ordinal,
+                case["label"] == "malicious_active",
+                "supplemental-event",
+            ),
+            "cold_start": entry.cold_start,
+            "error_contract": (
+                {
+                    "checked": True,
+                    "content_type": "application/json; charset=utf-8",
+                    "no_store": True,
+                    "nosniff": True,
+                    "schema_valid": True,
+                }
+                if blocked
+                else {
+                    "checked": False,
+                    "content_type": None,
+                    "no_store": None,
+                    "nosniff": None,
+                    "schema_valid": None,
+                }
+            ),
+            "execution_id": f"unit-run:supplemental:{ordinal:08d}",
+            "expected_action": expected,
+            "expected_action_by_mode": dict(case["expected_action_by_mode"]),
+            "expected_audit_request_hash": request_hash,
+            "http_status": 403 if blocked else 200,
+            "infrastructure_error": None,
+            "latency_ms": 1.0,
+            "mode": entry.mode,
+            "ordinal": ordinal,
+            "passed": True,
+            "protocol": entry.protocol,
+            "request_sha256": digest(f"request:{request_identity}"),
+            "response_bytes": 10,
+            "response_sha256": digest(f"supplemental-response:{ordinal}"),
+            "schema": SUPPLEMENTAL_ZIP_RESULT_SCHEMA,
+            "side_effect_deltas": (
+                {"auth": 0, "mock": 0, "provider": 0, "usage": 0}
+                if blocked
+                else {"auth": 1, "mock": 1, "provider": 1, "usage": 1}
+            ),
+            "source_text_sha256": case["source"]["normalized_text_sha256"],
+            "stream": entry.stream,
+            "stream_terminated": not blocked,
+            "supplemental_case_id": entry.semantic_case_id,
+            "template_sha256": case["template"]["sha256"],
+            "usage_recorded": not blocked,
+        }
+        raw = canonical_bytes(row) + b"\n"
+        supplemental_rows.append(row)
+        supplemental_per_cold[entry.cold_start].extend(raw)
+        supplemental_orders[entry.cold_start].append(
+            (entry.mode, entry.semantic_case_id, entry.protocol, entry.stream)
+        )
+    supplemental_results_path = directory / "supplemental-zip-results.jsonl"
+    supplemental_results_path.write_bytes(
+        b"".join(canonical_bytes(row) + b"\n" for row in supplemental_rows)
+    )
+    supplemental_manifest_raw = canonical_bytes(supplemental_manifest) + b"\n"
+    (directory / "supplemental-zip-policy.json").write_bytes(
+        supplemental_policy_raw
+    )
+    (directory / "supplemental-zip-manifest.json").write_bytes(
+        supplemental_manifest_raw
+    )
+
     cpa_image = "sha256:" + "a" * 64
     mock_image = "sha256:" + "b" * 64
     runtime_hashes = [digest(f"runtime:{index}") for index in range(1, 4)]
@@ -487,6 +659,15 @@ def evidence_files(directory: Path) -> tuple[dict[str, Any], dict[str, Any], Pat
                     "forced_kill_used": False,
                     "mock_graceful": True,
                 },
+                "supplemental_execution_count": len(
+                    supplemental_per_cold[index].splitlines()
+                ),
+                "supplemental_order_sha256": sha256_bytes(
+                    canonical_bytes(supplemental_orders[index])
+                ),
+                "supplemental_results_sha256": sha256_bytes(
+                    bytes(supplemental_per_cold[index])
+                ),
             }
         )
 
@@ -528,6 +709,10 @@ def evidence_files(directory: Path) -> tuple[dict[str, Any], dict[str, Any], Pat
             "graceful_stop_attempts": 6,
             "images_removed": False,
             "resources": resources,
+            "supplemental_input_archive_preserved": True,
+            "supplemental_member_text_files_created": 0,
+            "supplemental_member_text_files_removed": 0,
+            "supplemental_member_text_retained": False,
             "third_party_text_files_removed": source_manifest["source_count"],
             "third_party_text_retained": False,
         },
@@ -586,6 +771,54 @@ def evidence_files(directory: Path) -> tuple[dict[str, Any], dict[str, Any], Pat
         "run": {"cold_start_count": 3, "platform": "linux/amd64", "run_id": "unit-run", "seed": 1205},
         "schema": EVIDENCE_SCHEMA,
         "started_at": STAMP,
+        "supplemental_zip_manifest": {
+            "archive_bytes": supplemental_manifest["archive"]["bytes"],
+            "archive_sha256": supplemental_manifest["archive"]["sha256"],
+            "code_executions": 0,
+            "manifest_path": "supplemental-zip-manifest.json",
+            "manifest_sha256": sha256_bytes(supplemental_manifest_raw),
+            "member_text_files_created": 0,
+            "policy_path": "supplemental-zip-policy.json",
+            "policy_sha256": sha256_bytes(supplemental_policy_raw),
+            "selected_entry_count": 4,
+            "third_party_code_executions": 0,
+            "unique_reviewed_cases": 7,
+        },
+        "supplemental_zip_results": {
+            "modes": list(MODES),
+            "protocols": list(PROTOCOLS),
+            "results_path": "supplemental-zip-results.jsonl",
+            "results_sha256": sha256_file_bytes(
+                supplemental_results_path.read_bytes()
+            ),
+            "streams": list(STREAM_VALUES),
+            "supplemental_executions": len(supplemental_rows),
+        },
+        "supplemental_zip_summary": {
+            "allow_executions": sum(
+                row["actual_action"] == "allow" for row in supplemental_rows
+            ),
+            "block_incomplete_inspection_executions": sum(
+                row["actual_action"] == "block_incomplete_inspection"
+                for row in supplemental_rows
+            ),
+            "block_malicious_text_executions": sum(
+                row["actual_action"] == "block_malicious_text"
+                for row in supplemental_rows
+            ),
+            "code_executions": 0,
+            "malicious_case_count": sum(
+                case["label"] == "malicious_active"
+                for case in supplemental_cases.values()
+            ),
+            "passed_executions": len(supplemental_rows),
+            "third_party_code_executions": 0,
+            "total_executions": len(supplemental_rows),
+            "transport_error_executions": sum(
+                row["actual_action"] == "transport_error"
+                for row in supplemental_rows
+            ),
+        },
         "third_party_code_executions": 0,
         "transport": {
             "modes": list(MODES),

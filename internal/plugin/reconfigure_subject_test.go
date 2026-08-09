@@ -7,11 +7,108 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/subject"
 )
+
+func TestReconfigureRulePreparationDoesNotBlockRequestCallbacks(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+
+	loaderEntered := make(chan struct{})
+	releaseLoader := make(chan struct{})
+	p.loadRules = func() (*rules.RuleSet, error) {
+		close(loaderEntered)
+		<-releaseLoader
+		return rules.LoadDefault()
+	}
+
+	type callResult struct {
+		raw  []byte
+		code int
+	}
+	reconfigureDone := make(chan callResult, 1)
+	go func() {
+		raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+			"mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+		reconfigureDone <- callResult{raw: raw, code: code}
+	}()
+
+	select {
+	case <-loaderEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconfigure did not enter the injected rule loader")
+	}
+
+	routeRequest := pluginapi.ModelRouteRequest{
+		SourceFormat:   "openai",
+		RequestedModel: "gpt-test",
+		Body:           []byte(benignRequestInterceptBody),
+	}
+	routePayload, err := json.Marshal(routeRequest)
+	if err != nil {
+		close(releaseLoader)
+		t.Fatal(err)
+	}
+	routeDone := make(chan callResult, 1)
+	go func() {
+		raw, code := p.Call(pluginabi.MethodModelRoute, routePayload)
+		routeDone <- callResult{raw: raw, code: code}
+	}()
+
+	var route callResult
+	select {
+	case route = <-routeDone:
+		close(releaseLoader)
+	case <-time.After(2 * time.Second):
+		close(releaseLoader)
+		<-reconfigureDone
+		t.Fatal("request callback waited for non-state-dependent rule preparation")
+	}
+	if route.code != 0 {
+		t.Fatalf("model.route code=%d envelope=%s", route.code, route.raw)
+	}
+
+	select {
+	case result := <-reconfigureDone:
+		if result.code != 0 {
+			t.Fatalf("plugin.reconfigure code=%d envelope=%s", result.code, result.raw)
+		}
+		decodeOKResult(t, result.raw, &map[string]any{})
+	case <-time.After(5 * time.Second):
+		t.Fatal("reconfigure did not finish after releasing the rule loader")
+	}
+}
+
+func TestRejectedRuntimeConfigDoesNotCompileCandidateRules(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+
+	loaderCalls := 0
+	p.loadRules = func() (*rules.RuleSet, error) {
+		loaderCalls++
+		return rules.LoadDefault()
+	}
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: audit\nclassifier:\n  enabled: true\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("plugin.reconfigure code=%d envelope=%s", code, raw)
+	}
+	decodeOKResult(t, raw, &map[string]any{})
+	if loaderCalls != 0 {
+		t.Fatalf("rejected runtime configuration compiled candidate rules %d times", loaderCalls)
+	}
+	if p.runtime.Load().config.Mode != config.ModeBalanced {
+		t.Fatalf("rejected runtime configuration replaced the active mode: %q", p.runtime.Load().config.Mode)
+	}
+}
 
 func TestReconfigurePreservesSubjectRiskState(t *testing.T) {
 	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")

@@ -45,10 +45,12 @@ from audit_contract import (
     PROTOCOLS,
     RESULT_SCHEMA,
     STREAM_VALUES,
+    SUPPLEMENTAL_ZIP_RESULT_SCHEMA,
     BoundCorpus,
     ContractError,
     apply_template,
     build_execution_plan,
+    build_supplemental_execution_plan,
     canonical_bytes,
     expected_request_hash,
     load_json_bytes,
@@ -64,7 +66,10 @@ from audit_contract import (
     validate_manifest_policy,
     validate_result,
     validate_run_config,
+    validate_supplemental_result,
+    validate_supplemental_run_config_files,
 )
+from supplemental_zip import load_selected_supplemental_texts
 
 
 TOOL_DIR = Path(__file__).resolve().parent
@@ -91,6 +96,8 @@ RUNNER_BUNDLE_FILES = (
     "machine-evidence.schema.json",
     "repository-policy.json",
     "run.py",
+    "supplemental-zip-policy.json",
+    "supplemental_zip.py",
     "validate.py",
 )
 
@@ -1039,15 +1046,35 @@ class Harness:
         self.mock_name = f"{self.run_id}-mock"
         self.network_name = f"{self.run_id}-net"
         self.results_path = self.evidence_dir / "transport-results.jsonl"
+        self.supplemental_results_path = (
+            self.evidence_dir / "supplemental-zip-results.jsonl"
+        )
         self.runtime_root = self.evidence_dir / ".runtime"
         self.corpus_root = Path(config["paths"]["corpus_manifest"]).parent
         self.cases = {case["id"]: case for case in manifest["semantic_cases"]}
         self.plan = build_execution_plan(manifest, self.seed, self.cold_count)
+        self.supplemental_manifest: dict[str, Any] | None = None
+        self.supplemental_manifest_raw = b""
+        self.supplemental_policy: dict[str, Any] | None = None
+        self.supplemental_policy_raw = b""
+        self.supplemental_cases: dict[str, dict[str, Any]] = {}
+        self.supplemental_plan: list[Any] = []
+        self.supplemental_texts: dict[str, bytes] = {}
+        self.supplemental_archive_identity: tuple[int, int, int, int] | None = None
+        self.supplemental_archive_preserved = False
         self.cleanup = CleanupTracker(
             docker, self.run_id, self.cpa_name, self.mock_name, self.network_name
         )
         self.results_handle: Any = None
+        self.supplemental_results_handle: Any = None
         self.results_count = 0
+        self.supplemental_results_count = 0
+        self.supplemental_action_counts = {
+            "allow": 0,
+            "block_incomplete_inspection": 0,
+            "block_malicious_text": 0,
+            "transport_error": 0,
+        }
         self.cold_evidence: list[dict[str, Any]] = []
         self.runtime_hashes: list[str] = []
         self.runner_identity: dict[str, str] = {}
@@ -1081,6 +1108,64 @@ class Harness:
     @property
     def control_headers(self) -> dict[str, str]:
         return {"Authorization": "Bearer " + self.control_token}
+
+    @staticmethod
+    def supplemental_archive_stat_identity(info: os.stat_result) -> tuple[int, int, int, int]:
+        return (info.st_dev, info.st_ino, info.st_nlink, info.st_size)
+
+    def verify_supplemental_archive_identity(self) -> None:
+        if self.supplemental_archive_identity is None:
+            fail("supplemental ZIP archive was not bound before verification")
+        archive_path = Path(self.config["paths"]["supplemental_zip"])
+        info = regular_file_info(
+            archive_path, "supplemental ZIP archive", require_single_link=True
+        )
+        if self.supplemental_archive_stat_identity(info) != self.supplemental_archive_identity:
+            fail("supplemental ZIP archive inode, link count, size, or device drifted")
+        if sha256_file(
+            archive_path,
+            self.config["supplemental_zip"]["archive_bytes"],
+            require_single_link=True,
+        ) != self.config["supplemental_zip"]["archive_sha256"]:
+            fail("supplemental ZIP archive SHA-256 drifted")
+
+    def bind_supplemental_inputs(self) -> None:
+        (
+            supplemental_manifest,
+            supplemental_manifest_raw,
+            supplemental_policy,
+            supplemental_policy_raw,
+            archive_info,
+        ) = validate_supplemental_run_config_files(self.config)
+        self.supplemental_manifest = supplemental_manifest
+        self.supplemental_manifest_raw = supplemental_manifest_raw
+        self.supplemental_policy = supplemental_policy
+        self.supplemental_policy_raw = supplemental_policy_raw
+        self.supplemental_cases = {
+            case["id"]: case for case in supplemental_manifest["reviewed_cases"]
+        }
+        self.supplemental_plan = build_supplemental_execution_plan(
+            supplemental_manifest, self.seed, self.cold_count
+        )
+        self.supplemental_archive_identity = self.supplemental_archive_stat_identity(
+            archive_info
+        )
+        self.supplemental_texts = load_selected_supplemental_texts(
+            Path(self.config["paths"]["supplemental_zip"]),
+            supplemental_policy,
+            supplemental_manifest,
+            policy_sha256=sha256_bytes(supplemental_policy_raw),
+        )
+        for case_id, case in self.supplemental_cases.items():
+            source = case["source"]
+            raw = self.supplemental_texts.get(source["entry_id"])
+            if (
+                raw is None
+                or len(raw) != source["text_bytes"]
+                or sha256_bytes(raw) != source["normalized_text_sha256"]
+            ):
+                fail(f"supplemental ZIP selected text identity changed: {case_id}")
+        self.verify_supplemental_archive_identity()
 
     def verify_static_inputs(self) -> None:
         validate_candidate_manifest_file(self.config)
@@ -1118,6 +1203,7 @@ class Harness:
             load_json_bytes(policy_raw, "fixed source policy"), require_approved=True
         )
         validate_manifest_policy(self.manifest, policy, require_approved=True)
+        self.bind_supplemental_inputs()
         mock_source = Path(self.config["paths"]["mock_source"])
         if mock_source.resolve(strict=True) != (TOOL_DIR / "counted_mock.py").resolve(strict=True):
             fail("run config selected a different counted-Mock source")
@@ -1989,6 +2075,26 @@ class Harness:
         descriptor = os.open(self.results_path, flags, 0o600)
         self.results_handle = os.fdopen(descriptor, "wb", closefd=True)
         os.chmod(self.results_path, 0o600)
+        supplemental_descriptor: int | None = None
+        try:
+            supplemental_descriptor = os.open(
+                self.supplemental_results_path, flags, 0o600
+            )
+            self.supplemental_results_handle = os.fdopen(
+                supplemental_descriptor, "wb", closefd=True
+            )
+            supplemental_descriptor = None
+            os.chmod(self.supplemental_results_path, 0o600)
+        except BaseException:
+            if (
+                self.supplemental_results_handle is not None
+                and not self.supplemental_results_handle.closed
+            ):
+                self.supplemental_results_handle.close()
+            elif supplemental_descriptor is not None:
+                os.close(supplemental_descriptor)
+            self.results_handle.close()
+            raise
 
     def append_result(self, result: Mapping[str, Any]) -> bytes:
         if self.results_handle is None or self.results_handle.closed:
@@ -1998,6 +2104,22 @@ class Harness:
         self.results_handle.flush()
         os.fsync(self.results_handle.fileno())
         self.results_count += 1
+        return raw
+
+    def append_supplemental_result(self, result: Mapping[str, Any]) -> bytes:
+        if (
+            self.supplemental_results_handle is None
+            or self.supplemental_results_handle.closed
+        ):
+            fail("supplemental ZIP result handle is not open")
+        raw = canonical_bytes(result) + b"\n"
+        self.supplemental_results_handle.write(raw)
+        self.supplemental_results_handle.flush()
+        os.fsync(self.supplemental_results_handle.fileno())
+        self.supplemental_results_count += 1
+        action = result.get("actual_action")
+        if action in self.supplemental_action_counts:
+            self.supplemental_action_counts[action] += 1
         return raw
 
     def execute_entry(self, entry: Any, ordinal: int) -> bytes:
@@ -2019,6 +2141,34 @@ class Harness:
             text = raw_text.decode("utf-8", "strict")
         except UnicodeDecodeError:
             fail(f"corpus text is no longer UTF-8: {case['id']}")
+        return self.execute_transport_case(entry, ordinal, case, raw_text, text, False)
+
+    def execute_supplemental_entry(self, entry: Any, ordinal: int) -> bytes:
+        case = self.supplemental_cases[entry.semantic_case_id]
+        source = case["source"]
+        raw_text = self.supplemental_texts.get(source["entry_id"])
+        if (
+            raw_text is None
+            or len(raw_text) != source["text_bytes"]
+            or sha256_bytes(raw_text) != source["normalized_text_sha256"]
+        ):
+            fail(f"supplemental ZIP selected text identity changed: {case['id']}")
+        try:
+            text = raw_text.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            fail(f"supplemental ZIP selected text is no longer UTF-8: {case['id']}")
+        return self.execute_transport_case(entry, ordinal, case, raw_text, text, True)
+
+    def execute_transport_case(
+        self,
+        entry: Any,
+        ordinal: int,
+        case: Mapping[str, Any],
+        raw_text: bytes,
+        text: str,
+        supplemental: bool,
+    ) -> bytes:
+        source = case["source"]
         body = apply_template(case["template"]["id"], text, entry.protocol, entry.stream, MODEL)
         request_bytes = canonical_bytes(body)
         request_digest = sha256_bytes(request_bytes)
@@ -2080,7 +2230,11 @@ class Harness:
             "audit_event": event_summary,
             "cold_start": entry.cold_start,
             "error_contract": error_contract,
-            "execution_id": f"{self.run_id}:{ordinal:08d}",
+            "execution_id": (
+                f"{self.run_id}:supplemental:{ordinal:08d}"
+                if supplemental
+                else f"{self.run_id}:{ordinal:08d}"
+            ),
             "expected_action": expected,
             "expected_action_by_mode": dict(case["expected_action_by_mode"]),
             "expected_audit_request_hash": audit_request_hash,
@@ -2094,25 +2248,44 @@ class Harness:
             "request_sha256": request_digest,
             "response_bytes": len(response),
             "response_sha256": sha256_bytes(response),
-            "schema": RESULT_SCHEMA,
-            "semantic_case_id": case["id"],
+            "schema": (
+                SUPPLEMENTAL_ZIP_RESULT_SCHEMA if supplemental else RESULT_SCHEMA
+            ),
             "side_effect_deltas": side_effects,
-            "source_text_sha256": source["text_sha256"],
+            "source_text_sha256": (
+                source["normalized_text_sha256"]
+                if supplemental
+                else source["text_sha256"]
+            ),
             "stream": entry.stream,
             "stream_terminated": stream_terminated,
             "template_sha256": case["template"]["sha256"],
             "usage_recorded": usage_count == 1,
         }
+        result[
+            "supplemental_case_id" if supplemental else "semantic_case_id"
+        ] = case["id"]
+        result_label = (
+            f"supplemental ZIP execution {ordinal}"
+            if supplemental
+            else f"transport execution {ordinal}"
+        )
+        append = self.append_supplemental_result if supplemental else self.append_result
         try:
-            validate_result(result, self.cases, f"transport execution {ordinal}")
+            if supplemental:
+                validate_supplemental_result(
+                    result, self.supplemental_cases, result_label
+                )
+            else:
+                validate_result(result, self.cases, result_label)
         except ContractError as exc:
             error_id = sha256_bytes(str(exc).encode("utf-8"))[:16]
             result["passed"] = False
             result["infrastructure_error"] = f"closed_contract_failure:{error_id}"
-            raw_result = self.append_result(result)
+            raw_result = append(result)
             del raw_result
             fail(
-                f"transport execution {ordinal} failed closed; contract_error_id={error_id}"
+                f"{result_label} failed closed; contract_error_id={error_id}"
             )
         finally:
             raw_text = b""
@@ -2120,7 +2293,7 @@ class Harness:
             body = {}
             request_bytes = b""
             response = b""
-        return self.append_result(result)
+        return append(result)
 
     def sqlite_checkpoint(self, database: Path) -> dict[str, Any]:
         self.cleanup.checkpoint_attempts += 1
@@ -2191,6 +2364,9 @@ class Harness:
         execution_count: int,
         order_sha256: str,
         result_bytes: bytes,
+        supplemental_execution_count: int,
+        supplemental_order_sha256: str,
+        supplemental_result_bytes: bytes,
         runtime_hash: str,
     ) -> dict[str, Any]:
         self.verify_sandbox()
@@ -2236,12 +2412,29 @@ class Harness:
             "sqlite": sqlite,
             "started_at": started_at,
             "stop": stop,
+            "supplemental_execution_count": supplemental_execution_count,
+            "supplemental_order_sha256": supplemental_order_sha256,
+            "supplemental_results_sha256": sha256_bytes(
+                supplemental_result_bytes
+            ),
         }
 
-    def run_cold_start(self, cold_start: int, ordinal_offset: int) -> int:
+    def run_cold_start(
+        self,
+        cold_start: int,
+        ordinal_offset: int,
+        supplemental_ordinal_offset: int,
+    ) -> tuple[int, int]:
         entries = [entry for entry in self.plan if entry.cold_start == cold_start]
+        supplemental_entries = [
+            entry
+            for entry in self.supplemental_plan
+            if entry.cold_start == cold_start
+        ]
         if not entries:
             fail(f"cold start {cold_start} has no planned executions")
+        if not supplemental_entries:
+            fail(f"cold start {cold_start} has no supplemental ZIP executions")
         initial_mode = entries[0].mode
         self.failure_stage = "cold_runtime_prepare"
         cold_root, runtime_hash = self.prepare_cold_runtime(cold_start, initial_mode)
@@ -2274,6 +2467,34 @@ class Harness:
                     ),
                     flush=True,
                 )
+        self.failure_stage = "supplemental_zip_matrix"
+        supplemental_cold_raw = bytearray()
+        supplemental_order: list[tuple[str, str, str, bool]] = []
+        for index, entry in enumerate(supplemental_entries, start=1):
+            if entry.mode != current_mode:
+                self.reconfigure(entry.mode)
+                current_mode = entry.mode
+                self.verify_sandbox()
+            ordinal = supplemental_ordinal_offset + index
+            supplemental_cold_raw.extend(
+                self.execute_supplemental_entry(entry, ordinal)
+            )
+            supplemental_order.append(
+                (entry.mode, entry.semantic_case_id, entry.protocol, entry.stream)
+            )
+            if index % 25 == 0 or index == len(supplemental_entries):
+                print(
+                    json.dumps(
+                        {
+                            "cold_start": cold_start,
+                            "completed": index,
+                            "plane": "supplemental_zip",
+                            "total": len(supplemental_entries),
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
         self.failure_stage = "cold_finish"
         cold = self.finish_cold(
             cold_root,
@@ -2281,16 +2502,34 @@ class Harness:
             len(entries),
             sha256_bytes(canonical_bytes(order)),
             bytes(cold_raw),
+            len(supplemental_entries),
+            sha256_bytes(canonical_bytes(supplemental_order)),
+            bytes(supplemental_cold_raw),
             runtime_hash,
         )
         self.cold_evidence.append(cold)
-        return len(entries)
+        return len(entries), len(supplemental_entries)
 
     def close_results(self) -> None:
-        if self.results_handle is not None and not self.results_handle.closed:
-            self.results_handle.flush()
-            os.fsync(self.results_handle.fileno())
-            self.results_handle.close()
+        errors: list[str] = []
+        for label, handle in (
+            ("transport", self.results_handle),
+            ("supplemental_zip", self.supplemental_results_handle),
+        ):
+            if handle is None or handle.closed:
+                continue
+            try:
+                handle.flush()
+                os.fsync(handle.fileno())
+            except BaseException as exc:
+                errors.append(f"{label}:{type(exc).__name__}")
+            finally:
+                try:
+                    handle.close()
+                except BaseException as exc:
+                    errors.append(f"{label}_close:{type(exc).__name__}")
+        if errors:
+            fail("result close failed: " + ",".join(errors))
 
     def remove_corpus_texts(self) -> None:
         removed, retained = remove_manifest_corpus(
@@ -2316,6 +2555,8 @@ class Harness:
         business_before: list[dict[str, Any]],
         business_after: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        if self.supplemental_manifest is None:
+            fail("supplemental ZIP manifest is unavailable for machine evidence")
         cpa_config = self.config["identities"]["cpa"]
         mock_config = self.config["identities"]["mock"]
         cleanup = {
@@ -2325,6 +2566,10 @@ class Harness:
             "graceful_stop_attempts": self.cleanup.graceful_stop_attempts,
             "images_removed": False,
             "resources": self.cleanup.resources,
+            "supplemental_input_archive_preserved": self.supplemental_archive_preserved,
+            "supplemental_member_text_files_created": 0,
+            "supplemental_member_text_files_removed": 0,
+            "supplemental_member_text_retained": bool(self.supplemental_texts),
             "third_party_text_files_removed": self.cleanup.text_files_removed,
             "third_party_text_retained": self.cleanup.text_retained,
         }
@@ -2390,6 +2635,51 @@ class Harness:
             },
             "schema": EVIDENCE_SCHEMA,
             "started_at": started_at,
+            "supplemental_zip_manifest": {
+                "archive_bytes": self.supplemental_manifest["archive"]["bytes"],
+                "archive_sha256": self.supplemental_manifest["archive"]["sha256"],
+                "code_executions": 0,
+                "manifest_path": "supplemental-zip-manifest.json",
+                "manifest_sha256": sha256_bytes(self.supplemental_manifest_raw),
+                "member_text_files_created": 0,
+                "policy_path": "supplemental-zip-policy.json",
+                "policy_sha256": sha256_bytes(self.supplemental_policy_raw),
+                "selected_entry_count": self.supplemental_manifest[
+                    "selected_entry_count"
+                ],
+                "third_party_code_executions": 0,
+                "unique_reviewed_cases": self.supplemental_manifest[
+                    "unique_reviewed_cases"
+                ],
+            },
+            "supplemental_zip_results": {
+                "modes": list(MODES),
+                "protocols": list(PROTOCOLS),
+                "results_path": "supplemental-zip-results.jsonl",
+                "results_sha256": sha256_file(self.supplemental_results_path),
+                "streams": list(STREAM_VALUES),
+                "supplemental_executions": self.supplemental_results_count,
+            },
+            "supplemental_zip_summary": {
+                "allow_executions": self.supplemental_action_counts["allow"],
+                "block_incomplete_inspection_executions": self.supplemental_action_counts[
+                    "block_incomplete_inspection"
+                ],
+                "block_malicious_text_executions": self.supplemental_action_counts[
+                    "block_malicious_text"
+                ],
+                "code_executions": 0,
+                "malicious_case_count": sum(
+                    case["label"] == "malicious_active"
+                    for case in self.supplemental_cases.values()
+                ),
+                "passed_executions": self.supplemental_results_count,
+                "third_party_code_executions": 0,
+                "total_executions": self.supplemental_results_count,
+                "transport_error_executions": self.supplemental_action_counts[
+                    "transport_error"
+                ],
+            },
             "third_party_code_executions": 0,
             "transport": {
                 "modes": list(MODES),
@@ -2411,6 +2701,14 @@ class Harness:
             self.verify_static_inputs()
             write_exclusive(self.evidence_dir / "corpus-manifest.json", self.manifest_raw)
             write_exclusive(self.evidence_dir / "run-config.json", self.config_raw)
+            write_exclusive(
+                self.evidence_dir / "supplemental-zip-policy.json",
+                self.supplemental_policy_raw,
+            )
+            write_exclusive(
+                self.evidence_dir / "supplemental-zip-manifest.json",
+                self.supplemental_manifest_raw,
+            )
             business_before = business_snapshot(self.docker, self.run_id)
             self.runtime_root.mkdir(mode=0o700)
             os.chmod(self.runtime_root, 0o700)
@@ -2418,8 +2716,13 @@ class Harness:
             self.failure_stage = "network_create"
             self.create_network()
             ordinal_offset = 0
+            supplemental_ordinal_offset = 0
             for cold_start in range(1, self.cold_count + 1):
-                ordinal_offset += self.run_cold_start(cold_start, ordinal_offset)
+                core_count, supplemental_count = self.run_cold_start(
+                    cold_start, ordinal_offset, supplemental_ordinal_offset
+                )
+                ordinal_offset += core_count
+                supplemental_ordinal_offset += supplemental_count
             self.close_results()
             self.failure_stage = "network_cleanup"
             self.cleanup.remove_network()
@@ -2428,6 +2731,8 @@ class Harness:
             if cag_post != self.cag_pre:
                 fail("CAG source HEAD/tree moved during the audit")
             business_after = business_snapshot(self.docker, self.run_id)
+            self.verify_supplemental_archive_identity()
+            self.supplemental_archive_preserved = True
             self.failure_stage = "evidence_finalize"
             succeeded = True
         finally:
@@ -2460,6 +2765,9 @@ class Harness:
                     cleanup_errors.append(f"corpus_fds:{type(cleanup_exc).__name__}")
                 finally:
                     self.bound_corpus = None
+            for entry_id in tuple(self.supplemental_texts):
+                self.supplemental_texts[entry_id] = b""
+            self.supplemental_texts.clear()
             if cleanup_errors:
                 raise CleanupFailure(cleanup_errors)
         evidence = self.machine_evidence(started_at, business_before, business_after)
@@ -2468,6 +2776,7 @@ class Harness:
             evidence,
             self.results_path,
             corpus_root=None,
+            supplemental_results_path=self.supplemental_results_path,
         )
         write_json(self.evidence_dir / "machine-evidence.json", evidence)
         return evidence
@@ -2530,6 +2839,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     "completed": True,
                     "evidence": str(evidence_dir / "machine-evidence.json"),
+                    "supplemental_code_executions": evidence[
+                        "supplemental_zip_summary"
+                    ]["code_executions"],
+                    "supplemental_executions": evidence[
+                        "supplemental_zip_results"
+                    ]["supplemental_executions"],
                     "third_party_code_executions": evidence["third_party_code_executions"],
                     "transport_executions": evidence["transport"]["transport_executions"],
                 },

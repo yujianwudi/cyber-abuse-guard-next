@@ -39,6 +39,7 @@ from audit_contract import (
     validate_machine_evidence,
     validate_result,
     validate_run_config,
+    validate_supplemental_result,
 )
 from fixtures import approved_policy, candidate_provenance, evidence_files, manifest
 
@@ -335,10 +336,21 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
                 "cpa_official_asset": f"/srv/{CPA_OFFICIAL_ASSET_NAME}",
                 "evidence_directory": "/srv/evidence",
                 "mock_source": "/srv/counted_mock.py",
+                "supplemental_zip": "/srv/Codex-full.zip",
+                "supplemental_zip_manifest": "/srv/supplemental-zip-manifest.json",
+                "supplemental_zip_policy": "/srv/supplemental-zip-policy.json",
             },
             "policy_sha256": "a" * 64,
             "run": {"cold_start_count": 3, "platform": "linux/amd64", "run_id": "unit-run", "seed": 1205},
             "schema": RUN_CONFIG_SCHEMA,
+            "supplemental_zip": {
+                "archive_bytes": 5830796,
+                "archive_sha256": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
+                "manifest_sha256": "b" * 64,
+                "policy_sha256": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb",
+                "selected_entry_count": 4,
+                "unique_reviewed_cases": 7,
+            },
         }
         validate_run_config(config)
         extra = copy.deepcopy(config)
@@ -387,6 +399,70 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
             validated = validate_machine_evidence(source_manifest, evidence, results)
             self.assertEqual(validated["third_party_code_executions"], 0)
             self.assertEqual(validated["run"]["cold_start_count"], 3)
+
+    def test_core_and_supplemental_result_planes_reject_cross_routing(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_manifest, evidence, results = evidence_files(root)
+            core_row = json.loads(results.read_bytes().splitlines()[0])
+            supplemental_path = root / evidence["supplemental_zip_results"][
+                "results_path"
+            ]
+            supplemental_row = json.loads(
+                supplemental_path.read_bytes().splitlines()[0]
+            )
+            core_cases = {
+                case["id"]: case for case in source_manifest["semantic_cases"]
+            }
+            supplemental_manifest = json.loads(
+                (root / "supplemental-zip-manifest.json").read_bytes()
+            )
+            supplemental_cases = {
+                case["id"]: case
+                for case in supplemental_manifest["reviewed_cases"]
+            }
+            validate_result(core_row, core_cases, "core row")
+            validate_supplemental_result(
+                supplemental_row, supplemental_cases, "supplemental row"
+            )
+            with self.assertRaises(ContractError):
+                validate_supplemental_result(
+                    core_row, supplemental_cases, "misrouted core row"
+                )
+            with self.assertRaises(ContractError):
+                validate_result(
+                    supplemental_row, core_cases, "misrouted supplemental row"
+                )
+
+    def test_supplemental_machine_evidence_counts_hashes_and_cleanup_are_strict(self) -> None:
+        mutations = {
+            "missing_manifest": lambda value: value.pop("supplemental_zip_manifest"),
+            "wrong_total": lambda value: value["supplemental_zip_summary"].__setitem__(
+                "total_executions", 251
+            ),
+            "wrong_transport_error_count": lambda value: value[
+                "supplemental_zip_summary"
+            ].__setitem__("transport_error_executions", 1),
+            "wrong_cold_count": lambda value: value["cold_starts"][0].__setitem__(
+                "supplemental_execution_count", 83
+            ),
+            "wrong_cold_order": lambda value: value["cold_starts"][0].__setitem__(
+                "supplemental_order_sha256", "f" * 64
+            ),
+            "created_member_file": lambda value: value["cleanup"].__setitem__(
+                "supplemental_member_text_files_created", 1
+            ),
+            "archive_not_preserved": lambda value: value["cleanup"].__setitem__(
+                "supplemental_input_archive_preserved", False
+            ),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                source_manifest, evidence, results = evidence_files(root)
+                mutate(evidence)
+                with self.assertRaises(ContractError):
+                    validate_machine_evidence(source_manifest, evidence, results)
 
     def test_missing_identity_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

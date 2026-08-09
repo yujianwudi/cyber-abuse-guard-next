@@ -24,6 +24,7 @@ from audit_contract import (
     CPA_OFFICIAL_ASSET_NAME,
     CPA_OFFICIAL_ASSET_SHA256,
     CPA_TAG,
+    EVIDENCE_SCHEMA,
 )
 from fixtures import evidence_files
 
@@ -34,6 +35,25 @@ except ImportError:  # pragma: no cover - optional local schema verifier
 
 
 class SchemaTests(unittest.TestCase):
+    def test_machine_schema_v2_closes_the_supplemental_zip_plane(self) -> None:
+        schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
+        self.assertEqual(schema["properties"]["schema"], {"const": EVIDENCE_SCHEMA})
+        for field in (
+            "supplemental_zip_manifest",
+            "supplemental_zip_results",
+            "supplemental_zip_summary",
+        ):
+            self.assertIn(field, schema["required"])
+        cold = schema["$defs"]["cold_start"]
+        self.assertEqual(
+            cold["properties"]["supplemental_execution_count"], {"const": 84}
+        )
+        cleanup = schema["$defs"]["cleanup"]["properties"]
+        self.assertEqual(cleanup["supplemental_member_text_files_created"], {"const": 0})
+        self.assertEqual(cleanup["supplemental_member_text_files_removed"], {"const": 0})
+        self.assertEqual(cleanup["supplemental_member_text_retained"], {"const": False})
+        self.assertEqual(cleanup["supplemental_input_archive_preserved"], {"const": True})
+
     def test_machine_schema_pins_the_active_cpa_identity(self) -> None:
         schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
         properties = schema["$defs"]["cpa_identity"]["properties"]

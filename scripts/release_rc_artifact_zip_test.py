@@ -27,16 +27,17 @@ class ArtifactZipTests(unittest.TestCase):
         output: Path,
         names: list[str] | None = None,
         modes: dict[str, int] | None = None,
+        compression: int = zipfile.ZIP_DEFLATED,
     ) -> tuple[str, int]:
         modes = modes or {}
         with warnings.catch_warnings(), zipfile.ZipFile(
-            archive, "w", zipfile.ZIP_DEFLATED
+            archive, "w", compression
         ) as zipped:
             warnings.simplefilter("ignore", UserWarning)
             for name in names or sorted(EXPECTED_FILES):
                 info = zipfile.ZipInfo(name)
                 info.create_system = 3
-                info.compress_type = zipfile.ZIP_DEFLATED
+                info.compress_type = compression
                 info.external_attr = modes.get(name, stat.S_IFREG | 0o644) << 16
                 payload = (output / name).read_bytes() if name in EXPECTED_FILES else b"bad"
                 zipped.writestr(info, payload)
@@ -62,6 +63,12 @@ class ArtifactZipTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             archive, output, digest, size = self.fixture(Path(temporary))
             verify_artifact_zip(archive, output, digest, size)
+            with mock.patch.object(
+                Path,
+                "read_bytes",
+                side_effect=AssertionError("verifier must not buffer whole files"),
+            ):
+                verify_artifact_zip(archive, output, digest, size)
 
     def test_rejects_api_metadata_and_archive_type_mutations(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -72,6 +79,7 @@ class ArtifactZipTests(unittest.TestCase):
                 ("sha512:" + "0" * 64, size, "sha256 digest"),
                 ("sha256:" + "A" * 64, size, "metadata is invalid"),
                 (digest, 0, "metadata is invalid"),
+                (digest, verifier.MAX_ARCHIVE_BYTES + 1, "metadata is invalid"),
             )
             for expected_digest, expected_size, pattern in cases:
                 with self.subTest(pattern=pattern), self.assertRaisesRegex(
@@ -92,7 +100,7 @@ class ArtifactZipTests(unittest.TestCase):
             self.write_archive(archive, output, names + [names[0]])
             self.rejected(archive, output, "duplicate entry")
 
-    def test_rejects_unix_symlink_device_and_nonregular_modes(self) -> None:
+    def test_rejects_unsafe_modes_and_noncanonical_compression(self) -> None:
         unsafe_modes = (
             stat.S_IFLNK | 0o777,
             stat.S_IFCHR | 0o600,
@@ -108,6 +116,14 @@ class ArtifactZipTests(unittest.TestCase):
                 archive = root / "mode.zip"
                 self.write_archive(archive, output, modes={name: mode})
                 self.rejected(archive, output, "unsafe entry")
+
+        for compression in (zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA):
+            with self.subTest(compression=compression), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                output = self.action_output(root)
+                archive = root / "compression.zip"
+                self.write_archive(archive, output, compression=compression)
+                self.rejected(archive, output, "unsupported compression")
 
     def test_rejects_absolute_parent_and_backslash_paths(self) -> None:
         unsafe_names = ("/absolute", "../escape", "folder/escape", r"folder\escape")
@@ -152,6 +168,54 @@ class ArtifactZipTests(unittest.TestCase):
             archive, output, _digest, _size = self.fixture(Path(temporary))
             with mock.patch.object(verifier, "MAX_UNCOMPRESSED_BYTES", 1):
                 self.rejected(archive, output, "extraction limit")
+
+    def test_rejects_stream_bytes_beyond_declared_entry_size(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            archive, output, digest, size = self.fixture(Path(temporary))
+            original_open = zipfile.ZipFile.open
+
+            class OverreadStream:
+                def __init__(self, source: object) -> None:
+                    self.source = source
+                    self.emitted_extra = False
+
+                def __enter__(self) -> "OverreadStream":
+                    return self
+
+                def __exit__(self, *_args: object) -> None:
+                    self.source.close()  # type: ignore[attr-defined]
+
+                def read(self, count: int) -> bytes:
+                    chunk = self.source.read(count)  # type: ignore[attr-defined]
+                    if chunk:
+                        return chunk
+                    if not self.emitted_extra:
+                        self.emitted_extra = True
+                        return b"x"
+                    return b""
+
+            def overread(
+                zipped: zipfile.ZipFile,
+                member: object,
+                mode: str = "r",
+                pwd: bytes | None = None,
+                *,
+                force_zip64: bool = False,
+            ) -> OverreadStream:
+                return OverreadStream(
+                    original_open(
+                        zipped,
+                        member,
+                        mode,
+                        pwd,
+                        force_zip64=force_zip64,
+                    )
+                )
+
+            with mock.patch.object(zipfile.ZipFile, "open", new=overread), self.assertRaisesRegex(
+                ArtifactZipError, "declared uncompressed size"
+            ):
+                verify_artifact_zip(archive, output, digest, size)
 
     def test_rejects_malformed_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

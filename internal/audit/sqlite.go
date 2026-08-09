@@ -125,7 +125,10 @@ type Config struct {
 	// and creation after the runtime swap.
 	AllowDeferredDatabaseCreate bool
 	Now                         func() time.Time
-	OnError                     func(error)
+	// OnError runs synchronously. While handling an Activate failure, it must not
+	// call Close, CloseContext, Discard, or DiscardContext on the same Store;
+	// those methods wait for Activate to release its lifecycle lock.
+	OnError func(error)
 }
 
 // Query is a parameterized event filter. An empty Query selects recent events;
@@ -1217,7 +1220,7 @@ func (s *Store) Status() Status {
 		lastError = ErrRawCapturePurgeUnrecovered.Error()
 	}
 	return Status{
-		Healthy:                      !degraded && !closed && activated && s.db != nil,
+		Healthy:                      !degraded && !closed && activated && s.databaseOpen.Load(),
 		Degraded:                     degraded,
 		Closed:                       closed,
 		SchemaVersion:                int(s.schemaVersion.Load()),
@@ -1254,7 +1257,8 @@ func (s *Store) Status() Status {
 
 // SetErrorHandler replaces the optional rate-limited diagnostic callback.
 // Runtime shutdown clears it before a potentially asynchronous close so no
-// new host callback is started by the closing store.
+// new host callback is started by the closing store. Handlers have the same
+// reentrancy restrictions as Config.OnError.
 func (s *Store) SetErrorHandler(handler func(error)) {
 	if s == nil {
 		return

@@ -34,8 +34,14 @@ from audit_contract import (
     CANDIDATE_WORKFLOW_PATH,
     CLAIM_BOUNDARY,
     ContractError,
+    EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT,
+    EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT,
     MODES,
     PROTOCOLS,
+    SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY,
+    SUPPLEMENTAL_ZIP_CASE_SUFFIXES,
+    SUPPLEMENTAL_ZIP_LIMITS,
+    SUPPLEMENTAL_ZIP_POLICY_SHA256,
     STREAM_VALUES,
     canonical_bytes,
     iter_jsonl_bytes,
@@ -47,11 +53,16 @@ from audit_contract import (
     validate_machine_evidence,
     validate_result,
     validate_run_config,
+    validate_supplemental_result,
+    validate_supplemental_manifest,
+    validate_supplemental_policy,
+    validate_supplemental_run_config_files,
 )
 
 
-SCHEMA = "cyber-abuse-guard.second-machine-release-admission.v1"
+SCHEMA = "cyber-abuse-guard.second-machine-release-admission.v2"
 STATUS = "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS"
+SUPPLEMENTAL_STATUS = "SUPPLEMENTAL_ARCHIVE_PASS"
 BOUNDARY = "OWNER-RUN SECOND-MACHINE RELEASE ADMISSION; NOT INDEPENDENT PROOF"
 REPORT_NAME = "second-machine-release-admission.json"
 SCHEMA_NAME = "second-machine-release-admission.schema.json"
@@ -86,9 +97,25 @@ INPUT_HASH_KEYS = (
     "host_performance_evidence_sha256",
     "host_performance_measurements_sha256",
     "machine_evidence_sha256",
+    "native_host_go_test_log_sha256",
+    "native_host_special_paths_report_sha256",
     "performance_workload_manifest_sha256",
     "run_config_sha256",
+    "supplemental_archive_sha256",
+    "supplemental_manifest_sha256",
+    "supplemental_policy_sha256",
+    "supplemental_results_sha256",
     "transport_results_sha256",
+)
+EXPECTED_CORE_COLD_STARTS = 3
+EXPECTED_CORE_EXECUTIONS = 684
+EXPECTED_SUPPLEMENTAL_EXECUTIONS = 252
+EXPECTED_SUPPLEMENTAL_CASE_IDS = tuple(
+    sorted(
+        f"supplemental-zip:{entry_id}:{suffix}"
+        for entry_id, suffixes in SUPPLEMENTAL_ZIP_CASE_SUFFIXES.items()
+        for suffix in suffixes
+    )
 )
 
 
@@ -186,12 +213,92 @@ def load_canonical(path: Path, label: str, maximum: int) -> tuple[dict[str, Any]
     return value, raw
 
 
+def bind_supplemental_archive(path: Path) -> dict[str, int | str]:
+    """Seal the operator-owned archive without extracting any member to disk."""
+
+    before = path.stat(follow_symlinks=False)
+    raw = read_regular_bytes(
+        path,
+        "supplemental ZIP archive",
+        SUPPLEMENTAL_ZIP_LIMITS["max_archive_bytes"],
+        require_single_link=True,
+    )
+    after = path.stat(follow_symlinks=False)
+    identity_fields = ("st_dev", "st_ino", "st_nlink", "st_size")
+    if any(getattr(before, key) != getattr(after, key) for key in identity_fields):
+        fail("supplemental ZIP archive identity changed while hashing")
+    binding: dict[str, int | str] = {
+        "bytes": len(raw),
+        "sha256": sha256_bytes(raw),
+        **{key: int(getattr(after, key)) for key in identity_fields},
+    }
+    if (
+        binding["bytes"] != SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"]
+        or binding["sha256"] != SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"]
+    ):
+        fail("supplemental ZIP archive differs from the fixed reviewed bytes")
+    return binding
+
+
+def reverify_supplemental_archive(
+    path: Path, expected: Mapping[str, int | str]
+) -> None:
+    if bind_supplemental_archive(path) != dict(expected):
+        fail("supplemental ZIP archive stat/SHA identity changed during admission packing")
+
+
+def validate_supplemental_evidence_copies(
+    *,
+    original_manifest: Mapping[str, Any],
+    original_manifest_raw: bytes,
+    original_policy: Mapping[str, Any],
+    original_policy_raw: bytes,
+    evidence_manifest_path: Path,
+    evidence_policy_path: Path,
+) -> None:
+    """Require evidence-directory copies to equal the separately bound originals."""
+
+    evidence_policy_raw = read_regular_bytes(
+        evidence_policy_path,
+        "evidence-copy supplemental ZIP policy",
+        2 * 1024 * 1024,
+        require_single_link=True,
+    )
+    evidence_policy = validate_supplemental_policy(
+        load_json_bytes(evidence_policy_raw, "evidence-copy supplemental ZIP policy"),
+        require_approved=True,
+    )
+    evidence_manifest, evidence_manifest_raw = load_canonical(
+        evidence_manifest_path,
+        "evidence-copy supplemental ZIP manifest",
+        8 * 1024 * 1024,
+    )
+    evidence_manifest = validate_supplemental_manifest(
+        evidence_manifest,
+        evidence_policy,
+        policy_sha256=sha256_bytes(evidence_policy_raw),
+    )
+    if (
+        evidence_policy != dict(original_policy)
+        or evidence_policy_raw != original_policy_raw
+        or evidence_manifest != dict(original_manifest)
+        or evidence_manifest_raw != original_manifest_raw
+    ):
+        fail("supplemental ZIP evidence copies differ from the run-config original bytes")
+
+
 def local_tool_identities() -> dict[str, Any]:
     from host_performance import tool_identities as host_tool_identities
+    import native_host_special_paths
     from run import runner_identities
 
     source_sha, _, _ = sha256_file(SCRIPT_PATH, "release admission packer", 2 * 1024 * 1024)
     schema_sha, _, _ = sha256_file(SCHEMA_PATH, "release admission schema", 2 * 1024 * 1024)
+    native_test_source_sha, _, _ = sha256_file(
+        TOOL_DIR.parent.parent / native_host_special_paths.TEST_SOURCE,
+        "native Host integration test source",
+        8 * 1024 * 1024,
+    )
     return {
         "admission": {
             "schema_sha256": schema_sha,
@@ -199,6 +306,10 @@ def local_tool_identities() -> dict[str, Any]:
         },
         "host_performance": host_tool_identities(),
         "machine": runner_identities(),
+        "native_host_special_paths": {
+            **native_host_special_paths.tool_identity(),
+            "test_source_sha256": native_test_source_sha,
+        },
     }
 
 
@@ -291,9 +402,26 @@ def validate_candidate_directory(
             members = archive.infolist()
             if len(members) != 1 or members[0].filename != CAG_SO_NAME:
                 fail("candidate Store ZIP must contain exactly the root candidate SO")
-            if members[0].is_dir() or ((members[0].external_attr >> 16) & 0o170000) == 0o120000:
+            member = members[0]
+            mode = member.external_attr >> 16
+            if (
+                member.flag_bits & 0x1
+                or member.is_dir()
+                or (mode and stat.S_IFMT(mode) not in (0, stat.S_IFREG))
+            ):
                 fail("candidate Store ZIP member is not a regular file")
-            if archive.read(members[0]) != so_raw:
+            if member.compress_type not in (zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED):
+                fail("candidate Store ZIP uses an unsupported compression method")
+            if member.file_size != len(so_raw):
+                fail("candidate Store ZIP SO declared size differs from the standalone SO")
+            offset = 0
+            with archive.open(member, "r") as source:
+                while chunk := source.read(1024 * 1024):
+                    next_offset = offset + len(chunk)
+                    if next_offset > len(so_raw) or chunk != so_raw[offset:next_offset]:
+                        fail("candidate Store ZIP SO bytes differ from the standalone SO")
+                    offset = next_offset
+            if offset != len(so_raw):
                 fail("candidate Store ZIP SO bytes differ from the standalone SO")
     except (OSError, zipfile.BadZipFile) as exc:
         fail(f"candidate Store ZIP is invalid: {type(exc).__name__}")
@@ -456,6 +584,113 @@ def derive_semantic_summary(outcomes: Sequence[Mapping[str, Any]]) -> list[dict[
     return summaries
 
 
+def derive_supplemental_semantics(
+    manifest: Mapping[str, Any], results_raw: bytes, cold_start_arms: Sequence[int]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    cases = {case["id"]: case for case in manifest["reviewed_cases"]}
+    if tuple(sorted(cases)) != EXPECTED_SUPPLEMENTAL_CASE_IDS:
+        fail("supplemental manifest does not contain the exact seven reviewed cases")
+    rows = [
+        validate_supplemental_result(value, cases, f"portable supplemental result[{index}]")
+        for index, value in enumerate(
+            iter_jsonl_bytes(results_raw, "supplemental ZIP results")
+        )
+    ]
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[(row["supplemental_case_id"], row["mode"])].append(row)
+    expected_matrix = {
+        (protocol, stream, cold_start)
+        for protocol in PROTOCOLS
+        for stream in STREAM_VALUES
+        for cold_start in cold_start_arms
+    }
+    outcomes: list[dict[str, Any]] = []
+    for case_id in sorted(cases):
+        case = cases[case_id]
+        malicious = case["label"] == "malicious_active"
+        for mode in MODES:
+            selected = grouped[(case_id, mode)]
+            observed_matrix = {
+                (row["protocol"], row["stream"], row["cold_start"])
+                for row in selected
+            }
+            if len(selected) != len(expected_matrix) or observed_matrix != expected_matrix:
+                fail(f"supplemental summary cell {case_id}/{mode} is incomplete")
+            expected_actions = {row["expected_action"] for row in selected}
+            actual_actions = {row["actual_action"] for row in selected}
+            if len(expected_actions) != 1 or len(actual_actions) != 1:
+                fail(f"supplemental summary cell {case_id}/{mode} is inconsistent")
+            expected_action = next(iter(expected_actions))
+            actual_action = next(iter(actual_actions))
+            side_expected = (
+                {"auth": 1, "mock": 1, "provider": 1, "usage": 1}
+                if expected_action == "allow"
+                else {"auth": 0, "mock": 0, "provider": 0, "usage": 0}
+            )
+            side_violations = sum(
+                row["side_effect_deltas"] != side_expected for row in selected
+            )
+            if mode == "audit":
+                detected = malicious and all(
+                    row["actual_action"] == "allow"
+                    and row["audit_event"] is not None
+                    and row["audit_event"]["decision"] == "audit_malicious_text"
+                    for row in selected
+                )
+            else:
+                detected = malicious and all(
+                    row["actual_action"] == "block_malicious_text" for row in selected
+                )
+            outcomes.append(
+                {
+                    "actual_action": actual_action,
+                    "all_executions_passed": all(row["passed"] for row in selected),
+                    "execution_count": len(selected),
+                    "expected_action": expected_action,
+                    "false_positive": (not malicious and actual_action != "allow"),
+                    "label": case["label"],
+                    "malicious": malicious,
+                    "malicious_detected": detected,
+                    "mode": mode,
+                    "side_effect_violations": side_violations,
+                    "supplemental_case_id": case_id,
+                }
+            )
+    return outcomes, derive_supplemental_summary(outcomes)
+
+
+def derive_supplemental_summary(
+    outcomes: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    for mode in MODES:
+        selected = [row for row in outcomes if row["mode"] == mode]
+        benign = [row for row in selected if not row["malicious"]]
+        malicious = [row for row in selected if row["malicious"]]
+        detected = sum(row["malicious_detected"] is True for row in malicious)
+        denominator = len(malicious)
+        summaries.append(
+            {
+                "all_supplemental_contracts_passed": bool(selected)
+                and all(row["all_executions_passed"] is True for row in selected),
+                "false_positive_denominator": len(benign),
+                "false_positives": sum(row["false_positive"] is True for row in benign),
+                "malicious_detected": detected,
+                "malicious_recall_denominator": denominator,
+                "malicious_recall_percent": (
+                    100.0 * detected / denominator if denominator else 0.0
+                ),
+                "mode": mode,
+                "side_effect_violations": sum(
+                    int(row["side_effect_violations"]) for row in selected
+                ),
+                "supplemental_cases": len(selected),
+            }
+        )
+    return summaries
+
+
 def derive_summary(report: Mapping[str, Any]) -> dict[str, Any]:
     semantic = derive_semantic_summary(report["semantic"]["outcomes"])
     gates = report["performance"]["gates"]
@@ -510,6 +745,73 @@ def _corpus_identity(manifest: Mapping[str, Any]) -> dict[str, Any]:
     return {"repositories": repositories, "zip_source": next(iter(zip_sources.values()))}
 
 
+def _native_host_projection(
+    native_report: Mapping[str, Any],
+    native_report_raw: bytes,
+    native_go_test_raw: bytes,
+    *,
+    candidate: Mapping[str, Any],
+    source: Mapping[str, Any],
+    cpa: Mapping[str, Any],
+) -> dict[str, Any]:
+    import native_host_special_paths as native
+
+    native_candidate = native_report["candidate"]
+    native_artifact = native_candidate["artifact"]
+    portable_artifact = candidate["github_artifact"]
+    if not (
+        native_candidate["source"]["commit"] == source["commit"]
+        and native_candidate["source"]["tree"] == source["tree"]
+        and native_candidate["so"]["sha256"] == source["so"]["sha256"]
+        and native_candidate["manifest_sha256"] == candidate["manifest_sha256"]
+        and native_artifact["id"] == portable_artifact["id"]
+        and native_artifact["digest"] == portable_artifact["digest"]
+        and native_artifact["size"] == portable_artifact["size"]
+        and native_artifact["run_id"] == portable_artifact["run_id"]
+        and native_artifact["run_attempt"] == portable_artifact["run_attempt"]
+    ):
+        fail("native Host report candidate identity differs from the portable candidate")
+    if native_report["cpa"] != {"commit": cpa["commit"], "tag": cpa["tag"]}:
+        fail("native Host report CPA identity differs from the machine evidence")
+    if native_report["tool"] != native.tool_identity():
+        fail("native Host report tool identity differs from the checked-out validator")
+    if sha256_bytes(native_go_test_raw) != native_report["test_log"]["sha256"]:
+        fail("native Host go test log bytes differ from the validated report")
+    execution = native_report["execution"]
+    return {
+        "candidate": {
+            "artifact_digest": native_artifact["digest"],
+            "artifact_id": native_artifact["id"],
+            "artifact_size": native_artifact["size"],
+            "manifest_sha256": native_candidate["manifest_sha256"],
+            "run_attempt": native_artifact["run_attempt"],
+            "run_id": native_artifact["run_id"],
+            "so_sha256": native_candidate["so"]["sha256"],
+            "source_commit": native_candidate["source"]["commit"],
+            "source_tree": native_candidate["source"]["tree"],
+        },
+        "cpa_commit": native_report["cpa"]["commit"],
+        "cpa_tag": native_report["cpa"]["tag"],
+        "critical_test_count": len(execution["critical_tests"]),
+        "critical_tests_sha256": sha256_bytes(
+            canonical_bytes(execution["critical_tests"])
+        ),
+        "fail_count": execution["fail_count"],
+        "go_test_log_sha256": native_report["test_log"]["sha256"],
+        "go_version": native_report["runtime"]["go_version"],
+        "observed_test_count": execution["observed_test_count"],
+        "platform": native_report["runtime"]["platform"],
+        "report_schema": native_report["schema"],
+        "report_sha256": sha256_bytes(native_report_raw),
+        "required_test_count": execution["required_test_count"],
+        "schema_sha256": native_report["tool"]["schema_sha256"],
+        "skip_count": execution["skip_count"],
+        "source_sha256": native_report["tool"]["source_sha256"],
+        "status": native_report["status"],
+        "test_source_sha256": native_report["test_source"]["sha256"],
+    }
+
+
 def build_report(
     *,
     manifest: Mapping[str, Any],
@@ -527,13 +829,30 @@ def build_report(
     workload_raw: bytes,
     performance_config_raw: bytes,
     measurements_raw: bytes,
+    native_go_test_raw: bytes,
+    native_report: Mapping[str, Any],
+    native_report_raw: bytes,
     performance: Mapping[str, Any],
     performance_raw: bytes,
+    supplemental_archive_binding: Mapping[str, int | str],
+    supplemental_manifest: Mapping[str, Any],
+    supplemental_manifest_raw: bytes,
+    supplemental_policy_raw: bytes,
+    supplemental_results_raw: bytes,
     generated_at: datetime,
 ) -> dict[str, Any]:
     del results_path
+    if supplemental_manifest_raw != canonical_bytes(supplemental_manifest) + b"\n":
+        fail("supplemental manifest raw bytes differ from the validated object")
+    if native_report_raw != canonical_bytes(native_report) + b"\n":
+        fail("native Host report raw bytes differ from the validated object")
+    if int(machine["run"]["cold_start_count"]) != EXPECTED_CORE_COLD_STARTS:
+        fail("release admission requires exactly three cold starts")
     cold_start_arms = tuple(range(1, int(machine["run"]["cold_start_count"]) + 1))
     outcomes, semantic_summary = derive_semantics(manifest, results_raw, cold_start_arms)
+    supplemental_outcomes, supplemental_summary = derive_supplemental_semantics(
+        supplemental_manifest, supplemental_results_raw, cold_start_arms
+    )
     candidate = run_config["identities"]["candidate"]
     if not (
         candidate_manifest["event"] == "push"
@@ -561,6 +880,13 @@ def build_report(
     so_file = next(item for item in candidate_files if item["name"] == CAG_SO_NAME)
     if so_file["sha256"] != source["so_sha256"]:
         fail("candidate SO bytes differ from the validated machine identity")
+    if (
+        supplemental_archive_binding["bytes"]
+        != supplemental_manifest["archive"]["bytes"]
+        or supplemental_archive_binding["sha256"]
+        != supplemental_manifest["archive"]["sha256"]
+    ):
+        fail("supplemental archive binding differs from its reconstructed manifest")
     input_hashes = {
         "candidate_manifest_sha256": sha256_bytes(candidate_raw),
         "corpus_manifest_sha256": sha256_bytes(manifest_raw),
@@ -568,26 +894,53 @@ def build_report(
         "host_performance_evidence_sha256": sha256_bytes(performance_raw),
         "host_performance_measurements_sha256": sha256_bytes(measurements_raw),
         "machine_evidence_sha256": sha256_bytes(machine_raw),
+        "native_host_go_test_log_sha256": sha256_bytes(native_go_test_raw),
+        "native_host_special_paths_report_sha256": sha256_bytes(native_report_raw),
         "performance_workload_manifest_sha256": sha256_bytes(workload_raw),
         "run_config_sha256": sha256_bytes(run_config_raw),
+        "supplemental_archive_sha256": str(supplemental_archive_binding["sha256"]),
+        "supplemental_manifest_sha256": sha256_bytes(supplemental_manifest_raw),
+        "supplemental_policy_sha256": sha256_bytes(supplemental_policy_raw),
+        "supplemental_results_sha256": sha256_bytes(supplemental_results_raw),
         "transport_results_sha256": sha256_bytes(results_raw),
     }
     generated_at = generated_at.astimezone(timezone.utc).replace(microsecond=0)
-    report: dict[str, Any] = {
-        "candidate": {
-            "files": candidate_files,
-            "github_artifact": {
-                "digest": candidate["artifact"]["digest"],
-                "id": int(candidate["artifact"]["id"]),
-                "name": candidate["artifact"]["name"],
-                "run_attempt": int(candidate["run_attempt"]),
-                "run_id": int(candidate["run_id"]),
-                "size": candidate_artifact_size,
-                "workflow_name": CANDIDATE_WORKFLOW_NAME,
-                "workflow_path": CANDIDATE_WORKFLOW_PATH,
-            },
-            "manifest_sha256": sha256_bytes(candidate_raw),
+    portable_candidate = {
+        "files": candidate_files,
+        "github_artifact": {
+            "digest": candidate["artifact"]["digest"],
+            "id": int(candidate["artifact"]["id"]),
+            "name": candidate["artifact"]["name"],
+            "run_attempt": int(candidate["run_attempt"]),
+            "run_id": int(candidate["run_id"]),
+            "size": candidate_artifact_size,
+            "workflow_name": CANDIDATE_WORKFLOW_NAME,
+            "workflow_path": CANDIDATE_WORKFLOW_PATH,
         },
+        "manifest_sha256": sha256_bytes(candidate_raw),
+    }
+    portable_source = {
+        "binary_version": CAG_SOURCE_VERSION,
+        "commit": source["commit"],
+        "repository": CANDIDATE_REPOSITORY,
+        "so": {
+            "bytes": so_file["bytes"],
+            "name": source["so_name"],
+            "sha256": source["so_sha256"],
+        },
+        "source_version": source["source_version"],
+        "tree": source["tree"],
+    }
+    native_projection = _native_host_projection(
+        native_report,
+        native_report_raw,
+        native_go_test_raw,
+        candidate=portable_candidate,
+        source=portable_source,
+        cpa=machine["identities"]["cpa"],
+    )
+    report: dict[str, Any] = {
+        "candidate": portable_candidate,
         "claim_boundary": BOUNDARY,
         "cleanup": {
             "all_owned_resources_absent": machine["cleanup"]["all_owned_resources_absent"],
@@ -611,6 +964,7 @@ def build_report(
         "expires_at": timestamp(generated_at + REPORT_TTL),
         "generated_at": timestamp(generated_at),
         "inputs": input_hashes,
+        "native_host_special_paths": native_projection,
         "performance": {
             "evidence_schema": performance["schema"],
             "gates": gates,
@@ -627,15 +981,44 @@ def build_report(
         },
         "schema": SCHEMA,
         "semantic": {"outcomes": outcomes, "summary_by_mode": semantic_summary},
-        "source": {
-            "binary_version": CAG_SOURCE_VERSION,
-            "commit": source["commit"],
-            "repository": CANDIDATE_REPOSITORY,
-            "so": {"bytes": so_file["bytes"], "name": source["so_name"], "sha256": source["so_sha256"]},
-            "source_version": source["source_version"],
-            "tree": source["tree"],
-        },
+        "source": portable_source,
         "status": STATUS,
+        "supplemental_archive": {
+            "archive": {
+                "bytes": supplemental_manifest["archive"]["bytes"],
+                "sha256": supplemental_manifest["archive"]["sha256"],
+            },
+            "case_count": supplemental_manifest["unique_reviewed_cases"],
+            "code_executions": supplemental_manifest["code_executions"],
+            "entry_count": supplemental_manifest["selected_entry_count"],
+            "input_archive_preserved": machine["cleanup"][
+                "supplemental_input_archive_preserved"
+            ],
+            "manifest_sha256": sha256_bytes(supplemental_manifest_raw),
+            "member_text_files_created": machine["cleanup"][
+                "supplemental_member_text_files_created"
+            ],
+            "member_text_files_removed": machine["cleanup"][
+                "supplemental_member_text_files_removed"
+            ],
+            "member_text_retained": machine["cleanup"][
+                "supplemental_member_text_retained"
+            ],
+            "outcomes": supplemental_outcomes,
+            "policy_sha256": sha256_bytes(supplemental_policy_raw),
+            "results_sha256": sha256_bytes(supplemental_results_raw),
+            "side_effect_violations": sum(
+                item["side_effect_violations"] for item in supplemental_outcomes
+            ),
+            "status": SUPPLEMENTAL_STATUS,
+            "summary_by_mode": supplemental_summary,
+            "third_party_code_executions": supplemental_manifest[
+                "third_party_code_executions"
+            ],
+            "total_executions": sum(
+                item["execution_count"] for item in supplemental_outcomes
+            ),
+        },
         "summary": {},
         "tool_bundles": local_tool_identities(),
     }
@@ -655,8 +1038,9 @@ def validate_report(
         value,
         {
             "candidate", "claim_boundary", "cleanup", "corpus", "cpa", "expires_at",
-            "generated_at", "inputs", "performance", "safety", "schema", "semantic",
-            "source", "status", "summary", "tool_bundles",
+            "generated_at", "inputs", "native_host_special_paths", "performance", "safety",
+            "schema", "semantic", "source", "status", "summary", "supplemental_archive",
+            "tool_bundles",
         },
         "release admission report",
     )
@@ -773,7 +1157,12 @@ def validate_report(
         seen.add(identity)
         for key in ("actual_action", "expected_action", "label"):
             exact_string(item[key], f"report.semantic.outcomes[{index}].{key}", 128)
-        exact_int(item["execution_count"], f"report.semantic.outcomes[{index}].execution_count", 1)
+        if exact_int(
+            item["execution_count"],
+            f"report.semantic.outcomes[{index}].execution_count",
+            1,
+        ) != len(PROTOCOLS) * len(STREAM_VALUES) * EXPECTED_CORE_COLD_STARTS:
+            fail("report semantic outcome does not bind exactly three cold starts")
         if exact_int(item["side_effect_violations"], f"report.semantic.outcomes[{index}].side_effect_violations") != 0:
             fail("report semantic outcome contains a side-effect violation")
         if not exact_bool(item["all_executions_passed"], f"report.semantic.outcomes[{index}].all_executions_passed"):
@@ -784,12 +1173,188 @@ def validate_report(
             fail("report semantic outcome contains a false positive")
         if item["malicious"] and not item["malicious_detected"]:
             fail("report semantic outcome missed malicious ground truth")
+        if item["actual_action"] != item["expected_action"]:
+            fail("report semantic outcome actual action differs from expected action")
+    if sum(item["execution_count"] for item in outcomes) != EXPECTED_CORE_EXECUTIONS:
+        fail("report semantic plane is not the exact independent 684-execution denominator")
     recomputed_semantic = derive_semantic_summary(outcomes)
     if semantic["summary_by_mode"] != recomputed_semantic:
         fail("report semantic summary differs from the closed outcome matrix")
     for item in recomputed_semantic:
         if not item["all_semantic_contracts_passed"] or item["false_positives"] != 0 or item["malicious_cases"] < 1 or item["malicious_detected"] != item["malicious_cases"] or item["malicious_recall_percent"] != 100.0 or item["semantic_cases"] != 19 or item["side_effect_violations"] != 0:
             fail(f"report mode {item['mode']} does not satisfy the zero-FP/100%-recall contract")
+
+    supplemental = exact_object(
+        report["supplemental_archive"],
+        {
+            "archive",
+            "case_count",
+            "code_executions",
+            "entry_count",
+            "input_archive_preserved",
+            "manifest_sha256",
+            "member_text_files_created",
+            "member_text_files_removed",
+            "member_text_retained",
+            "outcomes",
+            "policy_sha256",
+            "results_sha256",
+            "side_effect_violations",
+            "status",
+            "summary_by_mode",
+            "third_party_code_executions",
+            "total_executions",
+        },
+        "report.supplemental_archive",
+    )
+    supplemental_archive = exact_object(
+        supplemental["archive"],
+        {"bytes", "sha256"},
+        "report.supplemental_archive.archive",
+    )
+    if supplemental_archive != {
+        "bytes": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"],
+        "sha256": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"],
+    }:
+        fail("report supplemental archive does not bind the fixed reviewed ZIP")
+    require_hex(
+        supplemental["manifest_sha256"],
+        "report.supplemental_archive.manifest_sha256",
+    )
+    if require_hex(
+        supplemental["policy_sha256"],
+        "report.supplemental_archive.policy_sha256",
+    ) != SUPPLEMENTAL_ZIP_POLICY_SHA256:
+        fail("report supplemental policy does not bind the fixed reviewed bytes")
+    require_hex(
+        supplemental["results_sha256"],
+        "report.supplemental_archive.results_sha256",
+    )
+    if (
+        supplemental["status"] != SUPPLEMENTAL_STATUS
+        or exact_int(supplemental["entry_count"], "report.supplemental_archive.entry_count")
+        != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT
+        or exact_int(supplemental["case_count"], "report.supplemental_archive.case_count")
+        != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT
+        or exact_int(
+            supplemental["total_executions"],
+            "report.supplemental_archive.total_executions",
+        )
+        != EXPECTED_SUPPLEMENTAL_EXECUTIONS
+    ):
+        fail("report supplemental archive status or independent matrix counts are invalid")
+    for key in (
+        "code_executions",
+        "member_text_files_created",
+        "member_text_files_removed",
+        "side_effect_violations",
+        "third_party_code_executions",
+    ):
+        if exact_int(supplemental[key], f"report.supplemental_archive.{key}") != 0:
+            fail(f"report supplemental archive {key} must remain zero")
+    if (
+        exact_bool(
+            supplemental["input_archive_preserved"],
+            "report.supplemental_archive.input_archive_preserved",
+        )
+        is not True
+        or exact_bool(
+            supplemental["member_text_retained"],
+            "report.supplemental_archive.member_text_retained",
+        )
+        is not False
+    ):
+        fail("report supplemental archive preservation/text-retention contract failed")
+
+    supplemental_outcomes = exact_list(
+        supplemental["outcomes"], "report.supplemental_archive.outcomes"
+    )
+    if len(supplemental_outcomes) != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT * len(MODES):
+        fail("report supplemental outcomes are not the exact seven-case by three-mode matrix")
+    supplemental_seen: set[tuple[str, str]] = set()
+    expected_supplemental_identities = {
+        (case_id, mode) for case_id in EXPECTED_SUPPLEMENTAL_CASE_IDS for mode in MODES
+    }
+    for index, raw in enumerate(supplemental_outcomes):
+        label = f"report.supplemental_archive.outcomes[{index}]"
+        item = exact_object(
+            raw,
+            {
+                "actual_action",
+                "all_executions_passed",
+                "execution_count",
+                "expected_action",
+                "false_positive",
+                "label",
+                "malicious",
+                "malicious_detected",
+                "mode",
+                "side_effect_violations",
+                "supplemental_case_id",
+            },
+            label,
+        )
+        case_id = exact_string(item["supplemental_case_id"], f"{label}.supplemental_case_id", 256)
+        mode = exact_string(item["mode"], f"{label}.mode", 16)
+        identity = (case_id, mode)
+        if identity in supplemental_seen or identity not in expected_supplemental_identities:
+            fail("report supplemental outcome identity is duplicate or outside the fixed matrix")
+        supplemental_seen.add(identity)
+        suffix = case_id.rsplit(":", 1)[1]
+        expected_malicious = suffix == "activated"
+        expected_label = {
+            "activated": "malicious_active",
+            "authorized-ctf": "authorized_security",
+            "defensive": "defensive_context",
+        }[suffix]
+        expected_action = (
+            "block_malicious_text"
+            if expected_malicious and mode in {"balanced", "strict"}
+            else "allow"
+        )
+        if (
+            exact_string(item["label"], f"{label}.label", 128) != expected_label
+            or exact_bool(item["malicious"], f"{label}.malicious") is not expected_malicious
+            or exact_bool(item["malicious_detected"], f"{label}.malicious_detected")
+            is not expected_malicious
+            or exact_bool(item["all_executions_passed"], f"{label}.all_executions_passed")
+            is not True
+            or exact_bool(item["false_positive"], f"{label}.false_positive") is not False
+            or item["expected_action"] != expected_action
+            or item["actual_action"] != expected_action
+            or exact_int(item["side_effect_violations"], f"{label}.side_effect_violations")
+            != 0
+            or exact_int(item["execution_count"], f"{label}.execution_count", 1)
+            != len(PROTOCOLS) * len(STREAM_VALUES) * EXPECTED_CORE_COLD_STARTS
+        ):
+            fail("report supplemental outcome violates its reviewed action/detection contract")
+    if supplemental_seen != expected_supplemental_identities:
+        fail("report supplemental outcome matrix is incomplete")
+    if sum(item["execution_count"] for item in supplemental_outcomes) != EXPECTED_SUPPLEMENTAL_EXECUTIONS:
+        fail("report supplemental plane is not the independent 252-execution denominator")
+    recomputed_supplemental = derive_supplemental_summary(supplemental_outcomes)
+    if supplemental["summary_by_mode"] != recomputed_supplemental:
+        fail("report supplemental summary differs from the closed outcome matrix")
+    for item in recomputed_supplemental:
+        if not (
+            item["all_supplemental_contracts_passed"] is True
+            and item["false_positive_denominator"] == 4
+            and item["false_positives"] == 0
+            and item["malicious_recall_denominator"] == 3
+            and item["malicious_detected"] == 3
+            and item["malicious_recall_percent"] == 100.0
+            and item["side_effect_violations"] == 0
+            and item["supplemental_cases"] == EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT
+        ):
+            fail(f"report supplemental mode {item['mode']} does not pass the fixed contract")
+
+    if not (
+        inputs["supplemental_archive_sha256"] == supplemental_archive["sha256"]
+        and inputs["supplemental_manifest_sha256"] == supplemental["manifest_sha256"]
+        and inputs["supplemental_policy_sha256"] == supplemental["policy_sha256"]
+        and inputs["supplemental_results_sha256"] == supplemental["results_sha256"]
+    ):
+        fail("report input hashes do not bind the supplemental archive plane")
 
     performance = exact_object(report["performance"], {"evidence_schema", "gates", "metrics", "status"}, "report.performance")
     exact_string(performance["evidence_schema"], "report.performance.evidence_schema", 256)
@@ -816,7 +1381,151 @@ def validate_report(
     if cpa["tag"] != CPA_TAG or cpa["commit"] != CPA_COMMIT or cpa["official_asset_name"] != CPA_OFFICIAL_ASSET_NAME or cpa["official_asset_sha256"] != CPA_OFFICIAL_ASSET_SHA256 or cpa["binary_sha256"] != CPA_OFFICIAL_BINARY_SHA256:
         fail("report does not bind the fixed CPA v7.2.125 official bytes")
 
-    tools = exact_object(report["tool_bundles"], {"admission", "host_performance", "machine"}, "report.tool_bundles")
+    import native_host_special_paths as native
+
+    native_section = exact_object(
+        report["native_host_special_paths"],
+        {
+            "candidate",
+            "cpa_commit",
+            "cpa_tag",
+            "critical_test_count",
+            "critical_tests_sha256",
+            "fail_count",
+            "go_test_log_sha256",
+            "go_version",
+            "observed_test_count",
+            "platform",
+            "report_schema",
+            "report_sha256",
+            "required_test_count",
+            "schema_sha256",
+            "skip_count",
+            "source_sha256",
+            "status",
+            "test_source_sha256",
+        },
+        "report.native_host_special_paths",
+    )
+    native_candidate = exact_object(
+        native_section["candidate"],
+        {
+            "artifact_digest",
+            "artifact_id",
+            "artifact_size",
+            "manifest_sha256",
+            "run_attempt",
+            "run_id",
+            "so_sha256",
+            "source_commit",
+            "source_tree",
+        },
+        "report.native_host_special_paths.candidate",
+    )
+    for key in (
+        "go_test_log_sha256",
+        "critical_tests_sha256",
+        "report_sha256",
+        "schema_sha256",
+        "source_sha256",
+        "test_source_sha256",
+    ):
+        require_hex(native_section[key], f"report.native_host_special_paths.{key}")
+    for key in ("manifest_sha256", "so_sha256"):
+        require_hex(native_candidate[key], f"report.native_host_special_paths.candidate.{key}")
+    require_hex(
+        native_candidate["source_commit"],
+        "report.native_host_special_paths.candidate.source_commit",
+        HEX40,
+    )
+    require_hex(
+        native_candidate["source_tree"],
+        "report.native_host_special_paths.candidate.source_tree",
+        HEX40,
+    )
+    require_digest(
+        native_candidate["artifact_digest"],
+        "report.native_host_special_paths.candidate.artifact_digest",
+    )
+    for key in ("artifact_id", "artifact_size", "run_attempt", "run_id"):
+        exact_int(
+            native_candidate[key],
+            f"report.native_host_special_paths.candidate.{key}",
+            1,
+        )
+    required_native_tests = len(native.CRITICAL_SUBTESTS) + 1
+    expected_critical_tests_sha256 = sha256_bytes(
+        canonical_bytes(native.expected_critical_tests())
+    )
+    if not (
+        native_section["status"] == native.STATUS
+        and native_section["report_schema"] == native.SCHEMA
+        and native_section["go_version"] == native.GO_VERSION
+        and native_section["platform"] == native.PLATFORM
+        and native_section["critical_tests_sha256"]
+        == expected_critical_tests_sha256
+        and native_section["cpa_commit"] == cpa["commit"]
+        and native_section["cpa_tag"] == cpa["tag"]
+        and exact_int(
+            native_section["critical_test_count"],
+            "report.native_host_special_paths.critical_test_count",
+        )
+        == len(native.CRITICAL_SUBTESTS)
+        and exact_int(
+            native_section["required_test_count"],
+            "report.native_host_special_paths.required_test_count",
+        )
+        == required_native_tests
+        and exact_int(
+            native_section["observed_test_count"],
+            "report.native_host_special_paths.observed_test_count",
+            required_native_tests,
+        )
+        >= required_native_tests
+        and exact_int(
+            native_section["fail_count"], "report.native_host_special_paths.fail_count"
+        )
+        == 0
+        and exact_int(
+            native_section["skip_count"], "report.native_host_special_paths.skip_count"
+        )
+        == 0
+    ):
+        fail("report native Host status/runtime/test denominator is invalid")
+    if native_candidate != {
+        "artifact_digest": artifact["digest"],
+        "artifact_id": artifact["id"],
+        "artifact_size": artifact["size"],
+        "manifest_sha256": candidate["manifest_sha256"],
+        "run_attempt": artifact["run_attempt"],
+        "run_id": artifact["run_id"],
+        "so_sha256": so["sha256"],
+        "source_commit": source["commit"],
+        "source_tree": source["tree"],
+    }:
+        fail("report native Host candidate projection differs from the portable candidate")
+    if not (
+        inputs["native_host_special_paths_report_sha256"]
+        == native_section["report_sha256"]
+        and inputs["native_host_go_test_log_sha256"]
+        == native_section["go_test_log_sha256"]
+    ):
+        fail("report input hashes do not bind the native Host evidence/log")
+
+    tools = exact_object(
+        report["tool_bundles"],
+        {"admission", "host_performance", "machine", "native_host_special_paths"},
+        "report.tool_bundles",
+    )
+    if not (
+        native_section["schema_sha256"]
+        == tools["native_host_special_paths"]["schema_sha256"]
+        and native_section["source_sha256"]
+        == tools["native_host_special_paths"]["source_sha256"]
+        and native_section["test_source_sha256"]
+        == tools["native_host_special_paths"]["test_source_sha256"]
+    ):
+        fail("report native Host projection differs from its tool bundle identity")
     if tools != local_tool_identities():
         fail("report tool bundle hashes differ from the checked-out tag validator")
 
@@ -868,17 +1577,95 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
     from run import runner_identities
     if machine.get("identities", {}).get("runner") != runner_identities():
         fail("machine evidence runner identity differs from this packer bundle")
-    machine = validate_machine_evidence(manifest, machine, args.results)
-    declared_manifest = args.evidence.parent / machine["corpus"]["manifest_path"]
-    declared_results = args.evidence.parent / machine["transport"]["results_path"]
-    if declared_manifest.resolve(strict=True) != args.manifest.resolve(strict=True) or declared_results.resolve(strict=True) != args.results.resolve(strict=True):
-        fail("machine evidence relative input paths differ from the supplied full bundle")
-    results_raw = read_regular_bytes(args.results, "transport results", 512 * 1024 * 1024, require_single_link=True)
 
     run_config, run_config_raw = load_canonical(args.run_config, "run config", 2 * 1024 * 1024)
     run_config = validate_run_config(run_config)
+    if int(run_config["run"]["cold_start_count"]) != EXPECTED_CORE_COLD_STARTS:
+        fail("release admission requires exactly three cold starts")
+    supplemental_manifest, supplemental_manifest_raw, supplemental_policy, supplemental_policy_raw, archive_stat = validate_supplemental_run_config_files(run_config)
+    if (
+        Path(run_config["paths"]["supplemental_zip"]).resolve(strict=True)
+        != args.supplemental_archive.resolve(strict=True)
+    ):
+        fail("supplied supplemental archive path differs from the immutable run config")
+    validate_supplemental_evidence_copies(
+        original_manifest=supplemental_manifest,
+        original_manifest_raw=supplemental_manifest_raw,
+        original_policy=supplemental_policy,
+        original_policy_raw=supplemental_policy_raw,
+        evidence_manifest_path=args.supplemental_manifest,
+        evidence_policy_path=args.supplemental_policy,
+    )
+    from supplemental_zip import create_supplemental_manifest
+
+    rebuilt_supplemental_manifest = create_supplemental_manifest(
+        args.supplemental_archive.resolve(strict=True),
+        supplemental_policy,
+        sha256_bytes(supplemental_policy_raw),
+        supplemental_manifest["acquired_at"],
+    )
+    if rebuilt_supplemental_manifest != supplemental_manifest:
+        fail("supplemental ZIP manifest differs from the archive reconstructed in memory")
+    supplemental_archive_binding = bind_supplemental_archive(
+        args.supplemental_archive.resolve(strict=True)
+    )
+    if any(
+        supplemental_archive_binding[key] != int(getattr(archive_stat, key))
+        for key in ("st_dev", "st_ino", "st_nlink", "st_size")
+    ):
+        fail("supplemental ZIP archive stat identity drifted after reconstruction")
+
+    machine = validate_machine_evidence(
+        manifest,
+        machine,
+        args.results,
+        supplemental_manifest_path=args.supplemental_manifest,
+        supplemental_policy_path=args.supplemental_policy,
+        supplemental_results_path=args.supplemental_results,
+    )
+    evidence_directory = args.evidence.parent.resolve(strict=True)
+    declared_paths = {
+        "corpus manifest": evidence_directory / machine["corpus"]["manifest_path"],
+        "transport results": evidence_directory / machine["transport"]["results_path"],
+        "supplemental manifest": evidence_directory
+        / machine["supplemental_zip_manifest"]["manifest_path"],
+        "supplemental policy": evidence_directory
+        / machine["supplemental_zip_manifest"]["policy_path"],
+        "supplemental results": evidence_directory
+        / machine["supplemental_zip_results"]["results_path"],
+    }
+    supplied_paths = {
+        "corpus manifest": args.manifest,
+        "transport results": args.results,
+        "supplemental manifest": args.supplemental_manifest,
+        "supplemental policy": args.supplemental_policy,
+        "supplemental results": args.supplemental_results,
+    }
+    for label, declared in declared_paths.items():
+        if declared.resolve(strict=True) != supplied_paths[label].resolve(strict=True):
+            fail(f"machine evidence relative {label} path differs from the supplied bundle")
+    results_raw = read_regular_bytes(
+        args.results,
+        "transport results",
+        512 * 1024 * 1024,
+        require_single_link=True,
+    )
+    supplemental_results_raw = read_regular_bytes(
+        args.supplemental_results,
+        "supplemental ZIP results",
+        64 * 1024 * 1024,
+        require_single_link=True,
+    )
+    if sha256_bytes(results_raw) != machine["transport"]["results_sha256"]:
+        fail("transport results changed after full machine-evidence validation")
+    if (
+        sha256_bytes(supplemental_results_raw)
+        != machine["supplemental_zip_results"]["results_sha256"]
+    ):
+        fail("supplemental ZIP results changed after full machine-evidence validation")
+
     candidate_manifest, candidate_raw = validate_candidate_manifest_file(run_config)
-    if Path(run_config["paths"]["evidence_directory"]).resolve(strict=True) != args.evidence.parent.resolve(strict=True):
+    if Path(run_config["paths"]["evidence_directory"]).resolve(strict=True) != evidence_directory:
         fail("run config evidence directory differs from the supplied machine evidence")
     validate_evidence_run_config(machine, run_config, run_config_raw)
     candidate_path = Path(run_config["paths"]["candidate_manifest"])
@@ -895,6 +1682,34 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
     performance_config = validate_performance_config(performance_config, run_config, run_config_raw, candidate_manifest, candidate_raw, workload_raw)
     validated_measurements, summaries, baseline, extra = validate_measurements(measurements, measurements_raw, performance_config, performance_config_raw, workload)
     performance = validate_evidence_bundle(performance, performance_config, performance_config_raw, validated_measurements, measurements_raw, summaries, baseline, extra, require_pass=True)
+
+    import native_host_special_paths as native
+
+    native_report_path = args.native_report.resolve(strict=True)
+    native_go_test_path = args.native_go_test_jsonl.resolve(strict=True)
+    checkout = args.checkout.resolve(strict=True)
+    candidate_identity = run_config["identities"]["candidate"]
+    native_report = native.validate_bundle(
+        report_path=native_report_path,
+        candidate_manifest=args.candidate_manifest.resolve(strict=True),
+        checkout=checkout,
+        go_test_jsonl=native_go_test_path,
+        artifact_id=candidate_identity["artifact"]["id"],
+        artifact_name=candidate_identity["artifact"]["name"],
+        artifact_digest=candidate_identity["artifact"]["digest"],
+        artifact_size=args.candidate_artifact_size,
+    )
+    native_report_again, native_report_raw = native.load_report(native_report_path)
+    if native_report_again != native_report:
+        fail("native Host report changed after full bundle reconstruction")
+    native_go_test_raw = read_regular_bytes(
+        native_go_test_path,
+        "native Host go test JSONL",
+        native.MAX_LOG_BYTES,
+        require_single_link=True,
+    )
+    if sha256_bytes(native_go_test_raw) != native_report["test_log"]["sha256"]:
+        fail("native Host go test JSONL changed after full bundle reconstruction")
     return {
         "candidate_files": candidate_files,
         "candidate_manifest": candidate_manifest,
@@ -904,6 +1719,9 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
         "manifest": manifest,
         "manifest_raw": manifest_raw,
         "measurements_raw": measurements_raw,
+        "native_go_test_raw": native_go_test_raw,
+        "native_report": native_report,
+        "native_report_raw": native_report_raw,
         "performance": performance,
         "performance_config_raw": performance_config_raw,
         "performance_raw": performance_raw,
@@ -911,6 +1729,12 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
         "results_raw": results_raw,
         "run_config": run_config,
         "run_config_raw": run_config_raw,
+        "supplemental_archive_binding": supplemental_archive_binding,
+        "supplemental_archive_path": args.supplemental_archive.resolve(strict=True),
+        "supplemental_manifest": supplemental_manifest,
+        "supplemental_manifest_raw": supplemental_manifest_raw,
+        "supplemental_policy_raw": supplemental_policy_raw,
+        "supplemental_results_raw": supplemental_results_raw,
         "workload_raw": workload_raw,
     }
 
@@ -924,14 +1748,17 @@ def write_exclusive(path: Path, value: Mapping[str, Any]) -> None:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(path, flags, 0o600)
+    handle = os.fdopen(descriptor, "wb", closefd=True)
     try:
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
-            handle.write(raw)
-            handle.flush()
-            os.fsync(handle.fileno())
-    except BaseException:
-        path.unlink(missing_ok=True)
-        raise
+        handle.write(raw)
+        handle.flush()
+        os.fsync(handle.fileno())
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size != len(raw):
+            fail("new admission output is not a complete single-link regular file")
+    finally:
+        if not handle.closed:
+            handle.close()
 
 
 def parser() -> argparse.ArgumentParser:
@@ -944,6 +1771,13 @@ def parser() -> argparse.ArgumentParser:
     pack.add_argument("--run-config", type=Path, required=True)
     pack.add_argument("--candidate-manifest", type=Path, required=True)
     pack.add_argument("--candidate-artifact-size", type=int, required=True)
+    pack.add_argument("--supplemental-archive", type=Path, required=True)
+    pack.add_argument("--supplemental-manifest", type=Path, required=True)
+    pack.add_argument("--supplemental-policy", type=Path, required=True)
+    pack.add_argument("--supplemental-results", type=Path, required=True)
+    pack.add_argument("--native-report", type=Path, required=True)
+    pack.add_argument("--native-go-test-jsonl", type=Path, required=True)
+    pack.add_argument("--checkout", type=Path, required=True)
     pack.add_argument("--workload-manifest", type=Path, required=True)
     pack.add_argument("--performance-config", type=Path, required=True)
     pack.add_argument("--measurements", type=Path, required=True)
@@ -985,12 +1819,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.candidate_artifact_size < 1:
                 fail("candidate GitHub artifact size must be positive")
             values = load_validated_inputs(args)
+            supplemental_archive_path = values.pop("supplemental_archive_path")
+            supplemental_archive_binding = values["supplemental_archive_binding"]
             report = build_report(
                 **values,
                 candidate_artifact_size=args.candidate_artifact_size,
                 generated_at=datetime.now(timezone.utc),
             )
             write_exclusive(args.output, report)
+            # Preserve failed task-scoped output for explicit cleanup. A
+            # pathname unlink cannot be made conditional on inode identity
+            # without a same-UID replacement race.
+            reverify_supplemental_archive(
+                supplemental_archive_path, supplemental_archive_binding
+            )
             print(json.dumps({"report_sha256": sha256_bytes(canonical_bytes(report) + b"\n"), "status": report["status"], "valid": True}, sort_keys=True))
             return 0
         raw = read_regular_bytes(args.report, "portable release admission", MAX_REPORT_BYTES, require_single_link=True)
@@ -1062,6 +1904,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             "performance_gates_passed": summary["performance_gates_passed"],
             "performance_gates_sha256": sha256_bytes(canonical_bytes(report["performance"]["gates"])),
             "performance_status": report["performance"]["status"],
+            "supplemental_archive_status": report["supplemental_archive"]["status"],
+            "supplemental_archive_sha256": report["supplemental_archive"]["archive"]["sha256"],
+            "supplemental_manifest_sha256": report["supplemental_archive"]["manifest_sha256"],
+            "supplemental_policy_sha256": report["supplemental_archive"]["policy_sha256"],
+            "supplemental_results_sha256": report["supplemental_archive"]["results_sha256"],
+            "supplemental_summary_sha256": sha256_bytes(canonical_bytes(report["supplemental_archive"]["summary_by_mode"])),
+            "native_host_status": report["native_host_special_paths"]["status"],
+            "native_host_special_paths_report_sha256": report["native_host_special_paths"]["report_sha256"],
+            "native_host_special_paths_source_sha256": report["native_host_special_paths"]["source_sha256"],
+            "native_host_special_paths_schema_sha256": report["native_host_special_paths"]["schema_sha256"],
+            "native_host_test_source_sha256": report["native_host_special_paths"]["test_source_sha256"],
+            "native_host_go_test_log_sha256": report["native_host_special_paths"]["go_test_log_sha256"],
             "report_candidate_artifact_digest": report["candidate"]["github_artifact"]["digest"],
             "report_candidate_artifact_id": report["candidate"]["github_artifact"]["id"],
             "report_candidate_artifact_size": report["candidate"]["github_artifact"]["size"],

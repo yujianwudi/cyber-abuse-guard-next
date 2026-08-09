@@ -3,11 +3,13 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import struct
 import sys
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -25,28 +27,43 @@ from audit_contract import (  # noqa: E402
     CPA_OFFICIAL_ASSET_SHA256,
     CPA_OFFICIAL_BINARY_SHA256,
     CPA_TAG,
+    ContractError,
     MODES,
+    SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY,
+    SUPPLEMENTAL_ZIP_POLICY_SHA256,
     candidate_identity,
     canonical_bytes,
 )
 from host_performance import EVIDENCE_SCHEMA, THRESHOLDS  # noqa: E402
+import native_host_special_paths as native  # noqa: E402
 from second_machine_release_admission import (  # noqa: E402
     AdmissionError,
     BOUNDARY,
     EXPECTED_CANDIDATE_FILES,
+    EXPECTED_CORE_EXECUTIONS,
+    EXPECTED_SUPPLEMENTAL_CASE_IDS,
+    EXPECTED_SUPPLEMENTAL_EXECUTIONS,
     INPUT_HASH_KEYS,
     REPORT_TTL,
     SCHEMA,
     STATUS,
+    SUPPLEMENTAL_STATUS,
     _performance_gate,
     build_report,
     derive_semantic_summary,
+    derive_supplemental_summary,
     derive_summary,
     local_tool_identities,
+    main,
+    validate_supplemental_evidence_copies,
     validate_report,
     validate_candidate_directory,
 )
-from fixtures import audit_candidate_manifest, evidence_files  # noqa: E402
+from fixtures import (  # noqa: E402
+    audit_candidate_manifest,
+    evidence_files,
+    supplemental_manifest_fixture,
+)
 
 
 try:
@@ -102,6 +119,36 @@ def valid_report() -> dict[str, object]:
                     "mode": mode,
                     "semantic_case_id": f"case-{case_index:02d}",
                     "side_effect_violations": 0,
+                }
+            )
+    supplemental_outcomes = []
+    for case_id in EXPECTED_SUPPLEMENTAL_CASE_IDS:
+        suffix = case_id.rsplit(":", 1)[1]
+        malicious = suffix == "activated"
+        label = {
+            "activated": "malicious_active",
+            "authorized-ctf": "authorized_security",
+            "defensive": "defensive_context",
+        }[suffix]
+        for mode in MODES:
+            actual = (
+                "block_malicious_text"
+                if malicious and mode in {"balanced", "strict"}
+                else "allow"
+            )
+            supplemental_outcomes.append(
+                {
+                    "actual_action": actual,
+                    "all_executions_passed": True,
+                    "execution_count": 12,
+                    "expected_action": actual,
+                    "false_positive": False,
+                    "label": label,
+                    "malicious": malicious,
+                    "malicious_detected": malicious,
+                    "mode": mode,
+                    "side_effect_violations": 0,
+                    "supplemental_case_id": case_id,
                 }
             )
     metrics = {name: passing_metric(name) for name in sorted(THRESHOLDS)}
@@ -169,6 +216,44 @@ def valid_report() -> dict[str, object]:
         "expires_at": (NOW + REPORT_TTL).isoformat().replace("+00:00", "Z"),
         "generated_at": NOW.isoformat().replace("+00:00", "Z"),
         "inputs": {key: f"{(index % 6) + 9:x}" * 64 for index, key in enumerate(INPUT_HASH_KEYS)},
+        "native_host_special_paths": {
+            "candidate": {
+                "artifact_digest": "sha256:" + "5" * 64,
+                "artifact_id": 2002,
+                "artifact_size": 123456,
+                "manifest_sha256": MANIFEST_SHA,
+                "run_attempt": 1,
+                "run_id": 1001,
+                "so_sha256": SO_SHA,
+                "source_commit": COMMIT,
+                "source_tree": TREE,
+            },
+            "cpa_commit": CPA_COMMIT,
+            "cpa_tag": CPA_TAG,
+            "critical_test_count": len(native.CRITICAL_SUBTESTS),
+            "critical_tests_sha256": hashlib.sha256(
+                canonical_bytes(native.expected_critical_tests())
+            ).hexdigest(),
+            "fail_count": 0,
+            "go_test_log_sha256": "f" * 64,
+            "go_version": native.GO_VERSION,
+            "observed_test_count": len(native.CRITICAL_SUBTESTS) + 1,
+            "platform": native.PLATFORM,
+            "report_schema": native.SCHEMA,
+            "report_sha256": "0" * 64,
+            "required_test_count": len(native.CRITICAL_SUBTESTS) + 1,
+            "schema_sha256": local_tool_identities()["native_host_special_paths"][
+                "schema_sha256"
+            ],
+            "skip_count": 0,
+            "source_sha256": local_tool_identities()["native_host_special_paths"][
+                "source_sha256"
+            ],
+            "status": native.STATUS,
+            "test_source_sha256": local_tool_identities()["native_host_special_paths"][
+                "test_source_sha256"
+            ],
+        },
         "performance": {
             "evidence_schema": EVIDENCE_SCHEMA,
             "gates": gates,
@@ -194,11 +279,39 @@ def valid_report() -> dict[str, object]:
             "tree": TREE,
         },
         "status": STATUS,
+        "supplemental_archive": {
+            "archive": {
+                "bytes": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"],
+                "sha256": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"],
+            },
+            "case_count": 7,
+            "code_executions": 0,
+            "entry_count": 4,
+            "input_archive_preserved": True,
+            "manifest_sha256": "2" * 64,
+            "member_text_files_created": 0,
+            "member_text_files_removed": 0,
+            "member_text_retained": False,
+            "outcomes": supplemental_outcomes,
+            "policy_sha256": SUPPLEMENTAL_ZIP_POLICY_SHA256,
+            "results_sha256": "3" * 64,
+            "side_effect_violations": 0,
+            "status": SUPPLEMENTAL_STATUS,
+            "summary_by_mode": derive_supplemental_summary(supplemental_outcomes),
+            "third_party_code_executions": 0,
+            "total_executions": EXPECTED_SUPPLEMENTAL_EXECUTIONS,
+        },
         "summary": {},
         "tool_bundles": local_tool_identities(),
     }
     report["inputs"]["candidate_manifest_sha256"] = MANIFEST_SHA  # type: ignore[index]
     report["inputs"]["corpus_manifest_sha256"] = "6" * 64  # type: ignore[index]
+    report["inputs"]["supplemental_archive_sha256"] = SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"]  # type: ignore[index]
+    report["inputs"]["supplemental_manifest_sha256"] = "2" * 64  # type: ignore[index]
+    report["inputs"]["supplemental_policy_sha256"] = SUPPLEMENTAL_ZIP_POLICY_SHA256  # type: ignore[index]
+    report["inputs"]["supplemental_results_sha256"] = "3" * 64  # type: ignore[index]
+    report["inputs"]["native_host_special_paths_report_sha256"] = "0" * 64  # type: ignore[index]
+    report["inputs"]["native_host_go_test_log_sha256"] = "f" * 64  # type: ignore[index]
     report["summary"] = derive_summary(report)
     return report
 
@@ -271,6 +384,48 @@ class PortableAdmissionTests(unittest.TestCase):
                 "paths": {"evidence_directory": str(Path(directory).resolve())},
             }
             results_raw = results_path.read_bytes()
+            supplemental_manifest, _supplemental_policy, supplemental_policy_raw = (
+                supplemental_manifest_fixture()
+            )
+            supplemental_manifest_raw = canonical_bytes(supplemental_manifest) + b"\n"
+            supplemental_results_raw = (
+                Path(directory) / "supplemental-zip-results.jsonl"
+            ).read_bytes()
+            native_go_test_raw = b'{"Action":"pass"}\n'
+            native_report = {
+                "candidate": {
+                    "artifact": {
+                        "digest": candidate["artifact"]["digest"],
+                        "id": int(candidate["artifact"]["id"]),
+                        "name": candidate["artifact"]["name"],
+                        "run_attempt": int(candidate["run_attempt"]),
+                        "run_id": int(candidate["run_id"]),
+                        "size": 123456,
+                    },
+                    "manifest_sha256": hashlib.sha256(candidate_raw).hexdigest(),
+                    "so": {"sha256": cag["so_sha256"]},
+                    "source": {"commit": cag["commit"], "tree": cag["tree"]},
+                },
+                "cpa": {"commit": CPA_COMMIT, "tag": CPA_TAG},
+                "execution": {
+                    "critical_tests": native.expected_critical_tests(),
+                    "fail_count": 0,
+                    "observed_test_count": len(native.CRITICAL_SUBTESTS) + 1,
+                    "required_test_count": len(native.CRITICAL_SUBTESTS) + 1,
+                    "skip_count": 0,
+                },
+                "runtime": {"go_version": native.GO_VERSION, "platform": native.PLATFORM},
+                "schema": native.SCHEMA,
+                "status": native.STATUS,
+                "test_log": {"sha256": hashlib.sha256(native_go_test_raw).hexdigest()},
+                "test_source": {
+                    "sha256": local_tool_identities()["native_host_special_paths"][
+                        "test_source_sha256"
+                    ]
+                },
+                "tool": native.tool_identity(),
+            }
+            native_report_raw = canonical_bytes(native_report) + b"\n"
 
             def pack(raw: bytes) -> dict[str, Any]:
                 return build_report(
@@ -289,8 +444,19 @@ class PortableAdmissionTests(unittest.TestCase):
                     workload_raw=b"{}\n",
                     performance_config_raw=b"{}\n",
                     measurements_raw=b"{}\n",
+                    native_go_test_raw=native_go_test_raw,
+                    native_report=native_report,
+                    native_report_raw=native_report_raw,
                     performance=performance,
                     performance_raw=canonical_bytes(performance) + b"\n",
+                    supplemental_archive_binding={
+                        "bytes": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"],
+                        "sha256": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"],
+                    },
+                    supplemental_manifest=supplemental_manifest,
+                    supplemental_manifest_raw=supplemental_manifest_raw,
+                    supplemental_policy_raw=supplemental_policy_raw,
+                    supplemental_results_raw=supplemental_results_raw,
                     generated_at=NOW,
                 )
 
@@ -298,6 +464,14 @@ class PortableAdmissionTests(unittest.TestCase):
             self.assertEqual(report["status"], STATUS)
             self.assertEqual(report["source"]["so"]["name"], CAG_SO_NAME)
             self.assertEqual(report["summary"]["performance_gate_count"], len(THRESHOLDS))
+            self.assertEqual(
+                sum(item["execution_count"] for item in report["semantic"]["outcomes"]),
+                EXPECTED_CORE_EXECUTIONS,
+            )
+            self.assertEqual(
+                report["supplemental_archive"]["total_executions"],
+                EXPECTED_SUPPLEMENTAL_EXECUTIONS,
+            )
 
             missing_arm = machine["run"]["cold_start_count"]
             incomplete_results_raw = b"".join(
@@ -397,9 +571,143 @@ class PortableAdmissionTests(unittest.TestCase):
             }
             (root / "audit-candidate-manifest.json").write_bytes(canonical_bytes(manifest) + b"\n")
             self.assertEqual(len(validate_candidate_directory(root, manifest)), 9)
+            original_infolist = zipfile.ZipFile.infolist
+
+            def oversized_member(archive: zipfile.ZipFile) -> list[zipfile.ZipInfo]:
+                members = original_infolist(archive)
+                members[0].file_size = len(so) + 1
+                return members
+
+            with mock.patch.object(
+                zipfile.ZipFile, "infolist", new=oversized_member
+            ), self.assertRaisesRegex(AdmissionError, "declared size"):
+                validate_candidate_directory(root, manifest)
+
             (root / "cyber-abuse-guard-v1.0.0-rc.1.so").write_bytes(so)
             with self.assertRaises(AdmissionError):
                 validate_candidate_directory(root, manifest)
+
+    def test_supplemental_evidence_copies_may_live_outside_original_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = root / "operator-inputs"
+            evidence = root / "machine-evidence"
+            original.mkdir()
+            evidence.mkdir()
+            manifest, policy, policy_raw = supplemental_manifest_fixture()
+            manifest_raw = canonical_bytes(manifest) + b"\n"
+            original_manifest = original / "supplemental-zip-manifest.json"
+            original_policy = original / "supplemental-zip-policy.json"
+            evidence_manifest = evidence / "supplemental-zip-manifest.json"
+            evidence_policy = evidence / "supplemental-zip-policy.json"
+            original_manifest.write_bytes(manifest_raw)
+            original_policy.write_bytes(policy_raw)
+            evidence_manifest.write_bytes(manifest_raw)
+            evidence_policy.write_bytes(policy_raw)
+            self.assertNotEqual(original_manifest.parent, evidence_manifest.parent)
+
+            validate_supplemental_evidence_copies(
+                original_manifest=json.loads(original_manifest.read_bytes()),
+                original_manifest_raw=original_manifest.read_bytes(),
+                original_policy=json.loads(original_policy.read_bytes()),
+                original_policy_raw=original_policy.read_bytes(),
+                evidence_manifest_path=evidence_manifest,
+                evidence_policy_path=evidence_policy,
+            )
+
+            changed = copy.deepcopy(manifest)
+            changed["acquired_at"] = "2026-08-10T00:00:00Z"
+            evidence_manifest.write_bytes(canonical_bytes(changed) + b"\n")
+            with self.assertRaisesRegex(AdmissionError, "evidence copies differ"):
+                validate_supplemental_evidence_copies(
+                    original_manifest=manifest,
+                    original_manifest_raw=manifest_raw,
+                    original_policy=policy,
+                    original_policy_raw=policy_raw,
+                    evidence_manifest_path=evidence_manifest,
+                    evidence_policy_path=evidence_policy,
+                )
+            evidence_manifest.write_bytes(manifest_raw)
+            os.link(evidence_manifest, evidence / "manifest-hardlink.json")
+            with self.assertRaises(ContractError):
+                validate_supplemental_evidence_copies(
+                    original_manifest=manifest,
+                    original_manifest_raw=manifest_raw,
+                    original_policy=policy,
+                    original_policy_raw=policy_raw,
+                    evidence_manifest_path=evidence_manifest,
+                    evidence_policy_path=evidence_policy,
+                )
+
+    def test_post_pack_archive_drift_preserves_replaced_output(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "second-machine-release-admission.json"
+            archive = root / "supplemental.zip"
+            replacement = b"replacement-owned-by-another-writer\n"
+            values = {
+                "supplemental_archive_binding": {
+                    "bytes": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"],
+                    "sha256": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"],
+                },
+                "supplemental_archive_path": archive,
+            }
+
+            def replace_then_fail(*_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+                output.unlink()
+                output.write_bytes(replacement)
+                raise AdmissionError("supplemental archive drift")
+
+            arguments = [
+                "pack",
+                "--manifest", "unused",
+                "--evidence", "unused",
+                "--results", "unused",
+                "--run-config", "unused",
+                "--candidate-manifest", "unused",
+                "--candidate-artifact-size", "1",
+                "--supplemental-archive", "unused",
+                "--supplemental-manifest", "unused",
+                "--supplemental-policy", "unused",
+                "--supplemental-results", "unused",
+                "--native-report", "unused",
+                "--native-go-test-jsonl", "unused",
+                "--checkout", "unused",
+                "--workload-manifest", "unused",
+                "--performance-config", "unused",
+                "--measurements", "unused",
+                "--performance-evidence", "unused",
+                "--output", str(output),
+            ]
+            module = main.__module__
+            with (
+                mock.patch(f"{module}.load_validated_inputs", return_value=values),
+                mock.patch(f"{module}.build_report", return_value=valid_report()),
+                mock.patch(
+                    f"{module}.reverify_supplemental_archive",
+                    side_effect=replace_then_fail,
+                ),
+                mock.patch("sys.stderr"),
+            ):
+                self.assertEqual(main(arguments), 2)
+            self.assertEqual(output.read_bytes(), replacement)
+
+            preserved_output = root / "preserved-failed-admission.json"
+            arguments[-1] = str(preserved_output)
+            values["supplemental_archive_path"] = archive
+            with (
+                mock.patch(f"{module}.load_validated_inputs", return_value=values),
+                mock.patch(f"{module}.build_report", return_value=valid_report()),
+                mock.patch(
+                    f"{module}.reverify_supplemental_archive",
+                    side_effect=AdmissionError("supplemental archive drift"),
+                ),
+                mock.patch("sys.stderr"),
+            ):
+                self.assertEqual(main(arguments), 2)
+            self.assertEqual(
+                preserved_output.read_bytes(), canonical_bytes(valid_report()) + b"\n"
+            )
 
     def assert_rejected(self, mutate, *, when: datetime = NOW) -> None:  # type: ignore[no-untyped-def]
         report = valid_report()
@@ -409,6 +717,8 @@ class PortableAdmissionTests(unittest.TestCase):
 
     def test_rejects_unknown_key_and_fabricated_summary(self) -> None:
         self.assert_rejected(lambda report: report.__setitem__("operator_note", "trust me"))
+        self.assert_rejected(lambda report: report.__setitem__("schema", "cyber-abuse-guard.second-machine-release-admission.v1"))
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("operator_note", "trust me"))  # type: ignore[union-attr]
         self.assert_rejected(lambda report: report["summary"].__setitem__("false_positives", 1))  # type: ignore[union-attr]
 
     def test_rejects_wrong_commit_tree_or_so(self) -> None:
@@ -471,6 +781,62 @@ class PortableAdmissionTests(unittest.TestCase):
         self.assert_rejected(lambda report: report["semantic"]["outcomes"][0].__setitem__("malicious_detected", False))  # type: ignore[index,union-attr]
         self.assert_rejected(lambda report: report["semantic"]["outcomes"][0].__setitem__("side_effect_violations", 1))  # type: ignore[index,union-attr]
 
+    def test_rejects_core_and_supplemental_denominator_blending(self) -> None:
+        self.assert_rejected(lambda report: report["semantic"]["outcomes"][0].__setitem__("execution_count", 13))  # type: ignore[index,union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("total_executions", EXPECTED_CORE_EXECUTIONS + EXPECTED_SUPPLEMENTAL_EXECUTIONS))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"]["outcomes"][0].__setitem__("execution_count", 11))  # type: ignore[index,union-attr]
+
+    def test_rejects_supplemental_hash_count_status_and_safety_drift(self) -> None:
+        self.assert_rejected(lambda report: report["supplemental_archive"]["archive"].__setitem__("sha256", "9" * 64))  # type: ignore[index,union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("manifest_sha256", "9" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("entry_count", 5))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("case_count", 8))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("status", "PASS"))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("member_text_retained", True))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["supplemental_archive"].__setitem__("third_party_code_executions", 1))  # type: ignore[union-attr]
+
+    def test_rejects_supplemental_false_positive_recall_and_audit_blocking(self) -> None:
+        benign = next(
+            item
+            for item in valid_report()["supplemental_archive"]["outcomes"]  # type: ignore[index,union-attr]
+            if not item["malicious"]
+        )
+        benign_id = benign["supplemental_case_id"]
+        malicious_id = next(
+            item["supplemental_case_id"]
+            for item in valid_report()["supplemental_archive"]["outcomes"]  # type: ignore[index,union-attr]
+            if item["malicious"] and item["mode"] == "balanced"
+        )
+        audit_id = next(
+            item["supplemental_case_id"]
+            for item in valid_report()["supplemental_archive"]["outcomes"]  # type: ignore[index,union-attr]
+            if item["malicious"] and item["mode"] == "audit"
+        )
+
+        def mutate_case(report, case_id, mode, key, value) -> None:  # type: ignore[no-untyped-def]
+            row = next(
+                item
+                for item in report["supplemental_archive"]["outcomes"]
+                if item["supplemental_case_id"] == case_id and item["mode"] == mode
+            )
+            row[key] = value
+
+        self.assert_rejected(lambda report: mutate_case(report, benign_id, "audit", "false_positive", True))
+        self.assert_rejected(lambda report: mutate_case(report, malicious_id, "balanced", "malicious_detected", False))
+        self.assert_rejected(lambda report: mutate_case(report, audit_id, "audit", "actual_action", "block_malicious_text"))
+
+    def test_rejects_native_report_log_tool_candidate_test_and_status_drift(self) -> None:
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("report_sha256", "9" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("go_test_log_sha256", "9" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("source_sha256", "9" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("test_source_sha256", "9" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("critical_tests_sha256", "9" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"]["candidate"].__setitem__("source_commit", "9" * 40))  # type: ignore[index,union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("critical_test_count", 34))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("required_test_count", 35))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("fail_count", 1))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("status", "PASS"))  # type: ignore[union-attr]
+
     def test_rejects_failed_or_tampered_performance_gate(self) -> None:
         metric = next(name for name, (operator, _) in THRESHOLDS.items() if operator in ("<=", "<"))
         limit = THRESHOLDS[metric][1]
@@ -488,8 +854,23 @@ class PortableAdmissionTests(unittest.TestCase):
     def test_packer_reuses_full_validators_before_emitting(self) -> None:
         source = (TOOL / "second_machine_release_admission.py").read_text("utf-8")
         for marker in (
-            "validate_machine_evidence(manifest, machine, args.results)",
+            "validate_machine_evidence(",
             "validate_evidence_run_config(machine, run_config, run_config_raw)",
+            "validate_supplemental_run_config_files(run_config)",
+            "create_supplemental_manifest(",
+            "supplemental_manifest_path=args.supplemental_manifest",
+            "supplemental_policy_path=args.supplemental_policy",
+            "supplemental_results_path=args.supplemental_results",
+            "native.validate_bundle(",
+            "checkout=checkout",
+            "go_test_jsonl=native_go_test_path",
+            'pack.add_argument("--supplemental-archive", type=Path, required=True)',
+            'pack.add_argument("--supplemental-manifest", type=Path, required=True)',
+            'pack.add_argument("--supplemental-policy", type=Path, required=True)',
+            'pack.add_argument("--supplemental-results", type=Path, required=True)',
+            'pack.add_argument("--native-report", type=Path, required=True)',
+            'pack.add_argument("--native-go-test-jsonl", type=Path, required=True)',
+            'pack.add_argument("--checkout", type=Path, required=True)',
             "validate_candidate_manifest_file(run_config)",
             "validate_measurements(",
             "validate_evidence_bundle(",

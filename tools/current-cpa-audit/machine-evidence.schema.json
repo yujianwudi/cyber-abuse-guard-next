@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cyber-abuse-guard.invalid/schemas/current-cpa-machine-evidence-v1.json",
+  "$id": "https://cyber-abuse-guard.invalid/schemas/current-cpa-machine-evidence-v2.json",
   "title": "CAG current CPA machine evidence",
   "type": "object",
   "additionalProperties": false,
@@ -16,11 +16,14 @@
     "run",
     "schema",
     "started_at",
+    "supplemental_zip_manifest",
+    "supplemental_zip_results",
+    "supplemental_zip_summary",
     "third_party_code_executions",
     "transport"
   ],
   "properties": {
-    "schema": {"const": "cag-current-cpa-machine-evidence/v1"},
+    "schema": {"const": "cag-current-cpa-machine-evidence/v2"},
     "claim_boundary": {"const": "SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION"},
     "started_at": {"$ref": "#/$defs/timestamp"},
     "completed_at": {"$ref": "#/$defs/timestamp"},
@@ -30,6 +33,9 @@
     "corpus": {"$ref": "#/$defs/corpus"},
     "identities": {"$ref": "#/$defs/identities"},
     "transport": {"$ref": "#/$defs/transport"},
+    "supplemental_zip_manifest": {"$ref": "#/$defs/supplemental_zip_manifest"},
+    "supplemental_zip_results": {"$ref": "#/$defs/supplemental_zip_results"},
+    "supplemental_zip_summary": {"$ref": "#/$defs/supplemental_zip_summary"},
     "cold_starts": {
       "type": "array",
       "minItems": 3,
@@ -299,6 +305,90 @@
         "transport_executions": {"type": "integer", "minimum": 684, "maximum": 2280}
       }
     },
+    "supplemental_zip_manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archive_bytes",
+        "archive_sha256",
+        "code_executions",
+        "manifest_path",
+        "manifest_sha256",
+        "member_text_files_created",
+        "policy_path",
+        "policy_sha256",
+        "selected_entry_count",
+        "third_party_code_executions",
+        "unique_reviewed_cases"
+      ],
+      "properties": {
+        "archive_bytes": {"const": 5830796},
+        "archive_sha256": {"const": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c"},
+        "code_executions": {"const": 0},
+        "manifest_path": {"const": "supplemental-zip-manifest.json"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "member_text_files_created": {"const": 0},
+        "policy_path": {"const": "supplemental-zip-policy.json"},
+        "policy_sha256": {"const": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb"},
+        "selected_entry_count": {"const": 4},
+        "third_party_code_executions": {"const": 0},
+        "unique_reviewed_cases": {"const": 7}
+      }
+    },
+    "supplemental_zip_results": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modes", "protocols", "results_path", "results_sha256", "streams", "supplemental_executions"],
+      "properties": {
+        "modes": {
+          "type": "array",
+          "minItems": 3,
+          "prefixItems": [{"const": "audit"}, {"const": "balanced"}, {"const": "strict"}],
+          "items": false
+        },
+        "protocols": {
+          "type": "array",
+          "minItems": 2,
+          "prefixItems": [{"const": "chat"}, {"const": "responses"}],
+          "items": false
+        },
+        "results_path": {"const": "supplemental-zip-results.jsonl"},
+        "results_sha256": {"$ref": "#/$defs/sha256"},
+        "streams": {
+          "type": "array",
+          "minItems": 2,
+          "prefixItems": [{"const": false}, {"const": true}],
+          "items": false
+        },
+        "supplemental_executions": {"type": "integer", "minimum": 252, "maximum": 840}
+      }
+    },
+    "supplemental_zip_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_executions",
+        "block_incomplete_inspection_executions",
+        "block_malicious_text_executions",
+        "code_executions",
+        "malicious_case_count",
+        "passed_executions",
+        "third_party_code_executions",
+        "total_executions",
+        "transport_error_executions"
+      ],
+      "properties": {
+        "allow_executions": {"type": "integer", "minimum": 180, "maximum": 600},
+        "block_incomplete_inspection_executions": {"const": 0},
+        "block_malicious_text_executions": {"type": "integer", "minimum": 72, "maximum": 240},
+        "code_executions": {"const": 0},
+        "malicious_case_count": {"const": 3},
+        "passed_executions": {"type": "integer", "minimum": 252, "maximum": 840},
+        "third_party_code_executions": {"const": 0},
+        "total_executions": {"type": "integer", "minimum": 252, "maximum": 840},
+        "transport_error_executions": {"const": 0}
+      }
+    },
     "container": {
       "type": "object",
       "additionalProperties": false,
@@ -426,7 +516,10 @@
         "runtime_config_sha256",
         "sqlite",
         "started_at",
-        "stop"
+        "stop",
+        "supplemental_execution_count",
+        "supplemental_order_sha256",
+        "supplemental_results_sha256"
       ],
       "properties": {
         "completed_at": {"$ref": "#/$defs/timestamp"},
@@ -448,7 +541,10 @@
         "runtime_config_sha256": {"$ref": "#/$defs/sha256"},
         "sqlite": {"$ref": "#/$defs/sqlite"},
         "started_at": {"$ref": "#/$defs/timestamp"},
-        "stop": {"$ref": "#/$defs/stop"}
+        "stop": {"$ref": "#/$defs/stop"},
+        "supplemental_execution_count": {"const": 84},
+        "supplemental_order_sha256": {"$ref": "#/$defs/sha256"},
+        "supplemental_results_sha256": {"$ref": "#/$defs/sha256"}
       }
     },
     "snapshot": {
@@ -499,6 +595,10 @@
         "graceful_stop_attempts",
         "images_removed",
         "resources",
+        "supplemental_input_archive_preserved",
+        "supplemental_member_text_files_created",
+        "supplemental_member_text_files_removed",
+        "supplemental_member_text_retained",
         "third_party_text_files_removed",
         "third_party_text_retained"
       ],
@@ -514,6 +614,10 @@
           "maxItems": 21,
           "items": {"$ref": "#/$defs/cleanup_resource"}
         },
+        "supplemental_input_archive_preserved": {"const": true},
+        "supplemental_member_text_files_created": {"const": 0},
+        "supplemental_member_text_files_removed": {"const": 0},
+        "supplemental_member_text_retained": {"const": false},
         "third_party_text_files_removed": {"const": 11},
         "third_party_text_retained": {"const": false}
       }

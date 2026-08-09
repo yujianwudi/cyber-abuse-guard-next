@@ -107,7 +107,10 @@ def verify_release(directory: Path) -> None:
     for name in expected_names:
         if cpa[name] != hashlib.sha256((directory / name).read_bytes()).hexdigest():
             raise ValueError(f"checksums.txt hash differs for {name}")
-    provenance = json.loads((directory / "release-provenance.json").read_bytes())
+    provenance_path = directory / "release-provenance.json"
+    if provenance_path.is_symlink() or not provenance_path.is_file():
+        raise ValueError("release provenance file is missing or unsafe")
+    provenance = json.loads(provenance_path.read_bytes())
     if not isinstance(provenance, dict):
         raise ValueError("release provenance must be a JSON object")
     expected_derived = [{

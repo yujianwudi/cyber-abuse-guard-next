@@ -592,6 +592,8 @@ validate_dist_candidate() {
 
 verify_assets() {
   local require_attestation="$1"
+  [[ "$require_attestation" =~ ^[01]$ ]] || \
+    release_die "REQUIRE_ATTESTATION must be exactly 0 or 1"
   resolve_dist
   assert_exact_dist_assets "$require_attestation"
   validate_dist_candidate

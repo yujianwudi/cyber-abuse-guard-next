@@ -530,6 +530,7 @@ run_round13_gate "$work/round13-pass"
 
 for mutation in \
   'docs/RULES.md:rules-active' \
+  'docs/reports/CPA_INTEGRATION.md:cpa-integration-overlay' \
   'docs/reports/PRIVACY.md:privacy-overlay' \
   'docs/reports/ROUND8_CALIBRATION.md:round8-calibration'; do
   relative="${mutation%%:*}"
@@ -597,9 +598,9 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/$name"
   cp -a "$work/round13-pass" "$fixture"
-  sed -i '0,/184\/184 PASS/s//181\/181 PASS/' "$fixture/$relative"
+  sed -i '0,/229\/229 PASS/s//223\/223 PASS/' "$fixture/$relative"
   round13_must_fail "$name" "$fixture" \
-    "$relative: active Round 13 overlay must contain exactly one 184/184 PASS result"
+    "$relative: active Round 13 overlay must contain exactly one 229/229 PASS result"
 done
 
 cp -a "$work/round13-pass" "$work/round13-duplicate-active-cpa-target"

@@ -1155,19 +1155,19 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "f22834a13993b6200bf0a87f7ed286778409d1ba1c96e7c8cc14eb4e904bbe39"
+ACTIVE_RC_WORKFLOW_SHA256 = "78403ee2f486d75baef1c20a8d8cce8638627800a9e6bf718c4b59cd3af7d760"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
-    "d422317536d941d8f77d5e9ee423d02cd7b9028d86051315cd371e66203dc115"
+    "531e3f752eeaae4a675b58fd4efe85c839d9e64509ffa75df8a5411b9e4d47a1"
 )
 ROUND13_RC_CONTRACT_TEST_SCRIPT = "scripts/release-rc-contract-test.sh"
 ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256 = (
-    "505cc8b74e242ac6fdea5a5282827bac5680de6386d0f2091183e69aba458077"
+    "25f1a52f1df2b39c14f476c5e692ada0012d608665116e45708b67c0e9a66b11"
 )
 ROUND13_RC_CPA_STORE_SCRIPT = "scripts/release_rc_cpa_store.py"
-ROUND13_RC_CPA_STORE_SCRIPT_SHA256 = "f6310724a85e60d4a899a73070fcb84131befe17f59c8f24e6eb72debf9969d7"
+ROUND13_RC_CPA_STORE_SCRIPT_SHA256 = "1abe639e21b1e865dbda7f0359938991a5126ca77849ce7c4335b1d1017bb98a"
 ROUND13_RC_CPA_STORE_TEST_SCRIPT = "scripts/release_rc_cpa_store_test.py"
-ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256 = "966bbc4e45b33afd3bd20aa5e3737b82a4ccc9b8758efaded53d60ad0e624dbd"
+ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256 = "1f4db67e68405c6a13f43c78498a7f08c19ccc1d1840a75b2d77f7b9e249ef2d"
 ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT = "integration/pluginstorecontract/archive_contract_test.go"
 ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT_SHA256 = "e94038dac3b09852e9c40d3c11a4f5658ce7333ac1ee845193854cf8a47e02e1"
 ROUND13_RC_CPA_STORE_HOST_CONTRACT = "integration/pluginstorecontract/host_source_contract_test.go"
@@ -1176,20 +1176,20 @@ ROUND13_RC_CPA_STORE_OVERLAY = "integration/pluginstorecontract/testfixtures/rel
 ROUND13_RC_CPA_STORE_OVERLAY_SHA256 = "a6fbedd328e743eb2251d1153b7cc9447d2687c167c62dd3b2f716e3c1af61be"
 ROUND13_RC_ARTIFACT_ZIP_SCRIPT = "scripts/release_rc_artifact_zip.py"
 ROUND13_RC_ARTIFACT_ZIP_SCRIPT_SHA256 = (
-    "783e540c2facd3f174bbab54e832e4663fd9faec151fdf34841c4734cd497eee"
+    "b6053cb0bcd1b2729b9c294b9a478b94d6bef0cab581f6cb4af790770a685830"
 )
 ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT = "scripts/release_rc_artifact_zip_test.py"
 ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT_SHA256 = (
-    "056fdac324374fca76a1fc17f4393b2a5c9cab5daaad6b67051c74917ee2ef95"
+    "2193ef7de9730537fdc26d022806ca07b18e567627786424ac0fb17998086914"
 )
 ROUND13_RC_GITHUB_ADMISSION_SCRIPT = "scripts/release_rc_github_admission.py"
 ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "d64122f3280ac7ceaca55f32b74063ca15d11a16c03b6ce10d0843a0bce0eed3"
 ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT = "scripts/release_rc_github_admission_test.py"
 ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "41195b133f69968513185080ca9b871cb03d16023d1dc5d7724227e401ed9603"
 ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT = "tools/current-cpa-audit/second_machine_release_admission.py"
-ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "68fe2f3c4269af39f9c74253217a929ee87556680eb46b0b7737800c41e536ed"
+ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "1af1f8d351ed97cfca871682800e23949a94022eecb0378b8057e5335f2a9a07"
 ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT = "tools/current-cpa-audit/tests/test_second_machine_release_admission.py"
-ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256 = "135cd20119e8d670806da8c16ef7faaf335285a72d7e3181f1b78a4c8bba6055"
+ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256 = "3014cd6537da626806d5bc43941c0793a7d99a60b74f68b1c618b57f4ba9c697"
 ROUND13_RC_LINKED_CONTRACT_SHA256 = {
     ROUND13_RC_RELEASE_SCRIPT: ROUND13_RC_RELEASE_SCRIPT_SHA256,
     ROUND13_RC_CONTRACT_TEST_SCRIPT: ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256,
@@ -1204,6 +1204,28 @@ ROUND13_RC_LINKED_CONTRACT_SHA256 = {
     ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT: ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256,
     ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256,
     ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256,
+    "tools/current-cpa-audit/second-machine-release-admission.schema.json": "65d5cba58840f3ed62b086444fd72db381c1881af9cf45223a7f181af428d15f",
+    "tools/current-cpa-audit/Dockerfile.mock": "7a690961f1500b63d6a8a17e3081abf461619d9eeaadd8b1b97660b542712d85",
+    "tools/current-cpa-audit/README.md": "4388892dfbea8b1dc91a2b16b55629d7175c6047feebd8f08a3995355547f288",
+    "tools/current-cpa-audit/acquire.py": "fdb6d0d53abc22d59903ec0ad8c6bf381f71792c13a4fd3e2018637dcd5ea42d",
+    "tools/current-cpa-audit/audit_contract.py": "62a89b63836abd548ba7aa1364e76d1324279e703afed42296ee3f84b8b1b7a9",
+    "tools/current-cpa-audit/counted_mock.py": "bfc53f57a9621f9f73a57595b6c4f3c33c2e7f11d58d9409a69a7c0112d8beb7",
+    "tools/current-cpa-audit/make_run_config.py": "23b6a1b9900f4e6aff883ca241472edc62185fe5a79c85584357b9734c75dac5",
+    "tools/current-cpa-audit/machine-evidence.schema.json": "b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6",
+    "tools/current-cpa-audit/repository-policy.json": "9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225",
+    "tools/current-cpa-audit/run.py": "a6e1d254d19669be35fb6916ba7b714fe44552abbd4b24430eb48ec6f46e6d24",
+    "tools/current-cpa-audit/supplemental-zip-policy.json": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb",
+    "tools/current-cpa-audit/supplemental_zip.py": "34077f072ae9ee1481101aa90b096db863b27e4a70e0ed61c6464cd1e63316ba",
+    "tools/current-cpa-audit/validate.py": "07dab7f64a6a166a0c7a01ac798fbd690aeed68389f95d9fdacac7a5d2036551",
+    "tools/current-cpa-audit/host-performance-evidence.schema.json": "198d0c37f298c3bb3ebe2153b60bf128c8f4bba1c7f3024f27d6aa8a9243827f",
+    "tools/current-cpa-audit/host_performance.py": "2355ed8ed01cf36615ada2767f132aa0631071be5f57a6aa3b16897090ec678e",
+    "tools/current-cpa-audit/host_performance_workloads.py": "ac97084c61ee0560f9571145418ebbfdf47946829f57e844fab355d5f3d3f485",
+    "tools/current-cpa-audit/native-host-special-paths.schema.json": "41c7ece82929e162cbc4971abb71a17950ad18dfa347371bb716bcd66d28700d",
+    "tools/current-cpa-audit/native_host_special_paths.py": "9546343b2e752f98ffe199d582390c3c2d7bc3a41eb7669c53c3a181e67db479",
+    "integration/host_integration_test.go": "611f0df8ab663cc7d568b2d044fa4356fb36d6a50dc7db8c285e0ec9ec70fe24",
+    "tools/current-cpa-audit/tests/test_host_performance_workloads.py": "35a925c6c939f5bdf03be425c1e1d194f2e11ae1827a7f0f73bc164a6a455b23",
+    "tools/current-cpa-audit/tests/test_native_host_special_paths.py": "8a285cde28182ebe1f885dfe43bdb9db3cbfe556170e8f79302e915d5fdcc01b",
+    "tools/current-cpa-audit/tests/test_supplemental_zip.py": "8ccba8d00e7ff6202572ec76761aa3084423344908e9bf6203e2ca611e7eb22e",
 }
 ROUND13_RC_INPUT_ORDER = (
     "ci_run_id",
@@ -1415,11 +1437,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "ae85fc75a60f633d7f9bfea5c9bee909def56561d5acd0128d890380bd0134e7"
+    "0ac6c5d520b0521199a08d3b5157c03a580d1f9bcf226e1c8d32332c8d820bb4"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "1fb8e18f74f9a2e26adb6d83767dc6eb721da62dbb2d8f7a81e38a922218e5f7",
-    "scripts/release-doc-consistency.sh": "bb72182e7d24f93c3d0b19dd1d1fa5b82c89ca9beefed2883fe631ead49b31ac",
+    "scripts/release-doc-consistency-test.sh": "6c0ca127b6c3dc7f4281949b3b6fd31ac32abb270a3482babf460605acdb4dff",
+    "scripts/release-doc-consistency.sh": "2ecd6f4706308d1e16705c46ac63c4cd194c8a595825df45fcf9440fb3844430",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1556,7 +1578,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "80e5f11b908ed143ef212703846caa87bee6c8b26d45d2165eb8ce8fdbf96a84"
+ROUND6_SAFE_GATE_TEST_SHA256 = "2b7f1ebe0f77a373ff474e1a50364a20c64d409918d0f7f881409293b2667129"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -7523,6 +7545,9 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("RC_CANDIDATE_ARTIFACT_NAME", "cyber-abuse-guard-linux-amd64-audit-candidate"),
         ("RC_SECOND_MACHINE_ASSET_NAME", "second-machine-release-admission.json"),
         ("RC_SECOND_MACHINE_REQUIRED_STATUS", "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS"),
+        ("RC_SUPPLEMENTAL_ARCHIVE_SHA256", "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c"),
+        ("RC_SUPPLEMENTAL_REQUIRED_STATUS", "SUPPLEMENTAL_ARCHIVE_PASS"),
+        ("RC_NATIVE_HOST_REQUIRED_STATUS", "NATIVE_HOST_SPECIAL_PATHS_PASS"),
         ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.1-second-machine-admission"),
         ("RC_PUBLISH_TIMEOUT_SECONDS", "1200"),
         ("RC_CLOCK_MARGIN_SECONDS", "300"),
@@ -7637,6 +7662,9 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '[[ "$WORKFLOW_SHA" == "$DISPATCH_SHA" ]]',
         '.verification.verified == true and .verification.reason == "valid"',
         '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',
+        "supplemental_archive_status=",
+        "supplemental_archive_sha256=",
+        "native_host_status=",
         'run-id: ${{ inputs.ci_run_id }}',
         '"${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANDIDATE_ARTIFACT_ID}/zip"',
         'python3 -B scripts/release_rc_artifact_zip.py',

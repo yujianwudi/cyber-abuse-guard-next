@@ -179,6 +179,7 @@ class HostPerformanceContractTests(unittest.TestCase):
             "host_performance_source_sha256": "host_performance.py",
             "run_sha256": "run.py",
             "validator_sha256": "validate.py",
+            "workload_generator_sha256": "host_performance_workloads.py",
         }
         self.assertEqual(set(approved), {*source_files, "bundle_sha256"})
         for key, filename in source_files.items():
@@ -1751,6 +1752,66 @@ class HostPerformanceContractTests(unittest.TestCase):
                 self.good_config_raw,
                 self.good_workload,
             )
+
+    def test_large_payload_wall_tolerance_is_closed_at_five_ms(self) -> None:
+        for offset_ms, accepted in ((5, True), (6, False)):
+            with self.subTest(field="cell", offset_ms=offset_ms):
+                value = copy.deepcopy(self.good_measurements)
+                cell = value["large_payload_cells"][0]
+                completed = datetime.fromisoformat(
+                    cell["completed_at"].replace("Z", "+00:00")
+                )
+                cell["completed_at"] = (
+                    completed + timedelta(milliseconds=offset_ms)
+                ).astimezone(timezone.utc).isoformat(timespec="milliseconds").replace(
+                    "+00:00", "Z"
+                )
+                if accepted:
+                    validate_measurements(
+                        value,
+                        canonical_bytes(value) + b"\n",
+                        self.good_config,
+                        self.good_config_raw,
+                        self.good_workload,
+                    )
+                else:
+                    with self.assertRaisesRegex(ContractError, "wall-clock interval"):
+                        validate_measurements(
+                            value,
+                            canonical_bytes(value) + b"\n",
+                            self.good_config,
+                            self.good_config_raw,
+                            self.good_workload,
+                        )
+
+            with self.subTest(field="rss_sample", offset_ms=offset_ms):
+                value = copy.deepcopy(self.good_measurements)
+                sample = value["large_payload_cells"][0]["rss_baseline_samples"][0]
+                observed = datetime.fromisoformat(
+                    sample["observed_at"].replace("Z", "+00:00")
+                )
+                sample["observed_at"] = (
+                    observed + timedelta(milliseconds=offset_ms)
+                ).astimezone(timezone.utc).isoformat(timespec="milliseconds").replace(
+                    "+00:00", "Z"
+                )
+                if accepted:
+                    validate_measurements(
+                        value,
+                        canonical_bytes(value) + b"\n",
+                        self.good_config,
+                        self.good_config_raw,
+                        self.good_workload,
+                    )
+                else:
+                    with self.assertRaisesRegex(ContractError, "wall timestamp"):
+                        validate_measurements(
+                            value,
+                            canonical_bytes(value) + b"\n",
+                            self.good_config,
+                            self.good_config_raw,
+                            self.good_workload,
+                        )
 
     def test_exact_double_interval_resource_gap_fails_closed(self) -> None:
         value = copy.deepcopy(self.good_measurements)

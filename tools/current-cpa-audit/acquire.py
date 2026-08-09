@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Acquire a five-repository inert corpus from exact current GitHub heads.
+"""Acquire a five-repository corpus or one reviewed local supplemental ZIP.
 
 Only allowlisted text blobs and one single-entry Markdown ZIP are read.  No
 third-party repository code, installer, hook, macro, binary, or dependency is
-ever invoked.
+ever invoked.  The supplemental action writes metadata only; selected member
+text is validated in memory and the operator-owned archive is never removed.
 """
 
 from __future__ import annotations
@@ -62,18 +63,23 @@ from audit_contract import (
     require_timestamp,
     review_sha256,
     sha256_bytes,
+    unlink_corpus_file,
     validate_corpus_manifest,
     validate_expected_actions,
     validate_inert_text,
     validate_manifest_policy,
     validate_semantic_case,
+    validate_supplemental_manifest,
+    validate_supplemental_policy,
 )
+from supplemental_zip import create_supplemental_manifest
 
 
 MAX_API_BYTES = 32 * 1024 * 1024
 MAX_POLICY_BYTES = 2 * 1024 * 1024
 USER_AGENT = "cag-current-cpa-audit-acquirer/1"
 GIT_LFS_PREFIX = b"version https://git-lfs.github.com/spec/v1"
+SUPPLEMENTAL_MANIFEST_NAME = "supplemental-zip-manifest.json"
 
 
 def now_iso() -> str:
@@ -813,6 +819,110 @@ def discard_candidate_texts(manifest_path: Path) -> int:
         bound.close()
 
 
+def load_supplemental_policy(path: Path) -> tuple[dict[str, Any], bytes]:
+    raw = read_regular_bytes(
+        path,
+        "supplemental ZIP policy",
+        MAX_POLICY_BYTES,
+        require_single_link=True,
+    )
+    policy = validate_supplemental_policy(
+        load_json_bytes(raw, "supplemental ZIP policy", MAX_POLICY_BYTES),
+        require_approved=True,
+    )
+    return policy, raw
+
+
+def acquire_supplemental_zip(
+    archive_path: Path, policy_path: Path, output: Path
+) -> dict[str, Any]:
+    """Write one metadata-only candidate; member text never leaves memory."""
+
+    if output.exists() or output.is_symlink():
+        fail("supplemental acquisition output must be a new path")
+    output.mkdir(parents=True, mode=0o700)
+    os.chmod(output, 0o700)
+    try:
+        policy, policy_raw = load_supplemental_policy(policy_path)
+        manifest = create_supplemental_manifest(
+            archive_path,
+            policy,
+            sha256_bytes(policy_raw),
+            now_iso(),
+        )
+        raw = canonical_bytes(manifest) + b"\n"
+        write_exclusive(output / SUPPLEMENTAL_MANIFEST_NAME, raw)
+        validate_supplemental_manifest(
+            manifest,
+            policy,
+            policy_sha256=sha256_bytes(policy_raw),
+        )
+        return manifest
+    except BaseException:
+        try:
+            remove_private_tree(output)
+        except BaseException as cleanup_exc:
+            fail(
+                "supplemental acquisition cleanup failed closed: "
+                f"{type(cleanup_exc).__name__}"
+            )
+        raise
+
+
+def validate_supplemental_candidate(
+    manifest_path: Path, policy_path: Path
+) -> dict[str, Any]:
+    if manifest_path.name != SUPPLEMENTAL_MANIFEST_NAME:
+        fail(f"supplemental candidate must be named {SUPPLEMENTAL_MANIFEST_NAME}")
+    raw = read_regular_bytes(
+        manifest_path,
+        "supplemental ZIP manifest",
+        16 * 1024 * 1024,
+        require_single_link=True,
+    )
+    value = load_json_bytes(raw, "supplemental ZIP manifest", 16 * 1024 * 1024)
+    if raw != canonical_bytes(value) + b"\n":
+        fail("supplemental ZIP manifest must be canonical JSON with one terminal newline")
+    policy, policy_raw = load_supplemental_policy(policy_path)
+    manifest = validate_supplemental_manifest(
+        value,
+        policy,
+        policy_sha256=sha256_bytes(policy_raw),
+    )
+    root = manifest_path.parent
+    try:
+        root_info = root.lstat()
+    except FileNotFoundError:
+        fail("supplemental acquisition root is missing")
+    if stat.S_ISLNK(root_info.st_mode) or not stat.S_ISDIR(root_info.st_mode):
+        fail("supplemental acquisition root must be a real directory")
+    if os.name == "posix" and root_info.st_mode & 0o077:
+        fail("supplemental acquisition root must be mode-0700 or stricter")
+    children = list(root.iterdir())
+    if children != [manifest_path]:
+        fail("supplemental acquisition root contains unexpected files")
+    return manifest
+
+
+def discard_supplemental_candidate(manifest_path: Path, policy_path: Path) -> int:
+    """Remove only task-created metadata, never the operator-owned archive."""
+
+    validate_supplemental_candidate(manifest_path, policy_path)
+    removed, problems = unlink_corpus_file(
+        manifest_path, "supplemental-zip-manifest.json"
+    )
+    if not removed or problems:
+        fail(
+            "supplemental candidate discard failed closed: "
+            + ",".join(problems or ["manifest_not_removed"])
+        )
+    try:
+        manifest_path.parent.rmdir()
+    except OSError as exc:
+        fail(f"supplemental candidate root removal failed: {type(exc).__name__}")
+    return 1
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     action = parser.add_mutually_exclusive_group(required=True)
@@ -825,12 +935,45 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         metavar="MANIFEST",
         help="remove only private corpus text named by a canonical candidate manifest",
     )
+    action.add_argument(
+        "--supplemental-archive",
+        dest="supplemental_zip",
+        type=Path,
+        metavar="ARCHIVE",
+        help="read one reviewed local ZIP and write metadata only",
+    )
+    action.add_argument(
+        "--validate-supplemental",
+        type=Path,
+        metavar="MANIFEST",
+        help="validate one canonical metadata-only supplemental candidate",
+    )
+    action.add_argument(
+        "--discard-supplemental",
+        type=Path,
+        metavar="MANIFEST",
+        help="remove only a validated task-created supplemental manifest/root",
+    )
+    parser.add_argument(
+        "--supplemental-policy",
+        type=Path,
+        help="reviewed supplemental ZIP policy JSON",
+    )
     parser.add_argument("--output", type=Path, help="new mode-0700 acquisition directory")
     args = parser.parse_args(argv)
-    if args.policy is not None and args.output is None:
-        parser.error("--output is required with --policy")
-    if args.discard_candidate is not None and args.output is not None:
-        parser.error("--output cannot be used with --discard-candidate")
+    acquiring = args.policy is not None or args.supplemental_zip is not None
+    supplemental = any(
+        value is not None
+        for value in (
+            args.supplemental_zip,
+            args.validate_supplemental,
+            args.discard_supplemental,
+        )
+    )
+    if acquiring != (args.output is not None):
+        parser.error("--output is required only for acquisition actions")
+    if supplemental != (args.supplemental_policy is not None):
+        parser.error("--supplemental-policy is required only for supplemental actions")
     return args
 
 
@@ -845,6 +988,71 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "candidate_manifest": str(args.discard_candidate),
                         "private_text_files_removed": removed,
                         "private_text_retained": False,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.validate_supplemental is not None:
+            manifest = validate_supplemental_candidate(
+                args.validate_supplemental, args.supplemental_policy
+            )
+            print(
+                json.dumps(
+                    {
+                        "archive_sha256": manifest["archive"]["sha256"],
+                        "member_text_files_created": manifest[
+                            "member_text_files_created"
+                        ],
+                        "operator_archive_preserved": True,
+                        "selected_entries": manifest["selected_entry_count"],
+                        "unique_reviewed_cases": manifest["unique_reviewed_cases"],
+                        "valid": True,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.discard_supplemental is not None:
+            removed = discard_supplemental_candidate(
+                args.discard_supplemental, args.supplemental_policy
+            )
+            print(
+                json.dumps(
+                    {
+                        "metadata_files_removed": removed,
+                        "operator_archive_preserved": True,
+                        "supplemental_text_files_removed": 0,
+                        "supplemental_text_retained": False,
+                    },
+                    sort_keys=True,
+                )
+            )
+            return 0
+        if args.supplemental_zip is not None:
+            output = args.output.resolve(strict=False)
+            manifest = acquire_supplemental_zip(
+                args.supplemental_zip,
+                args.supplemental_policy,
+                output,
+            )
+            print(
+                json.dumps(
+                    {
+                        "archive_sha256": manifest["archive"]["sha256"],
+                        "artifact_status": manifest["artifact_status"],
+                        "code_executions": manifest["code_executions"],
+                        "member_text_files_created": manifest[
+                            "member_text_files_created"
+                        ],
+                        "operator_archive_preserved": True,
+                        "output": str(output),
+                        "policy_review_status": manifest["policy_review_status"],
+                        "selected_entries": manifest["selected_entry_count"],
+                        "third_party_code_executions": manifest[
+                            "third_party_code_executions"
+                        ],
+                        "unique_reviewed_cases": manifest["unique_reviewed_cases"],
                     },
                     sort_keys=True,
                 )

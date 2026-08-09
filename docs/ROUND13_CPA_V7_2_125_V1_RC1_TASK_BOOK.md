@@ -45,9 +45,13 @@ merge ref、最终 `main` 和 tag 的 commit/tree/SO 必须分别闭合身份链
 3. 补齐官方 Codex Responses 流式 `response.failed` 行为，并证明 CAG 前置拦截不会产生 Provider、Auth、Executor、Usage 或 SSE 副作用。
 4. 修复热重配的事务边界：失败重配不得暗改现行 Subject 状态、请求缓存或候选 SQLite。
 5. 继续以正常用户零误伤优先：不得因安全审查、引用、翻译、防御性说明、授权测试或工具 schema 中出现高风险词汇而屏蔽请求。
-6. 完成 Linux CI、CodeRabbit、五仓与 `Codex全破` 二号机隔离审计，再通过受保护 PR 合并 `main`。
-7. 从精确合并后的 `main` CI 唯一审计候选中原样封装、验证并发布
-   `v1.0.0-rc.1` 预发行版；发布阶段不得重新编译已审计 SO。
+6. 完成 Linux CI、CodeRabbit，以及 PR synthetic merge artifact 的五仓与
+   `Codex全破` 二号机 pre-merge 隔离诊断；只有全部适用门禁闭合后才由 PR
+   作者通过受保护 squash merge 合并 `main`，该阶段禁止 portable `pack`。
+7. 等待精确合并后 `main` `push` 的五项 required checks，下载新的唯一九文件
+   artifact，以新 `RUN_ID` 全量重跑同一二号机矩阵，再从该 post-main
+   release-admitted candidate 原样封装、验证并发布 `v1.0.0-rc.1` 预发行版；
+   发布阶段不得重新编译已审计 SO。
 
 ## 3. 上游 v7.2.125 变化边界
 
@@ -159,7 +163,8 @@ paired_malicious_strict_semantic_recall = 100%
 chat_responses_stream_batch_carrier_parity_mismatch = 0
 ```
 
-二号机最终候选门禁：
+二号机两阶段候选门禁；pre-merge synthetic merge 完整诊断和 post-main
+release admission 必须分别从各自 artifact 全量满足，结果不可转移：
 
 ```text
 normal_defensive_authorized_semantic_false_positives = 0
@@ -182,7 +187,11 @@ third_party_code_executions = 0
 
 补充 ZIP：`Codex全破.zip`，输入 SHA-256
 `23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c`。
-ZIP 结果单独报告，不能混入五仓召回分母。
+该 ZIP 必须经显式 `--supplemental-archive` 输入；source hash、case count、
+误报分母、恶意召回分母、结果和清理状态均须单独报告，不能混入五仓召回
+分母。该参数不能因 draft code 出现就视为准入；在 parser/schema/validator/
+negative tests/pins 一起正式落地并完成真实运行前，只能标记 `NOT_RUN`，不得
+声称 PASS。
 
 ### R13-06：性能与资源（P1）
 
@@ -253,12 +262,22 @@ artifact version: 1.0.0-rc.1
   `cyber-abuse-guard-v1.0.0-rc.1.so`。为满足 CPA v7.2.125 Store 精确选择，
   仅从审计 SO 字节确定性派生 `cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip`，
   内部恰好一个根 `cyber-abuse-guard.so`，并生成 CPA-facing `checksums.txt`；
-- RC tag 必须指向精确合并后 `main`，且为签名的 annotated tag；
+- RC tag 必须指向精确合并后 `main`，且由真实、获授权、持有对应私钥的
+  signer 创建为 GitHub 可验证的 signed annotated tag；unsigned annotated
+  tag、lightweight tag、Release 自动代建 tag 或冒充维护者身份的签名均不准入；
 - Linux `.so`、Store ZIP、源码归档、checksums、build metadata、ruleset manifest、SBOM、审计摘要和 provenance/attestation 都绑定同一 commit/tree；发布
   provenance 还必须绑定 CI artifact ID/digest/size 和二号机 staging
   Release/asset ID/digest/size；
-- CI reproducibility lane 在二号机审计前证明候选构建可复现；RC seal job
-  下载并复核同一九文件 artifact，原样发布，不进行第三次构建；
+- PR `pull_request` artifact 只用于 pre-merge synthetic-merge 完整诊断，禁止
+  `pack`、禁止 staging Release、禁止作为 release admission；
+- squash merge 会产生新的 `main` commit；`.so` 嵌入 commit，因此即使 tree
+  不变，commit、SO bytes、hash 和 artifact identity 也会改变。必须等待精确
+  `main` `push` 的五项 required checks，再下载该 push run 的九文件 artifact，
+  使用新的 `RUN_ID` 和 evidence root 全量重跑；任何 PR 阶段 SO、报告或 PASS
+  均不可转移；
+- CI reproducibility lane 分别证明其精确候选可复现；RC seal job 只下载并复核
+  通过 post-main 二号机 release admission 的同一九文件 `push`/`main` artifact，
+  原样发布，不进行第三次构建；
 - Release 必须 `prerelease=true`、`make_latest=false`，不存在同名旧 Release/tag；
 - Release 说明明确“候选版、二号机所有者审计、非独立证明、非稳定生产批准”。
 
@@ -269,10 +288,37 @@ artifact version: 1.0.0-rc.1
 1. 定向单测和完整 Linux unit/race/vet/fuzz/script/corpus/compat/reproducibility；
 2. 完成实现后运行本地 CodeRabbit `--base main`，修复有效 critical/major/minor 并复审到 0 issues；
 3. 创建签名候选提交和 PR；
-4. 等待五个 required contexts 全绿：`quality-and-artifacts`、`fuzz-long`、`reproducibility`、`Analyze Go on Linux`、`round9-policy-and-corpus`；
-5. 下载精确 PR/merge candidate，并在二号机以官方 CPA v7.2.125 和 isolated counted Mock 执行五仓、ZIP、特殊路径、性能和清理闭环；
-6. 只有无未解决 P0/P1 且二号机通过时才合并；
-7. 合并后等待精确 `main` 五项检查通过，再构建/tag/发布 RC。
+4. 等待 PR head 的五个 required contexts 全绿：`quality-and-artifacts`、
+   `fuzz-long`、`reproducibility`、`Analyze Go on Linux`、
+   `round9-policy-and-corpus`；
+5. 下载精确 PR synthetic merge artifact，把九个候选文件直接放在
+   `/srv/artifacts/candidate`，把官方 CPA v7.2.125 tar 只放在
+   `/srv/artifacts/upstream`，并以新的语义 `RUN_ID` 使用
+   `/srv/cag-audit/evidence-$RUN_ID`；manifest 必须分别闭合 PR head 与
+   synthetic merge commit/tree；
+6. 在二号机使用官方 CPA v7.2.125 和 isolated counted Mock 完成 pre-merge
+   五仓、内建 ZIP、特殊路径、功能、安全、副作用、性能和清理诊断。该阶段
+   即使全通过也只允许记录 `PREMERGE_DIAGNOSTIC_PASS`，禁止执行 portable
+   `pack`，禁止 staging/tag/release；
+7. 独立提供的 Codex 全破 ZIP 必须通过显式 `--supplemental-archive` 输入，
+   其 source hash、case count、误报分母、恶意召回分母、结果和清理状态必须
+   与固定五仓 11-source/19-case 分母分开。在参数及闭合 schema/validator/
+   negative tests/pins 正式落地并完成真实运行前，当前状态只能是 `NOT_RUN`，
+   不得把五仓或内建单 ZIP 结果重标为该 supplemental archive 的 PASS；本轮
+   若把该独立 ZIP 列为准入输入，则在上述代码与实跑闭环前合并/发布继续阻断；
+8. 只有 PR required checks、pre-merge 完整诊断、所有适用 supplemental gate、
+   CodeRabbit/P0/P1 和 PR 对话均闭合时，才允许 PR 作者通过 GitHub squash
+   merge；不得使用 merge commit、rebase、管理员绕过或 force push；
+9. squash 后读取新的 protected-`main` commit/tree，等待该精确 `push` 的五项
+   required checks 全绿，下载新的九文件 main artifact，并用新的 `RUN_ID`、
+   新的 `/srv/cag-audit/evidence-$RUN_ID` 全量重跑与 pre-merge 相同的二号机
+   功能、安全、五仓/ZIP、性能、副作用和清理矩阵。只有 manifest
+   `event=push`、`head_branch=main` 且 `head_sha=commit=protected main` 的本轮
+   fresh PASS 才可执行 portable `pack`；
+10. post-main portable report 与 draft staging Release/asset 闭合后，由真实
+    signer 在该精确 main commit 上创建 GitHub 验证为 valid 的 signed
+    annotated `v1.0.0-rc.1` tag；轻量或未签 tag 立即停止。最后从该 tag 手动
+    dispatch 固定 RC workflow，复核资产后只发布 non-latest prerelease。
 
 二号机清理只允许删除本轮精确 task label/root、临时容器、网络和惰性语料；
 禁止 `docker system prune`，禁止删除业务镜像、容器、卷、配置、数据库、凭据或旧审计证据。
@@ -287,9 +333,13 @@ artifact version: 1.0.0-rc.1
 - no-copy 载体被污染、串请求、出现 race 或大载荷复制回退；
 - 被拒重配改变当前 Subject、请求缓存、配置或 SQLite；
 - CPA、CAG、语料、runner、CI artifact、commit/tree/SO 身份不闭合；
+- 尝试把 pre-merge artifact、SO、证据或 PASS 转移到 post-main，或从
+  `pull_request`/非 `main` artifact 执行 portable `pack`；
+- supplemental archive 参数、独立分母、schema/validator/tests 尚未落地却
+  声称 Codex 全破 ZIP PASS；
 - required check 失败、CodeRabbit 仍有有效问题或 PR 对话未解决；
 - 二号机出现 OOM、panic、非预期 restart、业务快照漂移或清理残留；
-- tag/commit 不能满足签名要求；
+- tag/commit 不能满足签名要求，或 signer 身份/私钥所有权不真实明确；
 - Release 资产集合、checksum、SBOM、provenance 或复现性不闭合。
 
 ## 8. 回滚方案
@@ -303,7 +353,11 @@ artifact version: 1.0.0-rc.1
 ## 9. 最终状态定义
 
 - `ENGINEERING PASS`：精确候选的 Linux 与五项 GitHub required checks 成功。
-- `SECOND-MACHINE OWNER AUDIT PASS`：精确候选的功能、安全、副作用、误报、身份和清理闭环成功；仍非独立证明。
+- `PREMERGE DIAGNOSTIC PASS`：PR synthetic merge artifact 的完整二号机诊断
+  成功；仅授权 squash merge，不是 release admission，禁止 `pack`。
+- `POSTMAIN SECOND-MACHINE OWNER RELEASE ADMISSION PASS`：精确 protected-main
+  `push` artifact 在新的完整二号机运行中闭合功能、安全、副作用、误报、
+  身份、性能和清理，并生成 portable report；仍非独立证明。
 - `RC RELEASED`：精确合并 `main` 上的签名 tag 和完整 prerelease 资产已验证。
 - `INDEPENDENT ATTESTATION`：本轮不提供。
 - `STABLE PRODUCTION APPROVED`：本轮不提供；`v1.0.0-rc.1` 不是稳定版。

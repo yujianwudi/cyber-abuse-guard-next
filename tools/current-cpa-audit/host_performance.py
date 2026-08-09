@@ -145,6 +145,7 @@ TOOL_IDENTITY_SOURCE_KEYS = (
     "host_performance_source_sha256",
     "run_sha256",
     "validator_sha256",
+    "workload_generator_sha256",
 )
 TOOL_IDENTITY_KEYS = (*TOOL_IDENTITY_SOURCE_KEYS, "bundle_sha256")
 
@@ -791,6 +792,7 @@ def tool_identities() -> dict[str, str]:
         "host_performance_source_sha256": TOOL_DIR / "host_performance.py",
         "run_sha256": TOOL_DIR / "run.py",
         "validator_sha256": TOOL_DIR / "validate.py",
+        "workload_generator_sha256": TOOL_DIR / "host_performance_workloads.py",
     }
     identities = {
         key: sha256_bytes(read_regular_bytes(path, key, 4 * 1024 * 1024))
@@ -1714,7 +1716,10 @@ def _validate_large_payload_cell(
     cell_completed = _host_timestamp_value(
         cell["completed_at"], f"{label}.completed_at"
     )
-    if abs((cell_completed - cell_started).total_seconds() - elapsed) > 0.005:
+    if (
+        abs((cell_completed - cell_started).total_seconds() - elapsed) * 1000.0
+        > LARGE_PAYLOAD_SAMPLE_WALL_TOLERANCE_MS
+    ):
         fail(f"{label} wall-clock interval does not tightly bind elapsed_seconds")
     planned = exact_int(cell["planned_requests"], f"{label}.planned_requests", 1)
     if planned != config["plan"]["large_payload_request_count"]:
@@ -2904,6 +2909,7 @@ def build_evidence(
             "run_config_sha256": config["run_config_sha256"],
             "run_sha256": tools["run_sha256"],
             "validator_sha256": tools["validator_sha256"],
+            "workload_generator_sha256": tools["workload_generator_sha256"],
             "workload_manifest_sha256": config["workload_manifest_sha256"],
         },
         "baseline_eligibility": dict(baseline),

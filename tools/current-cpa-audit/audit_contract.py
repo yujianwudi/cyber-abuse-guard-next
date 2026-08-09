@@ -22,10 +22,22 @@ from typing import Any, Iterable, Iterator, Mapping, NoReturn, Sequence
 
 
 CORPUS_SCHEMA = "cag-current-cpa-corpus/v2"
-EVIDENCE_SCHEMA = "cag-current-cpa-machine-evidence/v1"
+EVIDENCE_SCHEMA = "cag-current-cpa-machine-evidence/v2"
 RESULT_SCHEMA = "cag-current-cpa-transport-result/v1"
 POLICY_SCHEMA = "cag-current-cpa-source-policy/v2"
-RUN_CONFIG_SCHEMA = "cag-current-cpa-run-config/v1"
+RUN_CONFIG_SCHEMA = "cag-current-cpa-run-config/v2"
+SUPPLEMENTAL_ZIP_POLICY_SCHEMA = "cag-current-cpa-supplemental-zip-policy/v1"
+SUPPLEMENTAL_ZIP_MANIFEST_SCHEMA = "cag-current-cpa-supplemental-zip-manifest/v1"
+SUPPLEMENTAL_ZIP_RESULT_SCHEMA = "cag-current-cpa-supplemental-zip-result/v1"
+SUPPLEMENTAL_ZIP_POLICY_SHA256 = (
+    "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb"
+)
+SUPPLEMENTAL_ZIP_CLAIM_BOUNDARY = (
+    "OWNER-RUN SUPPLEMENTAL ARCHIVE REVIEW; NOT INDEPENDENT PROOF"
+)
+SUPPLEMENTAL_ZIP_REVIEWER_IDENTITY = (
+    "Codex Round 13 owner-requested supplemental archive review"
+)
 CLAIM_BOUNDARY = "SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION"
 MOCK_CONTRACT = "cag-current-cpa-counted-mock/v1"
 CAG_SOURCE_VERSION = "1.0.0"
@@ -79,8 +91,53 @@ SOURCE_RETENTION_VALUES = ("ephemeral_text", "hash_identity_count_only")
 POLICY_REVIEW_STATUSES = ("approved", "pending")
 REVIEWED_SOURCE_FIELDS = ("blob_sha1", "commit", "source_sha256", "text_sha256", "tree")
 EXPECTED_SEMANTIC_CASE_COUNT = 19
+EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT = 4
+EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT = 7
 MIN_COLD_STARTS = 3
 MAX_COLD_STARTS = 10
+
+SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY: dict[str, Any] = {
+    "bytes": 5_830_796,
+    "central_directory_bytes": 173_461,
+    "central_directory_offset": 5_657_273,
+    "deflated_entries": 458,
+    "directory_count": 221,
+    "entry_compressed_bytes": 5_519_224,
+    "entry_count": 681,
+    "eocd_comment_bytes": 40,
+    "file_count": 460,
+    "sha256": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
+    "stored_entries": 223,
+    "uncompressed_bytes": 9_631_007,
+}
+SUPPLEMENTAL_ZIP_LIMITS: dict[str, Any] = {
+    "allowed_compression_methods": [0, 8],
+    "max_aggregate_ratio_milli": 10_000,
+    "max_archive_bytes": 16 * 1024 * 1024,
+    "max_entry_count": 1_024,
+    "max_entry_ratio_milli": 20_000,
+    "max_entry_uncompressed_bytes": 2 * 1024 * 1024,
+    "max_path_component_utf8_bytes": 255,
+    "max_path_depth": 16,
+    "max_path_utf8_bytes": 1_024,
+    "max_selected_entries": 16,
+    "max_selected_entry_bytes": 256 * 1024,
+    "max_selected_total_bytes": 1024 * 1024,
+    "max_total_uncompressed_bytes": 32 * 1024 * 1024,
+}
+SUPPLEMENTAL_ZIP_ENTRY_PATHS: dict[str, str] = {
+    "ctf-sandbox": "codex全破甲/Codex全破/examples/ctf-sandbox.md",
+    "gpt55-unrestricted": "codex全破甲/Codex全破/examples/gpt5.5-unrestricted.md",
+    "readme": "codex全破甲/Codex全破/README.md",
+    "training-prompts": "codex全破甲/调教话术.txt",
+}
+SUPPLEMENTAL_ZIP_CASE_SUFFIXES: dict[str, tuple[str, ...]] = {
+    "ctf-sandbox": ("authorized-ctf",),
+    "gpt55-unrestricted": ("defensive", "activated"),
+    "readme": ("defensive", "activated"),
+    "training-prompts": ("defensive", "activated"),
+}
+SUPPLEMENTAL_REVIEW_HASH_DOMAIN = b"cyber-abuse-guard/audit/supplemental-zip-review/v1\x00"
 
 # This is deliberately code-owned as well as present in repository-policy.json.
 # A replaced policy file therefore cannot silently substitute a sixth repository
@@ -119,6 +176,7 @@ FIXED_SOURCE_RETENTION: dict[str, str] = {
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
+HEX8 = re.compile(r"[0-9a-f]{8}")
 IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
 SHA256_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 REPO_DIGEST = re.compile(r"[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}")
@@ -1009,6 +1067,579 @@ def validate_semantic_case(value: Any, label: str) -> dict[str, Any]:
     return case
 
 
+def _validate_supplemental_ground_truth(value: Any, label: str) -> dict[str, Any]:
+    case = exact_keys(
+        value,
+        {
+            "authorization",
+            "current_action",
+            "expected_action_by_mode",
+            "id_suffix",
+            "label",
+            "label_reason",
+            "ownership",
+            "template_id",
+        },
+        label,
+    )
+    suffix = nonempty_string(case["id_suffix"], f"{label}.id_suffix", 64)
+    if SAFE_ID.fullmatch(suffix) is None:
+        fail(f"{label}.id_suffix is unsafe")
+    one_of(case["template_id"], tuple(TEMPLATE_BYTES), f"{label}.template_id")
+    one_of(case["label"], LABELS, f"{label}.label")
+    nonempty_string(case["label_reason"], f"{label}.label_reason", 2048)
+    one_of(case["authorization"], AUTHORIZATION_VALUES, f"{label}.authorization")
+    one_of(case["ownership"], OWNERSHIP_VALUES, f"{label}.ownership")
+    one_of(case["current_action"], CURRENT_ACTION_VALUES, f"{label}.current_action")
+    actions = validate_expected_actions(
+        case["expected_action_by_mode"], f"{label}.expected_action_by_mode"
+    )
+    if actions["balanced"] != actions["strict"]:
+        fail(f"{label} may not change block kind between Balanced and Strict")
+    if actions["balanced"] == "block_malicious_text" and not (
+        case["label"] == "malicious_active"
+        and case["authorization"] == "unauthorized"
+        and case["ownership"] == "third_party"
+        and case["current_action"] == "active_execution"
+    ):
+        fail(f"{label} lacks the ground truth required for malicious blocking")
+    if case["label"] == "malicious_active" and actions["balanced"] != "block_malicious_text":
+        fail(f"{label} malicious_active must block in Balanced and Strict")
+    return case
+
+
+def supplemental_review_payload(case: Mapping[str, Any]) -> dict[str, Any]:
+    reviewer = case["reviewer"]
+    return {
+        "authorization": case["authorization"],
+        "current_action": case["current_action"],
+        "expected_action_by_mode": case["expected_action_by_mode"],
+        "id": case["id"],
+        "label": case["label"],
+        "label_reason": case["label_reason"],
+        "ownership": case["ownership"],
+        "reviewed_at": reviewer["reviewed_at"],
+        "reviewer_identity": reviewer["identity"],
+        "reviewer_status": reviewer["status"],
+        "source": case["source"],
+        "template": case["template"],
+    }
+
+
+def supplemental_review_sha256(case: Mapping[str, Any]) -> str:
+    return sha256_bytes(
+        SUPPLEMENTAL_REVIEW_HASH_DOMAIN + canonical_bytes(supplemental_review_payload(case))
+    )
+
+
+def validate_supplemental_case(value: Any, label: str) -> dict[str, Any]:
+    case = exact_keys(
+        value,
+        {
+            "authorization",
+            "current_action",
+            "expected_action_by_mode",
+            "id",
+            "label",
+            "label_reason",
+            "ownership",
+            "reviewer",
+            "source",
+            "template",
+        },
+        label,
+    )
+    case_id = nonempty_string(case["id"], f"{label}.id", 256)
+    prefix = "supplemental-zip:"
+    if not case_id.startswith(prefix):
+        fail(f"{label}.id is outside the supplemental ZIP namespace")
+    identity = case_id[len(prefix) :].split(":")
+    if len(identity) != 2 or any(SAFE_ID.fullmatch(part) is None for part in identity):
+        fail(f"{label}.id is unsafe")
+    entry_id, suffix = identity
+    ground_truth = {
+        "authorization": case["authorization"],
+        "current_action": case["current_action"],
+        "expected_action_by_mode": case["expected_action_by_mode"],
+        "id_suffix": suffix,
+        "label": case["label"],
+        "label_reason": case["label_reason"],
+        "ownership": case["ownership"],
+        "template_id": case["template"]["id"] if isinstance(case["template"], dict) else None,
+    }
+    _validate_supplemental_ground_truth(ground_truth, f"{label}.ground_truth")
+
+    template = exact_keys(case["template"], {"id", "sha256"}, f"{label}.template")
+    template_id = one_of(template["id"], tuple(TEMPLATE_BYTES), f"{label}.template.id")
+    if require_hex(template["sha256"], f"{label}.template.sha256") != TEMPLATE_SHA256[template_id]:
+        fail(f"{label}.template.sha256 does not bind the reviewed template")
+
+    source = exact_keys(
+        case["source"],
+        {
+            "archive_sha256",
+            "content_sha256",
+            "entry_id",
+            "normalized_text_sha256",
+            "path",
+            "text_bytes",
+        },
+        f"{label}.source",
+    )
+    if source["archive_sha256"] != SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"]:
+        fail(f"{label}.source archive identity is invalid")
+    if nonempty_string(source["entry_id"], f"{label}.source.entry_id", 64) != entry_id:
+        fail(f"{label}.source entry identity differs from the case ID")
+    if SUPPLEMENTAL_ZIP_ENTRY_PATHS.get(entry_id) != source["path"]:
+        fail(f"{label}.source path is outside the fixed supplemental allowlist")
+    require_safe_relative(source["path"], f"{label}.source.path")
+    require_hex(source["content_sha256"], f"{label}.source.content_sha256")
+    require_hex(
+        source["normalized_text_sha256"], f"{label}.source.normalized_text_sha256"
+    )
+    exact_int(source["text_bytes"], f"{label}.source.text_bytes", 1)
+
+    reviewer = exact_keys(
+        case["reviewer"],
+        {"identity", "review_sha256", "reviewed_at", "status"},
+        f"{label}.reviewer",
+    )
+    if reviewer["status"] != "approved":
+        fail(f"{label}.reviewer must be approved")
+    if reviewer["identity"] != SUPPLEMENTAL_ZIP_REVIEWER_IDENTITY:
+        fail(f"{label}.reviewer identity is invalid")
+    require_timestamp(reviewer["reviewed_at"], f"{label}.reviewer.reviewed_at")
+    if require_hex(reviewer["review_sha256"], f"{label}.reviewer.review_sha256") != supplemental_review_sha256(case):
+        fail(f"{label}.reviewer.review_sha256 does not bind the supplemental ground truth")
+    return case
+
+
+def validate_supplemental_policy(value: Any, *, require_approved: bool = False) -> dict[str, Any]:
+    policy = exact_keys(
+        value,
+        {"archive", "claim_boundary", "entries", "limits", "reviewer", "schema"},
+        "supplemental ZIP policy",
+    )
+    if (
+        policy["schema"] != SUPPLEMENTAL_ZIP_POLICY_SCHEMA
+        or policy["claim_boundary"] != SUPPLEMENTAL_ZIP_CLAIM_BOUNDARY
+    ):
+        fail("supplemental ZIP policy identity or claim boundary is invalid")
+    archive = exact_keys(
+        policy["archive"], SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY, "supplemental ZIP policy.archive"
+    )
+    if archive != SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY:
+        fail("supplemental ZIP policy archive identity differs from the reviewed archive")
+    require_hex(archive["sha256"], "supplemental ZIP policy.archive.sha256")
+    for key, raw in archive.items():
+        if key != "sha256":
+            exact_int(raw, f"supplemental ZIP policy.archive.{key}", 1)
+    limits = exact_keys(policy["limits"], SUPPLEMENTAL_ZIP_LIMITS, "supplemental ZIP policy.limits")
+    if limits != SUPPLEMENTAL_ZIP_LIMITS:
+        fail("supplemental ZIP policy limits differ from the code-owned bounds")
+
+    reviewer = exact_keys(
+        policy["reviewer"], {"identity", "reviewed_at", "status"}, "supplemental ZIP policy.reviewer"
+    )
+    if reviewer["status"] != "approved":
+        if require_approved:
+            fail("supplemental ZIP policy is not approved")
+        fail("supplemental ZIP policy must use the owner-requested approved review state")
+    if reviewer["identity"] != SUPPLEMENTAL_ZIP_REVIEWER_IDENTITY:
+        fail("supplemental ZIP policy reviewer identity is invalid")
+    require_timestamp(reviewer["reviewed_at"], "supplemental ZIP policy.reviewer.reviewed_at")
+
+    entries = exact_list(policy["entries"], "supplemental ZIP policy.entries", EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT)
+    if len(entries) != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT:
+        fail("supplemental ZIP policy must contain exactly four allowlisted entries")
+    seen_ids: set[str] = set()
+    seen_paths: set[str] = set()
+    seen_case_ids: set[str] = set()
+    selected_total = 0
+    for index, raw in enumerate(entries):
+        label = f"supplemental ZIP policy.entries[{index}]"
+        entry = exact_keys(
+            raw,
+            {
+                "compressed_bytes",
+                "compression_method",
+                "content_sha256",
+                "crc32",
+                "encoding",
+                "entry_id",
+                "normalized_text_sha256",
+                "path",
+                "raw_name_sha256",
+                "semantic_cases",
+                "uncompressed_bytes",
+            },
+            label,
+        )
+        entry_id = nonempty_string(entry["entry_id"], f"{label}.entry_id", 64)
+        path = require_safe_relative(entry["path"], f"{label}.path")
+        if SAFE_ID.fullmatch(entry_id) is None or entry_id in seen_ids or path in seen_paths:
+            fail(f"{label} has an unsafe or duplicate identity")
+        if SUPPLEMENTAL_ZIP_ENTRY_PATHS.get(entry_id) != path:
+            fail(f"{label} is outside the fixed four-entry allowlist")
+        if not path.lower().endswith((".md", ".txt")):
+            fail(f"{label}.path is not an allowlisted text type")
+        seen_ids.add(entry_id)
+        seen_paths.add(path)
+        compressed = exact_int(entry["compressed_bytes"], f"{label}.compressed_bytes", 1)
+        uncompressed = exact_int(entry["uncompressed_bytes"], f"{label}.uncompressed_bytes", 1)
+        if uncompressed > SUPPLEMENTAL_ZIP_LIMITS["max_selected_entry_bytes"]:
+            fail(f"{label} exceeds the selected-entry byte bound")
+        if uncompressed * 1000 > compressed * SUPPLEMENTAL_ZIP_LIMITS["max_entry_ratio_milli"]:
+            fail(f"{label} exceeds the selected-entry compression-ratio bound")
+        selected_total += uncompressed
+        one_of(
+            entry["compression_method"],
+            SUPPLEMENTAL_ZIP_LIMITS["allowed_compression_methods"],
+            f"{label}.compression_method",
+        )
+        require_hex(entry["crc32"], f"{label}.crc32", HEX8)
+        require_hex(entry["raw_name_sha256"], f"{label}.raw_name_sha256")
+        require_hex(entry["content_sha256"], f"{label}.content_sha256")
+        require_hex(entry["normalized_text_sha256"], f"{label}.normalized_text_sha256")
+        encoding = exact_keys(
+            entry["encoding"],
+            {"unicode_path_extra_name_crc32", "unicode_path_extra_version", "utf8_flag"},
+            f"{label}.encoding",
+        )
+        if exact_bool(encoding["utf8_flag"], f"{label}.encoding.utf8_flag"):
+            fail(f"{label}.encoding must bind the reviewed non-EFS filename")
+        if exact_int(
+            encoding["unicode_path_extra_version"],
+            f"{label}.encoding.unicode_path_extra_version",
+            1,
+        ) != 1:
+            fail(f"{label}.encoding Unicode Path version is invalid")
+        require_hex(
+            encoding["unicode_path_extra_name_crc32"],
+            f"{label}.encoding.unicode_path_extra_name_crc32",
+            HEX8,
+        )
+        cases = exact_list(entry["semantic_cases"], f"{label}.semantic_cases", 1)
+        suffixes: list[str] = []
+        for case_index, case_raw in enumerate(cases):
+            case = _validate_supplemental_ground_truth(
+                case_raw, f"{label}.semantic_cases[{case_index}]"
+            )
+            suffix = case["id_suffix"]
+            case_id = f"supplemental-zip:{entry_id}:{suffix}"
+            if case_id in seen_case_ids:
+                fail(f"supplemental ZIP policy repeats case {case_id}")
+            seen_case_ids.add(case_id)
+            suffixes.append(suffix)
+        if tuple(suffixes) != SUPPLEMENTAL_ZIP_CASE_SUFFIXES[entry_id]:
+            fail(f"{label}.semantic_cases differs from the fixed supplemental case set")
+    if seen_ids != set(SUPPLEMENTAL_ZIP_ENTRY_PATHS) or seen_paths != set(
+        SUPPLEMENTAL_ZIP_ENTRY_PATHS.values()
+    ):
+        fail("supplemental ZIP policy does not contain the exact fixed entry set")
+    if selected_total > SUPPLEMENTAL_ZIP_LIMITS["max_selected_total_bytes"]:
+        fail("supplemental ZIP policy selected text exceeds the aggregate byte bound")
+    if len(seen_case_ids) != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT:
+        fail("supplemental ZIP policy must contain exactly seven reviewed cases")
+    return policy
+
+
+def validate_supplemental_manifest(
+    value: Any,
+    policy_value: Any | None = None,
+    *,
+    policy_sha256: str | None = None,
+) -> dict[str, Any]:
+    manifest = exact_keys(
+        value,
+        {
+            "acquired_at",
+            "approved_entries",
+            "archive",
+            "artifact_status",
+            "claim_boundary",
+            "code_executions",
+            "member_text_files_created",
+            "policy_review_status",
+            "policy_sha256",
+            "reviewed_cases",
+            "schema",
+            "selected_entry_count",
+            "third_party_code_executions",
+            "unique_reviewed_cases",
+        },
+        "supplemental ZIP manifest",
+    )
+    if (
+        manifest["schema"] != SUPPLEMENTAL_ZIP_MANIFEST_SCHEMA
+        or manifest["claim_boundary"] != SUPPLEMENTAL_ZIP_CLAIM_BOUNDARY
+    ):
+        fail("supplemental ZIP manifest identity or claim boundary is invalid")
+    if manifest["artifact_status"] != "candidate" or manifest["policy_review_status"] != "approved":
+        fail("supplemental ZIP manifest review state is invalid")
+    require_timestamp(manifest["acquired_at"], "supplemental ZIP manifest.acquired_at")
+    observed_policy_sha = require_hex(
+        manifest["policy_sha256"], "supplemental ZIP manifest.policy_sha256"
+    )
+    if policy_sha256 is not None and observed_policy_sha != require_hex(
+        policy_sha256, "expected supplemental ZIP policy SHA-256"
+    ):
+        fail("supplemental ZIP manifest policy digest differs from the supplied policy bytes")
+    if exact_int(
+        manifest["code_executions"],
+        "supplemental ZIP manifest.code_executions",
+    ) != 0:
+        fail("supplemental ZIP code execution must remain zero")
+    if exact_int(
+        manifest["third_party_code_executions"],
+        "supplemental ZIP manifest.third_party_code_executions",
+    ) != 0:
+        fail("supplemental ZIP third-party code execution must remain zero")
+    if exact_int(
+        manifest["member_text_files_created"],
+        "supplemental ZIP manifest.member_text_files_created",
+    ) != 0:
+        fail("supplemental ZIP member text must never be written to disk")
+
+    archive_expected_keys = set(SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY) | {
+        "aggregate_ratio_milli",
+        "data_descriptor_entries",
+        "duplicate_normalized_names",
+        "duplicate_raw_names",
+        "encrypted_entries",
+        "max_entry_ratio_milli",
+        "max_entry_uncompressed_bytes",
+        "special_entries",
+        "symlink_entries",
+        "unicode_path_entries",
+        "unsafe_paths",
+        "utf8_flag_entries",
+        "zip64_entries",
+    }
+    archive = exact_keys(manifest["archive"], archive_expected_keys, "supplemental ZIP manifest.archive")
+    for key, expected in SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY.items():
+        if archive[key] != expected:
+            fail(f"supplemental ZIP manifest.archive.{key} differs from the reviewed archive")
+    for key in (
+        "data_descriptor_entries",
+        "duplicate_normalized_names",
+        "duplicate_raw_names",
+        "encrypted_entries",
+        "special_entries",
+        "symlink_entries",
+        "unsafe_paths",
+        "utf8_flag_entries",
+        "zip64_entries",
+    ):
+        if exact_int(archive[key], f"supplemental ZIP manifest.archive.{key}") != 0:
+            fail(f"supplemental ZIP manifest.archive.{key} must remain zero")
+    if exact_int(
+        archive["unicode_path_entries"],
+        "supplemental ZIP manifest.archive.unicode_path_entries",
+    ) != archive["entry_count"]:
+        fail("supplemental ZIP manifest does not bind Unicode Path metadata for every entry")
+    max_entry_bytes = exact_int(
+        archive["max_entry_uncompressed_bytes"],
+        "supplemental ZIP manifest.archive.max_entry_uncompressed_bytes",
+    )
+    max_entry_ratio = exact_int(
+        archive["max_entry_ratio_milli"],
+        "supplemental ZIP manifest.archive.max_entry_ratio_milli",
+    )
+    aggregate_ratio = exact_int(
+        archive["aggregate_ratio_milli"],
+        "supplemental ZIP manifest.archive.aggregate_ratio_milli",
+    )
+    if (
+        max_entry_bytes > SUPPLEMENTAL_ZIP_LIMITS["max_entry_uncompressed_bytes"]
+        or max_entry_ratio > SUPPLEMENTAL_ZIP_LIMITS["max_entry_ratio_milli"]
+        or aggregate_ratio > SUPPLEMENTAL_ZIP_LIMITS["max_aggregate_ratio_milli"]
+    ):
+        fail("supplemental ZIP manifest archive expansion metrics exceed the reviewed bounds")
+
+    policy = (
+        validate_supplemental_policy(policy_value, require_approved=True)
+        if policy_value is not None
+        else None
+    )
+    policy_entries = (
+        {entry["entry_id"]: entry for entry in policy["entries"]} if policy is not None else {}
+    )
+    approved = exact_list(
+        manifest["approved_entries"],
+        "supplemental ZIP manifest.approved_entries",
+        EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT,
+    )
+    if len(approved) != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT:
+        fail("supplemental ZIP manifest must contain exactly four approved entries")
+    observed_entries: dict[str, dict[str, Any]] = {}
+    for index, raw in enumerate(approved):
+        label = f"supplemental ZIP manifest.approved_entries[{index}]"
+        entry = exact_keys(
+            raw,
+            {
+                "compressed_bytes",
+                "compression_method",
+                "content_sha256",
+                "crc32",
+                "data_offset",
+                "encoding",
+                "entry_id",
+                "flags",
+                "local_header_offset",
+                "normalized_text_sha256",
+                "path",
+                "raw_name_sha256",
+                "text_bytes",
+                "uncompressed_bytes",
+            },
+            label,
+        )
+        entry_id = nonempty_string(entry["entry_id"], f"{label}.entry_id", 64)
+        if entry_id in observed_entries or SUPPLEMENTAL_ZIP_ENTRY_PATHS.get(entry_id) != entry["path"]:
+            fail(f"{label} has a duplicate or non-allowlisted identity")
+        require_safe_relative(entry["path"], f"{label}.path")
+        exact_int(entry["compressed_bytes"], f"{label}.compressed_bytes", 1)
+        exact_int(entry["uncompressed_bytes"], f"{label}.uncompressed_bytes", 1)
+        exact_int(entry["text_bytes"], f"{label}.text_bytes", 1)
+        if exact_int(entry["flags"], f"{label}.flags") != 0:
+            fail(f"{label}.flags differs from the reviewed archive")
+        local_header_offset = exact_int(
+            entry["local_header_offset"], f"{label}.local_header_offset"
+        )
+        data_offset = exact_int(entry["data_offset"], f"{label}.data_offset", 1)
+        if (
+            data_offset <= local_header_offset
+            or data_offset + entry["compressed_bytes"] > archive["central_directory_offset"]
+        ):
+            fail(f"{label} local data range is invalid")
+        one_of(
+            entry["compression_method"],
+            SUPPLEMENTAL_ZIP_LIMITS["allowed_compression_methods"],
+            f"{label}.compression_method",
+        )
+        require_hex(entry["crc32"], f"{label}.crc32", HEX8)
+        for key in ("content_sha256", "normalized_text_sha256", "raw_name_sha256"):
+            require_hex(entry[key], f"{label}.{key}")
+        encoding = exact_keys(
+            entry["encoding"],
+            {"unicode_path_extra_name_crc32", "unicode_path_extra_version", "utf8_flag"},
+            f"{label}.encoding",
+        )
+        if exact_bool(encoding["utf8_flag"], f"{label}.encoding.utf8_flag"):
+            fail(f"{label}.encoding differs from the reviewed non-EFS name")
+        if exact_int(
+            encoding["unicode_path_extra_version"],
+            f"{label}.encoding.unicode_path_extra_version",
+            1,
+        ) != 1:
+            fail(f"{label}.encoding Unicode Path version is invalid")
+        require_hex(
+            encoding["unicode_path_extra_name_crc32"],
+            f"{label}.encoding.unicode_path_extra_name_crc32",
+            HEX8,
+        )
+        if entry["text_bytes"] > SUPPLEMENTAL_ZIP_LIMITS["max_selected_entry_bytes"]:
+            fail(f"{label}.text_bytes exceeds the selected text bound")
+        if policy is not None:
+            expected_entry = policy_entries.get(entry_id)
+            if expected_entry is None:
+                fail(f"{label} is absent from the supplied policy")
+            for key in (
+                "compressed_bytes",
+                "compression_method",
+                "content_sha256",
+                "crc32",
+                "encoding",
+                "entry_id",
+                "normalized_text_sha256",
+                "path",
+                "raw_name_sha256",
+                "uncompressed_bytes",
+            ):
+                if entry[key] != expected_entry[key]:
+                    fail(f"{label}.{key} differs from the supplied policy")
+        observed_entries[entry_id] = entry
+    if set(observed_entries) != set(SUPPLEMENTAL_ZIP_ENTRY_PATHS):
+        fail("supplemental ZIP manifest approved entry set is incomplete")
+    selected_ranges = sorted(
+        (
+            entry["local_header_offset"],
+            entry["data_offset"] + entry["compressed_bytes"],
+        )
+        for entry in observed_entries.values()
+    )
+    if len({entry["raw_name_sha256"] for entry in observed_entries.values()}) != len(
+        observed_entries
+    ) or any(previous[1] > current[0] for previous, current in zip(selected_ranges, selected_ranges[1:])):
+        fail("supplemental ZIP manifest selected entry identities or ranges overlap")
+
+    reviewed_cases = exact_list(
+        manifest["reviewed_cases"],
+        "supplemental ZIP manifest.reviewed_cases",
+        EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT,
+    )
+    if len(reviewed_cases) != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT:
+        fail("supplemental ZIP manifest must contain exactly seven reviewed cases")
+    seen_cases: set[str] = set()
+    suffixes_by_entry: dict[str, list[str]] = {
+        entry_id: [] for entry_id in SUPPLEMENTAL_ZIP_ENTRY_PATHS
+    }
+    policy_ground_truth: dict[tuple[str, str], Mapping[str, Any]] = {}
+    if policy is not None:
+        for entry in policy["entries"]:
+            for ground_truth in entry["semantic_cases"]:
+                policy_ground_truth[(entry["entry_id"], ground_truth["id_suffix"])] = ground_truth
+    for index, raw in enumerate(reviewed_cases):
+        label = f"supplemental ZIP manifest.reviewed_cases[{index}]"
+        case = validate_supplemental_case(raw, label)
+        if case["id"] in seen_cases:
+            fail(f"{label}.id is duplicated")
+        seen_cases.add(case["id"])
+        entry_id = case["source"]["entry_id"]
+        suffix = case["id"].rsplit(":", 1)[-1]
+        suffixes_by_entry[entry_id].append(suffix)
+        entry = observed_entries[entry_id]
+        source = case["source"]
+        if any(
+            source[key] != entry[key]
+            for key in ("content_sha256", "normalized_text_sha256", "path", "text_bytes")
+        ):
+            fail(f"{label}.source differs from its approved entry")
+        if policy is not None:
+            expected_ground_truth = policy_ground_truth.get((entry_id, suffix))
+            observed_ground_truth = {
+                "authorization": case["authorization"],
+                "current_action": case["current_action"],
+                "expected_action_by_mode": case["expected_action_by_mode"],
+                "id_suffix": suffix,
+                "label": case["label"],
+                "label_reason": case["label_reason"],
+                "ownership": case["ownership"],
+                "template_id": case["template"]["id"],
+            }
+            if expected_ground_truth != observed_ground_truth:
+                fail(f"{label} ground truth differs from the supplied policy")
+            if (
+                case["reviewer"]["identity"] != policy["reviewer"]["identity"]
+                or case["reviewer"]["reviewed_at"] != policy["reviewer"]["reviewed_at"]
+                or case["reviewer"]["status"] != policy["reviewer"]["status"]
+            ):
+                fail(f"{label}.reviewer differs from the supplied policy")
+    for entry_id, suffixes in suffixes_by_entry.items():
+        if tuple(suffixes) != SUPPLEMENTAL_ZIP_CASE_SUFFIXES[entry_id]:
+            fail(f"supplemental ZIP manifest cases differ for {entry_id}")
+    if exact_int(
+        manifest["selected_entry_count"], "supplemental ZIP manifest.selected_entry_count", 1
+    ) != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT:
+        fail("supplemental ZIP manifest selected entry count is invalid")
+    if exact_int(
+        manifest["unique_reviewed_cases"], "supplemental ZIP manifest.unique_reviewed_cases", 1
+    ) != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT:
+        fail("supplemental ZIP manifest reviewed case count is invalid")
+    return manifest
+
+
 def validate_manifest_policy(
     manifest: Mapping[str, Any],
     policy: Mapping[str, Any],
@@ -1373,6 +2004,46 @@ def build_execution_plan(
     return result
 
 
+def build_supplemental_execution_plan(
+    manifest: Mapping[str, Any], seed: int, cold_starts: int
+) -> list[PlannedExecution]:
+    """Build the ZIP-only matrix without changing the fixed 19-case plan."""
+
+    import random
+
+    validate_supplemental_manifest(manifest)
+    exact_int(seed, "supplemental seed")
+    cold_start_count = exact_int(
+        cold_starts, "supplemental cold_starts", MIN_COLD_STARTS
+    )
+    if cold_start_count > MAX_COLD_STARTS:
+        fail(f"supplemental cold_starts exceeds the reviewed maximum of {MAX_COLD_STARTS}")
+    case_ids = [case["id"] for case in manifest["reviewed_cases"]]
+    if len(case_ids) != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT:
+        fail("supplemental execution plan lacks the exact reviewed case set")
+    archive_sha256 = manifest["archive"]["sha256"]
+    result: list[PlannedExecution] = []
+    for cold_start in range(1, cold_start_count + 1):
+        rng = random.Random(
+            f"cag-current-cpa:supplemental-zip:{archive_sha256}:{seed}:{cold_start}"
+        )
+        modes = list(MODES)
+        rng.shuffle(modes)
+        for mode in modes:
+            cases = list(case_ids)
+            rng.shuffle(cases)
+            transports = [
+                (protocol, stream) for protocol in PROTOCOLS for stream in STREAM_VALUES
+            ]
+            rng.shuffle(transports)
+            for case_id in cases:
+                for protocol, stream in transports:
+                    result.append(
+                        PlannedExecution(cold_start, mode, case_id, protocol, stream)
+                    )
+    return result
+
+
 def positive_decimal(value: Any, label: str, maximum: int = 32) -> str:
     text = nonempty_string(value, label, maximum)
     if re.fullmatch(r"[1-9][0-9]*", text) is None:
@@ -1679,6 +2350,7 @@ def validate_run_config(value: Any) -> dict[str, Any]:
             "policy_sha256",
             "run",
             "schema",
+            "supplemental_zip",
         },
         "run config",
     )
@@ -1686,6 +2358,46 @@ def validate_run_config(value: Any) -> dict[str, Any]:
         fail("run config schema is invalid")
     require_hex(config["corpus_manifest_sha256"], "run config.corpus_manifest_sha256")
     require_hex(config["policy_sha256"], "run config.policy_sha256")
+
+    supplemental = exact_keys(
+        config["supplemental_zip"],
+        {
+            "archive_bytes",
+            "archive_sha256",
+            "manifest_sha256",
+            "policy_sha256",
+            "selected_entry_count",
+            "unique_reviewed_cases",
+        },
+        "run config.supplemental_zip",
+    )
+    if exact_int(
+        supplemental["archive_bytes"], "run config.supplemental_zip.archive_bytes", 1
+    ) != SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"]:
+        fail("run config supplemental ZIP byte length is invalid")
+    if require_hex(
+        supplemental["archive_sha256"], "run config.supplemental_zip.archive_sha256"
+    ) != SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"]:
+        fail("run config supplemental ZIP archive identity is invalid")
+    if require_hex(
+        supplemental["policy_sha256"], "run config.supplemental_zip.policy_sha256"
+    ) != SUPPLEMENTAL_ZIP_POLICY_SHA256:
+        fail("run config supplemental ZIP policy identity is invalid")
+    require_hex(
+        supplemental["manifest_sha256"], "run config.supplemental_zip.manifest_sha256"
+    )
+    if exact_int(
+        supplemental["selected_entry_count"],
+        "run config.supplemental_zip.selected_entry_count",
+        1,
+    ) != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT:
+        fail("run config supplemental ZIP selected entry count is invalid")
+    if exact_int(
+        supplemental["unique_reviewed_cases"],
+        "run config.supplemental_zip.unique_reviewed_cases",
+        1,
+    ) != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT:
+        fail("run config supplemental ZIP reviewed case count is invalid")
 
     run = exact_keys(
         config["run"], {"cold_start_count", "platform", "run_id", "seed"}, "run config.run"
@@ -1714,6 +2426,9 @@ def validate_run_config(value: Any) -> dict[str, Any]:
             "cpa_official_asset",
             "evidence_directory",
             "mock_source",
+            "supplemental_zip",
+            "supplemental_zip_manifest",
+            "supplemental_zip_policy",
         },
         "run config.paths",
     )
@@ -1836,6 +2551,91 @@ def validate_candidate_manifest_file(
     return manifest, raw
 
 
+def validate_supplemental_run_config_files(
+    config: Mapping[str, Any],
+) -> tuple[dict[str, Any], bytes, dict[str, Any], bytes, os.stat_result]:
+    """Re-read and cross-bind the operator-owned ZIP plus its policy/manifest."""
+
+    paths = config["paths"]
+    archive_path = Path(paths["supplemental_zip"])
+    policy_path = Path(paths["supplemental_zip_policy"])
+    manifest_path = Path(paths["supplemental_zip_manifest"])
+    for label, path in (
+        ("supplemental ZIP archive", archive_path),
+        ("supplemental ZIP policy", policy_path),
+        ("supplemental ZIP manifest", manifest_path),
+    ):
+        try:
+            real = path.resolve(strict=True)
+        except (FileNotFoundError, OSError) as exc:
+            fail(f"{label} cannot be resolved: {type(exc).__name__}")
+        if real != path:
+            fail(f"{label} path must already be an absolute resolved real path")
+        regular_file_info(path, label, require_single_link=True)
+
+    archive_info = regular_file_info(
+        archive_path, "supplemental ZIP archive", require_single_link=True
+    )
+    supplemental = config["supplemental_zip"]
+    if (
+        archive_info.st_size != supplemental["archive_bytes"]
+        or sha256_file(
+            archive_path,
+            SUPPLEMENTAL_ZIP_LIMITS["max_archive_bytes"],
+            require_single_link=True,
+        )
+        != supplemental["archive_sha256"]
+    ):
+        fail("supplemental ZIP archive bytes drifted from the run config")
+
+    policy_raw = read_regular_bytes(
+        policy_path,
+        "supplemental ZIP policy",
+        2 * 1024 * 1024,
+        require_single_link=True,
+    )
+    policy = validate_supplemental_policy(
+        load_json_bytes(policy_raw, "supplemental ZIP policy"), require_approved=True
+    )
+    policy_sha256 = sha256_bytes(policy_raw)
+    if (
+        policy_sha256 != supplemental["policy_sha256"]
+        or policy_sha256 != SUPPLEMENTAL_ZIP_POLICY_SHA256
+    ):
+        fail("supplemental ZIP policy bytes drifted from the run config")
+
+    manifest_raw = read_regular_bytes(
+        manifest_path,
+        "supplemental ZIP manifest",
+        8 * 1024 * 1024,
+        require_single_link=True,
+    )
+    manifest = validate_supplemental_manifest(
+        load_json_bytes(manifest_raw, "supplemental ZIP manifest"),
+        policy,
+        policy_sha256=policy_sha256,
+    )
+    if manifest_raw != canonical_bytes(manifest) + b"\n":
+        fail("supplemental ZIP manifest must be canonical JSON with one terminal newline")
+    if sha256_bytes(manifest_raw) != supplemental["manifest_sha256"]:
+        fail("supplemental ZIP manifest bytes drifted from the run config")
+    if (
+        manifest["archive"]["bytes"] != supplemental["archive_bytes"]
+        or manifest["archive"]["sha256"] != supplemental["archive_sha256"]
+        or manifest["policy_sha256"] != supplemental["policy_sha256"]
+        or manifest["selected_entry_count"] != supplemental["selected_entry_count"]
+        or manifest["unique_reviewed_cases"] != supplemental["unique_reviewed_cases"]
+    ):
+        fail("supplemental ZIP metadata is not closed across config and manifest")
+    archive_post = regular_file_info(
+        archive_path, "supplemental ZIP archive", require_single_link=True
+    )
+    identity_fields = ("st_dev", "st_ino", "st_nlink", "st_size")
+    if any(getattr(archive_info, key) != getattr(archive_post, key) for key in identity_fields):
+        fail("supplemental ZIP archive identity changed during validation")
+    return manifest, manifest_raw, policy, policy_raw, archive_post
+
+
 def validate_evidence_run_config(
     evidence: Mapping[str, Any], config: Mapping[str, Any], config_raw: bytes
 ) -> None:
@@ -1876,6 +2676,20 @@ def validate_evidence_run_config(
         fail("machine evidence Mock identity drifted from the input config")
     if evidence["identities"]["runner"]["policy_sha256"] != config["policy_sha256"]:
         fail("machine evidence policy identity drifted from the input config")
+    supplemental_config = config["supplemental_zip"]
+    supplemental_evidence = evidence["supplemental_zip_manifest"]
+    for evidence_key, config_key in (
+        ("archive_bytes", "archive_bytes"),
+        ("archive_sha256", "archive_sha256"),
+        ("manifest_sha256", "manifest_sha256"),
+        ("policy_sha256", "policy_sha256"),
+        ("selected_entry_count", "selected_entry_count"),
+        ("unique_reviewed_cases", "unique_reviewed_cases"),
+    ):
+        if supplemental_evidence[evidence_key] != supplemental_config[config_key]:
+            fail(
+                f"machine evidence supplemental ZIP identity drifted at {evidence_key}"
+            )
 
 
 def apply_template(template_id: str, text: str, protocol: str, stream: bool, model: str) -> dict[str, Any]:
@@ -2310,6 +3124,60 @@ def validate_result(value: Any, cases: Mapping[str, Mapping[str, Any]], label: s
     return result
 
 
+def validate_supplemental_result(
+    value: Any, cases: Mapping[str, Mapping[str, Any]], label: str
+) -> dict[str, Any]:
+    """Validate one ZIP-plane row without accepting a core semantic-case row."""
+
+    expected_keys = {
+        "actual_action",
+        "audit_event",
+        "cold_start",
+        "error_contract",
+        "execution_id",
+        "expected_action",
+        "expected_action_by_mode",
+        "expected_audit_request_hash",
+        "http_status",
+        "infrastructure_error",
+        "latency_ms",
+        "mode",
+        "ordinal",
+        "passed",
+        "protocol",
+        "request_sha256",
+        "response_bytes",
+        "response_sha256",
+        "schema",
+        "side_effect_deltas",
+        "source_text_sha256",
+        "stream",
+        "stream_terminated",
+        "supplemental_case_id",
+        "template_sha256",
+        "usage_recorded",
+    }
+    result = exact_keys(value, expected_keys, label)
+    if result["schema"] != SUPPLEMENTAL_ZIP_RESULT_SCHEMA:
+        fail(f"{label}.schema is invalid")
+    case_id = nonempty_string(
+        result["supplemental_case_id"], f"{label}.supplemental_case_id", 256
+    )
+    if not case_id.startswith("supplemental-zip:") or case_id not in cases:
+        fail(f"{label} references an unknown supplemental ZIP case")
+    case = cases[case_id]
+    translated_case = dict(case)
+    translated_case["source"] = {
+        **case["source"],
+        "text_sha256": case["source"]["normalized_text_sha256"],
+    }
+    translated = dict(result)
+    translated["schema"] = RESULT_SCHEMA
+    translated["semantic_case_id"] = translated.pop("supplemental_case_id")
+    validate_result(translated, {case_id: translated_case}, label)
+    return result
+
+
 def iter_jsonl(path: Path, label: str, maximum_line: int = 2 * 1024 * 1024) -> Iterator[Any]:
     descriptor, _ = open_regular(path, label)
     with os.fdopen(descriptor, "rb", closefd=True) as handle:
@@ -2344,6 +3212,9 @@ def validate_machine_evidence(
     results_path: Path,
     *,
     corpus_root: Path | None = None,
+    supplemental_manifest_path: Path | None = None,
+    supplemental_policy_path: Path | None = None,
+    supplemental_results_path: Path | None = None,
 ) -> dict[str, Any]:
     manifest = validate_corpus_manifest(manifest_value, corpus_root)
     evidence = exact_keys(
@@ -2360,6 +3231,9 @@ def validate_machine_evidence(
             "run",
             "schema",
             "started_at",
+            "supplemental_zip_manifest",
+            "supplemental_zip_results",
+            "supplemental_zip_summary",
             "third_party_code_executions",
             "transport",
         },
@@ -2529,17 +3403,198 @@ def validate_machine_evidence(
         fail("machine evidence results SHA does not match the JSONL")
     transport_count = exact_int(transport["transport_executions"], "machine evidence.transport.transport_executions", 1)
 
+    supplemental_manifest_evidence = exact_keys(
+        evidence["supplemental_zip_manifest"],
+        {
+            "archive_bytes",
+            "archive_sha256",
+            "code_executions",
+            "manifest_path",
+            "manifest_sha256",
+            "member_text_files_created",
+            "policy_path",
+            "policy_sha256",
+            "selected_entry_count",
+            "third_party_code_executions",
+            "unique_reviewed_cases",
+        },
+        "machine evidence.supplemental_zip_manifest",
+    )
+    require_safe_relative(
+        supplemental_manifest_evidence["manifest_path"],
+        "machine evidence.supplemental_zip_manifest.manifest_path",
+    )
+    require_safe_relative(
+        supplemental_manifest_evidence["policy_path"],
+        "machine evidence.supplemental_zip_manifest.policy_path",
+    )
+    if (
+        supplemental_manifest_evidence["manifest_path"]
+        != "supplemental-zip-manifest.json"
+        or supplemental_manifest_evidence["policy_path"]
+        != "supplemental-zip-policy.json"
+    ):
+        fail("machine evidence supplemental ZIP metadata filenames are invalid")
+    if supplemental_manifest_path is None:
+        supplemental_manifest_path = (
+            results_path.parent / supplemental_manifest_evidence["manifest_path"]
+        )
+    copied_manifest_raw = read_regular_bytes(
+        supplemental_manifest_path,
+        "copied supplemental ZIP manifest",
+        8 * 1024 * 1024,
+        require_single_link=True,
+    )
+    supplemental_manifest_value = load_json_bytes(
+        copied_manifest_raw, "copied supplemental ZIP manifest"
+    )
+    if supplemental_policy_path is None:
+        supplemental_policy_path = (
+            results_path.parent / supplemental_manifest_evidence["policy_path"]
+        )
+    copied_policy_raw = read_regular_bytes(
+        supplemental_policy_path,
+        "copied supplemental ZIP policy",
+        2 * 1024 * 1024,
+        require_single_link=True,
+    )
+    supplemental_policy_value = load_json_bytes(
+        copied_policy_raw, "copied supplemental ZIP policy"
+    )
+    supplemental_policy = validate_supplemental_policy(
+        supplemental_policy_value, require_approved=True
+    )
+    supplemental_policy_sha256 = sha256_bytes(copied_policy_raw)
+    supplemental_manifest = validate_supplemental_manifest(
+        supplemental_manifest_value,
+        supplemental_policy,
+        policy_sha256=supplemental_policy_sha256,
+    )
+    if copied_manifest_raw != canonical_bytes(supplemental_manifest) + b"\n":
+        fail("copied supplemental ZIP manifest is not canonical JSON")
+    if (
+        require_hex(
+            supplemental_manifest_evidence["manifest_sha256"],
+            "machine evidence.supplemental_zip_manifest.manifest_sha256",
+        )
+        != sha256_bytes(copied_manifest_raw)
+        or require_hex(
+            supplemental_manifest_evidence["policy_sha256"],
+            "machine evidence.supplemental_zip_manifest.policy_sha256",
+        )
+        != supplemental_policy_sha256
+        or supplemental_policy_sha256 != SUPPLEMENTAL_ZIP_POLICY_SHA256
+    ):
+        fail("machine evidence supplemental ZIP policy/manifest digest mismatch")
+    if (
+        exact_int(
+            supplemental_manifest_evidence["archive_bytes"],
+            "machine evidence.supplemental_zip_manifest.archive_bytes",
+            1,
+        )
+        != supplemental_manifest["archive"]["bytes"]
+        or require_hex(
+            supplemental_manifest_evidence["archive_sha256"],
+            "machine evidence.supplemental_zip_manifest.archive_sha256",
+        )
+        != supplemental_manifest["archive"]["sha256"]
+        or exact_int(
+            supplemental_manifest_evidence["selected_entry_count"],
+            "machine evidence.supplemental_zip_manifest.selected_entry_count",
+            1,
+        )
+        != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT
+        or exact_int(
+            supplemental_manifest_evidence["unique_reviewed_cases"],
+            "machine evidence.supplemental_zip_manifest.unique_reviewed_cases",
+            1,
+        )
+        != EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT
+    ):
+        fail("machine evidence supplemental ZIP manifest metadata drifted")
+    for key in (
+        "code_executions",
+        "member_text_files_created",
+        "third_party_code_executions",
+    ):
+        if exact_int(
+            supplemental_manifest_evidence[key],
+            f"machine evidence.supplemental_zip_manifest.{key}",
+        ) != 0:
+            fail(f"machine evidence supplemental_zip_manifest.{key} must be zero")
+
+    supplemental_results = exact_keys(
+        evidence["supplemental_zip_results"],
+        {
+            "modes",
+            "protocols",
+            "results_path",
+            "results_sha256",
+            "streams",
+            "supplemental_executions",
+        },
+        "machine evidence.supplemental_zip_results",
+    )
+    if (
+        supplemental_results["modes"] != list(MODES)
+        or supplemental_results["protocols"] != list(PROTOCOLS)
+        or supplemental_results["streams"] != list(STREAM_VALUES)
+    ):
+        fail("machine evidence supplemental ZIP transport matrix is incomplete")
+    require_safe_relative(
+        supplemental_results["results_path"],
+        "machine evidence.supplemental_zip_results.results_path",
+    )
+    if supplemental_results["results_path"] != "supplemental-zip-results.jsonl":
+        fail("machine evidence supplemental ZIP results filename is invalid")
+    if supplemental_results_path is None:
+        supplemental_results_path = results_path.parent / supplemental_results["results_path"]
+    supplemental_results_raw = read_regular_bytes(
+        supplemental_results_path,
+        "supplemental ZIP results",
+        8 * MAX_JSON_BYTES,
+        require_single_link=True,
+    )
+    if require_hex(
+        supplemental_results["results_sha256"],
+        "machine evidence.supplemental_zip_results.results_sha256",
+    ) != sha256_bytes(supplemental_results_raw):
+        fail("machine evidence supplemental ZIP results SHA does not match the JSONL")
+    supplemental_count = exact_int(
+        supplemental_results["supplemental_executions"],
+        "machine evidence.supplemental_zip_results.supplemental_executions",
+        1,
+    )
+
     cold = exact_list(evidence["cold_starts"], "machine evidence.cold_starts", cold_count)
     if len(cold) != cold_count:
         fail("machine evidence cold-start result count is invalid")
     cold_result_counts: dict[int, int] = {}
     cold_result_hashes: dict[int, str] = {}
+    cold_supplemental_counts: dict[int, int] = {}
+    cold_supplemental_hashes: dict[int, str] = {}
     cold_container_ids: dict[str, set[str]] = {"cpa": set(), "mock": set()}
     for offset, raw in enumerate(cold, start=1):
         label = f"machine evidence.cold_starts[{offset - 1}]"
         item = exact_keys(
             raw,
-            {"completed_at", "containers", "execution_count", "index", "network", "order_sha256", "results_sha256", "runtime", "runtime_config_sha256", "sqlite", "started_at", "stop"},
+            {
+                "completed_at",
+                "containers",
+                "execution_count",
+                "index",
+                "network",
+                "order_sha256",
+                "results_sha256",
+                "runtime",
+                "runtime_config_sha256",
+                "sqlite",
+                "started_at",
+                "stop",
+                "supplemental_execution_count",
+                "supplemental_order_sha256",
+                "supplemental_results_sha256",
+            },
             label,
         )
         if exact_int(item["index"], f"{label}.index", 1) != offset:
@@ -2553,6 +3608,19 @@ def validate_machine_evidence(
             fail(f"{label}.runtime_config_sha256 drifted")
         cold_result_counts[offset] = exact_int(item["execution_count"], f"{label}.execution_count", 1)
         cold_result_hashes[offset] = require_hex(item["results_sha256"], f"{label}.results_sha256")
+        cold_supplemental_counts[offset] = exact_int(
+            item["supplemental_execution_count"],
+            f"{label}.supplemental_execution_count",
+            1,
+        )
+        require_hex(
+            item["supplemental_order_sha256"],
+            f"{label}.supplemental_order_sha256",
+        )
+        cold_supplemental_hashes[offset] = require_hex(
+            item["supplemental_results_sha256"],
+            f"{label}.supplemental_results_sha256",
+        )
         network = exact_keys(item["network"], {"attachable", "driver", "host_ports", "ingress", "internal", "ipv6", "members", "name"}, f"{label}.network")
         nonempty_string(network["name"], f"{label}.network.name", 256)
         if network["name"] != f"{run_id}-net":
@@ -2604,13 +3672,51 @@ def validate_machine_evidence(
     if not exact_bool(snapshots["unchanged"], "machine evidence.business_snapshots.unchanged") or before != after:
         fail("machine evidence business containers changed")
 
-    cleanup = exact_keys(evidence["cleanup"], {"all_owned_resources_absent", "checkpoint_attempts", "global_prune_used", "graceful_stop_attempts", "images_removed", "resources", "third_party_text_files_removed", "third_party_text_retained"}, "machine evidence.cleanup")
+    cleanup = exact_keys(
+        evidence["cleanup"],
+        {
+            "all_owned_resources_absent",
+            "checkpoint_attempts",
+            "global_prune_used",
+            "graceful_stop_attempts",
+            "images_removed",
+            "resources",
+            "supplemental_input_archive_preserved",
+            "supplemental_member_text_files_created",
+            "supplemental_member_text_files_removed",
+            "supplemental_member_text_retained",
+            "third_party_text_files_removed",
+            "third_party_text_retained",
+        },
+        "machine evidence.cleanup",
+    )
     if not exact_bool(cleanup["all_owned_resources_absent"], "machine evidence.cleanup.all_owned_resources_absent") or exact_bool(cleanup["global_prune_used"], "machine evidence.cleanup.global_prune_used") or exact_bool(cleanup["images_removed"], "machine evidence.cleanup.images_removed"):
         fail("machine evidence cleanup used a forbidden global/image action or left resources")
     if exact_int(cleanup["graceful_stop_attempts"], "machine evidence.cleanup.graceful_stop_attempts", cold_count * 2) != cold_count * 2 or exact_int(cleanup["checkpoint_attempts"], "machine evidence.cleanup.checkpoint_attempts", cold_count) != cold_count:
         fail("machine evidence cleanup attempt counts are incomplete")
     if exact_int(cleanup["third_party_text_files_removed"], "machine evidence.cleanup.third_party_text_files_removed", manifest["source_count"]) != manifest["source_count"] or exact_bool(cleanup["third_party_text_retained"], "machine evidence.cleanup.third_party_text_retained"):
         fail("machine evidence retained third-party corpus text")
+    if (
+        exact_int(
+            cleanup["supplemental_member_text_files_created"],
+            "machine evidence.cleanup.supplemental_member_text_files_created",
+        )
+        != 0
+        or exact_int(
+            cleanup["supplemental_member_text_files_removed"],
+            "machine evidence.cleanup.supplemental_member_text_files_removed",
+        )
+        != 0
+        or exact_bool(
+            cleanup["supplemental_member_text_retained"],
+            "machine evidence.cleanup.supplemental_member_text_retained",
+        )
+        or not exact_bool(
+            cleanup["supplemental_input_archive_preserved"],
+            "machine evidence.cleanup.supplemental_input_archive_preserved",
+        )
+    ):
+        fail("machine evidence supplemental ZIP cleanup/preservation contract failed")
     resources = exact_list(cleanup["resources"], "machine evidence.cleanup.resources", cold_count * 2 + 1)
     if len(resources) != cold_count * 2 + 1:
         fail("machine evidence cleanup resource count is not exact")
@@ -2716,4 +3822,183 @@ def validate_machine_evidence(
         order_hash = sha256_bytes(canonical_bytes(actual_order[index]))
         if evidence["cold_starts"][index - 1]["order_sha256"] != order_hash:
             fail(f"cold-start {index} order SHA mismatch")
+
+    supplemental_case_map = {
+        case["id"]: case for case in supplemental_manifest["reviewed_cases"]
+    }
+    zip_rows: list[dict[str, Any]] = []
+    zip_seen_event_ids: set[str] = set()
+    zip_seen_execution_ids: set[str] = set()
+    zip_seen_ordinals: set[int] = set()
+    zip_by_key: dict[tuple[str, str, str, bool], list[dict[str, Any]]] = {}
+    zip_request_identities: dict[
+        tuple[str, str, bool], set[tuple[str, str]]
+    ] = {}
+    zip_per_cold_raw: dict[int, bytearray] = {
+        index: bytearray() for index in range(1, cold_count + 1)
+    }
+    for index, raw in enumerate(
+        iter_jsonl_bytes(supplemental_results_raw, "supplemental ZIP results"),
+        start=1,
+    ):
+        result = validate_supplemental_result(
+            raw, supplemental_case_map, f"supplemental ZIP results[{index - 1}]"
+        )
+        execution_id = result["execution_id"]
+        ordinal = result["ordinal"]
+        if execution_id in zip_seen_execution_ids or execution_id in seen_execution_ids:
+            fail("supplemental ZIP results contain a duplicate or cross-plane execution ID")
+        zip_seen_execution_ids.add(execution_id)
+        if ordinal in zip_seen_ordinals:
+            fail("supplemental ZIP results contain a duplicate ordinal")
+        zip_seen_ordinals.add(ordinal)
+        event = result["audit_event"]
+        if event is not None:
+            if event["id"] in zip_seen_event_ids or event["id"] in seen_audit_event_ids:
+                fail("supplemental ZIP results contain a duplicate or cross-plane audit event ID")
+            zip_seen_event_ids.add(event["id"])
+        if result["cold_start"] > cold_count:
+            fail("supplemental ZIP result cold-start index is outside the run contract")
+        zip_rows.append(result)
+        key = (
+            result["supplemental_case_id"],
+            result["mode"],
+            result["protocol"],
+            result["stream"],
+        )
+        zip_by_key.setdefault(key, []).append(result)
+        request_key = (
+            result["supplemental_case_id"],
+            result["protocol"],
+            result["stream"],
+        )
+        zip_request_identities.setdefault(request_key, set()).add(
+            (result["request_sha256"], result["expected_audit_request_hash"])
+        )
+        zip_per_cold_raw[result["cold_start"]].extend(canonical_bytes(result) + b"\n")
+    if len(zip_rows) != supplemental_count:
+        fail("machine evidence supplemental_executions does not match JSONL records")
+    if zip_seen_ordinals != set(range(1, supplemental_count + 1)):
+        fail("supplemental ZIP result ordinals are not consecutive in their own domain")
+    expected_supplemental_count = (
+        len(supplemental_case_map)
+        * len(MODES)
+        * len(PROTOCOLS)
+        * len(STREAM_VALUES)
+        * cold_count
+    )
+    if supplemental_count != expected_supplemental_count:
+        fail("supplemental ZIP executions do not cover the complete independent matrix")
+    expected_zip_keys = {
+        (case_id, mode, protocol, stream)
+        for case_id in supplemental_case_map
+        for mode in MODES
+        for protocol in PROTOCOLS
+        for stream in STREAM_VALUES
+    }
+    if set(zip_by_key) != expected_zip_keys:
+        fail("supplemental ZIP result matrix has missing or unexpected cells")
+    for key, rows in zip_by_key.items():
+        if (
+            {row["cold_start"] for row in rows}
+            != set(range(1, cold_count + 1))
+            or len(rows) != cold_count
+        ):
+            fail(f"supplemental ZIP matrix cell {key} lacks all cold starts")
+        signatures = {
+            (
+                row["actual_action"],
+                row["http_status"],
+                canonical_bytes(row["error_contract"]),
+                canonical_bytes(row["side_effect_deltas"]),
+                row["request_sha256"],
+                row["expected_audit_request_hash"],
+                row["usage_recorded"],
+                row["stream_terminated"],
+            )
+            for row in rows
+        }
+        if len(signatures) != 1:
+            fail(f"supplemental ZIP matrix cell {key} is inconsistent across cold starts")
+    if any(len(identities) != 1 for identities in zip_request_identities.values()):
+        fail("supplemental ZIP logical request identity drifted across modes or cold starts")
+    for index in range(1, cold_count + 1):
+        count = sum(result["cold_start"] == index for result in zip_rows)
+        if (
+            count != cold_supplemental_counts[index]
+            or sha256_bytes(bytes(zip_per_cold_raw[index]))
+            != cold_supplemental_hashes[index]
+        ):
+            fail(f"cold-start {index} supplemental ZIP result count or digest mismatch")
+
+    planned_zip = build_supplemental_execution_plan(
+        supplemental_manifest, seed, cold_count
+    )
+    planned_zip_order: dict[int, list[tuple[str, str, str, bool]]] = {
+        index: [] for index in range(1, cold_count + 1)
+    }
+    for entry in planned_zip:
+        planned_zip_order[entry.cold_start].append(
+            (entry.mode, entry.semantic_case_id, entry.protocol, entry.stream)
+        )
+    actual_zip_order: dict[int, list[tuple[str, str, str, bool]]] = {
+        index: [] for index in range(1, cold_count + 1)
+    }
+    for result in sorted(zip_rows, key=lambda row: row["ordinal"]):
+        actual_zip_order[result["cold_start"]].append(
+            (
+                result["mode"],
+                result["supplemental_case_id"],
+                result["protocol"],
+                result["stream"],
+            )
+        )
+    for index in range(1, cold_count + 1):
+        if actual_zip_order[index] != planned_zip_order[index]:
+            fail(f"cold-start {index} did not use the supplemental ZIP randomized order")
+        zip_order_hash = sha256_bytes(canonical_bytes(actual_zip_order[index]))
+        if (
+            evidence["cold_starts"][index - 1]["supplemental_order_sha256"]
+            != zip_order_hash
+        ):
+            fail(f"cold-start {index} supplemental ZIP order SHA mismatch")
+
+    summary = exact_keys(
+        evidence["supplemental_zip_summary"],
+        {
+            "allow_executions",
+            "block_incomplete_inspection_executions",
+            "block_malicious_text_executions",
+            "code_executions",
+            "malicious_case_count",
+            "passed_executions",
+            "third_party_code_executions",
+            "total_executions",
+            "transport_error_executions",
+        },
+        "machine evidence.supplemental_zip_summary",
+    )
+    expected_summary = {
+        "allow_executions": sum(row["actual_action"] == "allow" for row in zip_rows),
+        "block_incomplete_inspection_executions": sum(
+            row["actual_action"] == "block_incomplete_inspection" for row in zip_rows
+        ),
+        "block_malicious_text_executions": sum(
+            row["actual_action"] == "block_malicious_text" for row in zip_rows
+        ),
+        "code_executions": 0,
+        "malicious_case_count": sum(
+            case["label"] == "malicious_active"
+            for case in supplemental_case_map.values()
+        ),
+        "passed_executions": sum(row["passed"] is True for row in zip_rows),
+        "third_party_code_executions": 0,
+        "total_executions": len(zip_rows),
+        "transport_error_executions": sum(
+            row["actual_action"] == "transport_error" for row in zip_rows
+        ),
+    }
+    for key, expected in expected_summary.items():
+        if exact_int(summary[key], f"machine evidence.supplemental_zip_summary.{key}") != expected:
+            fail(f"machine evidence supplemental ZIP summary drifted at {key}")
     return evidence

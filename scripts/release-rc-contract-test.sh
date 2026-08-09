@@ -43,6 +43,7 @@ workflow = (root / ".github/workflows/release-rc.yml").read_text("utf-8")
 script = (root / "scripts/release-rc.sh").read_text("utf-8")
 readme = (root / ".github/workflows/README.md").read_text("utf-8")
 portable = (root / "tools/current-cpa-audit/second_machine_release_admission.py").read_text("utf-8")
+portable_schema = (root / "tools/current-cpa-audit/second-machine-release-admission.schema.json").read_text("utf-8")
 api_validator = (root / "scripts/release_rc_github_admission.py").read_text("utf-8")
 normalized_readme = " ".join(readme.split())
 
@@ -72,6 +73,12 @@ for marker in (
     "bash scripts/release-rc.sh seal-candidate",
     "EXACT_PROTECTED_MAIN_CHECKS_PASS",
     "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS",
+    "SUPPLEMENTAL_ARCHIVE_PASS",
+    "NATIVE_HOST_SPECIAL_PATHS_PASS",
+    "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
+    "supplemental_archive_status=",
+    "supplemental_archive_sha256=",
+    "native_host_status=",
     "commit: ${{ steps.evidence.outputs.commit }}",
     "tree: ${{ steps.evidence.outputs.tree }}",
     "cpa_tag: ${{ steps.evidence.outputs.cpa_tag }}",
@@ -132,18 +139,41 @@ require('digest != expected_digest' in api_validator,
         "API validator does not bind the release asset API digest")
 
 for marker in (
-    "validate_machine_evidence(manifest, machine, args.results)",
+    "validate_machine_evidence(",
+    "supplemental_manifest_path=args.supplemental_manifest",
+    "supplemental_policy_path=args.supplemental_policy",
+    "supplemental_results_path=args.supplemental_results",
+    "validate_supplemental_evidence_copies(",
+    "native.validate_bundle(",
     "validate_evidence_run_config(machine, run_config, run_config_raw)",
     "validate_candidate_manifest_file(run_config)",
     "validate_evidence_bundle(",
     "require_pass=True",
     "derive_semantic_summary",
+    "derive_supplemental_summary",
     "local_tool_identities()",
+    'SCHEMA = "cyber-abuse-guard.second-machine-release-admission.v2"',
+    "EXPECTED_CORE_EXECUTIONS = 684",
+    "EXPECTED_SUPPLEMENTAL_EXECUTIONS = 252",
+    'pack.add_argument("--supplemental-archive", type=Path, required=True)',
+    'pack.add_argument("--supplemental-manifest", type=Path, required=True)',
+    'pack.add_argument("--supplemental-policy", type=Path, required=True)',
+    'pack.add_argument("--supplemental-results", type=Path, required=True)',
+    'pack.add_argument("--native-report", type=Path, required=True)',
+    'pack.add_argument("--native-go-test-jsonl", type=Path, required=True)',
+    'pack.add_argument("--checkout", type=Path, required=True)',
     "REPORT_TTL = timedelta(hours=24)",
     'so["name"] != CAG_SO_NAME',
     'candidate_manifest["event"] == "push"',
 ):
     require(marker in portable, f"portable admission contract is missing {marker!r}")
+
+for marker in (
+    "workload_generator_sha256",
+    "test_source_sha256",
+    "critical_tests_sha256",
+):
+    require(marker in portable_schema, f"portable admission schema is missing {marker!r}")
 
 for marker in (
     "readonly rc_source_version='1.0.0'",
@@ -178,8 +208,13 @@ for marker in (
     "independent_proof: false",
     "not an independent audit or independent proof",
     "NOT STABLE PRODUCTION APPROVAL",
+    '[[ "$require_attestation" =~ ^[01]$ ]]',
+    "REQUIRE_ATTESTATION must be exactly 0 or 1",
 ):
     require(marker in script, f"release seal script is missing {marker!r}")
+
+require(script.count('[[ "$require_attestation" =~ ^[01]$ ]]') == 1,
+        "release verify must validate the attestation requirement exactly once")
 
 for forbidden in (
     "build_assets()",

@@ -124,6 +124,14 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 	}
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
+	return gate.verificationLocked()
+}
+
+// verificationLocked returns a live or cached verdict while the caller holds
+// gate.mu. Keeping the access decision under the same lock prevents a
+// concurrent arm or latch transition from pairing one status with another
+// gate state.
+func (gate *auditStorageGate) verificationLocked() auditStorageVerification {
 	if gate.latched || !gate.armed {
 		return gate.current
 	}
@@ -150,10 +158,10 @@ func (gate *auditStorageGate) access() error {
 	if gate == nil {
 		return errors.New("persistent audit storage gate is unavailable")
 	}
-	status := gate.verification()
 	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	status := gate.verificationLocked()
 	blocked := !gate.armed || gate.latched || status.preventsDatabaseOpen()
-	gate.mu.Unlock()
 	if !blocked {
 		return nil
 	}

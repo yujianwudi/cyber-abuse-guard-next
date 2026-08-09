@@ -27,7 +27,7 @@ and the binary SHA-256 is
 
 | Evidence boundary | Current Round 13 status |
 |---|---|
-| Pinned CPA source/compile contract and audit-harness unit suite | `PASS / 184_OF_184` |
+| Pinned CPA source/compile contract and audit-harness unit suite | `PASS / 229_OF_229` |
 | no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `PASS / NATIVE_HOST_PENDING` |
 | Exact-candidate Linux native Host, race, and full matrix | `NOT_RUN / PENDING` |
 | Second-machine, protected Host, and independent attestation | `NOT_PROVIDED` |

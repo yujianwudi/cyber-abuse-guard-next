@@ -18,6 +18,7 @@ from audit_contract import (
     CPA_TAG,
     MOCK_CONTRACT,
     RUN_CONFIG_SCHEMA,
+    SUPPLEMENTAL_ZIP_LIMITS,
     ContractError,
     candidate_identity,
     canonical_bytes,
@@ -30,6 +31,9 @@ from audit_contract import (
     validate_corpus_manifest,
     validate_manifest_policy,
     validate_run_config,
+    validate_supplemental_manifest,
+    validate_supplemental_policy,
+    validate_supplemental_run_config_files,
 )
 
 
@@ -130,6 +134,15 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=1205)
     parser.add_argument("--cold-start-count", type=int, default=3)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument(
+        "--supplemental-archive",
+        dest="supplemental_zip",
+        type=Path,
+        required=True,
+        help="reviewed supplemental ZIP archive; members remain memory-only",
+    )
+    parser.add_argument("--supplemental-zip-policy", type=Path, required=True)
+    parser.add_argument("--supplemental-zip-manifest", type=Path, required=True)
     parser.add_argument("--evidence-directory", type=Path, required=True)
     parser.add_argument("--cag-repository", type=Path, required=True)
     parser.add_argument("--cag-so", type=Path, required=True)
@@ -186,6 +199,66 @@ def main(argv: Sequence[str] | None = None) -> int:
         if manifest_value["policy_sha256"] != policy_sha256:
             raise RuntimeError("corpus candidate was not acquired with this approved policy")
         validate_manifest_policy(manifest_value, policy_value, require_approved=True)
+        for path, label in (
+            (args.supplemental_zip, "supplemental ZIP archive input"),
+            (args.supplemental_zip_policy, "supplemental ZIP policy input"),
+            (args.supplemental_zip_manifest, "supplemental ZIP manifest input"),
+        ):
+            regular_file_info(path, label, require_single_link=True)
+        supplemental_archive = args.supplemental_zip.resolve(strict=True)
+        supplemental_policy = args.supplemental_zip_policy.resolve(strict=True)
+        supplemental_manifest = args.supplemental_zip_manifest.resolve(strict=True)
+        for path, label in (
+            (supplemental_archive, "supplemental ZIP archive"),
+            (supplemental_policy, "supplemental ZIP policy"),
+            (supplemental_manifest, "supplemental ZIP manifest"),
+        ):
+            regular_file_info(path, label, require_single_link=True)
+        supplemental_policy_raw = read_regular_bytes(
+            supplemental_policy,
+            "supplemental ZIP policy",
+            2 * 1024 * 1024,
+            require_single_link=True,
+        )
+        supplemental_policy_value = validate_supplemental_policy(
+            load_json_bytes(supplemental_policy_raw, "supplemental ZIP policy"),
+            require_approved=True,
+        )
+        supplemental_policy_sha256 = sha256_bytes(supplemental_policy_raw)
+        supplemental_manifest_raw = read_regular_bytes(
+            supplemental_manifest,
+            "supplemental ZIP manifest",
+            8 * 1024 * 1024,
+            require_single_link=True,
+        )
+        supplemental_manifest_value = validate_supplemental_manifest(
+            load_json_bytes(supplemental_manifest_raw, "supplemental ZIP manifest"),
+            supplemental_policy_value,
+            policy_sha256=supplemental_policy_sha256,
+        )
+        if supplemental_manifest_raw != canonical_bytes(supplemental_manifest_value) + b"\n":
+            raise RuntimeError(
+                "supplemental ZIP manifest is not canonical JSON with one terminal newline"
+            )
+        supplemental_archive_info = regular_file_info(
+            supplemental_archive,
+            "supplemental ZIP archive",
+            require_single_link=True,
+        )
+        supplemental_archive_sha256 = sha256_file(
+            supplemental_archive,
+            SUPPLEMENTAL_ZIP_LIMITS["max_archive_bytes"],
+            require_single_link=True,
+        )
+        if (
+            supplemental_archive_info.st_size
+            != supplemental_manifest_value["archive"]["bytes"]
+            or supplemental_archive_sha256
+            != supplemental_manifest_value["archive"]["sha256"]
+        ):
+            raise RuntimeError(
+                "supplemental ZIP archive does not match the supplied validated manifest"
+            )
         cag_repository = args.cag_repository.resolve(strict=True)
         cag_so = args.cag_so.resolve(strict=True)
         candidate_manifest = args.candidate_manifest.resolve(strict=True)
@@ -236,6 +309,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "cpa_official_asset": str(asset),
                 "evidence_directory": str(evidence),
                 "mock_source": str(mock_source),
+                "supplemental_zip": str(supplemental_archive),
+                "supplemental_zip_manifest": str(supplemental_manifest),
+                "supplemental_zip_policy": str(supplemental_policy),
             },
             "policy_sha256": policy_sha256,
             "run": {
@@ -245,8 +321,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "seed": args.seed,
             },
             "schema": RUN_CONFIG_SCHEMA,
+            "supplemental_zip": {
+                "archive_bytes": supplemental_archive_info.st_size,
+                "archive_sha256": supplemental_archive_sha256,
+                "manifest_sha256": sha256_bytes(supplemental_manifest_raw),
+                "policy_sha256": supplemental_policy_sha256,
+                "selected_entry_count": supplemental_manifest_value[
+                    "selected_entry_count"
+                ],
+                "unique_reviewed_cases": supplemental_manifest_value[
+                    "unique_reviewed_cases"
+                ],
+            },
         }
         validate_run_config(config)
+        validate_supplemental_run_config_files(config)
         raw = canonical_bytes(config) + b"\n"
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
         if hasattr(os, "O_NOFOLLOW"):

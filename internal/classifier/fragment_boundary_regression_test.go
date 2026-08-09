@@ -65,8 +65,11 @@ func TestFragmentBoundaryNormalizationRejectsInternalIndependentLexemes(t *testi
 	for _, value := range []string{
 		"text\nste\nal",
 		"ste\nal\ntext",
+		"Text\nCreate",
+		"Create\nText",
+		"Family\nCreate",
 	} {
-		want := strings.ReplaceAll(value, "\n", compactHardBoundaryText)
+		want := strings.ReplaceAll(strings.ToLower(value), "\n", compactHardBoundaryText)
 		if got := string(normalizeParts([]string{value}).standardRunes); got != want {
 			t.Fatalf("internal independent lexeme in %q normalized as %q, want %q", value, got, want)
 		}

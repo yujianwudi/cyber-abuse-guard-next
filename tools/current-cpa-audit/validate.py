@@ -22,6 +22,7 @@ from audit_contract import (
     validate_machine_evidence,
     validate_manifest_policy,
     validate_run_config,
+    validate_supplemental_run_config_files,
 )
 
 
@@ -119,6 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ContractError("corpus candidate was not acquired with this approved policy")
             validate_manifest_policy(manifest, policy, require_approved=True)
             validate_candidate_manifest_file(config)
+            validate_supplemental_run_config_files(config)
             output = {"policy_review_status": "approved", "valid": True}
         elif args.command == "evidence":
             manifest = load_json_file(args.manifest, "corpus manifest")
@@ -136,21 +138,48 @@ def main(argv: Sequence[str] | None = None) -> int:
             validated = validate_machine_evidence(manifest, evidence, args.results)
             declared_manifest = args.evidence.parent / validated["corpus"]["manifest_path"]
             declared_results = args.evidence.parent / validated["transport"]["results_path"]
+            declared_supplemental_manifest = (
+                args.evidence.parent
+                / validated["supplemental_zip_manifest"]["manifest_path"]
+            )
+            declared_supplemental_policy = (
+                args.evidence.parent
+                / validated["supplemental_zip_manifest"]["policy_path"]
+            )
+            declared_supplemental_results = (
+                args.evidence.parent
+                / validated["supplemental_zip_results"]["results_path"]
+            )
             if declared_manifest.resolve(strict=True) != args.manifest.resolve(strict=True):
                 raise ContractError("supplied manifest path does not match evidence.corpus.manifest_path")
             if declared_results.resolve(strict=True) != args.results.resolve(strict=True):
                 raise ContractError("supplied results path does not match evidence.transport.results_path")
+            for path, label in (
+                (declared_supplemental_manifest, "supplemental ZIP manifest"),
+                (declared_supplemental_policy, "supplemental ZIP policy"),
+                (declared_supplemental_results, "supplemental ZIP results"),
+            ):
+                if path.resolve(strict=True).parent != args.evidence.parent.resolve(
+                    strict=True
+                ):
+                    raise ContractError(
+                        f"evidence {label} path escaped the supplied evidence directory"
+                    )
             config_raw = read_regular_bytes(args.run_config, "run config", 2 * 1024 * 1024)
             config = validate_run_config(load_json_bytes(config_raw, "run config"))
             if config_raw != canonical_bytes(config) + b"\n":
                 raise ContractError("run config is not canonical JSON with one terminal newline")
             validate_candidate_manifest_file(config)
+            validate_supplemental_run_config_files(config)
             if Path(config["paths"]["evidence_directory"]).resolve(strict=True) != args.evidence.parent.resolve(strict=True):
                 raise ContractError("run config evidence directory does not match the supplied evidence")
             validate_evidence_run_config(validated, config, config_raw)
             output = {
                 "cold_start_count": validated["run"]["cold_start_count"],
                 "third_party_code_executions": validated["third_party_code_executions"],
+                "supplemental_executions": validated["supplemental_zip_results"][
+                    "supplemental_executions"
+                ],
                 "transport_executions": validated["transport"]["transport_executions"],
                 "valid": True,
             }

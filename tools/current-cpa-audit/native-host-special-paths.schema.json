@@ -1,0 +1,357 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyber-abuse-guard.invalid/schemas/native-host-special-paths-v1.json",
+  "title": "CAG native CPA Host special-path evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidate",
+    "claim_boundary",
+    "cpa",
+    "execution",
+    "generated_at",
+    "runtime",
+    "schema",
+    "status",
+    "test_log",
+    "test_source",
+    "tool"
+  ],
+  "properties": {
+    "candidate": {"$ref": "#/$defs/candidate"},
+    "claim_boundary": {
+      "const": "OWNER-RUN NATIVE HOST SPECIAL-PATH EVIDENCE; NOT INDEPENDENT PROOF"
+    },
+    "cpa": {"$ref": "#/$defs/cpa"},
+    "execution": {"$ref": "#/$defs/execution"},
+    "generated_at": {"$ref": "#/$defs/timestamp"},
+    "runtime": {"$ref": "#/$defs/runtime"},
+    "schema": {"const": "cyber-abuse-guard.native-host-special-paths.v1"},
+    "status": {"const": "NATIVE_HOST_SPECIAL_PATHS_PASS"},
+    "test_log": {"$ref": "#/$defs/test_log"},
+    "test_source": {"$ref": "#/$defs/test_source"},
+    "tool": {"$ref": "#/$defs/tool"}
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "minLength": 20,
+      "maxLength": 20
+    },
+    "sha1": {
+      "type": "string",
+      "pattern": "^(?!0{40}$)[0-9a-f]{40}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "sha256_digest": {
+      "type": "string",
+      "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "id", "name", "run_attempt", "run_id", "size"],
+      "properties": {
+        "digest": {"$ref": "#/$defs/sha256_digest"},
+        "id": {"type": "integer", "minimum": 1},
+        "name": {"const": "cyber-abuse-guard-linux-amd64-audit-candidate"},
+        "run_attempt": {"type": "integer", "minimum": 1},
+        "run_id": {"type": "integer", "minimum": 1},
+        "size": {"type": "integer", "minimum": 1, "maximum": 1073741824}
+      }
+    },
+    "candidate_file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes", "name", "sha256"],
+      "properties": {
+        "bytes": {"type": "integer", "minimum": 1, "maximum": 536870912},
+        "name": {"type": "string", "minLength": 1, "maxLength": 256},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "candidate_files": {
+      "type": "array",
+      "minItems": 9,
+      "maxItems": 9,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {
+            "bytes": {"maximum": 2097152},
+            "name": {"const": "audit-candidate-manifest.json"}
+          }
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "build-metadata.json"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "checksums.txt"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "cyber-abuse-guard-v1.0.0.so"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "cyber-abuse-guard-v1.0.0.so.sha256"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "cyber-abuse-guard_1.0.0_linux_amd64.zip"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "ruleset-manifest.json"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "ruleset.sha256"}}
+        },
+        {
+          "$ref": "#/$defs/candidate_file",
+          "properties": {"name": {"const": "sbom.cdx.json"}}
+        }
+      ],
+      "items": false
+    },
+    "candidate_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "dirty", "event", "head_branch", "head_sha", "tree", "version"],
+      "properties": {
+        "commit": {"$ref": "#/$defs/sha1"},
+        "dirty": {"const": false},
+        "event": {"enum": ["pull_request", "push"]},
+        "head_branch": {
+          "type": "string",
+          "pattern": "^(?!.*//)(?!.*\\.\\.)(?!.*@\\{)[A-Za-z0-9](?:[A-Za-z0-9._/-]{0,253}[A-Za-z0-9_-])?$",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "head_sha": {"$ref": "#/$defs/sha1"},
+        "tree": {"$ref": "#/$defs/sha1"},
+        "version": {"const": "1.0.0"}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "files", "manifest_sha256", "repository", "so", "source", "workflow"],
+      "properties": {
+        "artifact": {"$ref": "#/$defs/artifact"},
+        "files": {"$ref": "#/$defs/candidate_files"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "repository": {"const": "yujianwudi/cyber-abuse-guard-next"},
+        "so": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "sha256"],
+          "properties": {
+            "name": {"const": "cyber-abuse-guard-v1.0.0.so"},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "source": {"$ref": "#/$defs/candidate_source"},
+        "workflow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "path"],
+          "properties": {
+            "name": {"const": "CI"},
+            "path": {"const": ".github/workflows/ci.yml"}
+          }
+        }
+      }
+    },
+    "cpa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "tag"],
+      "properties": {
+        "commit": {"const": "2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e"},
+        "tag": {"const": "v7.2.125"}
+      }
+    },
+    "command": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "prefixItems": [
+        {"const": "go"},
+        {"const": "test"},
+        {"const": "-json"},
+        {"const": "-count=1"},
+        {"const": "-run=^TestCPAPluginHostBlocksBeforeUpstream$"},
+        {"const": "-tags=integration,sqlite_omit_load_extension"},
+        {"const": "./integration"}
+      ],
+      "items": false
+    },
+    "critical_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "name", "status"],
+      "properties": {
+        "category": {
+          "enum": ["claude_replay", "multi_agent_v2", "no_copy", "ordered_tool", "originator", "response_failed"]
+        },
+        "name": {
+          "enum": [
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-json-guard-enabled-control-fingerprint",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-openai-image-edits-multipart-large-file-keywords-ignored",
+            "TestCPAPluginHostBlocksBeforeUpstream/balanced-incomplete-allows-and-audits-rpc-body-limit",
+            "TestCPAPluginHostBlocksBeforeUpstream/strict-incomplete-blocks-rpc-body-limit",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-json-disabled-control-matches-guard-enabled-upstream",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-multipart-disabled-control-matches-guard-enabled-semantics",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-desktop-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-desktop-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-desktop-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-desktop-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-tui-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-tui-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-tui-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-tui-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-cli-rs-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-cli-rs-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-cli-rs-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-cli-rs-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-inert-tool-description-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-inert-tool-description-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-official-codex-response-failed",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-non-codex-legacy-error",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-official-codex-originator-response-failed",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-official-codex-bare-originator-response-failed",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-claude-compatible-thinking-replay-http",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-claude-compatible-thinking-replay-sse",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-claude-compatible-thinking-replay-clears-after-upstream-bad-request",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-chat-model-tools-current",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-chat-model-tools-current",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-chat-current-model-tools",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-chat-current-model-tools",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-responses-model-tools-current",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-responses-model-tools-current",
+            "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-responses-current-model-tools",
+            "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-responses-current-model-tools"
+          ]
+        },
+        "status": {"const": "PASS"}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "critical_tests",
+        "fail_count",
+        "observed_test_count",
+        "package",
+        "package_status",
+        "required_test_count",
+        "skip_count",
+        "top_level_status",
+        "top_level_test"
+      ],
+      "properties": {
+        "command": {"$ref": "#/$defs/command"},
+        "critical_tests": {
+          "type": "array",
+          "minItems": 35,
+          "maxItems": 35,
+          "prefixItems": [
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "no_copy"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-json-guard-enabled-control-fingerprint"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "no_copy"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-openai-image-edits-multipart-large-file-keywords-ignored"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "no_copy"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/balanced-incomplete-allows-and-audits-rpc-body-limit"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "no_copy"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/strict-incomplete-blocks-rpc-body-limit"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "no_copy"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-json-disabled-control-matches-guard-enabled-upstream"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "no_copy"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-multipart-disabled-control-matches-guard-enabled-semantics"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-desktop-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-desktop-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-desktop-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-desktop-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-tui-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-tui-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-tui-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-tui-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-cli-rs-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-cli-rs-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-cli-rs-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-codex-multi-agent-v2-cli-rs-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-inert-tool-description-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "multi_agent_v2"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-codex-multi-agent-v2-inert-tool-description-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "response_failed"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-official-codex-response-failed"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "response_failed"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-non-codex-legacy-error"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "originator"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-official-codex-originator-response-failed"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "originator"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-stream-upstream-failure-official-codex-bare-originator-response-failed"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "claude_replay"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-claude-compatible-thinking-replay-http"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "claude_replay"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-claude-compatible-thinking-replay-sse"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "claude_replay"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-claude-compatible-thinking-replay-clears-after-upstream-bad-request"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-chat-model-tools-current"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-chat-model-tools-current"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-chat-current-model-tools"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-chat-current-model-tools"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-responses-model-tools-current"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-responses-model-tools-current"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/allow-ordered-tool-schema-responses-current-model-tools"}}},
+            {"$ref": "#/$defs/critical_test", "properties": {"category": {"const": "ordered_tool"}, "name": {"const": "TestCPAPluginHostBlocksBeforeUpstream/block-ordered-tool-schema-responses-current-model-tools"}}}
+          ],
+          "items": false
+        },
+        "fail_count": {"const": 0},
+        "observed_test_count": {"type": "integer", "minimum": 36},
+        "package": {"const": "github.com/yujianwudi/cyber-abuse-guard-next/integration"},
+        "package_status": {"const": "PASS"},
+        "required_test_count": {"const": 36},
+        "skip_count": {"const": 0},
+        "top_level_status": {"const": "PASS"},
+        "top_level_test": {"const": "TestCPAPluginHostBlocksBeforeUpstream"}
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["go_version", "platform"],
+      "properties": {
+        "go_version": {"const": "go1.26.4"},
+        "platform": {"const": "linux/amd64"}
+      }
+    },
+    "test_log": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes", "event_count", "sha256"],
+      "properties": {
+        "bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+        "event_count": {"type": "integer", "minimum": 74},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "test_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes", "path", "sha256"],
+      "properties": {
+        "bytes": {"type": "integer", "minimum": 1, "maximum": 8388608},
+        "path": {"const": "integration/host_integration_test.go"},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_sha256", "source_sha256"],
+      "properties": {
+        "schema_sha256": {"$ref": "#/$defs/sha256"},
+        "source_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

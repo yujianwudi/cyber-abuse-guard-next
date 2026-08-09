@@ -13,11 +13,148 @@ sys.path.insert(0, str(TOOL))
 sys.path.insert(0, str(HERE))
 
 import run
-from audit_contract import CPA_COMMIT, CPA_TAG, canonical_bytes, sha256_bytes
-from fixtures import manifest
+from audit_contract import (
+    CPA_COMMIT,
+    CPA_TAG,
+    build_execution_plan,
+    build_supplemental_execution_plan,
+    canonical_bytes,
+    sha256_bytes,
+)
+from fixtures import manifest, supplemental_manifest_fixture
 
 
 class RunnerPureTests(unittest.TestCase):
+    def test_supplemental_order_and_action_accounting_are_closed(self) -> None:
+        source_manifest = manifest()
+        supplemental_manifest, _, _ = supplemental_manifest_fixture()
+        core_plan = build_execution_plan(source_manifest, 1205, 3)
+        supplemental_plan = build_supplemental_execution_plan(
+            supplemental_manifest, 1205, 3
+        )
+
+        def one_run(zip_plan: list[object]) -> tuple[tuple[object, ...], list[str]]:
+            harness = object.__new__(run.Harness)
+            harness.plan = core_plan
+            harness.supplemental_plan = zip_plan
+            harness.runtime_hashes = []
+            harness.cold_evidence = []
+            harness.failure_stage = "initialization"
+            sequence: list[str] = []
+            captured: list[tuple[object, ...]] = []
+            harness.prepare_cold_runtime = lambda *_: (Path("cold-1"), "a" * 64)
+            harness.start_cold = lambda *_: None
+            harness.reconfigure = lambda *_: None
+            harness.verify_sandbox = lambda: None
+
+            def execute_core(entry: object, ordinal: int) -> bytes:
+                sequence.append("core")
+                return canonical_bytes(
+                    [
+                        ordinal,
+                        entry.mode,
+                        entry.semantic_case_id,
+                        entry.protocol,
+                        entry.stream,
+                    ]
+                ) + b"\n"
+
+            def execute_supplemental(entry: object, ordinal: int) -> bytes:
+                sequence.append("supplemental")
+                return canonical_bytes(
+                    [
+                        ordinal,
+                        entry.mode,
+                        entry.semantic_case_id,
+                        entry.protocol,
+                        entry.stream,
+                    ]
+                ) + b"\n"
+
+            harness.execute_entry = execute_core
+            harness.execute_supplemental_entry = execute_supplemental
+            harness.finish_cold = lambda *args: captured.append(args) or {"index": 1}
+            with mock.patch("builtins.print"):
+                counts = harness.run_cold_start(1, 0, 0)
+            self.assertEqual(counts, (228, 84))
+            self.assertEqual(sequence[:228], ["core"] * 228)
+            self.assertEqual(sequence[228:], ["supplemental"] * 84)
+            return captured[0], sequence
+
+        baseline, _ = one_run(supplemental_plan)
+        reordered, _ = one_run(list(reversed(supplemental_plan)))
+        self.assertEqual(baseline[2], reordered[2])
+        self.assertEqual(baseline[3], reordered[3])
+        self.assertEqual(baseline[4], reordered[4])
+        self.assertEqual(sha256_bytes(baseline[4]), sha256_bytes(reordered[4]))
+        self.assertNotEqual(baseline[6], reordered[6])
+
+        with tempfile.TemporaryDirectory() as directory:
+            harness = object.__new__(run.Harness)
+            harness.supplemental_results_count = 0
+            harness.supplemental_action_counts = {
+                "allow": 0,
+                "block_incomplete_inspection": 0,
+                "block_malicious_text": 0,
+                "transport_error": 0,
+            }
+            results_path = Path(directory) / "supplemental-results.jsonl"
+            with results_path.open("wb") as handle:
+                harness.supplemental_results_handle = handle
+                harness.append_supplemental_result(
+                    {"actual_action": "transport_error"}
+                )
+            self.assertEqual(harness.supplemental_results_count, 1)
+            self.assertEqual(
+                harness.supplemental_action_counts,
+                {
+                    "allow": 0,
+                    "block_incomplete_inspection": 0,
+                    "block_malicious_text": 0,
+                    "transport_error": 1,
+                },
+            )
+
+    def test_supplemental_archive_verification_preserves_bytes_and_rejects_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "operator.zip"
+            original = b"operator-owned supplemental archive sentinel"
+            archive.write_bytes(original)
+            harness = object.__new__(run.Harness)
+            harness.config = {
+                "paths": {"supplemental_zip": str(archive.resolve())},
+                "supplemental_zip": {
+                    "archive_bytes": len(original),
+                    "archive_sha256": sha256_bytes(original),
+                },
+            }
+            initial = archive.lstat()
+            harness.supplemental_archive_identity = (
+                initial.st_dev,
+                initial.st_ino,
+                initial.st_nlink,
+                initial.st_size,
+            )
+            harness.verify_supplemental_archive_identity()
+            harness.verify_supplemental_archive_identity()
+            self.assertEqual(archive.read_bytes(), original)
+            self.assertEqual(
+                (archive.lstat().st_dev, archive.lstat().st_ino, archive.lstat().st_size),
+                (initial.st_dev, initial.st_ino, initial.st_size),
+            )
+
+            archive.write_bytes(b"X" * len(original))
+            with self.assertRaisesRegex(run.AuditFailure, "SHA-256"):
+                harness.verify_supplemental_archive_identity()
+
+            archive.write_bytes(original)
+            replacement = root / "replacement.zip"
+            replacement.write_bytes(original)
+            os.replace(replacement, archive)
+            with self.assertRaisesRegex(run.AuditFailure, "inode"):
+                harness.verify_supplemental_archive_identity()
+
     def test_runtime_config_has_only_counted_mock(self) -> None:
         raw = run.cpa_yaml("balanced", "client", "management", "upstream").decode("utf-8")
         self.assertIn('base-url: "http://mock:18080/v1"', raw)

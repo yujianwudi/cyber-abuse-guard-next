@@ -170,6 +170,7 @@ class CPAStoreReleaseTests(unittest.TestCase):
             "checksums-wrong-hash": self.wrong_rc_checksum,
             "candidate-checksums-masquerade": self.copy_candidate_checksums,
             "provenance-missing-derived": self.remove_derived,
+            "provenance-symlink": self.symlink_provenance,
         }
         for name, mutate in mutations.items():
             with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
@@ -201,6 +202,14 @@ class CPAStoreReleaseTests(unittest.TestCase):
         (root / "release-provenance.json").write_text(
             json.dumps({"derived_artifacts": []}) + "\n", encoding="utf-8"
         )
+
+    @staticmethod
+    def symlink_provenance(root: Path, _payload: bytes) -> None:
+        provenance = root / "release-provenance.json"
+        target = root / "release-provenance-target.json"
+        target.write_bytes(provenance.read_bytes())
+        provenance.unlink()
+        provenance.symlink_to(target.name)
 
     @staticmethod
     def rewrite_rc(

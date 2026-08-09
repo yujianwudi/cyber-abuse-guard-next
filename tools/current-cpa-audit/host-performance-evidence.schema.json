@@ -101,6 +101,7 @@
         "run_config_sha256",
         "run_sha256",
         "validator_sha256",
+        "workload_generator_sha256",
         "workload_manifest_sha256"
       ],
       "properties": {
@@ -115,6 +116,7 @@
         "run_config_sha256": {"$ref": "#/$defs/sha256"},
         "run_sha256": {"$ref": "#/$defs/sha256"},
         "validator_sha256": {"$ref": "#/$defs/sha256"},
+        "workload_generator_sha256": {"$ref": "#/$defs/sha256"},
         "workload_manifest_sha256": {"$ref": "#/$defs/sha256"}
       }
     },

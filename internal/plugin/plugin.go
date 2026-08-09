@@ -128,6 +128,11 @@ type runtimeState struct {
 	configuredAt                                 time.Time
 }
 
+type preparedRuntimeRules struct {
+	set        *rules.RuleSet
+	classifier *classifier.Classifier
+}
+
 type auditActivationStage uint8
 
 const (
@@ -621,6 +626,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	currentBeforeBuild := p.runtime.Load()
 	var preparedSubject *subject.Controller
 	var candidateConfig config.Config
+	var preparedRules *preparedRuntimeRules
 	prepareAuditCandidate := false
 	deferAuditCandidateMutation := false
 	opLocked := false
@@ -634,6 +640,22 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		if errParse != nil {
 			p.setLastConfigError(errParse)
 			p.rejectReconfigure(errParse, "invalid_config")
+			return okEnvelope(currentRegistration())
+		}
+		if errParse = validateRuntimeConfig(candidateConfig); errParse != nil {
+			p.setLastConfigError(errParse)
+			p.rejectReconfigure(errParse, "invalid_config")
+			return okEnvelope(currentRegistration())
+		}
+		// Loading and compiling the immutable rule set can be relatively slow and
+		// does not depend on active request or subject state. Prepare it before the
+		// exclusive operation barrier so ordinary callbacks keep using the current
+		// runtime until the state-dependent clone and atomic swap begin.
+		var prepareErr error
+		preparedRules, prepareErr = p.prepareRuntimeRules()
+		if prepareErr != nil {
+			p.setLastConfigError(prepareErr)
+			p.rejectReconfigure(prepareErr, "invalid_config")
 			return okEnvelope(currentRegistration())
 		}
 		p.opMu.Lock()
@@ -676,7 +698,18 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		}
 	}
 
-	state, err := p.buildRuntime(request.ConfigYAML, deferAuditCandidateMutation, prepareAuditCandidate)
+	var state *runtimeState
+	var err error
+	if preparedRules != nil {
+		state, err = p.buildRuntimeWithRules(
+			request.ConfigYAML,
+			deferAuditCandidateMutation,
+			prepareAuditCandidate,
+			preparedRules,
+		)
+	} else {
+		state, err = p.buildRuntime(request.ConfigYAML, deferAuditCandidateMutation, prepareAuditCandidate)
+	}
 	if err != nil {
 		if opLocked {
 			p.opMu.Unlock()
@@ -860,20 +893,7 @@ func (p *Plugin) log(level, message string, fields map[string]any) {
 	logger(level, message, fields)
 }
 
-func (p *Plugin) buildRuntime(rawConfig []byte, deferAuditCandidateMutation, prepareAuditCandidate bool) (*runtimeState, error) {
-	cfg, err := config.Parse(rawConfig)
-	if err != nil {
-		return nil, err
-	}
-	if cfg.Classifier.Enabled {
-		return nil, fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
-	}
-	if cfg.TrustedProxy.Enabled {
-		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.125 request interception does not provide a verified direct peer address")
-	}
-	if cfg.Audit.LogOriginalText {
-		return nil, fmt.Errorf("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
-	}
+func (p *Plugin) prepareRuntimeRules() (*preparedRuntimeRules, error) {
 	loader := p.loadRules
 	if loader == nil {
 		loader = rules.LoadDefault
@@ -885,6 +905,45 @@ func (p *Plugin) buildRuntime(rawConfig []byte, deferAuditCandidateMutation, pre
 	compiled, err := classifier.New(set)
 	if err != nil {
 		return nil, fmt.Errorf("compile rules: %w", err)
+	}
+	return &preparedRuntimeRules{set: set, classifier: compiled}, nil
+}
+
+func validateRuntimeConfig(cfg config.Config) error {
+	if cfg.Classifier.Enabled {
+		return fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
+	}
+	if cfg.TrustedProxy.Enabled {
+		return errors.New("trusted_proxy.enabled is not supported because CPA v7.2.125 request interception does not provide a verified direct peer address")
+	}
+	if cfg.Audit.LogOriginalText {
+		return errors.New("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
+	}
+	return nil
+}
+
+func (p *Plugin) buildRuntime(rawConfig []byte, deferAuditCandidateMutation, prepareAuditCandidate bool) (*runtimeState, error) {
+	return p.buildRuntimeWithRules(rawConfig, deferAuditCandidateMutation, prepareAuditCandidate, nil)
+}
+
+func (p *Plugin) buildRuntimeWithRules(
+	rawConfig []byte,
+	deferAuditCandidateMutation bool,
+	prepareAuditCandidate bool,
+	preparedRules *preparedRuntimeRules,
+) (*runtimeState, error) {
+	cfg, err := config.Parse(rawConfig)
+	if err != nil {
+		return nil, err
+	}
+	if err = validateRuntimeConfig(cfg); err != nil {
+		return nil, err
+	}
+	if preparedRules == nil {
+		preparedRules, err = p.prepareRuntimeRules()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.SubjectControl.Enabled && p.identifierErr != nil {
 		p.log("error", "cyber-abuse-guard subject identifier initialization failed", map[string]any{
@@ -908,8 +967,8 @@ func (p *Plugin) buildRuntime(rawConfig []byte, deferAuditCandidateMutation, pre
 	now := time.Now().UTC()
 	state := &runtimeState{
 		config:       cfg,
-		classifier:   compiled,
-		rulesVersion: set.Version,
+		classifier:   preparedRules.classifier,
+		rulesVersion: preparedRules.set.Version,
 		auditStorage: disabledAuditStorageVerification(),
 		subject:      controller,
 		startedAt:    now,

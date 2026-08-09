@@ -1416,6 +1416,7 @@ func TestStoreLifecyclePredicateHasNoActivateCloseFlushDiscardLockInversion(t *t
 						default:
 							_ = store.IsActive()
 							_ = store.DatabaseAvailable()
+							_ = store.Status()
 						}
 					}
 				}()

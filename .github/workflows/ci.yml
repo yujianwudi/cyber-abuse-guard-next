@@ -240,7 +240,7 @@ jobs:
           [[ "$candidate_head_branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$ ]]
           [[ "$candidate_head_sha" =~ ^[0-9a-f]{40}$ ]]
           [[ "$candidate_workflow_ref" == "$candidate_repository/"*'@'* ]]
-          candidate_workflow_path="${candidate_workflow_ref#${candidate_repository}/}"
+          candidate_workflow_path="${candidate_workflow_ref#"$candidate_repository/"}"
           candidate_workflow_path="${candidate_workflow_path%@*}"
           [[ "$candidate_workflow_path" == '.github/workflows/ci.yml' ]]
           manifest_schema='cyber-abuse-guard.audit-candidate-manifest.v1'
@@ -509,7 +509,7 @@ jobs:
           [[ "$candidate_head_branch" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$ ]]
           [[ "$candidate_head_sha" =~ ^[0-9a-f]{40}$ ]]
           [[ "$candidate_workflow_ref" == "$candidate_repository/"*'@'* ]]
-          candidate_workflow_path="${candidate_workflow_ref#${candidate_repository}/}"
+          candidate_workflow_path="${candidate_workflow_ref#"$candidate_repository/"}"
           candidate_workflow_path="${candidate_workflow_path%@*}"
           [[ "$candidate_workflow_path" == '.github/workflows/ci.yml' ]]
           [[ "$(git rev-parse HEAD)" == "$source_commit" ]]

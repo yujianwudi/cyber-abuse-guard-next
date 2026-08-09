@@ -55,6 +55,9 @@ env:
   RC_CANDIDATE_ARTIFACT_NAME: cyber-abuse-guard-linux-amd64-audit-candidate
   RC_SECOND_MACHINE_ASSET_NAME: second-machine-release-admission.json
   RC_SECOND_MACHINE_REQUIRED_STATUS: SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS
+  RC_SUPPLEMENTAL_ARCHIVE_SHA256: 23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c
+  RC_SUPPLEMENTAL_REQUIRED_STATUS: SUPPLEMENTAL_ARCHIVE_PASS
+  RC_NATIVE_HOST_REQUIRED_STATUS: NATIVE_HOST_SPECIAL_PATHS_PASS
   RC_SECOND_MACHINE_STAGING_TAG: v1.0.0-rc.1-second-machine-admission
   RC_PUBLISH_TIMEOUT_SECONDS: '1200'
   RC_CLOCK_MARGIN_SECONDS: '300'
@@ -329,6 +332,12 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
           [[ "$(grep '^status=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)" == \
             "$RC_SECOND_MACHINE_REQUIRED_STATUS" ]]
+          [[ "$(grep '^supplemental_archive_status=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)" == \
+            "$RC_SUPPLEMENTAL_REQUIRED_STATUS" ]]
+          [[ "$(grep '^supplemental_archive_sha256=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)" == \
+            "$RC_SUPPLEMENTAL_ARCHIVE_SHA256" ]]
+          [[ "$(grep '^native_host_status=' "$GITHUB_OUTPUT" | tail -n1 | cut -d= -f2-)" == \
+            "$RC_NATIVE_HOST_REQUIRED_STATUS" ]]
 
   seal_candidate:
     name: RC Linux amd64 audited-candidate seal and attestation

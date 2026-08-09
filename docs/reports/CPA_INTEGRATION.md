@@ -1,5 +1,10 @@
 # CPA v7.2.125 schema-2 active contract and frozen historical validation
 
+```text
+current_classifier_policy_version: classifier-policy-v15
+current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+```
+
 ## Round 13 active compatibility overlay
 
 The sole active source/compile target is CLIProxyAPI
@@ -25,14 +30,14 @@ release lanes remain open. See [Round 13 status](../ROUND13_STATUS.md).
 
 ## Round 13 executed contract gates
 
-The following commands passed on 2026-08-09 for this working tree:
+The following commands passed on 2026-08-10 for this working tree:
 
 - `bash scripts/release-doc-consistency.sh` — `PASS`;
 - `bash scripts/release-rc-contract-test.sh` — `PASS`;
 - `bash scripts/release-candidate-contract-test.sh` — `PASS`;
 - `make workflow-lint` — `PASS`;
 - `bash scripts/check-production-health-test.sh` — `PASS`;
-- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `184/184 PASS` on Linux;
+- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `229/229 PASS` on Linux;
 - `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` — `PASS`.
 
 These contract gates do not close the real native Host, race, complete Linux
@@ -40,11 +45,6 @@ matrix, second-machine, independent-attestation, or production gates.
 
 Everything below this overlay is the frozen Round 12 / CPA v7.2.124 report and
 must not be read as current v7.2.125 evidence.
-
-```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
-```
 
 ## Frozen Round 12 compatibility target
 

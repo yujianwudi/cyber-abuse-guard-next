@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
 import json
 import os
 import subprocess
@@ -76,6 +78,53 @@ def candidate_manifest(so_sha256: str) -> dict[str, object]:
 
 
 class MakeRunConfigTests(unittest.TestCase):
+    def test_supplemental_zip_policy_and_manifest_cli_inputs_are_required(self) -> None:
+        argv = [
+            "--output", "run-config.json",
+            "--run-id", "unit-run",
+            "--manifest", "corpus-manifest.json",
+            "--supplemental-archive", "operator.zip",
+            "--supplemental-zip-policy", "supplemental-zip-policy.json",
+            "--supplemental-zip-manifest", "supplemental-zip-manifest.json",
+            "--evidence-directory", "evidence",
+            "--cag-repository", "cag",
+            "--cag-so", CAG_SO_NAME,
+            "--candidate-manifest", "audit-candidate-manifest.json",
+            "--candidate-artifact-id", "1",
+            "--candidate-artifact-name", CANDIDATE_ARTIFACT_NAME,
+            "--candidate-artifact-digest", "sha256:" + "1" * 64,
+            "--cpa-official-asset", "cpa.tar.gz",
+            "--cpa-official-asset-sha256", "2" * 64,
+            "--cpa-binary-path", "/CLIProxyAPI",
+            "--cpa-binary-sha256", "3" * 64,
+            "--cpa-image-ref", "registry/cpa@sha256:" + "4" * 64,
+            "--cpa-image-id", "sha256:" + "5" * 64,
+            "--mock-image-ref", "registry/mock@sha256:" + "6" * 64,
+            "--mock-image-id", "sha256:" + "7" * 64,
+        ]
+        parsed = make_run_config.parse_args(argv)
+        self.assertEqual(parsed.supplemental_zip, Path("operator.zip"))
+        self.assertEqual(
+            parsed.supplemental_zip_policy, Path("supplemental-zip-policy.json")
+        )
+        self.assertEqual(
+            parsed.supplemental_zip_manifest,
+            Path("supplemental-zip-manifest.json"),
+        )
+        for option in (
+            "--supplemental-archive",
+            "--supplemental-zip-policy",
+            "--supplemental-zip-manifest",
+        ):
+            index = argv.index(option)
+            missing = argv[:index] + argv[index + 2 :]
+            with (
+                self.subTest(option=option),
+                contextlib.redirect_stderr(io.StringIO()),
+                self.assertRaises(SystemExit),
+            ):
+                make_run_config.parse_args(missing)
+
     def test_ci_manifest_uses_context_and_post_upload_external_admission(self) -> None:
         workflow = (
             TOOL.parents[1] / ".github" / "workflows" / "ci.yml"

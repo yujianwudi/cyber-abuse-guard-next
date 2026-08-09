@@ -105,6 +105,9 @@ def valid_run_config() -> dict[str, Any]:
             "cpa_official_asset": f"/srv/{CPA_OFFICIAL_ASSET_NAME}",
             "evidence_directory": "/srv/evidence",
             "mock_source": "/srv/counted_mock.py",
+            "supplemental_zip": "/srv/Codex-full.zip",
+            "supplemental_zip_manifest": "/srv/supplemental-zip-manifest.json",
+            "supplemental_zip_policy": "/srv/supplemental-zip-policy.json",
         },
         "policy_sha256": "a" * 64,
         "run": {
@@ -114,6 +117,14 @@ def valid_run_config() -> dict[str, Any]:
             "seed": 1205,
         },
         "schema": RUN_CONFIG_SCHEMA,
+        "supplemental_zip": {
+            "archive_bytes": 5830796,
+            "archive_sha256": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
+            "manifest_sha256": "b" * 64,
+            "policy_sha256": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb",
+            "selected_entry_count": 4,
+            "unique_reviewed_cases": 7,
+        },
     }
 
 
@@ -155,10 +166,25 @@ def config_bound_to_evidence(
             "cpa_official_asset": f"/srv/{CPA_OFFICIAL_ASSET_NAME}",
             "evidence_directory": evidence_directory,
             "mock_source": "/srv/counted_mock.py",
+            "supplemental_zip": "/srv/Codex-full.zip",
+            "supplemental_zip_manifest": "/srv/supplemental-zip-manifest.json",
+            "supplemental_zip_policy": "/srv/supplemental-zip-policy.json",
         },
         "policy_sha256": evidence["identities"]["runner"]["policy_sha256"],
         "run": copy.deepcopy(evidence["run"]),
         "schema": RUN_CONFIG_SCHEMA,
+        "supplemental_zip": {
+            "archive_bytes": evidence["supplemental_zip_manifest"]["archive_bytes"],
+            "archive_sha256": evidence["supplemental_zip_manifest"]["archive_sha256"],
+            "manifest_sha256": evidence["supplemental_zip_manifest"]["manifest_sha256"],
+            "policy_sha256": evidence["supplemental_zip_manifest"]["policy_sha256"],
+            "selected_entry_count": evidence["supplemental_zip_manifest"][
+                "selected_entry_count"
+            ],
+            "unique_reviewed_cases": evidence["supplemental_zip_manifest"][
+                "unique_reviewed_cases"
+            ],
+        },
     }
     raw = canonical_bytes(config) + b"\n"
     evidence["identities"]["configuration"]["input_sha256"] = sha256_bytes(raw)
@@ -729,6 +755,15 @@ class ClosedContractRegressionTests(unittest.TestCase):
                     "repo_digest": "registry.example/mock@sha256:" + "0" * 64,
                 }
             ),
+            "supplemental_archive_sha": lambda value: value[
+                "supplemental_zip"
+            ].__setitem__("archive_sha256", "f" * 64),
+            "supplemental_policy_sha": lambda value: value[
+                "supplemental_zip"
+            ].__setitem__("policy_sha256", "e" * 64),
+            "supplemental_case_count": lambda value: value[
+                "supplemental_zip"
+            ].__setitem__("unique_reviewed_cases", 6),
         }
         for label, mutate in mutations.items():
             value = valid_run_config()
@@ -1127,6 +1162,9 @@ class ClosedContractRegressionTests(unittest.TestCase):
                 mock.patch.object(
                     validator_cli, "validate_candidate_manifest_file"
                 ) as candidate_check,
+                mock.patch.object(
+                    validator_cli, "validate_supplemental_run_config_files"
+                ) as supplemental_check,
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 self.assertEqual(
@@ -1146,6 +1184,7 @@ class ClosedContractRegressionTests(unittest.TestCase):
                     0,
                 )
             candidate_check.assert_called_once_with(config)
+            supplemental_check.assert_called_once_with(config)
 
     def test_evidence_cli_rejects_non_object_without_traceback(self) -> None:
         cases = (
