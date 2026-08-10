@@ -594,9 +594,27 @@ func boundedLexicalFragmentsAround(text []rune, boundary int) bool {
 // code fence or "family\nCreate" in an inert inventory) and let defensive
 // context leak into an independently actionable directive.
 func compactFragmentIsIndependentLexeme(fragment []rune) bool {
-	switch string(fragment) {
-	case "and", "now", "then", "create", "family", "index", "text":
-		return true
+	switch len(fragment) {
+	case 2:
+		return directiveRunesEqualString(fragment, "so")
+	case 3:
+		return directiveRunesEqualString(fragment, "and") ||
+			directiveRunesEqualString(fragment, "but") ||
+			directiveRunesEqualString(fragment, "now") ||
+			directiveRunesEqualString(fragment, "yet")
+	case 4:
+		return directiveRunesEqualString(fragment, "plus") ||
+			directiveRunesEqualString(fragment, "then") ||
+			directiveRunesEqualString(fragment, "text")
+	case 5:
+		return directiveRunesEqualString(fragment, "index")
+	case 6:
+		return directiveRunesEqualString(fragment, "create") ||
+			directiveRunesEqualString(fragment, "family")
+	case 8:
+		return directiveRunesEqualString(fragment, "moreover")
+	case 9:
+		return directiveRunesEqualString(fragment, "whereupon")
 	default:
 		return false
 	}

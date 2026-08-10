@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,7 @@ SECOND_MACHINE_ASSET_NAME = "second-machine-release-admission.json"
 MAX_CANDIDATE_ARTIFACT_BYTES = 1024 * 1024 * 1024
 MAX_SECOND_MACHINE_REPORT_BYTES = 8 * 1024 * 1024
 MAX_CLOCK_SKEW = timedelta(minutes=5)
+FIXTURE_NOW_ENV = "CAG_RC_GITHUB_ADMISSION_ALLOW_FIXTURE_NOW"
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
@@ -244,6 +246,8 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     try:
+        if args.now and os.environ.get(FIXTURE_NOW_ENV) != "1":
+            fail(f"--now requires fixture-only opt-in {FIXTURE_NOW_ENV}=1")
         now = timestamp(args.now, "--now") if args.now else datetime.now(timezone.utc)
         output = validate(
             candidate_artifacts=load(args.candidate_artifacts, "candidate artifact response"),

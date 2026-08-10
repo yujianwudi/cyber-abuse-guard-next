@@ -146,7 +146,7 @@ func TestCyberAbuseGuardRCPluginStoreContract(t *testing.T) {
 	}
 
 	latest := Release{TagName: "v1.0.0", Assets: release.Assets}
-	if latestVersion, errLatest := ReleaseVersion(latest); errLatest != nil || latestVersion == rcVersion {
+	if latestVersion, errLatest := ReleaseVersion(latest); errLatest != nil || latestVersion != "1.0.0" {
 		t.Fatalf("latest stable boundary = %q, %v", latestVersion, errLatest)
 	}
 }

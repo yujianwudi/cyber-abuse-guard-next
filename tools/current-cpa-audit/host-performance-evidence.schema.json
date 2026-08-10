@@ -570,6 +570,22 @@
           }
         },
         "super_options_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "if": {
+        "additionalProperties": false,
+        "patternProperties": {"^(?!kind$).*": true},
+        "properties": {"kind": {"const": "file"}},
+        "required": ["kind"]
+      },
+      "then": {
+        "additionalProperties": false,
+        "patternProperties": {"^(?!content_sha256$).*": true},
+        "properties": {"content_sha256": {"$ref": "#/$defs/sha256"}}
+      },
+      "else": {
+        "additionalProperties": false,
+        "patternProperties": {"^(?!content_sha256$).*": true},
+        "properties": {"content_sha256": {"type": "null"}}
       }
     },
     "mount_record": {

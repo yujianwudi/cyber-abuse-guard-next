@@ -9,8 +9,8 @@ current_rc_plugin_store_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / ro
 current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_2
 current_platform: linux-amd64
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 current_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_MERGE / NO_RELEASE
 ```
 
@@ -166,8 +166,8 @@ Round 13 status at the top of this file.
 | CPA Host matrix | Active target CPA v7.2.124, Linux amd64, isolated counted Mock upstream only. The v7.2.116 exact-main engineering `.so` load, owner-run diagnostic, and any five-repository data are historical and non-transferable; RT12-05/06 protected Audit→Balanced→Strict, signed external evaluation, special-path closure, Multi-Agent v2 `/v1/responses` tool-definition regression, and protected-ledger proof remain **NOT RUN / PENDING** |
 | Production | Not accessed or modified; no production request, audit database, credential, HMAC key, account pool, or real Provider was used |
 | Scanner identity | `streaming-scanner-v1` |
-| Classifier policy | Current working-source snapshot: `classifier-policy-v12` / `2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`; Round 12 changes role/streaming defensive-owner behavior as well as the CPA-bound source identity. Exact-commit GitHub and final-candidate second-machine binding remain pending |
-| Embedded YAML ruleset | Current main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final candidate binding remains pending |
+| Classifier policy | Frozen Round 12 working-source snapshot: `classifier-policy-v12` / `2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`; Round 12 changed role/streaming defensive-owner behavior as well as the CPA-bound source identity. Exact-commit GitHub and final-candidate second-machine binding remained pending |
+| Embedded YAML ruleset | Frozen Round 12 main snapshot: `1.0.10` / `e609669853036090ff4d09379a84a4c0209d1f39120db910a6a38575678749b0`; final-candidate binding remained pending |
 | Audit schema | v6; decision kinds and explanation variants are closed, v5→v6 migration creates a mandatory pre-v6 backup, Raw Capture remains default-off, and `audit.max_db_mb` is enforced after each bounded write batch and inside subject-snapshot replacement transactions, with raw-first cleanup, explicit capacity status, and storage-write rejection that does not change classification |
 | Code review | Automated review is advisory; no independent approval is claimed |
 
@@ -185,7 +185,7 @@ are not relabelled as v7.2.125 results.
   can require an explicitly verified persistent Linux volume and exposes live
   readiness reasons without leaking the database path to unauthenticated
   callers.
-- The active compatibility target is official CPA `v7.2.124` at
+- The frozen Round 12 compatibility target was official CPA `v7.2.124` at
   `197f520426374e514218ed155933ac546c98d345`, module sum
   `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=`. C ABI 1 and RPC
   schema 2 are unchanged from v7.2.116. The standard upstream Linux amd64 asset
@@ -453,7 +453,7 @@ policy.
   listener; the watchdog enforces the observable parts of that contract. It
   binds initial/final status, both classifier health probes,
   challenge issue, ResourceRoute response, and confirmation to one random
-  256-bit plugin process identity. Applying this contract to v7.2.124 requires
+  256-bit plugin process identity. Applying this contract to v7.2.125 requires
   a fresh exact-target watchdog and Host run.
   A same-host proxy that rewrites that identity, preserves hop-by-hop headers,
   or normalizes lowercase `get` remains outside the plugin ABI boundary; see
@@ -537,7 +537,7 @@ curl -H "X-Management-Key: $CPA_MANAGEMENT_KEY" \
 ```
 
 The frozen CPA v7.2.113 lane HTML-escapes the legacy `raw_preview` string. The
-v7.2.124 target must revalidate that transport behavior. The field remains
+v7.2.125 target must revalidate that transport behavior. The field remains
 available for compatibility but is explicitly deprecated. New consumers should
 use the canonical `raw_preview_b64` field when byte-stable review text is
 required. Base64 is transport encoding, not encryption or redaction: decoded

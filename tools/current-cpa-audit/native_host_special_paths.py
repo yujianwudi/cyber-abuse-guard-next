@@ -1065,7 +1065,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         )
         return 0
-    except (ContractError, OSError, RuntimeError, ValueError) as exc:
+    except (
+        ContractError,
+        OSError,
+        RuntimeError,
+        ValueError,
+        subprocess.SubprocessError,
+    ) as exc:
         print(
             f"native Host special-path evidence failed: {type(exc).__name__}",
             file=sys.stderr,

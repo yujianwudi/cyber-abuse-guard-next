@@ -537,6 +537,23 @@ class AcquisitionIntegrationTests(unittest.TestCase):
                 ).acquire()
             self.assertFalse(output.exists())
 
+        stale_head = copy.deepcopy(approve_policy_for_client(pending, discovery_client))
+        for source in stale_head["repositories"][0]["paths"]:
+            source["reviewed_source"]["commit"] = "f" * 40
+            source["reviewed_source"]["tree"] = "e" * 40
+        acquire.validate_policy(stale_head, require_approved=True)
+        current_head_client = FakeGitHubClient(stale_head)
+        with tempfile.TemporaryDirectory() as parent:
+            output = Path(parent) / "stale-head-acquisition"
+            with self.assertRaises(ContractError):
+                acquire.Acquirer(
+                    stale_head,
+                    current_head_client,
+                    output,
+                    sha256_bytes(canonical_bytes(stale_head) + b"\n"),
+                ).acquire()
+            self.assertFalse(output.exists())
+
     def test_write_exclusive_rejects_a_hardlink_created_while_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

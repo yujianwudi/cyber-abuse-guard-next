@@ -1,8 +1,8 @@
 # Defensive Review: public prompt-injection references and v0.15 Round 6 controls
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
 > **Frozen historical snapshot.** The Round 6 addendum and the older

@@ -248,8 +248,8 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
         self.assertEqual(
             validated["reviewer"],
             {
-                "identity": "Codex Round 12 exact-source review",
-                "reviewed_at": "2026-08-06T01:19:51.256Z",
+                "identity": "Codex Round 13 exact-source review",
+                "reviewed_at": "2026-08-10T11:47:52.749Z",
                 "status": "approved",
             },
         )

@@ -4,10 +4,16 @@
 from __future__ import annotations
 
 import copy
+import contextlib
+import io
+import json
+import os
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 
 HERE = Path(__file__).resolve().parent
@@ -16,8 +22,10 @@ sys.path.insert(0, str(HERE))
 from release_rc_github_admission import (  # noqa: E402
     AdmissionError,
     CANDIDATE_NAME,
+    FIXTURE_NOW_ENV,
     SECOND_MACHINE_ASSET_NAME,
     SECOND_MACHINE_TAG,
+    main,
     validate,
 )
 
@@ -149,6 +157,52 @@ class GitHubAdmissionTests(unittest.TestCase):
         self.assert_rejected(lambda value: value["candidate_artifacts"]["artifacts"][0]["workflow_run"].__setitem__("head_sha", "8" * 40))  # type: ignore[index,union-attr]
         self.assert_rejected(lambda value: value["candidate_artifacts"]["artifacts"][0].__setitem__("digest", "not-a-digest"))  # type: ignore[index,union-attr]
         self.assert_rejected(lambda value: value["candidate_artifacts"]["artifacts"][0].__setitem__("size_in_bytes", 0))  # type: ignore[index,union-attr]
+
+    def test_cli_now_override_requires_explicit_fixture_opt_in(self) -> None:
+        value = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            inputs = {
+                "candidate.json": value["candidate_artifacts"],
+                "release.json": value["release"],
+                "release-assets.json": value["release_assets"],
+                "asset.json": value["asset"],
+            }
+            for name, payload in inputs.items():
+                (root / name).write_text(json.dumps(payload), encoding="utf-8")
+            argv = [
+                "--candidate-artifacts",
+                str(root / "candidate.json"),
+                "--second-machine-release",
+                str(root / "release.json"),
+                "--second-machine-release-assets",
+                str(root / "release-assets.json"),
+                "--second-machine-asset",
+                str(root / "asset.json"),
+                "--commit",
+                COMMIT,
+                "--ci-run-id",
+                str(CI_RUN_ID),
+                "--second-machine-release-id",
+                str(RELEASE_ID),
+                "--second-machine-asset-id",
+                str(ASSET_ID),
+                "--second-machine-asset-sha256",
+                REPORT_SHA,
+                "--now",
+                "2026-08-09T04:00:00Z",
+            ]
+            stderr = io.StringIO()
+            with mock.patch.dict(os.environ, {}, clear=True), contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(argv), 2)
+            self.assertIn(f"{FIXTURE_NOW_ENV}=1", stderr.getvalue())
+
+            stdout = io.StringIO()
+            with mock.patch.dict(
+                os.environ, {FIXTURE_NOW_ENV: "1"}, clear=True
+            ), contextlib.redirect_stdout(stdout):
+                self.assertEqual(main(argv), 0)
+            self.assertTrue(json.loads(stdout.getvalue())["valid"])
 
 
 if __name__ == "__main__":

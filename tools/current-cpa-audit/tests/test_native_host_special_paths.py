@@ -348,6 +348,29 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
                     )
                 self.assertEqual(json.loads(stdout.getvalue()), summary)
 
+                stderr = io.StringIO()
+                with (
+                    mock.patch.object(
+                        native,
+                        "live_runtime_identity",
+                        side_effect=subprocess.TimeoutExpired(["go", "env"], 30),
+                    ),
+                    contextlib.redirect_stderr(stderr),
+                ):
+                    self.assertEqual(
+                        native.main(
+                            [
+                                "pack",
+                                *common,
+                                "--output",
+                                str(fixture.root / "timeout-report.json"),
+                            ]
+                        ),
+                        2,
+                    )
+                self.assertIn("TimeoutExpired", stderr.getvalue())
+                self.assertNotIn("Traceback", stderr.getvalue())
+
     def test_output_is_exclusive(self) -> None:
         with self.fixture() as fixture:
             report = fixture.build()

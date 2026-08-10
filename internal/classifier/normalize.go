@@ -269,7 +269,9 @@ func appendBoundary(runes []rune) []rune {
 	for len(runes) > 0 && runes[len(runes)-1] == ' ' {
 		runes = runes[:len(runes)-1]
 	}
-	if len(runes) == 0 || runes[len(runes)-1] != compactHardBoundary {
+	if len(runes) == 0 ||
+		(runes[len(runes)-1] != compactHardBoundary &&
+			runes[len(runes)-1] != compactPartBoundary) {
 		runes = append(runes, compactHardBoundary)
 	}
 	return runes

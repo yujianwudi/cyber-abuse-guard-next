@@ -248,7 +248,7 @@ def canonical_bytes(value: Any) -> bytes:
         fail(f"value is not canonical JSON: {type(exc).__name__}")
 
 
-def sha256_bytes(raw: bytes) -> str:
+def sha256_bytes(raw: bytes | bytearray) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
@@ -1157,6 +1157,8 @@ def validate_supplemental_case(value: Any, label: str) -> dict[str, Any]:
     if len(identity) != 2 or any(SAFE_ID.fullmatch(part) is None for part in identity):
         fail(f"{label}.id is unsafe")
     entry_id, suffix = identity
+    template = exact_keys(case["template"], {"id", "sha256"}, f"{label}.template")
+    template_id = one_of(template["id"], tuple(TEMPLATE_BYTES), f"{label}.template.id")
     ground_truth = {
         "authorization": case["authorization"],
         "current_action": case["current_action"],
@@ -1165,12 +1167,10 @@ def validate_supplemental_case(value: Any, label: str) -> dict[str, Any]:
         "label": case["label"],
         "label_reason": case["label_reason"],
         "ownership": case["ownership"],
-        "template_id": case["template"]["id"] if isinstance(case["template"], dict) else None,
+        "template_id": template_id,
     }
     _validate_supplemental_ground_truth(ground_truth, f"{label}.ground_truth")
 
-    template = exact_keys(case["template"], {"id", "sha256"}, f"{label}.template")
-    template_id = one_of(template["id"], tuple(TEMPLATE_BYTES), f"{label}.template.id")
     if require_hex(template["sha256"], f"{label}.template.sha256") != TEMPLATE_SHA256[template_id]:
         fail(f"{label}.template.sha256 does not bind the reviewed template")
 
@@ -1214,7 +1214,7 @@ def validate_supplemental_case(value: Any, label: str) -> dict[str, Any]:
     return case
 
 
-def validate_supplemental_policy(value: Any, *, require_approved: bool = False) -> dict[str, Any]:
+def validate_supplemental_policy(value: Any) -> dict[str, Any]:
     policy = exact_keys(
         value,
         {"archive", "claim_boundary", "entries", "limits", "reviewer", "schema"},
@@ -1242,8 +1242,6 @@ def validate_supplemental_policy(value: Any, *, require_approved: bool = False) 
         policy["reviewer"], {"identity", "reviewed_at", "status"}, "supplemental ZIP policy.reviewer"
     )
     if reviewer["status"] != "approved":
-        if require_approved:
-            fail("supplemental ZIP policy is not approved")
         fail("supplemental ZIP policy must use the owner-requested approved review state")
     if reviewer["identity"] != SUPPLEMENTAL_ZIP_REVIEWER_IDENTITY:
         fail("supplemental ZIP policy reviewer identity is invalid")
@@ -1458,7 +1456,7 @@ def validate_supplemental_manifest(
         fail("supplemental ZIP manifest archive expansion metrics exceed the reviewed bounds")
 
     policy = (
-        validate_supplemental_policy(policy_value, require_approved=True)
+        validate_supplemental_policy(policy_value)
         if policy_value is not None
         else None
     )
@@ -2595,7 +2593,7 @@ def validate_supplemental_run_config_files(
         require_single_link=True,
     )
     policy = validate_supplemental_policy(
-        load_json_bytes(policy_raw, "supplemental ZIP policy"), require_approved=True
+        load_json_bytes(policy_raw, "supplemental ZIP policy")
     )
     policy_sha256 = sha256_bytes(policy_raw)
     if (
@@ -3461,9 +3459,7 @@ def validate_machine_evidence(
     supplemental_policy_value = load_json_bytes(
         copied_policy_raw, "copied supplemental ZIP policy"
     )
-    supplemental_policy = validate_supplemental_policy(
-        supplemental_policy_value, require_approved=True
-    )
+    supplemental_policy = validate_supplemental_policy(supplemental_policy_value)
     supplemental_policy_sha256 = sha256_bytes(copied_policy_raw)
     supplemental_manifest = validate_supplemental_manifest(
         supplemental_manifest_value,

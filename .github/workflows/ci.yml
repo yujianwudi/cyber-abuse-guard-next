@@ -222,6 +222,11 @@ jobs:
             pull_request)
               candidate_head_branch="$GITHUB_HEAD_REF"
               candidate_head_sha="$(jq -er '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
+              candidate_head_repository="$(jq -er '.pull_request.head.repo.full_name' "$GITHUB_EVENT_PATH")"
+              [[ "$candidate_head_repository" == "$GITHUB_REPOSITORY" ]] || {
+                echo 'fork pull-request heads cannot produce an admitted audit candidate' >&2
+                exit 1
+              }
               ;;
             push)
               candidate_head_branch="$GITHUB_REF_NAME"
@@ -491,6 +496,11 @@ jobs:
             pull_request)
               candidate_head_branch="$GITHUB_HEAD_REF"
               candidate_head_sha="$(jq -er '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
+              candidate_head_repository="$(jq -er '.pull_request.head.repo.full_name' "$GITHUB_EVENT_PATH")"
+              [[ "$candidate_head_repository" == "$GITHUB_REPOSITORY" ]] || {
+                echo 'fork pull-request heads cannot produce an admitted audit candidate' >&2
+                exit 1
+              }
               ;;
             push)
               candidate_head_branch="$GITHUB_REF_NAME"

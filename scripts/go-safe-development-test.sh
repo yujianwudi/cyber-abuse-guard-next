@@ -713,6 +713,21 @@ expected_round12_plugin_entries=(
 require_reviewed_entries ./internal/plugin "round-twelve plugin" \
   '^TestRound12[A-Za-z0-9_]*$' "${expected_round12_plugin_entries[@]}"
 
+expected_round13_classifier_entries=(
+	TestRound13AssistantMixedScriptContinuationCannotBeSuppressed
+	TestRound13AssistantQuotedRestatementProofBudgetParity
+	TestRound13AssistantQuotedRestatementSuffixRemainsDetectable
+	TestRound13AssistantScopedRestatementCannotHideOperationalContinuation
+	TestRound13AssistantScopedRestatementProofBudgetParity
+	TestRound13MixedScriptSafetyObjectCannotConsumeOperationalContinuation
+	TestRound13ProfiledClearNonUserSafetyFieldsAllow
+  TestRound13ProfiledNegationReversalPolicyRemainsDetectable
+	TestRound13ProfiledNonUserSafetyOverrideRemainsDetectable
+	TestRound13SafetyPolicyNegationReversalGovernors
+	TestRound13SystemQuotedRestatementSuffixProfiledParity
+	TestRound13ToolPayloadSafetyFramingCannotSuppress
+)
+
 # Every classifier test-like entry visible without the consumed_evaluation build
 # tag is explicitly classified. Restricted evaluation/holdout tests are not
 # compiled or listed in development test/race/list modes. Any new visible test,
@@ -768,6 +783,7 @@ expected_safe_classifier_entries=(
   TestCommonPastTenseOperationalAbuse
   TestCompactRuleIntentFirstRunePreflightPreservesObfuscatedMatches
   TestCompactEvidenceDoesNotCrossParts
+	TestCompactFragmentIndependentLexemeIsExactAndAllocationFree
   TestCompactMatcherHandlesUnderscoresAndShortLiterals
   TestCompactMatcherPreservesEnglishWordBoundaries
   TestContextLabelDoesNotOverrideOperationalRealTarget
@@ -829,6 +845,7 @@ expected_safe_classifier_entries=(
   TestFindingOriginSurvivesLongStreamingFieldAndClearsWhenIncomplete
   TestFindingOriginTracksWinningRoleAndProvenance
   TestFragmentBoundaryBatchNewlineParity
+	TestFragmentBoundaryDiscourseConnectorCannotHideDirective
   TestFragmentBoundaryDoesNotCrossInterleavedPhysicalOwner
   TestFragmentBoundaryDoesNotCrossLogicalOwners
   TestFragmentBoundaryDoesNotJoinPunctuatedIndependentSentences
@@ -1012,6 +1029,7 @@ expected_safe_classifier_entries+=("${expected_round8_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round9_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round10_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round12_classifier_entries[@]}")
+expected_safe_classifier_entries+=("${expected_round13_classifier_entries[@]}")
 declare -A safe_seen=()
 for name in "${expected_safe_classifier_entries[@]}"; do
 	if [[ -v safe_seen["$name"] ]]; then

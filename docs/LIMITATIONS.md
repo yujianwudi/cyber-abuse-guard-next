@@ -8,11 +8,11 @@
 > tracked in [ROUND13_STATUS.md](ROUND13_STATUS.md).
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
-Last updated: 2026-08-09 (Asia/Shanghai)
+Last updated: 2026-08-11 (Asia/Shanghai)
 
 ## Current Round 13 evidence boundary
 
@@ -24,17 +24,36 @@ The CPA module sum is `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, the go.
 SHA-256 is `4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`,
 and the binary SHA-256 is
 `656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+GitHub's current upstream latest is `v7.2.127`, but Round 13 remains deliberately
+frozen to v7.2.125. No later-version compatibility or runtime evidence is
+inferred.
+
+The current five-repository source policy SHA-256 is
+`06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26`.
+It reviews Keysmith at commit
+`3a9d2008ead29a261e2644963a50202e747c7c8a` / tree
+`973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`. A fresh read-only GitHub
+acquisition validated 5 repositories, 11 selected text sources, and 19 semantic
+cases without executing third-party code, then removed the ephemeral text.
 
 | Evidence boundary | Current Round 13 status |
 |---|---|
-| Pinned CPA source/compile contract and audit-harness unit suite | `PASS / 229_OF_229` |
-| no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `PASS / NATIVE_HOST_PENDING` |
-| Exact-candidate Linux native Host, race, and full matrix | `NOT_RUN / PENDING` |
-| Second-machine, protected Host, and independent attestation | `NOT_PROVIDED` |
-| Release readiness and production approval | `NOT_PROVIDED` |
+| Pinned CPA source/compile contract and audit-harness unit suite | `DIRTY_WORKTREE PASS / 231_OF_231 / NOT_FINAL_CANDIDATE` |
+| no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `PASS / DIRTY_WORKTREE_NATIVE_HOST_PASS / FINAL_CANDIDATE_PENDING` |
+| Dirty-worktree Linux unit, race, full script matrix, and root-isolated CPA Host/Router matrix | `PASS / NO_DATA_RACE / NOT_FINAL_CANDIDATE`; Host functional evidence only, not Host latency/RSS |
+| Exact-candidate Linux native Host, required GitHub checks, race, and full matrix | `NOT_RUN / PENDING` |
+| Local in-process performance | `CLASSIFIER-POLICY-V18 DIRTY_WORKTREE SOURCE-ONLY PASS / JSON 3c86959e...e62a2`; ordinary p95 `2.303293 ms`; five-repository surrogate p95 `105.194822 ms`; CPA Host overhead, RSS, paired throughput, and production SLO remain `NOT_PROVIDED` |
+| Local development corpus | malicious recall `154/154`; benign audit hits `3/142`; local-only and not a second-machine false-positive result |
+| Local CodeRabbit | final v18 review iterations complete; 2 valid findings fixed; 3 stale findings disproved against current source; 0 open valid findings; pushed-head GitHub CodeRabbit remains pending |
+| Pre-merge and post-main second-machine executions | `NOT_RUN` |
+| Protected Host and independent attestation | `NOT_PROVIDED` |
+| Post-main release admission | `NOT_RUN` |
+| Tag and GitHub Release | `NOT_CREATED` |
+| Production approval | `NOT_PROVIDED` |
 
-No source/unit result closes the real Host, race, full-matrix, second-machine,
-independent-audit, release, or production gates. Current status is maintained in
+No dirty-worktree source, unit, race, surrogate-performance, or local Host
+result closes exact-candidate GitHub/Host, second-machine, independent-audit,
+release, or production gates. Current status is maintained in
 [ROUND13_STATUS.md](ROUND13_STATUS.md).
 
 ## Frozen historical Round 12 evidence boundary

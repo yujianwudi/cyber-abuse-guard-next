@@ -9,6 +9,8 @@ current_rc_plugin_store_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / �
 current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_2
 current_platform: linux-amd64
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 current_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_MERGE / NO_RELEASE
 ```
 
@@ -21,11 +23,6 @@ Cyber-Abuse-Guard Next 是
 
 下方第十二轮状态仅保留为 CPA v7.2.124 历史证据，不能覆盖第十三轮身份，也不能把
 旧 PASS 转移到 CPA v7.2.125。
-
-```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
-```
 
 <!-- round12-status:start -->
 ```text

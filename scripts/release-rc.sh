@@ -224,7 +224,7 @@ validate_portable_and_candidate() {
     --expected-candidate-artifact-id "$RC_CANDIDATE_ARTIFACT_ID" \
     --expected-candidate-artifact-digest "$RC_CANDIDATE_ARTIFACT_DIGEST" \
     --expected-candidate-artifact-size "$RC_CANDIDATE_ARTIFACT_SIZE" \
-    --candidate-directory "$candidate_directory" >/dev/null
+    --candidate-directory "$candidate_directory" >/dev/null || return $?
   [[ "$(hash_file "$report")" == "$RC_SECOND_MACHINE_REPORT_SHA256" ]] || \
     release_die "portable report bytes differ from the GitHub-admitted SHA-256"
   [[ "$(stat -c %s "$report")" == "$RC_SECOND_MACHINE_ASSET_SIZE" ]] || \
@@ -573,9 +573,10 @@ verify_manifest_assets() {
   done
 }
 
-validate_dist_candidate() {
+validate_dist_candidate() (
   local stage name
   stage="$(mktemp -d)"
+  trap 'rm -rf -- "$stage"' EXIT
   for name in "${candidate_input_assets[@]}"; do
     if [[ "$name" == checksums.txt ]]; then
       install -m 0644 "$dist/$audit_checksums" "$stage/checksums.txt"
@@ -583,12 +584,8 @@ validate_dist_candidate() {
       install -m 0644 "$dist/$name" "$stage/$name"
     fi
   done
-  if ! validate_portable_and_candidate "$dist/$rc_second_report" "$stage"; then
-    rm -rf -- "$stage"
-    return 1
-  fi
-  rm -rf -- "$stage"
-}
+  validate_portable_and_candidate "$dist/$rc_second_report" "$stage"
+)
 
 verify_assets() {
   local require_attestation="$1"

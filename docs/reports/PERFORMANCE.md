@@ -1,11 +1,11 @@
 # Performance Report — Round 13 source status and historical development evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
-Last updated: 2026-08-09 (Asia/Shanghai)
+Last updated: 2026-08-11 (Asia/Shanghai)
 
 ## Round 10 bounded Linux concurrency runner
 
@@ -43,26 +43,63 @@ workload matrices fail closed. On a runner with at least 16 effective CPUs, all
 absolute gates still include c=16. This development runner remains explicitly
 non-equivalent to a production-capacity SLO.
 
-### Round 13 classifier-policy-v15 local source result
+### Selected additional 2026-08-11 classifier-policy-v18 local source rerun
 
-The 2026-08-09 isolated WSL Linux amd64 / Go 1.26.4 working-tree run completed
-`make round6-benchmark` in 204.93 seconds and the Round 10 gate in 25.72
-seconds. The Round 10 JSON deliberately records
+This final local rerun supersedes both the pre-boundary-collapse
+`0cce8613...6af8` result and the earlier v18 `a66eaa52...3e90` result as the
+selected current dirty-source evidence. It is
+bound to
+`classifier-policy-v18` /
+`9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa`.
+On WSL Linux amd64 with Go 1.26.4, 20 visible CPUs, and `GOMAXPROCS=20`,
+  the selected `make round10-performance` run passed in 24.0 wall-clock seconds;
+  the measured Go test itself completed in 17.127 seconds. Its JSON SHA-256 is
+`3c86959ea1f132b322da03b1271c1b96aa17117de70ffc1f8c73cbdaf9ee62a2`.
+The report records source HEAD
+`a672ab31eabed9ca32c90ad110a9f47b3ae407c6`, committed head tree
+`9aee6ced9cacf5ed899c658ed8d8ed422580cee8`, and
+`measured_tree=NOT_PROVIDED_DIRTY_WORKTREE`.
+
+| Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
+|---|---:|---|
+| ordinary | worst p95 `2.303293 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `105.194822 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `45.001980 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `8.702025/9.020208 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `1.311953 ms` at c=16; sampled queue max `28/256` | failure/panic count 0: `PASS` |
+
+All 2,304 bounded operations reported zero failures and zero recovered panics.
+The fixed-workload p99 regression baseline, native CPA Host/container overhead,
+paired throughput, 60-minute RSS lane, and second-machine performance evidence
+remain `NOT_PROVIDED`; this local source-only PASS is not a release or
+production-capacity result.
+
+### Round 13 pre-mixed-script-fix classifier-policy-v16 local source result
+
+This retained pre-fix run is bound to `classifier-policy-v16` /
+`2ad85748dd208ae2fd2eacc1dfe9827fc5fd9448434419c713f32b7334b7ba38`.
+The 2026-08-10 isolated WSL Linux amd64 / Go 1.26.4 working-tree run
+completed `make round6-benchmark` in 195.895 seconds and the Round 10 gate in
+21.934 seconds. The 14,503-byte Round 10 JSON has SHA-256
+`98d2bab0f30ca64ece65e732b08974672ad3b33e39bbcc3e24541a68fbaa147a`.
+It records source commit `a672ab31eabed9ca32c90ad110a9f47b3ae407c6`, committed
+head tree `9aee6ced9cacf5ed899c658ed8d8ed422580cee8`, and deliberately marks
 `measured_tree=NOT_PROVIDED_DIRTY_WORKTREE`; it is source-development evidence,
 not an exact commit, CPA Host, container, Provider, or production result.
 
 | Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
 |---|---:|---|
-| ordinary | p95 `2.395298 ms` at c=16 | p95 <= 10 ms: `PASS` |
-| five-repository surrogate activation | p95 `134.449820 ms` at c=16 | p95 <= 250 ms: `PASS` |
-| Codex-all surrogate long | p95 `63.070076 ms` at c=16 | p95 <= 600 ms: `PASS` |
-| public synthetic | p95/p99 `9.161171/9.392444 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
-| SQLite `Enqueue` + `Flush` | p95 `1.268688 ms` at c=16; sampled queue max `30/256` | failure/panic count 0: `PASS` |
+| ordinary | worst p95 `3.253807 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `107.621719 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `48.027130 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `9.326911/9.775005 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `1.447351 ms` at c=16; sampled queue max `30/256` | failure/panic count 0: `PASS` |
 
-All bounded operations reported zero failures and zero recovered panics. The
+All 2,304 bounded operations reported zero failures and zero recovered panics. The
 fixed-workload p99 regression baseline, native CPA Host/container overhead,
 throughput ratio, 60-minute RSS lane, and second-machine evidence remain
-`NOT_PROVIDED`; no release or production performance PASS is inferred.
+`NOT_PROVIDED`; this pre-v18 run provides no classifier-policy-v18, release, or
+production performance PASS.
 
 ### Frozen pre-v7.2.113 classifier-policy-v10 local source result
 

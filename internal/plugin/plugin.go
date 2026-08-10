@@ -120,7 +120,7 @@ type runtimeState struct {
 	// startup snapshot.
 	auditStorageProbe                            func(auditStorageVerification) auditStorageVerification
 	auditStorageNeedsPostActivationCheck         bool
-	auditStorageFinalBindFailed                  bool
+	auditStorageActivationDiscardRequired        bool
 	subjectPersistenceNeedsPostActivationRestore bool
 	subject                                      *subject.Controller
 	persistence                                  *subjectPersistenceRuntime
@@ -138,29 +138,70 @@ type auditActivationStage uint8
 const (
 	auditActivationBeforeSwap auditActivationStage = iota + 1
 	auditActivationAfterSwapBeforeOpen
+	auditActivationAfterPriorCloseBeforeOpen
 	auditActivationAfterOpenBeforeBind
 	auditActivationAfterMaintenanceBeforeFinalBind
 )
 
-func (state *runtimeState) close() error {
+type runtimeCloseOutcome struct {
+	durable          bool
+	sidecarsReleased bool
+	err              error
+}
+
+func (state *runtimeState) close() runtimeCloseOutcome {
 	if state == nil {
-		return nil
+		return runtimeCloseOutcome{durable: true}
 	}
+	// Capture recovery eligibility before the close transition starts. The final
+	// subject-persistence save below performs a live storage probe and may newly
+	// latch the gate; such a transition-time failure must not be mistaken for an
+	// already-visible degraded runtime that an explicit reconfigure may recover.
+	latchedBeforeClose := state.auditStorageGate != nil && state.auditStorageGate.latchedBeforeClose()
 	state.stopSubjectPersistence()
 	if state.audit == nil {
-		return nil
+		return runtimeCloseOutcome{durable: true}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	state.audit.SetErrorHandler(nil)
-	if state.auditStorageGate != nil && state.auditStorageGate.verification().blocksOperationalReadiness() {
-		return state.audit.DiscardContext(ctx)
+	if !state.audit.IsActive() ||
+		(state.auditStorageGate != nil && state.auditStorageGate.latchedBeforeClose()) {
+		// Discard is an intentional no-checkpoint boundary. Even when it returns
+		// nil, it is not durable. An explicit reconfigure may nevertheless recover
+		// from a gate that was already visibly latched before close; a failure first
+		// discovered by this close never receives that ownership-release grant.
+		err := state.audit.DiscardContext(ctx)
+		return runtimeCloseOutcome{sidecarsReleased: latchedBeforeClose && err == nil, err: err}
 	}
-	return state.audit.CloseContext(ctx)
+	// The caller has already removed this runtime behind opMu's exclusive
+	// admission boundary, and stopSubjectPersistence above has stopped its only
+	// asynchronous producer. Quiesce also closes the Store's own admission gate,
+	// drains every accepted item, and stops the worker/maintenance ticker without
+	// checkpointing or closing SQLite. Individual worker failures are fail-open
+	// and therefore are not returned by CloseContext.
+	if err := state.audit.QuiesceContext(ctx); err != nil {
+		discardErr := state.audit.DiscardContext(ctx)
+		return runtimeCloseOutcome{err: errors.Join(err, discardErr)}
+	}
+	if state.auditStorageGate != nil {
+		// readAccess bypasses the one-second write-hot-path cache. A worker may
+		// have first latched the gate while satisfying the quiesce drain above;
+		// in that case Discard must prevent the unsafe checkpoint that a normal
+		// CloseContext would otherwise attempt.
+		if err := state.auditStorageGate.readAccess(); err != nil {
+			discardErr := state.audit.DiscardContext(ctx)
+			return runtimeCloseOutcome{err: discardErr}
+		}
+	}
+	err := state.audit.CloseContext(ctx)
+	clean := err == nil && (state.auditStorageGate == nil || !state.auditStorageGate.latchedBeforeClose())
+	return runtimeCloseOutcome{durable: clean, sidecarsReleased: clean, err: err}
 }
 
-func (p *Plugin) closeRuntime(state *runtimeState) {
-	if err := state.close(); err != nil {
+func (p *Plugin) closeRuntime(state *runtimeState) runtimeCloseOutcome {
+	outcome := state.close()
+	if outcome.err != nil {
 		// SQLite diagnostics may contain operator-selected paths. Keep the Host
 		// log stable and content-free while ensuring checkpoint/close failures are
 		// not silently discarded.
@@ -169,6 +210,24 @@ func (p *Plugin) closeRuntime(state *runtimeState) {
 			"code":   "audit_storage_close_failed",
 		})
 	}
+	return outcome
+}
+
+// completePriorAuditStoreClose transfers exactly one sidecar lifecycle grant
+// to a same-path prepared candidate. A failed or timed-out prior close cannot
+// be rolled back after Swap, so the replacement is latched degraded and its
+// prepared SQLite handle is discarded during the activation failure path.
+func (state *runtimeState) completePriorAuditStoreClose(expected, sidecarsReleased bool, closeErr error) {
+	if !expected || state == nil || state.auditStorageGate == nil {
+		return
+	}
+	if sidecarsReleased && closeErr == nil {
+		state.auditStorageGate.authorizePriorStoreSidecarRelease()
+		return
+	}
+	state.auditStorage = state.auditStorageGate.latchPriorStoreCloseFailure()
+	state.auditStorageNeedsPostActivationCheck = false
+	state.auditStorageActivationDiscardRequired = true
 }
 
 // Plugin is safe for concurrent CPA callbacks. A validated runtime is built
@@ -189,7 +248,7 @@ type Plugin struct {
 	identifierErr        error
 	loadRules            func() (*rules.RuleSet, error)
 	auditStorageInspect  func(string, bool, bool, int64) auditStorageVerification
-	// auditActivationHook is nil in production. Tests use the three lifecycle
+	// auditActivationHook is nil in production. Tests use the explicit lifecycle
 	// boundaries to replace a directory/database deterministically instead of
 	// relying on scheduler timing around Swap and post-open identity binding.
 	auditActivationHook       func(auditActivationStage)
@@ -766,19 +825,30 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 				return okEnvelope(currentRegistration())
 			}
 		}
-		stores := []*audit.Store{state.audit}
+		stores := make([]*audit.Store, 0, 2)
 		if samePath {
 			// Use the queue owner as the same-path purge authority. Flush above
 			// established its writer boundary, and a compensated post-delete
 			// failure is then reflected on the Store that remains active.
-			stores[0] = current.audit
-		} else if current.audit.IsActive() {
 			stores = append(stores, current.audit)
+		} else {
+			if state.audit != nil && state.audit.IsActive() {
+				stores = append(stores, state.audit)
+			}
+			if current.audit.IsActive() {
+				stores = append(stores, current.audit)
+			}
+		}
+		if len(stores) == 0 {
+			p.opMu.Unlock()
+			p.closeRuntime(state)
+			p.rejectReconfigure(
+				errors.New("disabling raw capture or audit without an active purge Store requires restart so retained sensitive previews cannot be hidden"),
+				"audit_storage_restart_required",
+			)
+			return okEnvelope(currentRegistration())
 		}
 		for _, store := range stores {
-			if store == nil {
-				continue
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_, purgeErr := store.PurgeRawCaptures(ctx)
 			cancel()
@@ -806,7 +876,21 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	p.startupPrivacyChallenges.clear()
 	p.setLastConfigError(nil)
 	p.setLastReconfigureError(nil)
-	p.closeRuntime(previous)
+	priorClose := p.closeRuntime(previous)
+	if p.auditActivationHook != nil && state.audit != nil {
+		p.auditActivationHook(auditActivationAfterPriorCloseBeforeOpen)
+	}
+	state.completePriorAuditStoreClose(prepareAuditCandidate, priorClose.sidecarsReleased, priorClose.err)
+	if previous != nil && previous.audit != nil && !priorClose.sidecarsReleased {
+		// Close diagnostics can contain an operator-selected SQLite path. Preserve
+		// the concrete error only in the Store's internal status/log boundary and
+		// expose a stable content-free lifecycle error through management JSON.
+		message := "prior audit Store became unverified during runtime close"
+		if priorClose.err != nil {
+			message = "prior audit Store close or checkpoint failed before runtime activation"
+		}
+		p.setLastReconfigureError(errors.New(message))
+	}
 	var activationErr error
 	if state.audit != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -817,7 +901,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 				"plugin": ID,
 				"code":   "audit_activation_degraded",
 			})
-			if state.auditStorageFinalBindFailed {
+			if state.auditStorageActivationDiscardRequired {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				discardErr := state.audit.DiscardContext(ctx)
 				cancel()
@@ -1170,7 +1254,7 @@ func (p *Plugin) bindActivatedAuditStorage(state *runtimeState) error {
 	)
 	state.auditStorageNeedsPostActivationCheck = false
 	if state.auditStorage.preventsDatabaseOpen() {
-		state.auditStorageFinalBindFailed = true
+		state.auditStorageActivationDiscardRequired = true
 		if state.auditStorageGate != nil {
 			state.auditStorageGate.latch(state.auditStorage)
 		}

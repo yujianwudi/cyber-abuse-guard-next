@@ -1,8 +1,8 @@
 # Round 6 long-text streaming scanner design
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**. This is exact project

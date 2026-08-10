@@ -175,37 +175,40 @@ func (c *Controller) CloneReconfigured(cfg Config) (*Controller, error) {
 		return nil, err
 	}
 
-	c.mu.Lock()
-	clone := &Controller{
-		cfg:              c.cfg,
-		entries:          make(map[string]*entry, len(c.entries)),
-		manualSubjects:   c.manualSubjects,
-		evicted:          c.evicted,
-		rejectedCapacity: c.rejectedCapacity,
-	}
-	for element := c.evictable.Front(); element != nil; element = element.Next() {
-		subjectHash, ok := element.Value.(string)
-		if !ok {
-			continue
+	clone := func() *Controller {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		clone := &Controller{
+			cfg:              c.cfg,
+			entries:          make(map[string]*entry, len(c.entries)),
+			manualSubjects:   c.manualSubjects,
+			evicted:          c.evicted,
+			rejectedCapacity: c.rejectedCapacity,
 		}
-		current, ok := c.entries[subjectHash]
-		if !ok || current == nil || current.manualBlocked || current.element != element {
-			continue
+		for element := c.evictable.Front(); element != nil; element = element.Next() {
+			subjectHash, ok := element.Value.(string)
+			if !ok {
+				continue
+			}
+			current, ok := c.entries[subjectHash]
+			if !ok || current == nil || current.manualBlocked || current.element != element {
+				continue
+			}
+			copied := cloneSubjectEntry(current)
+			copied.element = clone.evictable.PushBack(subjectHash)
+			clone.entries[subjectHash] = copied
 		}
-		copied := cloneSubjectEntry(current)
-		copied.element = clone.evictable.PushBack(subjectHash)
-		clone.entries[subjectHash] = copied
-	}
-	for subjectHash, current := range c.entries {
-		if current == nil {
-			continue
+		for subjectHash, current := range c.entries {
+			if current == nil {
+				continue
+			}
+			if _, alreadyCopied := clone.entries[subjectHash]; alreadyCopied {
+				continue
+			}
+			clone.entries[subjectHash] = cloneSubjectEntry(current)
 		}
-		if _, alreadyCopied := clone.entries[subjectHash]; alreadyCopied {
-			continue
-		}
-		clone.entries[subjectHash] = cloneSubjectEntry(current)
-	}
-	c.mu.Unlock()
+		return clone
+	}()
 
 	if err := clone.Reconfigure(cfg); err != nil {
 		return nil, err

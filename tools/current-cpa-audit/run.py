@@ -114,6 +114,15 @@ class CleanupFailure(AuditFailure):
         super().__init__(f"cleanup failed closed; cleanup_error_id={self.cleanup_error_id}")
 
 
+def _zeroize_supplemental_texts(values: dict[str, bytearray]) -> None:
+    """Best-effort zero caller-owned supplemental buffers before release."""
+
+    for entry_id in tuple(values):
+        raw = values[entry_id]
+        raw[:] = b"\x00" * len(raw)
+    values.clear()
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -1059,7 +1068,7 @@ class Harness:
         self.supplemental_policy_raw = b""
         self.supplemental_cases: dict[str, dict[str, Any]] = {}
         self.supplemental_plan: list[Any] = []
-        self.supplemental_texts: dict[str, bytes] = {}
+        self.supplemental_texts: dict[str, bytearray] = {}
         self.supplemental_archive_identity: tuple[int, int, int, int] | None = None
         self.supplemental_archive_preserved = False
         self.cleanup = CleanupTracker(
@@ -2164,7 +2173,7 @@ class Harness:
         entry: Any,
         ordinal: int,
         case: Mapping[str, Any],
-        raw_text: bytes,
+        raw_text: bytes | bytearray,
         text: str,
         supplemental: bool,
     ) -> bytes:
@@ -2765,9 +2774,7 @@ class Harness:
                     cleanup_errors.append(f"corpus_fds:{type(cleanup_exc).__name__}")
                 finally:
                     self.bound_corpus = None
-            for entry_id in tuple(self.supplemental_texts):
-                self.supplemental_texts[entry_id] = b""
-            self.supplemental_texts.clear()
+            _zeroize_supplemental_texts(self.supplemental_texts)
             if cleanup_errors:
                 raise CleanupFailure(cleanup_errors)
         evidence = self.machine_evidence(started_at, business_before, business_after)

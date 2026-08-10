@@ -65,11 +65,10 @@ func (c *rawCaptureRollbackFailureConn) ExecContext(_ context.Context, query str
 }
 
 func (c *rawCaptureRollbackFailureConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
-	if c.owner.queryErr != nil {
-		return nil, c.owner.queryErr
-	}
 	normalized := strings.ToUpper(strings.Join(strings.Fields(query), " "))
 	switch {
+	case normalized == "SELECT COUNT(*) FROM SQLITE_SCHEMA":
+		return &rawCaptureRollbackFailureRows{columns: []string{"schema_objects"}, values: [][]driver.Value{{int64(1)}}}, nil
 	case strings.HasPrefix(normalized, "SELECT COUNT(*) FROM RAW_REQUEST_CAPTURES WHERE"):
 		return &rawCaptureRollbackFailureRows{columns: []string{"non_canonical_rows"}, values: [][]driver.Value{{int64(0)}}}, nil
 	case strings.HasPrefix(normalized, "SELECT NAME FROM SQLITE_MASTER"):
@@ -77,6 +76,9 @@ func (c *rawCaptureRollbackFailureConn) QueryContext(_ context.Context, query st
 	case strings.HasPrefix(normalized, "SELECT COUNT(*), COALESCE(SUM("):
 		return &rawCaptureRollbackFailureRows{columns: []string{"row_count", "snapshot_bytes"}, values: [][]driver.Value{{int64(0), int64(0)}}}, nil
 	case strings.HasPrefix(normalized, "SELECT ID, EVENT_ID, TIMESTAMP_NS"):
+		if c.owner.queryErr != nil {
+			return nil, c.owner.queryErr
+		}
 		return &rawCaptureRollbackFailureRows{columns: make([]string, 15)}, nil
 	default:
 		return nil, fmt.Errorf("unexpected QueryContext query %q", query)
@@ -400,6 +402,77 @@ func TestQueryRawCapturesPageDiscardsConnectionWhenDeferredRollbackFails(t *test
 	}
 	if !failingDriver.closed.Load() {
 		t.Fatal("failed deferred ROLLBACK returned an indeterminate connection to the pool")
+	}
+}
+
+func TestQueryRawCapturesPagePinsSnapshotBeforeSensitiveReadGate(t *testing.T) {
+	now := time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
+	path := filepath.Join(t.TempDir(), "sensitive-read-snapshot.db")
+	baseConfig := Config{
+		Path: path, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		QueueSize: 16, BusyTimeout: time.Second, Now: func() time.Time { return now },
+		RawCapture: RawCaptureConfig{
+			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
+		},
+	}
+	writer, err := Open(baseConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+
+	enqueueCapture := func(id, marker string, timestamp time.Time) error {
+		raw := []byte(`{"messages":[{"role":"user","content":"` + marker + `"}]}`)
+		event := rawCaptureEvent(id, timestamp, "block", "block_malicious_text", raw)
+		accepted, err := writer.EnqueueEventWithRawCapture(event, RawCaptureInput{
+			EventID: event.ID, Timestamp: event.Timestamp, RequestHash: event.RequestHash,
+			SubjectHash: event.SubjectHash, Action: event.Action, Decision: event.Decision, RawRequest: raw,
+		})
+		if err != nil {
+			return err
+		}
+		if !accepted {
+			return errors.New("raw capture snapshot fixture was not accepted")
+		}
+		return writer.Flush(context.Background())
+	}
+	if err := enqueueCapture("snapshot-before-gate-a", "snapshot A", now); err != nil {
+		t.Fatal(err)
+	}
+
+	var insertedDuringGate atomic.Bool
+	readerConfig := baseConfig
+	readerConfig.StorageReadAccessGate = func() error {
+		if insertedDuringGate.CompareAndSwap(false, true) {
+			return enqueueCapture("snapshot-during-gate-b", "snapshot B", now.Add(time.Second))
+		}
+		return nil
+	}
+	reader, err := Open(readerConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = reader.Close() })
+
+	first, err := reader.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !insertedDuringGate.Load() {
+		t.Fatal("sensitive read gate did not execute the concurrent writer fixture")
+	}
+	if len(first.Captures) != 1 || first.Captures[0].EventID != "snapshot-before-gate-a" {
+		t.Fatalf("first pinned snapshot captures=%#v, want only the pre-gate row", first.Captures)
+	}
+
+	second, err := reader.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Captures) != 2 ||
+		second.Captures[0].EventID != "snapshot-during-gate-b" ||
+		second.Captures[1].EventID != "snapshot-before-gate-a" {
+		t.Fatalf("second snapshot captures=%#v, want the concurrent and original rows", second.Captures)
 	}
 }
 

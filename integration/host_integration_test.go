@@ -77,7 +77,7 @@ func requireLinuxAMD64HostIntegration(t *testing.T, description string) {
 type mockUpstream struct {
 	server                     *httptest.Server
 	calls                      atomic.Int64
-	streamFailureStatus        atomic.Int32
+	streamTerminalRequestFault atomic.Bool
 	claudeReplayNonStreamCalls atomic.Int64
 	claudeReplayStreamCalls    atomic.Int64
 	claudeReplayErrorCalls     atomic.Int64
@@ -108,8 +108,33 @@ type countingProviderExecutor struct {
 // local block avoided credential selection, so the test installs this wrapper
 // around CPA's exported deterministic selector and snapshots it independently.
 type countingAuthSelector struct {
-	delegate coreauth.Selector
-	calls    atomic.Int64
+	owner      *coreauth.Manager
+	delegateMu sync.RWMutex
+	delegate   coreauth.Selector
+	calls      atomic.Int64
+}
+
+func (s *countingAuthSelector) setDelegate(delegate coreauth.Selector) error {
+	if s == nil || delegate == nil {
+		return errors.New("counting auth selector delegate is unavailable")
+	}
+	if delegate == s {
+		return errors.New("counting auth selector cannot delegate to itself")
+	}
+	s.delegateMu.Lock()
+	s.delegate = delegate
+	s.delegateMu.Unlock()
+	return nil
+}
+
+func (s *countingAuthSelector) binding() (*coreauth.Manager, coreauth.Selector) {
+	if s == nil {
+		return nil, nil
+	}
+	s.delegateMu.RLock()
+	owner, delegate := s.owner, s.delegate
+	s.delegateMu.RUnlock()
+	return owner, delegate
 }
 
 func (s *countingAuthSelector) Pick(
@@ -118,11 +143,17 @@ func (s *countingAuthSelector) Pick(
 	opts cliproxyexecutor.Options,
 	auths []*coreauth.Auth,
 ) (*coreauth.Auth, error) {
-	if s == nil || s.delegate == nil {
+	if s == nil {
 		return nil, errors.New("counting auth selector is not initialized")
 	}
+	s.delegateMu.RLock()
+	delegate := s.delegate
+	s.delegateMu.RUnlock()
+	if delegate == nil || delegate == s {
+		return nil, errors.New("counting auth selector delegate is not initialized")
+	}
 	s.calls.Add(1)
-	return s.delegate.Pick(ctx, provider, model, opts, auths)
+	return delegate.Pick(ctx, provider, model, opts, auths)
 }
 
 // codexAlphaSearchExecutorProbe is a completely local ProviderExecutor. It
@@ -292,6 +323,84 @@ func installStableProviderProbe(t *testing.T, manager *coreauth.Manager, identif
 	return nil
 }
 
+func installStableAuthSelectorProbe(
+	t *testing.T,
+	manager *coreauth.Manager,
+	probe *countingAuthSelector,
+	requireNativeTransition bool,
+) {
+	t.Helper()
+	const (
+		pollInterval = 50 * time.Millisecond
+		quietWindow  = 500 * time.Millisecond
+		timeout      = 15 * time.Second
+	)
+	if manager == nil || probe == nil {
+		t.Fatal("CPA auth selector probe cannot be installed without a manager and probe")
+	}
+	if probe.owner == nil {
+		probe.owner = manager
+	} else if probe.owner != manager {
+		t.Fatal("CPA auth selector probe owner changed")
+	}
+
+	deadline := time.Now().Add(timeout)
+	stableSince := time.Time{}
+	observedNative := !requireNativeTransition
+	installCount := 0
+	lastSeen := "missing"
+	for time.Now().Before(deadline) {
+		now := time.Now()
+		current := manager.Selector()
+		switch {
+		case current == nil:
+			stableSince = time.Time{}
+			lastSeen = "missing"
+		case current == probe:
+			lastSeen = fmt.Sprintf("%T", current)
+			if !observedNative {
+				stableSince = time.Time{}
+			} else if stableSince.IsZero() {
+				stableSince = now
+			} else if now.Sub(stableSince) >= quietWindow {
+				assertAuthSelectorProbeInstalled(t, probe)
+				return
+			}
+		default:
+			lastSeen = fmt.Sprintf("%T", current)
+			observedNative = true
+			if err := probe.setDelegate(current); err != nil {
+				t.Fatalf("bind CPA auth selector probe: %v", err)
+			}
+			manager.SetSelector(probe)
+			installCount++
+			stableSince = now
+		}
+		time.Sleep(pollInterval)
+	}
+	t.Fatalf("CPA auth selector did not retain the counting wrapper for %s within %s: installs=%d native_transition=%t last_seen=%s",
+		quietWindow, timeout, installCount, observedNative, lastSeen)
+}
+
+func assertAuthSelectorProbeInstalled(t testing.TB, probe *countingAuthSelector) {
+	t.Helper()
+	owner, delegate := probe.binding()
+	if owner == nil || delegate == nil || delegate == probe {
+		t.Fatalf("CPA auth selector probe has an invalid binding: owner=%t delegate=%T", owner != nil, delegate)
+	}
+	if current := owner.Selector(); current != probe {
+		t.Fatalf("CPA auth selector probe was displaced by %T; credential-selection evidence is invalid", current)
+	}
+}
+
+func authSelectionSnapshot(t testing.TB, probe *countingAuthSelector) int64 {
+	t.Helper()
+	assertAuthSelectorProbeInstalled(t, probe)
+	value := probe.calls.Load()
+	assertAuthSelectorProbeInstalled(t, probe)
+	return value
+}
+
 func newMockUpstream(t *testing.T) *mockUpstream {
 	t.Helper()
 	m := &mockUpstream{}
@@ -385,14 +494,19 @@ func newMockUpstream(t *testing.T) *mockUpstream {
 		}
 		_ = json.Unmarshal(body, &request)
 		if request.Stream {
-			if status := int(m.streamFailureStatus.Load()); status > 0 {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(status)
-				_, _ = io.WriteString(w, `{"error":{"type":"rate_limit_error","code":"mock_rate_limit","message":"synthetic counted-Mock stream failure"}}`)
-				return
-			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = io.WriteString(w, "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"integration-model\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":null}]}\n\n")
+			if m.streamTerminalRequestFault.Swap(false) {
+				if flusher, ok := w.(http.Flusher); ok {
+					flusher.Flush()
+				}
+				// A bare JSON line after the first valid SSE data chunk is converted
+				// by CPA's OpenAI-compatible executor into a post-start request fault.
+				// This reaches the official Responses terminal-error formatter without
+				// manufacturing a quota cooldown on the configured credential.
+				_, _ = io.WriteString(w, `{"error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"synthetic terminal request fault"}}`+"\n")
+				return
+			}
 			_, _ = io.WriteString(w, "data: {\"id\":\"chatcmpl-mock\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"integration-model\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":1,\"total_tokens\":2}}\n\n")
 			_, _ = io.WriteString(w, "data: [DONE]\n\n")
 			return
@@ -425,7 +539,7 @@ func (m *mockUpstream) reset() {
 	m.requests = nil
 	m.mu.Unlock()
 	m.calls.Store(0)
-	m.streamFailureStatus.Store(0)
+	m.streamTerminalRequestFault.Store(false)
 	m.claudeReplayNonStreamCalls.Store(0)
 	m.claudeReplayStreamCalls.Store(0)
 	m.claudeReplayErrorCalls.Store(0)
@@ -471,7 +585,7 @@ func runClaudeThinkingReplayHostMatrix(
 		t.Run("allow-claude-compatible-thinking-replay-"+transport, func(t *testing.T) {
 			upstream.reset()
 			countersBefore := hostPluginCounterSnapshot(t, baseURL)
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			providerBefore := claudeProbe.calls.Load()
 			guardBefore := guardProbe.calls.Load()
 			headers := http.Header{
@@ -543,7 +657,7 @@ func runClaudeThinkingReplayHostMatrix(
 	t.Run("allow-claude-compatible-thinking-replay-clears-after-upstream-bad-request", func(t *testing.T) {
 		upstream.reset()
 		countersBefore := hostPluginCounterSnapshot(t, baseURL)
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		providerBefore := claudeProbe.calls.Load()
 		guardBefore := guardProbe.calls.Load()
 		headers := http.Header{
@@ -576,7 +690,9 @@ func runClaudeThinkingReplayHostMatrix(
 		assertProviderRequestOccurred(
 			t, failed.Header, upstream, claudeProbe, failedUpstreamBefore, failedProviderBefore,
 		)
-		assertUsageQueueQuiet(t, baseURL)
+		// CAG allowed the continuation and CPA reached the selected Claude
+		// credential before the upstream rejected the replay signature.
+		assertUsageQueueIncrementedAndDrain(t, baseURL)
 
 		retryUpstreamBefore := upstream.calls.Load()
 		retryProviderBefore := claudeProbe.calls.Load()
@@ -672,8 +788,12 @@ func assertClaudeThinkingReplayClearedUpstreamRequest(t *testing.T, request mock
 	}
 }
 
-func (m *mockUpstream) failStreamsWith(status int) {
-	m.streamFailureStatus.Store(int32(status))
+func (m *mockUpstream) failNextStreamAfterFirstData() {
+	m.streamTerminalRequestFault.Store(true)
+}
+
+func (m *mockUpstream) clearStreamTerminalRequestFault() {
+	m.streamTerminalRequestFault.Store(false)
 }
 
 func hostIncidentResponseChatBody(t *testing.T, role, review, currentUser string) string {
@@ -1038,6 +1158,10 @@ func assertHostPluginForwardedCounterDelta(t *testing.T, before, after map[strin
 	for _, key := range []string{
 		"allowed", "blocked", "audited", "observed",
 		"coverage_complete", "coverage_incomplete", "incomplete_inspections",
+		"opaque_media", "opaque_media_allowed", "opaque_media_audited", "opaque_media_blocked",
+		"opaque_media_https_image_url", "opaque_media_data_url", "opaque_media_base64_image",
+		"opaque_media_audio", "opaque_media_video", "opaque_media_document",
+		"opaque_media_remote_url", "opaque_media_other",
 	} {
 		if after[key] < before[key] {
 			t.Fatalf("plugin counter %s decreased from %d to %d", key, before[key], after[key])
@@ -1048,6 +1172,16 @@ func assertHostPluginForwardedCounterDelta(t *testing.T, before, after map[strin
 		delta["coverage_complete"] != 1 || delta["coverage_incomplete"] != 0 || delta["incomplete_inspections"] != 0 {
 		t.Fatalf("forwarded plugin counter delta=%v want exactly one allow (not an audit disposition) with complete coverage; before=%v after=%v",
 			delta, before, after)
+	}
+	for _, key := range []string{
+		"opaque_media", "opaque_media_allowed", "opaque_media_audited", "opaque_media_blocked",
+		"opaque_media_https_image_url", "opaque_media_data_url", "opaque_media_base64_image",
+		"opaque_media_audio", "opaque_media_video", "opaque_media_document",
+		"opaque_media_remote_url", "opaque_media_other",
+	} {
+		if delta[key] != 0 {
+			t.Fatalf("forwarded request unexpectedly changed %s by %d; before=%v after=%v", key, delta[key], before, after)
+		}
 	}
 	if after["total"] < before["total"] || after["executor_blocks"] < before["executor_blocks"] ||
 		after["router_errors"] < before["router_errors"] {
@@ -1061,6 +1195,26 @@ func assertHostPluginForwardedCounterDelta(t *testing.T, before, after map[strin
 	}
 	if routerErrorDelta := after["router_errors"] - before["router_errors"]; routerErrorDelta != 0 {
 		t.Fatalf("forwarded request produced a CAG router/interceptor error: delta=%d before=%v after=%v", routerErrorDelta, before, after)
+	}
+}
+
+func assertHostPluginAuditedForwardedCounterDelta(t *testing.T, before, after map[string]uint64) {
+	t.Helper()
+	assertHostPluginCounterDelta(t, before, after, map[string]uint64{
+		"audited": 1, "coverage_complete": 1,
+	})
+	for _, key := range []string{
+		"opaque_media", "opaque_media_allowed", "opaque_media_audited", "opaque_media_blocked",
+		"opaque_media_https_image_url", "opaque_media_data_url", "opaque_media_base64_image",
+		"opaque_media_audio", "opaque_media_video", "opaque_media_document",
+		"opaque_media_remote_url", "opaque_media_other",
+	} {
+		if after[key] < before[key] {
+			t.Fatalf("plugin counter %s decreased from %d to %d", key, before[key], after[key])
+		}
+		if delta := after[key] - before[key]; delta != 0 {
+			t.Fatalf("audited forwarded request unexpectedly changed %s by %d; before=%v after=%v", key, delta, before, after)
+		}
 	}
 }
 
@@ -1162,7 +1316,7 @@ func runHostIncidentResponseRoleMatrix(
 				countersBefore := hostPluginCounterSnapshot(t, baseURL)
 				upstreamBefore := upstream.calls.Load()
 				providerBefore := providerProbe.calls.Load()
-				selectorBefore := authSelector.calls.Load()
+				selectorBefore := authSelectionSnapshot(t, authSelector)
 				response := assertHostExecutionResponse(t, baseURL+"/v1/chat/completions", body, http.StatusOK,
 					upstream, providerProbe, upstreamBefore, providerBefore)
 				assertProviderRequestOccurred(t, response.Header, upstream, providerProbe,
@@ -1184,7 +1338,7 @@ func runHostIncidentResponseRoleMatrix(
 			countersBefore := hostPluginCounterSnapshot(t, baseURL)
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			response := assertHostExecutionResponse(t, baseURL+"/v1/chat/completions", body, http.StatusForbidden,
 				upstream, providerProbe, upstreamBefore, providerBefore)
 			if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
@@ -1410,8 +1564,9 @@ openai-compatibility:
 	}
 
 	t.Setenv("CYBER_ABUSE_GUARD_HMAC_KEY", "integration-only-high-entropy-key-material-0123456789")
-	authSelector := &countingAuthSelector{delegate: &coreauth.RoundRobinSelector{}}
-	coreManager := coreauth.NewManager(nil, authSelector, nil)
+	authSelector := &countingAuthSelector{}
+	coreManager := coreauth.NewManager(nil, &coreauth.RoundRobinSelector{}, nil)
+	initialSelector := coreManager.Selector()
 	service, err := cliproxy.NewBuilder().
 		WithConfig(cfg).
 		WithConfigPath(configPath).
@@ -1439,7 +1594,17 @@ openai-compatibility:
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	waitHTTP(t, baseURL+"/healthz", http.StatusOK, "", 30*time.Second)
 	waitPluginRegistered(t, baseURL, 30*time.Second)
-	coreManager.SetSelector(authSelector)
+	// Plugin registration and configured auths can become visible before CPA's
+	// asynchronous full client load finishes applying manager configuration.
+	// That callback replaces the Host-supplied selector. Require both configured
+	// provider auth sets and an observed selector transition before wrapping the
+	// final CPA selector used by the pre-provider Host assertions.
+	waitForStatus(t, 30*time.Second, func() bool {
+		return coreManager.HasProviderAuth("openai-compatible-mock") &&
+			coreManager.HasProviderAuth("claude") &&
+			coreManager.Selector() != initialSelector
+	})
+	installStableAuthSelectorProbe(t, coreManager, authSelector, true)
 	assertCPARequestLoggingControls(t, baseURL)
 	assertNoCPARequestLogArtifacts(t, authDir, filepath.Dir(configPath))
 	assertStartupPrivacyResourceProof(t, baseURL, upstream)
@@ -1740,7 +1905,7 @@ openai-compatibility:
 				countersBefore := hostPluginCounterSnapshot(t, baseURL)
 				upstreamBefore := upstream.calls.Load()
 				providerBefore := providerProbe.calls.Load()
-				selectorBefore := authSelector.calls.Load()
+				selectorBefore := authSelectionSnapshot(t, authSelector)
 				guardBefore := guardExecutorProbe.calls.Load()
 				response := assertClientResponseWithUserAgent(
 					t, baseURL+"/v1/responses", body, client.userAgent, http.StatusOK,
@@ -1765,7 +1930,7 @@ openai-compatibility:
 				countersBefore := hostPluginCounterSnapshot(t, baseURL)
 				upstreamBefore := upstream.calls.Load()
 				providerBefore := providerProbe.calls.Load()
-				selectorBefore := authSelector.calls.Load()
+				selectorBefore := authSelectionSnapshot(t, authSelector)
 				guardBefore := guardExecutorProbe.calls.Load()
 				response := assertClientResponseWithUserAgent(
 					t, baseURL+"/v1/responses", body, client.userAgent, http.StatusForbidden,
@@ -1793,12 +1958,12 @@ openai-compatibility:
 		if stream {
 			transport = "sse"
 		}
-		t.Run("allow-codex-multi-agent-v2-inert-tool-description-"+transport, func(t *testing.T) {
+		t.Run("audit-codex-multi-agent-v2-hostile-tool-description-"+transport, func(t *testing.T) {
 			body := hostCodexMultiAgentV2Body(t, stream, multiAgentHostileDescription, safeResponsesContent)
 			countersBefore := hostPluginCounterSnapshot(t, baseURL)
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			guardBefore := guardExecutorProbe.calls.Load()
 			response := assertClientResponseWithUserAgent(
 				t, baseURL+"/v1/responses", body, "codex_cli_rs/0.144.1", http.StatusOK,
@@ -1815,7 +1980,10 @@ openai-compatibility:
 			assertAuthSelectionDelta(t, authSelector, selectorBefore, 1)
 			assertUsageQueueIncrementedAndDrain(t, baseURL)
 			assertGuardExecutorIdle(t, guardExecutorProbe, guardBefore)
-			assertHostPluginForwardedCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL))
+			// Tool schemas cannot acquire current-user blocking authority, but a
+			// complete malicious schema remains audit-only evidence because client
+			// identity headers and schema shapes are caller-spoofable.
+			assertHostPluginAuditedForwardedCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL))
 		})
 	}
 	for _, client := range []struct {
@@ -1865,8 +2033,8 @@ openai-compatibility:
 	} {
 		client := client
 		t.Run("allow-stream-upstream-failure-"+client.name, func(t *testing.T) {
-			upstream.failStreamsWith(http.StatusTooManyRequests)
-			t.Cleanup(func() { upstream.failStreamsWith(0) })
+			upstream.failNextStreamAfterFirstData()
+			t.Cleanup(upstream.clearStreamTerminalRequestFault)
 			countersBefore := hostPluginCounterSnapshot(t, baseURL)
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
@@ -1875,11 +2043,11 @@ openai-compatibility:
 			response := assertClientResponseWithIdentityHeaders(
 				t, baseURL+"/v1/responses", body, client.userAgent, client.originator, http.StatusOK,
 			)
-			upstream.failStreamsWith(0)
+			upstream.clearStreamTerminalRequestFault()
 			if contentType := strings.ToLower(response.Header.Get("Content-Type")); !strings.Contains(contentType, "text/event-stream") {
 				t.Fatalf("failed Responses stream Content-Type = %q, want text/event-stream", contentType)
 			}
-			for _, required := range [][]byte{client.wantEvent, client.wantPayloadType, []byte("mock_rate_limit")} {
+			for _, required := range [][]byte{client.wantEvent, client.wantPayloadType, []byte("context_length_exceeded")} {
 				if !bytes.Contains(response.Body, required) {
 					t.Fatalf("failed Responses stream lacks %q: %s", required, response.Body)
 				}
@@ -1890,7 +2058,10 @@ openai-compatibility:
 				}
 			}
 			assertProviderRequestOccurred(t, response.Header, upstream, providerProbe, upstreamBefore, providerBefore)
-			assertUsageQueueQuiet(t, baseURL)
+			// The request passed CAG, selected a credential, reached the provider,
+			// and emitted its first data chunk before the request fault. CPA therefore
+			// owns one usage record even though the downstream stream ends in an error.
+			assertUsageQueueIncrementedAndDrain(t, baseURL)
 			assertGuardExecutorIdle(t, guardExecutorProbe, guardBefore)
 			assertHostPluginForwardedCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL))
 		})
@@ -1923,7 +2094,7 @@ openai-compatibility:
 				countersBefore := hostPluginCounterSnapshot(t, baseURL)
 				upstreamBefore := upstream.calls.Load()
 				providerBefore := providerProbe.calls.Load()
-				selectorBefore := authSelector.calls.Load()
+				selectorBefore := authSelectionSnapshot(t, authSelector)
 				guardBefore := guardExecutorProbe.calls.Load()
 				response := assertClientResponse(t, baseURL+path, body, http.StatusForbidden)
 				assertNoProviderSideEffects(t, response.Header, upstream, providerProbe, upstreamBefore, providerBefore,
@@ -2054,7 +2225,7 @@ openai-compatibility:
 			countersBefore := hostPluginCounterSnapshot(t, baseURL)
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			guardExecutorBefore := guardExecutorProbe.calls.Load()
 			response, errRequest := clientRequest(baseURL+tc.path, tc.body, clientKey)
 			if errRequest != nil {
@@ -2094,7 +2265,7 @@ openai-compatibility:
 			modelName, malicious, base64.StdEncoding.EncodeToString([]byte("synthetic safe audio bytes")))
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		response := assertClientResponse(t, baseURL+"/v1/chat/completions", body, http.StatusForbidden)
 		if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
 			t.Fatalf("audio-with-malicious-text 403 body lacks guard marker: %s", response.Body)
@@ -2126,7 +2297,7 @@ openai-compatibility:
 		t.Run("block-openai-image-"+tc.name, func(t *testing.T) {
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			response := assertClientResponse(t, baseURL+tc.path, tc.body, http.StatusForbidden)
 			if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
 				t.Fatalf("openai-image 403 body lacks guard marker: %s", response.Body)
@@ -2144,7 +2315,7 @@ openai-compatibility:
 		requestBody, contentType := buildImageEditMultipart(t, imageModelName, malicious, "fixture.png", "image/png", fileBytes)
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		response := assertClientBytesResponse(t, baseURL+"/v1/images/edits", requestBody, contentType, http.StatusForbidden)
 		if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
 			t.Fatalf("multipart image-edit 403 body lacks guard marker: %s", response.Body)
@@ -2177,7 +2348,7 @@ openai-compatibility:
 		t.Run(tc.name, func(t *testing.T) {
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			response := assertClientResponse(t, baseURL+tc.path, tc.body, http.StatusForbidden)
 			if !bytes.Contains(response.Body, []byte(tc.bodyMarker)) {
 				t.Fatalf("token-count 403 body lacks protocol error marker %q: %s", tc.bodyMarker, response.Body)
@@ -2191,7 +2362,7 @@ openai-compatibility:
 	t.Run("executor-http-request-adapter-level-http-405", func(t *testing.T) {
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		// This test-only adapter proves ProviderExecutor.HttpRequest error-to-HTTP
 		// normalization only. CPA v7.2.125 exposes no generic public HTTP route for
 		// this plugin executor method, so a final official-handler HTTP 405 is not
@@ -2205,7 +2376,7 @@ openai-compatibility:
 	t.Run("image-edit-malformed-multipart-is-host-prevalidation", func(t *testing.T) {
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		malformed := []byte("--fixture-boundary\r\nContent-Disposition: form-data; name=\"prompt\"\r\n\r\ntruncated")
 		response := assertClientBytesResponse(t, baseURL+"/v1/images/edits", malformed,
 			"multipart/form-data; boundary=fixture-boundary", http.StatusBadRequest)
@@ -2235,7 +2406,7 @@ openai-compatibility:
 	}
 
 	reconfigureGuardForHost(t, baseURL, dataDir, "balanced", 256)
-	coreManager.SetSelector(authSelector)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
 	for _, tc := range incompleteCases {
 		t.Run("balanced-incomplete-allows-and-audits-"+tc.name, func(t *testing.T) {
@@ -2249,7 +2420,7 @@ openai-compatibility:
 	t.Run("balanced-legacy-max-scan-window-preserves-proven-block", func(t *testing.T) {
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		response := assertClientBytesResponse(t, baseURL+"/v1/chat/completions", legacyWindowBody,
 			"application/json", http.StatusForbidden)
 		if !bytes.Contains(response.Body, []byte("Request blocked by the local cyber-abuse policy")) {
@@ -2261,13 +2432,13 @@ openai-compatibility:
 	})
 
 	reconfigureGuardForHost(t, baseURL, dataDir, "strict", 256)
-	coreManager.SetSelector(authSelector)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
 	for _, tc := range incompleteCases {
 		t.Run("strict-incomplete-blocks-"+tc.name, func(t *testing.T) {
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			response := assertClientBytesResponse(t, baseURL+"/v1/chat/completions", tc.body, "application/json", http.StatusForbidden)
 			if !bytes.Contains(response.Body, []byte("Request blocked by the local cyber-abuse policy")) {
 				t.Fatalf("strict incomplete 403 body lacks policy marker: %s", response.Body)
@@ -2290,14 +2461,14 @@ openai-compatibility:
 		assertRound4NewMultipartSchemaEvent(t, caseID, baseURL, before, "strict", "block", round4UnknownSafeForbidden)
 	})
 	reconfigureGuardForHost(t, baseURL, dataDir, "strict", 262144)
-	coreManager.SetSelector(authSelector)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
 	runHostIncidentResponseRoleMatrix(t, "strict", baseURL, upstream, providerProbe, authSelector)
 
 	// Restore the initial production-candidate mode before the remaining Host
 	// lifecycle and streaming regressions.
 	reconfigureGuardForHost(t, baseURL, dataDir, "balanced", 262144)
-	coreManager.SetSelector(authSelector)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
 
 	blockedStreams := []struct {
@@ -2336,7 +2507,7 @@ openai-compatibility:
 			countersBefore := hostPluginCounterSnapshot(t, baseURL)
 			upstreamBefore := upstream.calls.Load()
 			providerBefore := providerProbe.calls.Load()
-			selectorBefore := authSelector.calls.Load()
+			selectorBefore := authSelectionSnapshot(t, authSelector)
 			guardExecutorBefore := guardExecutorProbe.calls.Load()
 			started := time.Now()
 			response := assertClientResponse(t, baseURL+tc.path, tc.body, http.StatusForbidden)
@@ -2373,25 +2544,21 @@ openai-compatibility:
 		return json.Unmarshal(body, &status) == nil && status.Mode == "balanced" && status.LastConfigError != ""
 	})
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
-	coreManager.SetSelector(authSelector)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	upstreamBeforeInvalid := upstream.calls.Load()
 	providerBeforeInvalid := providerProbe.calls.Load()
-	selectorBeforeInvalid := authSelector.calls.Load()
+	selectorBeforeInvalid := authSelectionSnapshot(t, authSelector)
 	invalidResponse := assertClientResponse(t, baseURL+"/v1/chat/completions", blocked[0].body, http.StatusForbidden)
 	assertNoProviderSideEffects(t, invalidResponse.Header, upstream, providerProbe,
 		upstreamBeforeInvalid, providerBeforeInvalid, authSelector, selectorBeforeInvalid)
 	assertUsageQueueQuiet(t, baseURL)
 
-	auditConfig := []byte(`{"enabled":true,"priority":300,"mode":"audit","audit":{"enabled":false,"require_persistent_storage":false}}`)
-	assertStatus(t, http.MethodPut, baseURL+"/v0/management/plugins/cyber-abuse-guard/config", auditConfig, managementKey, http.StatusOK)
-	waitForStatus(t, 15*time.Second, func() bool {
-		body := assertStatusNoFail(http.MethodGet, baseURL+"/v0/management/plugins/cyber-abuse-guard/status", nil, managementKey)
-		var status struct {
-			Mode            string `json:"mode"`
-			LastConfigError string `json:"last_config_error"`
-		}
-		return json.Unmarshal(body, &status) == nil && status.Mode == "audit" && status.LastConfigError == ""
-	})
+	// Keep the verified Store active while testing audit-mode forwarding. A
+	// later hot enable over an existing DB without an active Store correctly
+	// requires restart, so disabling audit here would invalidate the subsequent
+	// same-path Raw Capture lifecycle rather than test it.
+	reconfigureGuardForHost(t, baseURL, dataDir, "audit", 262144)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
 	t.Run("audit-mode-forwards-with-credential-selection-trace", func(t *testing.T) {
 		upstreamBefore := upstream.calls.Load()
@@ -2403,7 +2570,7 @@ openai-compatibility:
 
 	configureGuardRawCaptureForHost(t, baseURL, dataDir, true)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
-	coreManager.SetSelector(authSelector)
+	installStableAuthSelectorProbe(t, coreManager, authSelector, false)
 	runRawCaptureHostLifecycle(t, baseURL, dataDir, upstream, providerProbe, guardExecutorProbe, authSelector)
 	providerProbe = installStableProviderProbe(t, coreManager, "openai-compatible-mock")
 
@@ -3890,7 +4057,7 @@ func runRawCaptureHostLifecycle(
 	safeBody := fmt.Sprintf(`{"model":"%s","messages":[{"role":"user","content":"Summarize this ordinary local release checklist."}]}`, modelName)
 	upstreamBeforeSafe := upstream.calls.Load()
 	providerBeforeSafe := providerProbe.calls.Load()
-	selectorBeforeSafe := authSelector.calls.Load()
+	selectorBeforeSafe := authSelectionSnapshot(t, authSelector)
 	safeResponse := assertClientResponse(t, baseURL+"/v1/chat/completions", safeBody, http.StatusOK)
 	assertProviderRequestOccurred(t, safeResponse.Header, upstream, providerProbe, upstreamBeforeSafe, providerBeforeSafe)
 	assertAuthSelectionDelta(t, authSelector, selectorBeforeSafe, 1)
@@ -3914,7 +4081,7 @@ func runRawCaptureHostLifecycle(
 	for attempt := 1; attempt <= 2; attempt++ {
 		upstreamBefore := upstream.calls.Load()
 		providerBefore := providerProbe.calls.Load()
-		selectorBefore := authSelector.calls.Load()
+		selectorBefore := authSelectionSnapshot(t, authSelector)
 		guardExecutorBefore := guardExecutorProbe.calls.Load()
 		response := assertClientBytesResponse(t, baseURL+"/v1/chat/completions", blockedBody,
 			"application/json", http.StatusForbidden)
@@ -4105,15 +4272,16 @@ func reconfigureGuardForHost(t *testing.T, baseURL, dataDir, mode string, maxSca
 		"max_scan_bytes":      maxScanBytes,
 		"opaque_media_policy": "audit",
 		"audit": map[string]any{
-			"enabled":           true,
-			"data_dir":          dataDir,
-			"retention_days":    30,
-			"max_db_mb":         32,
-			"log_request_hash":  true,
-			"log_subject_hash":  true,
-			"log_rule_ids":      true,
-			"log_category":      true,
-			"log_original_text": false,
+			"enabled":                    true,
+			"data_dir":                   dataDir,
+			"require_persistent_storage": true,
+			"retention_days":             30,
+			"max_db_mb":                  32,
+			"log_request_hash":           true,
+			"log_subject_hash":           true,
+			"log_rule_ids":               true,
+			"log_category":               true,
+			"log_original_text":          false,
 		},
 		"classifier": map[string]any{
 			"enabled":    false,
@@ -4132,9 +4300,13 @@ func reconfigureGuardForHost(t *testing.T, baseURL, dataDir, mode string, maxSca
 			Mode              string `json:"mode"`
 			OpaqueMediaPolicy string `json:"opaque_media_policy"`
 			LastConfigError   string `json:"last_config_error"`
+			EffectiveLimits   struct {
+				LegacyMaxScanBytesConfigured int `json:"legacy_max_scan_bytes_configured"`
+			} `json:"effective_limits"`
 		}
 		return json.Unmarshal(body, &status) == nil && status.Mode == mode &&
-			status.OpaqueMediaPolicy == "audit" && status.LastConfigError == ""
+			status.OpaqueMediaPolicy == "audit" && status.LastConfigError == "" &&
+			status.EffectiveLimits.LegacyMaxScanBytesConfigured == maxScanBytes
 	})
 	drainUsageQueue(t, baseURL)
 }
@@ -4155,7 +4327,7 @@ func assertNoProviderSideEffects(
 	if authSelector == nil {
 		t.Fatal("blocked request auth-selector probe is unavailable")
 	}
-	selectorDelta := authSelector.calls.Load() - selectorBefore
+	selectorDelta := authSelectionSnapshot(t, authSelector) - selectorBefore
 	if traceID != "" || selectorDelta != 0 || upstreamDelta != 0 || providerDelta != 0 {
 		t.Fatalf("blocked request execution side effects trace=%q want_empty auth_selector_delta=%d want=0 mock_upstream_delta=%d want=0 provider_counter_delta=%d want=0",
 			traceID, selectorDelta, upstreamDelta, providerDelta)
@@ -4171,7 +4343,7 @@ func assertAuthSelectionDelta(
 	if authSelector == nil {
 		t.Fatal("auth-selector probe is unavailable")
 	}
-	if got := authSelector.calls.Load() - before; got != want {
+	if got := authSelectionSnapshot(t, authSelector) - before; got != want {
 		t.Fatalf("credential selector delta=%d want=%d", got, want)
 	}
 }

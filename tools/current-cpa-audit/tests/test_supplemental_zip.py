@@ -243,7 +243,7 @@ def reviewed_policy() -> tuple[dict[str, object], bytes]:
 
 def valid_manifest() -> tuple[dict[str, object], dict[str, object], bytes]:
     policy, policy_raw = reviewed_policy()
-    policy = validate_supplemental_policy(policy, require_approved=True)
+    policy = validate_supplemental_policy(policy)
     approved = []
     for index, entry in enumerate(policy["entries"]):
         approved.append(
@@ -320,6 +320,31 @@ class SupplementalZipParserTests(unittest.TestCase):
         self.assertEqual(set(inspection.selected_texts), {"entry-0", "entry-1"})
         self.assertEqual(inspection.archive["utf8_flag_entries"], 1)
         self.assertEqual(inspection.archive["unicode_path_entries"], 1)
+
+        policy, _ = reviewed_policy()
+        selected_texts = {
+            f"entry-{index}": f"owned-buffer-{index}".encode("utf-8")
+            for index in range(EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT)
+        }
+        loader_inspection = supplemental_zip.SupplementalInspection(
+            archive={},
+            approved_entries=[],
+            selected_texts=selected_texts,
+        )
+        with mock.patch.object(
+            supplemental_zip,
+            "inspect_supplemental_zip",
+            return_value=loader_inspection,
+        ):
+            loaded = supplemental_zip.load_selected_supplemental_texts(
+                Path("unused-supplemental.zip"), policy
+            )
+        for entry_id, buffer in loaded.items():
+            self.assertIsInstance(buffer, bytearray)
+            self.assertEqual(
+                bytes(buffer), loader_inspection.selected_texts[entry_id]
+            )
+            self.assertIsNot(buffer, loader_inspection.selected_texts[entry_id])
 
     def test_rejects_missing_bad_or_conflicting_unicode_path_metadata(self) -> None:
         rejected = [
@@ -440,6 +465,10 @@ class SupplementalZipParserTests(unittest.TestCase):
     def test_rejects_local_central_name_or_size_drift_and_overlap(self) -> None:
         raw, metadata = build_archive([SyntheticEntry("safe/name.md")])
         policy = parser_policy(raw, metadata)
+        unknown_policy = copy.deepcopy(policy)
+        unknown_policy["archive"]["unknown_summary_field"] = 0
+        with self.assertRaisesRegex(ContractError, "unknown archive summary key"):
+            supplemental_zip._inspect_archive_bytes(raw, unknown_policy)
         mutations = []
         local_name = bytearray(raw)
         local_name[30] ^= 1
@@ -495,7 +524,14 @@ class SupplementalZipParserTests(unittest.TestCase):
 class SupplementalContractTests(unittest.TestCase):
     def test_reviewed_policy_is_closed_and_core_denominator_is_unchanged(self) -> None:
         policy, _ = reviewed_policy()
-        policy = validate_supplemental_policy(policy, require_approved=True)
+        for status in ("pending", "draft"):
+            mutation = copy.deepcopy(policy)
+            mutation["reviewer"]["status"] = status
+            with self.subTest(status=status), self.assertRaisesRegex(
+                ContractError, "approved review state"
+            ):
+                validate_supplemental_policy(mutation)
+        policy = validate_supplemental_policy(policy)
         self.assertEqual(len(policy["entries"]), EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT)
         self.assertEqual(
             sum(len(entry["semantic_cases"]) for entry in policy["entries"]),
@@ -553,6 +589,36 @@ class SupplementalContractTests(unittest.TestCase):
         mutation["unique_reviewed_cases"] = 6
         with self.assertRaises(ContractError):
             validate_supplemental_manifest(mutation, policy, policy_sha256=policy_sha)
+
+        template_mutations = (
+            ({}, "template must contain exactly"),
+            ({"sha256": "0" * 64}, "template must contain exactly"),
+            ([], "template must contain exactly"),
+            (
+                {"id": "unknown-template", "sha256": "0" * 64},
+                "template.id must be one of",
+            ),
+        )
+        for template, message in template_mutations:
+            mutation = copy.deepcopy(manifest)
+            mutation["reviewed_cases"][0]["template"] = template
+            with self.subTest(template=template), self.assertRaisesRegex(
+                ContractError, message
+            ):
+                validate_supplemental_manifest(
+                    mutation, policy, policy_sha256=policy_sha
+                )
+
+        mutation = copy.deepcopy(manifest)
+        mutation["reviewed_cases"][0]["template"]["sha256"] = hashlib.sha256(
+            b"wrong-reviewed-template"
+        ).hexdigest()
+        with self.assertRaisesRegex(
+            ContractError, "does not bind the reviewed template"
+        ):
+            validate_supplemental_manifest(
+                mutation, policy, policy_sha256=policy_sha
+            )
 
     def test_metadata_only_acquire_validate_and_discard_preserve_archive(self) -> None:
         manifest, _policy, _policy_raw = valid_manifest()

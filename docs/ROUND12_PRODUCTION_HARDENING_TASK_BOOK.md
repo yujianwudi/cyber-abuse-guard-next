@@ -1,8 +1,8 @@
 # Cyber-Abuse-Guard Next 第十二轮生产误报、审计证据与仓库治理任务书
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
 状态：**批准实施 / 未完成验收 / 禁止发布**
@@ -21,9 +21,8 @@ repository: yujianwudi/cyber-abuse-guard-next
 baseline_branch: main
 baseline_commit: 21267e742b624b29a75bd3683fd6914f76c764b5
 baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
-active_cpa_version: v7.2.124
-active_cpa_commit: 197f520426374e514218ed155933ac546c98d345
-active_cpa_module_sum: h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=
+round12_cpa_target: v7.2.124 / 197f520426374e514218ed155933ac546c98d345
+round12_cpa_module_sum: h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=
 historical_baseline_cpa_version: v7.2.116
 historical_baseline_cpa_commit: a88197f845c979132c8978ea223c6af05cc81536
 go_toolchain: go1.26.4

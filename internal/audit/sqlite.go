@@ -104,7 +104,8 @@ type Config struct {
 	// StoragePostMaintenanceBind is the deferred-activation final identity gate.
 	// Activate invokes it only after startup maintenance and capacity measurement
 	// succeed, but before publishing admission or starting the worker. The
-	// callback must not call Close or Discard because Activate holds activateMu.
+	// callback must not call Quiesce, Close, or Discard because Activate holds
+	// activateMu.
 	StoragePostMaintenanceBind func() error
 	// StorageReadAccessGate is an independent uncached gate for sensitive reads.
 	// QueryRawCapturesPage invokes it from the same checked-out connection and
@@ -126,8 +127,8 @@ type Config struct {
 	AllowDeferredDatabaseCreate bool
 	Now                         func() time.Time
 	// OnError runs synchronously. While handling an Activate failure, it must not
-	// call Close, CloseContext, Discard, or DiscardContext on the same Store;
-	// those methods wait for Activate to release its lifecycle lock.
+	// call Quiesce, Close, or Discard (including Context variants) on the same
+	// Store; those methods wait for Activate to release its lifecycle lock.
 	OnError func(error)
 }
 
@@ -242,17 +243,18 @@ type workItem struct {
 // Store owns SQLite and a bounded nonblocking writer. Database failures affect
 // only audit counters; callers can continue classification and enforcement.
 type Store struct {
-	cfg        Config
-	db         *sql.DB
-	queue      chan workItem
-	queueSlots chan struct{}
-	statsSlots chan struct{}
-	done       chan struct{}
-	abort      chan struct{}
-	closedDone chan struct{}
-	workerCtx  context.Context
-	cancelWork context.CancelFunc
-	wg         sync.WaitGroup
+	cfg          Config
+	db           *sql.DB
+	queue        chan workItem
+	queueSlots   chan struct{}
+	statsSlots   chan struct{}
+	done         chan struct{}
+	abort        chan struct{}
+	quiescedDone chan struct{}
+	closedDone   chan struct{}
+	workerCtx    context.Context
+	cancelWork   context.CancelFunc
+	wg           sync.WaitGroup
 
 	sendMu         sync.RWMutex
 	rawAdmissionMu sync.RWMutex
@@ -261,6 +263,7 @@ type Store struct {
 	admissionCount int
 	admissionIdle  chan struct{}
 	closed         bool
+	quiesceOnce    sync.Once
 	closeOnce      sync.Once
 	abortOnce      sync.Once
 	closeErr       error
@@ -321,15 +324,16 @@ func Open(cfg Config) (*Store, error) {
 	cfg = withDefaults(cfg)
 	workerCtx, cancelWork := context.WithCancel(context.Background())
 	store := &Store{
-		cfg:        cfg,
-		queue:      make(chan workItem, cfg.QueueSize),
-		queueSlots: make(chan struct{}, cfg.QueueSize),
-		statsSlots: make(chan struct{}, statsConcurrentLimit),
-		done:       make(chan struct{}),
-		abort:      make(chan struct{}),
-		closedDone: make(chan struct{}),
-		workerCtx:  workerCtx,
-		cancelWork: cancelWork,
+		cfg:          cfg,
+		queue:        make(chan workItem, cfg.QueueSize),
+		queueSlots:   make(chan struct{}, cfg.QueueSize),
+		statsSlots:   make(chan struct{}, statsConcurrentLimit),
+		done:         make(chan struct{}),
+		abort:        make(chan struct{}),
+		quiescedDone: make(chan struct{}),
+		closedDone:   make(chan struct{}),
+		workerCtx:    workerCtx,
+		cancelWork:   cancelWork,
 	}
 	store.admissionIdle = make(chan struct{})
 	close(store.admissionIdle)
@@ -339,11 +343,10 @@ func Open(cfg Config) (*Store, error) {
 	var err error
 	deferDatabaseOpen := false
 	if cfg.SkipAllStartupMutation && cfg.AllowDeferredDatabaseCreate {
-		absPath, pathErr := filepath.Abs(cfg.Path)
-		if pathErr != nil {
-			err = fmt.Errorf("audit: resolve deferred database path: %w", pathErr)
-		} else if strings.TrimSpace(absPath) == "" {
+		if strings.TrimSpace(cfg.Path) == "" {
 			err = errors.New("audit: deferred database path is empty")
+		} else if _, pathErr := filepath.Abs(cfg.Path); pathErr != nil {
+			err = fmt.Errorf("audit: resolve deferred database path: %w", pathErr)
 		} else {
 			// A hot candidate is a mutation-free placeholder regardless of whether
 			// the database already exists. Even a read-write Ping or journal-mode
@@ -575,7 +578,12 @@ func openDatabase(cfg Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("audit: resolve database path: %w", err)
 	}
-	if err := prepareSQLitePath(absPath, !cfg.RequirePersistentStorage); err != nil {
+	// A mutation-free candidate must neither create a missing directory nor
+	// defer file-mode rejection until after SQLite has opened the path. Passing
+	// createDirectory=false makes prepareSQLitePath enforce the regular-file and
+	// private-mode contract for DB/WAL/SHM before any driver operation.
+	createDirectory := !cfg.RequirePersistentStorage && !cfg.SkipAllStartupMutation
+	if err := prepareSQLitePath(absPath, createDirectory); err != nil {
 		return nil, err
 	}
 	if cfg.SkipAllStartupMutation {
@@ -848,6 +856,15 @@ func (s *Store) run() {
 	ticker := time.NewTicker(s.cfg.CleanupInterval)
 	defer ticker.Stop()
 	for {
+		// Once quiesce publishes done, do not let a simultaneously ready ticker
+		// start a new maintenance mutation. A tick already in progress finishes
+		// before this loop returns; accepted queue work is then drained below.
+		select {
+		case <-s.done:
+			s.drainQueuedOnStop()
+			return
+		default:
+		}
 		select {
 		case item := <-s.queue:
 			s.releaseQueueSlot()
@@ -858,22 +875,27 @@ func (s *Store) run() {
 				s.report(err)
 			}
 		case <-s.done:
-			for {
-				if s.aborted.Load() {
-					s.dropQueued()
-					return
-				}
-				select {
-				case <-s.abort:
-					s.dropQueued()
-					return
-				case item := <-s.queue:
-					s.releaseQueueSlot()
-					s.handleBatch(s.collectWriteBatch(item))
-				default:
-					return
-				}
-			}
+			s.drainQueuedOnStop()
+			return
+		}
+	}
+}
+
+func (s *Store) drainQueuedOnStop() {
+	for {
+		if s.aborted.Load() {
+			s.dropQueued()
+			return
+		}
+		select {
+		case <-s.abort:
+			s.dropQueued()
+			return
+		case item := <-s.queue:
+			s.releaseQueueSlot()
+			s.handleBatch(s.collectWriteBatch(item))
+		default:
+			return
 		}
 	}
 }
@@ -1268,15 +1290,16 @@ func (s *Store) SetErrorHandler(handler func(error)) {
 	s.reportMu.Unlock()
 }
 
-// CloseContext starts an idempotent background drain and waits only until the
-// supplied context expires. A timed-out caller is never forced to wait for a
-// locked SQLite writer; the background finalizer still closes the database
-// after the bounded queue has drained.
-func (s *Store) CloseContext(ctx context.Context) error {
+// startQuiesce publishes the terminal admission state exactly once and drains
+// every reservation accepted before that boundary. The worker exits only after
+// its queue and maintenance loop are both stopped. SQLite deliberately remains
+// open: the runtime owner must perform its final uncached storage verification
+// before choosing CloseContext (checkpoint) or DiscardContext (no checkpoint).
+func (s *Store) startQuiesce() {
 	if s == nil {
-		return nil
+		return
 	}
-	s.closeOnce.Do(func() {
+	s.quiesceOnce.Do(func() {
 		s.sendMu.Lock()
 		s.closed = true
 		s.closedState.Store(true)
@@ -1288,14 +1311,71 @@ func (s *Store) CloseContext(ctx context.Context) error {
 			_ = s.waitAdmissions(context.Background())
 			close(s.done)
 			s.wg.Wait()
+			// The worker owns all uses of workerCtx. Cancel only after wg confirms
+			// that queued writes and an in-flight maintenance tick have finished.
 			s.cancelWork()
+			// Activate may have passed its initial closed-state check before this
+			// quiesce began. Wait for its startup mutation and final publication
+			// boundary so a successful return is a truly mutation-free storage
+			// recheck surface. sendMu is not held, preserving the lifecycle lock
+			// order used by finishActivation.
+			s.activateMu.Lock()
+			s.activateMu.Unlock()
+			close(s.quiescedDone)
+		}()
+	})
+}
+
+// QuiesceContext atomically stops new admission and waits for every previously
+// accepted item plus any in-flight background maintenance tick to finish. It
+// never checkpoints or closes SQLite. A caller deadline only bounds the wait; the
+// idempotent background drain continues and a later call may resume waiting.
+func (s *Store) QuiesceContext(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.startQuiesce()
+	select {
+	case <-s.quiescedDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Quiesce is the unbounded form of QuiesceContext.
+func (s *Store) Quiesce() error {
+	return s.QuiesceContext(context.Background())
+}
+
+// startClose linearizes the finalization mode through closeOnce. If Close and
+// Discard race, the first terminal call decides whether the already-quiescing
+// Store may checkpoint; every caller then observes the same close result.
+func (s *Store) startClose(checkpoint bool) {
+	if s == nil {
+		return
+	}
+	s.closeOnce.Do(func() {
+		if !checkpoint && !s.closedState.Load() {
+			// A direct Discard that wins the terminal race preserves the historic
+			// no-more-queued-work boundary. When Quiesce already won admission
+			// closure, preserve its accepted-work drain instead.
+			s.abortOnce.Do(func() {
+				s.aborted.Store(true)
+				close(s.abort)
+				s.cancelWork()
+			})
+		}
+		s.startQuiesce()
+		go func() {
+			<-s.quiescedDone
 			// No sendMu is held while acquiring activateMu. This serializes the
 			// db pointer with Activate without introducing an activateMu/sendMu
 			// nesting order in either direction.
 			s.activateMu.Lock()
 			if s.db != nil {
 				var checkpointErr error
-				if !s.aborted.Load() && s.activated.Load() {
+				if checkpoint && !s.aborted.Load() && s.activated.Load() {
 					checkpointErr = checkpointWAL(s.db)
 					if checkpointErr != nil {
 						s.degraded.Store(true)
@@ -1309,33 +1389,39 @@ func (s *Store) CloseContext(ctx context.Context) error {
 			close(s.closedDone)
 		}()
 	})
+}
+
+// CloseContext starts an idempotent two-phase background finalizer and waits
+// only until the supplied context expires. The quiesce phase drains accepted
+// work and stops maintenance before the final checkpoint and database close.
+func (s *Store) CloseContext(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.startClose(true)
+	return s.waitClosed(ctx)
+}
+
+func (s *Store) waitClosed(ctx context.Context) error {
 	select {
 	case <-s.closedDone:
 		return s.closeErr
 	case <-ctx.Done():
-		s.abortOnce.Do(func() {
-			s.aborted.Store(true)
-			close(s.abort)
-			s.cancelWork()
-		})
 		return ctx.Err()
 	}
 }
 
-// DiscardContext closes the Store without attempting any further SQLite
-// checkpoint or queued write. Runtime owners use it after a verified storage
-// identity/permission/capacity failure, when even a normal close-time WAL
-// checkpoint would violate the latched no-write boundary.
+// DiscardContext closes the Store without a final SQLite checkpoint. Before an
+// explicit quiesce it aborts queued work immediately; after quiesce has begun it
+// preserves that phase's accepted-work drain while suppressing only the final
+// checkpoint. Runtime owners use it after a verified storage failure, when a
+// normal close-time WAL checkpoint would violate the latched no-write boundary.
 func (s *Store) DiscardContext(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	s.abortOnce.Do(func() {
-		s.aborted.Store(true)
-		close(s.abort)
-		s.cancelWork()
-	})
-	return s.CloseContext(ctx)
+	s.startClose(false)
+	return s.waitClosed(ctx)
 }
 
 // Discard is the unbounded form of DiscardContext.

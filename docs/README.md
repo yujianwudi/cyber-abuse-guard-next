@@ -1,8 +1,8 @@
 # Documentation index
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
@@ -19,7 +19,8 @@ archive SHA-256 is
 `4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`; its
 binary SHA-256 is
 `656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
-GitHub Actions may publish only the gated Linux RC after the Round 13 checks.
+GitHub Actions may publish only through the gated `release-rc.yml` Linux lane
+after every Round 13 admission check; it publishes a non-latest prerelease only.
 Owner-run server diagnostics are not independent evidence; production approval
 and release readiness are `NOT_PROVIDED`, and no stable `v0.16` exists.
 
@@ -60,21 +61,15 @@ they do not define the active v7.2.125 implementation:
 - [Historical Round 12 v7.2.124 status and evidence boundary](ROUND12_STATUS.md)
 - [Historical Round 12 v7.2.124 production-hardening task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md)
 - [Historical Round 12 GitHub governance read-only snapshot](reports/ROUND12_GITHUB_GOVERNANCE_SNAPSHOT.md)
-- [Blocked-request review capture operator guide](RAW_CAPTURE.md)
-- [Historical v0.16 release admission policy](RELEASE_POLICY.md)
 - [Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)
 - [Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md)
 - [Round 9 Linux old-SO rollback gate](ROUND9_OLD_SO_ROLLBACK_GATE.md)
 - [Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)
 - [Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)
-- [Round 13 test overlay plus frozen historical evidence](reports/TEST_REPORT.md)
-- [Round 13 release overlay plus frozen historical evidence](reports/RELEASE_EVIDENCE.md)
 - [Historical performance evidence and v0.16 acceptance table](reports/PERFORMANCE.md)
-- [Privacy boundary](reports/PRIVACY.md)
-- [Repository security-support policy](../SECURITY.md)
 
 Round 8 readiness, calibration, and Host documents are immutable historical
-regression evidence. They do not define the active Round 9 candidate:
+regression evidence. They do not define the active Round 13 boundary:
 
 - [Historical Round 8 v0.16-rc.2 release readiness](reports/ROUND8_RELEASE_READINESS.md)
 - [Historical Round 8 synthetic score calibration](reports/ROUND8_CALIBRATION.md)
@@ -129,13 +124,16 @@ Current GitHub Actions entry points are intentionally limited to:
 - `.github/workflows/codeql.yml` for minimal-permission Linux Go static
   analysis within the reviewed sparse source boundary;
 - `.github/workflows/policy-gate.yml` for benign/malicious policy, corpus,
-  performance, and bounded-fuzz acceptance.
+  performance, and bounded-fuzz acceptance;
+- `.github/workflows/release-rc.yml` for exact protected-main admission,
+  candidate sealing, provenance attestation, and manual non-latest prerelease
+  publication from the verified signed annotated `v1.0.0-rc.1` tag.
 
-CodeQL creates code-scanning evidence only. None of the three active workflows
-can publish a Release or use a self-hosted runner. Candidate, attestation,
-Round 8, Host, RC, formal-release, and promotion definitions were removed from
-the executable workflow directory and remain recoverable from
-Git history.
+CodeQL creates code-scanning evidence only. The first three workflows cannot
+publish a Release; `release-rc.yml` is the sole publication entry point and
+cannot publish until its complete fixed admission contract passes. None uses a
+self-hosted runner. Retired Round 8, Host, formal-release, and promotion
+definitions remain recoverable from Git history.
 
 The retired attempted `v0.15-rc.2` workflow definition is archived under
 [`archive/workflows/`](archive/workflows/) and cannot be dispatched by GitHub

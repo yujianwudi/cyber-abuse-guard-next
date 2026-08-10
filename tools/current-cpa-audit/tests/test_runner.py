@@ -115,6 +115,18 @@ class RunnerPureTests(unittest.TestCase):
                 },
             )
 
+        owned_buffers = {
+            "one": bytearray(b"first-sensitive-buffer"),
+            "two": bytearray(b"second-sensitive-buffer"),
+        }
+        retained_views = [memoryview(raw) for raw in owned_buffers.values()]
+        run._zeroize_supplemental_texts(owned_buffers)
+        self.assertEqual(owned_buffers, {})
+        for retained in retained_views:
+            self.assertGreater(len(retained), 0)
+            self.assertTrue(all(value == 0 for value in retained))
+            retained.release()
+
     def test_supplemental_archive_verification_preserves_bytes_and_rejects_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

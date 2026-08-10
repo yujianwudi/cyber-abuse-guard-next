@@ -266,7 +266,6 @@ def validate_supplemental_evidence_copies(
     )
     evidence_policy = validate_supplemental_policy(
         load_json_bytes(evidence_policy_raw, "evidence-copy supplemental ZIP policy"),
-        require_approved=True,
     )
     evidence_manifest, evidence_manifest_raw = load_canonical(
         evidence_manifest_path,

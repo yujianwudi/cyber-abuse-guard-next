@@ -19,6 +19,17 @@ AUDIT_ZIP = "cyber-abuse-guard_1.0.0_linux_amd64.zip"
 RC_ZIP = "cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip"
 AUDIT_CHECKSUMS = "audit-candidate-checksums.txt"
 CPA_CHECKSUMS = "checksums.txt"
+AUDIT_CHECKSUM_NAMES = frozenset(
+    {
+        SO_NAME,
+        f"{SO_NAME}.sha256",
+        AUDIT_ZIP,
+        "build-metadata.json",
+        "ruleset-manifest.json",
+        "ruleset.sha256",
+        "sbom.cdx.json",
+    }
+)
 
 
 def create(source: Path, output: Path) -> None:
@@ -100,6 +111,16 @@ def verify_release(directory: Path) -> None:
     audit = _checksums(directory / AUDIT_CHECKSUMS)
     if CPA_CHECKSUMS in audit:
         raise ValueError("candidate checksums may not masquerade as CPA release checksums")
+    if set(audit) != AUDIT_CHECKSUM_NAMES:
+        raise ValueError(
+            "audit-candidate-checksums.txt does not cover the exact audited asset set"
+        )
+    for name in AUDIT_CHECKSUM_NAMES:
+        path = directory / name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"audited candidate asset is missing or unsafe: {name}")
+        if audit[name] != hashlib.sha256(path.read_bytes()).hexdigest():
+            raise ValueError(f"audit-candidate-checksums.txt hash differs for {name}")
     cpa = _checksums(directory / CPA_CHECKSUMS)
     expected_names = {SO_NAME, AUDIT_ZIP, RC_ZIP}
     if set(cpa) != expected_names:

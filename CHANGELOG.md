@@ -1,11 +1,11 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
-Source-tree status updated: 2026-08-09 (Asia/Shanghai)
+Source-tree status updated: 2026-08-11 (Asia/Shanghai)
 
 ## Unreleased - v1.0.0-rc.1
 
@@ -22,6 +22,31 @@ Source-tree status updated: 2026-08-09 (Asia/Shanghai)
   Responses `response.failed`, Codex `Originator`, and Claude replay behavior.
   The native Host lane that must prove pre-provider CAG blocks emit no SSE and
   zero Provider/Auth/Executor/Usage/counted-Mock side effects remains pending.
+- Align the real v7.2.125 Host path with its asynchronous full-client load:
+  wait for auth readiness and the Host counting-selector conversion before
+  installing the final selector, and exercise official Codex
+  `response.failed`, Originator, Claude replay, ordered tool-schema, Usage
+  Queue, and Store-install behavior through the dirty-worktree Host blackbox.
+- Reduce false positives without weakening tool-schema visibility. Complete
+  system safety policies and assistant refusals are allow-safe unless an
+  operational reversal follows; hostile tool-schema text remains audit-only.
+  Ordinary tool arguments such as `document` and `format` remain inspectable
+  instead of being mislabeled opaque media, while concrete data URLs and
+  provider media containers stay opaque. A natural-language structural gate
+  removes repeated refusal parsing from large tool schemas and restores the
+  wrapper path to 2,585 allocations/op under the unchanged 3,000 limit.
+- Make same-path SQLite hot reconfiguration tolerate the retiring Store's
+  legitimate WAL/SHM cleanup without treating it as an external inode swap,
+  while preserving replacement and tamper detection.
+- Make complete audit shutdown a hard raw-preview privacy gate: an active Store
+  purges retained rows and truncates WAL before publication, while a nil or
+  inactive Store rejects hot shutdown and requires restart. Sensitive preview
+  reads now pin a read-only SQLite snapshot before the fresh storage gate, so a
+  concurrent WAL writer cannot change the rows released by that authorization.
+- Remove the long ASCII edge conversion from independent-lexeme matching with
+  exact zero-allocation rune comparisons. Restore 12 retired Round 8 workflow
+  tests to unittest discovery so Safe Gate reports `217` tests / `90` explicit
+  skips instead of silently omitting them.
 - Make hot reconfiguration generation-safe. Subject state is prepared in an
   independent controller before candidate database work, failed reconfiguration
   cannot mutate the active controller, and a successful swap clears old
@@ -29,12 +54,45 @@ Source-tree status updated: 2026-08-09 (Asia/Shanghai)
   Enabled audit storage cannot change `audit.data_dir` by hot reload; the
   candidate is rejected before directory creation or SQLite migration and must
   instead use a controlled restart.
-- Advance the classifier contract to `classifier-policy-v15` /
-  `12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9`.
+- Advance the classifier contract to `classifier-policy-v18` /
+  `9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa`.
   Bounded same-owner lexical reconstruction closes partial-word newline,
   streaming-chunk, and adjacent provider content-block splits such as
   `ste\nal` and `窃\n取`, while role, turn, scope, provenance, fragment-count,
-  rune, script, and replay-work limits prevent cross-owner composition.
+  rune, script, and replay-work limits prevent cross-owner composition. The v18
+  proof boundary also fails active on a Han/ASCII transition inside one
+  whitespace token, preventing an unknown CJK connector from being consumed
+  together with a later operational ransomware clause. A part boundary followed
+  by a leading line break now collapses to one hard boundary instead of charging
+  duplicate normalization and directive-analysis capacity.
+- Refresh the live five-repository review policy to SHA-256
+  `06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26`.
+  Keysmith advances to commit `3a9d2008ead29a261e2644963a50202e747c7c8a` /
+  tree `973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`; its two selected blobs remain
+  byte-identical. A fresh read-only acquisition validates all five repositories,
+  11 selected text sources, and 19 semantic cases without executing third-party
+  code, then removes the ephemeral text.
+- Rebind the current CPA audit runner to bundle
+  `6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f`,
+  audit contract
+  `81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e`,
+  run source
+  `21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de`,
+  and machine schema
+  `b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6`.
+  All 231 audit-tool tests pass on Linux; 19 platform/privilege-specific cases
+  are explicitly skipped.
+- Keep the Host-performance workload denominator code-owned and comparable:
+  the five-repository activation lane must contain exactly 16 requests across
+  eight Chat and eight Responses bodies before any source text is read. Bind
+  each Docker bind-mount backing identity to the exact inspect `Source` text
+  while retaining a separate resolved-path digest, so equivalent trailing,
+  repeated, or dot slashes cannot cause a false preflight rejection.
+- Make supplemental review approval unconditional, reject unknown archive
+  summary keys, and best-effort zero the four mutable text buffers owned by the
+  audit Harness before releasing them. This does not claim whole-process memory
+  zeroization: decompression, decoding, JSON, socket, CPA, and Docker may create
+  other transient copies.
 - Move the active source identity from historical `0.16` development to strict
   three-component SemVer `1.0.0`; the only authorized publication in this round
   is Linux prerelease tag/artifact `v1.0.0-rc.1` with `latest=false`.

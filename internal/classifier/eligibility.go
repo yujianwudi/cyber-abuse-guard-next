@@ -5598,7 +5598,21 @@ func resultIsEligibleBlockAction(result Result) bool {
 }
 
 func resultHasEligibleMaliciousWinner(result Result, thresholds Thresholds) bool {
-	if !resultHasEligibleBlockingCandidate(result, thresholds) || result.Category == "" ||
+	if !resultHasEligibleBlockingCandidate(result, thresholds) {
+		return false
+	}
+	return resultHasEligibleMaliciousOccurrence(result)
+}
+
+// resultHasEligibleMaliciousOccurrence validates the candidate-bound malicious
+// occurrence proof without imposing a decision-score threshold. Whole-field
+// refusal/policy suppression uses this stricter absence test so an independently
+// auditable malicious assistant occurrence cannot disappear merely because its
+// actor scope later caps it below a blocking action.
+func resultHasEligibleMaliciousOccurrence(result Result) bool {
+	if result.Truncated ||
+		(result.Coverage.State != "" && result.Coverage.State != CoverageComplete) ||
+		result.BlockEligibility == nil || !result.BlockEligibility.Eligible || result.Category == "" ||
 		len(result.RuleIDs) == 0 || result.DecisionExplanation == nil {
 		return false
 	}

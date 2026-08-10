@@ -222,7 +222,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         supplemental_policy_value = validate_supplemental_policy(
             load_json_bytes(supplemental_policy_raw, "supplemental ZIP policy"),
-            require_approved=True,
         )
         supplemental_policy_sha256 = sha256_bytes(supplemental_policy_raw)
         supplemental_manifest_raw = read_regular_bytes(

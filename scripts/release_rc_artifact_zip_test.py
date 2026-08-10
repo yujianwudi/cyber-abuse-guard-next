@@ -14,6 +14,24 @@ from release_rc_artifact_zip import ArtifactZipError, EXPECTED_FILES, verify_art
 
 
 class ArtifactZipTests(unittest.TestCase):
+    def test_expected_files_match_versioned_ci_candidate(self) -> None:
+        self.assertEqual(
+            EXPECTED_FILES,
+            frozenset(
+                {
+                    "cyber-abuse-guard-v1.0.0.so",
+                    "cyber-abuse-guard-v1.0.0.so.sha256",
+                    "cyber-abuse-guard_1.0.0_linux_amd64.zip",
+                    "audit-candidate-manifest.json",
+                    "build-metadata.json",
+                    "checksums.txt",
+                    "ruleset-manifest.json",
+                    "ruleset.sha256",
+                    "sbom.cdx.json",
+                }
+            ),
+        )
+
     def action_output(self, root: Path) -> Path:
         output = root / "action"
         output.mkdir()

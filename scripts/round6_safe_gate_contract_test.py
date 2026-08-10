@@ -2913,7 +2913,7 @@ jobs:
             ):
                 validate_candidate_workflow(workflow, Path("candidate.yml"))
 
-    def test_ci_workflow_rejects_checked_out_repository_token_exposure(self):
+    def test_ci_workflow_rejects_repository_token_exposure_and_fork_candidates(self):
         source = Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml"
         original = source.read_text(encoding="utf-8")
         validate_ci_workflow(original, source)
@@ -2930,10 +2930,22 @@ jobs:
                 "          GH_TOKEN: ${{ github['token'] }}\n",
                 1,
             ),
+            original.replace(
+                '              [[ "$candidate_head_repository" == "$GITHUB_REPOSITORY" ]] || {\n',
+                "",
+                1,
+            ),
+            original.replace(
+                ".pull_request.head.repo.full_name",
+                ".repository.full_name",
+                1,
+            ),
         )
         for workflow in mutations:
             self.assertNotEqual(workflow, original)
-            with self.assertRaisesRegex(ContractError, "github.token|repository token"):
+            with self.assertRaisesRegex(
+                ContractError, "github.token|repository token|fork pull-request heads"
+            ):
                 validate_ci_workflow(workflow, source)
 
     def test_ci_workflow_keeps_round8_counted_mock_in_an_isolated_historical_step(self):
@@ -4369,6 +4381,77 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
     def test_round13_rc_semantic_mutations_fail_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
+        step_headers = re.findall(r"^      - name: .+$", original, re.MULTILINE)
+        self.assertEqual(len(step_headers), 19)
+        step_gate_mutations = tuple(
+            original.replace(
+                f"{header}\n",
+                f"{header}\n{injected_gate}",
+                1,
+            )
+            for header in step_headers
+            for injected_gate in (
+                "        continue-on-error: true\n",
+                "        if: true\n",
+                "        if: false\n",
+                "        if: ${{ always() }}\n",
+                "        shell: bash --noprofile --norc -e {0}\n",
+            )
+        )
+        authorized_env = "          AUTHORIZED: ${{ inputs.authorize_prerelease }}\n"
+        sensitive_expression_mutations = (
+            original.replace(
+                authorized_env,
+                authorized_env
+                + "          UNREVIEWED_SECRET: ${{ secrets.RELEASE_PAT }}\n",
+                1,
+            ),
+            original.replace(
+                authorized_env,
+                authorized_env
+                + "          UNREVIEWED_SECRET: ${{ secrets['RELEASE_PAT'] }}\n",
+                1,
+            ),
+            original.replace(
+                authorized_env,
+                authorized_env
+                + "          UNREVIEWED_SECRET: ${{ toJSON(secrets) }}\n",
+                1,
+            ),
+            original.replace(
+                "          GH_TOKEN: ${{ github.token }}\n",
+                "          GH_TOKEN: ${{ secrets.RELEASE_PAT }}\n",
+                1,
+            ),
+            original.replace(
+                authorized_env,
+                authorized_env
+                + "          UNREVIEWED_TOKEN: ${{ github.token }}\n",
+                1,
+            ),
+            original.replace(
+                "          DISPATCH_REF: ${{ github.ref }}\n",
+                "          DISPATCH_REF: ${{ github.actor }}\n",
+                1,
+            ),
+            original.replace(
+                "          DISPATCH_REF: ${{ github.ref }}\n",
+                "          DISPATCH_REF: ${{ toJSON(github) }}\n",
+                1,
+            ),
+            original.replace(
+                "          GH_TOKEN: ${{ github.token }}\n",
+                "          GH_TOKEN: reviewed-static-value\n",
+                1,
+            ),
+        )
+        execution_context_mutations = (
+            original.replace(
+                authorized_env,
+                authorized_env + "          BASH_ENV: /tmp/attacker\n",
+                1,
+            ),
+        )
         mutations = (
             original.replace("defaults:\n  run:\n    shell: bash\n\n", "", 1),
             original.replace("      contents: write\n", "      contents: read\n", 1),
@@ -4403,7 +4486,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace("    runs-on: ubuntu-24.04\n", "    runs-on: ubuntu-latest\n", 1),
-        )
+        ) + step_gate_mutations + sensitive_expression_mutations + execution_context_mutations
         for index, mutation in enumerate(mutations):
             with self.subTest(mutation=index):
                 self.assertNotEqual(mutation, original)
@@ -4521,6 +4604,21 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             "tools/current-cpa-audit/tests/test_supplemental_zip.py",
         )
         self.assertEqual(set(linked_paths), set(ROUND13_RC_LINKED_CONTRACT_SHA256))
+        runbook = (root / "tools/current-cpa-audit/README.md").read_text(
+            encoding="utf-8"
+        )
+        workload_command = (
+            "python3 -B tools/current-cpa-audit/"
+            "host_performance_workloads.py generate"
+        )
+        audit_command = "python3 -B tools/current-cpa-audit/run.py"
+        self.assertEqual(runbook.count(workload_command), 1)
+        self.assertEqual(runbook.count(audit_command), 1)
+        self.assertLess(runbook.index(workload_command), runbook.index(audit_command))
+        self.assertEqual(runbook.count("`supplemental_zip.py` -"), 1)
+        self.assertEqual(
+            runbook.count("tools/current-cpa-audit/supplemental_zip.py"), 2
+        )
         for linked in linked_paths:
             with self.subTest(linked=linked), tempfile.TemporaryDirectory() as directory:
                 fixture = Path(directory)
@@ -4609,7 +4707,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         )
         return result, destination
 
-    def _historical_round8_active_rc_host_zip_extractor_accepts_only_the_two_reviewed_files(self):
+    def test_active_rc_host_zip_extractor_accepts_only_the_two_reviewed_files(self):
         regular = stat.S_IFREG | 0o600
         result, destination = self.run_active_rc_host_zip_extractor(
             (
@@ -4628,7 +4726,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             b"0" * 64 + b"  round8-host-evidence.json\n",
         )
 
-    def _historical_round8_active_rc_host_zip_extractor_rejects_unsafe_archives(self):
+    def test_active_rc_host_zip_extractor_rejects_unsafe_archives(self):
         regular = stat.S_IFREG | 0o600
         evidence = "round8-host-evidence.json"
         sidecar = "round8-host-evidence.json.sha256"
@@ -5516,7 +5614,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 with self.assertRaises(ContractError):
                     validate_round8_host_workflow(mutated, workflow_path)
 
-    def _historical_round8_active_rc_protected_host_admission_mutations_fail_closed(self):
+    def test_active_rc_protected_host_admission_mutations_fail_closed(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5556,7 +5654,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(mutated, workflow_path)
 
-    def _historical_round8_active_rc_host_artifact_zip_mutations_fail_closed_after_hash_review(self):
+    def test_active_rc_host_artifact_zip_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5633,7 +5731,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaisesRegex(ContractError, "Host artifact"):
                         validate_rc_release_workflow(mutated, workflow_path)
 
-    def _historical_round8_active_rc_ordinary_asset_attestation_mutations_fail_closed_after_hash_review(self):
+    def test_active_rc_ordinary_asset_attestation_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         exact_block = (
@@ -5712,7 +5810,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(mutated, workflow_path)
 
-    def _historical_round8_active_rc_workflow_security_mutations_fail_closed(self):
+    def test_active_rc_workflow_security_mutations_fail_closed(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -5739,7 +5837,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             with self.assertRaisesRegex(ContractError, "exact reviewed contract"):
                 validate_rc_release_workflow(workflow, workflow_path)
 
-    def _historical_round8_active_rc_two_stage_semantic_mutations_fail_closed_after_hash_review(self):
+    def test_active_rc_two_stage_semantic_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -6058,7 +6156,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def _historical_round8_active_rc_already_public_recovery_is_read_only_and_byte_exact(self):
+    def test_active_rc_already_public_recovery_is_read_only_and_byte_exact(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         mutations = (
@@ -6092,7 +6190,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 ):
                     validate_rc_release_workflow(workflow, workflow_path)
 
-    def _historical_round8_active_rc_admission_rejects_all_gh_api_write_forms_after_hash_review(self):
+    def test_active_rc_admission_rejects_all_gh_api_write_forms_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         admission_header = "  admission:\n"
@@ -6140,7 +6238,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaisesRegex(ContractError, "admission must remain read-only"):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def _historical_round8_active_rc_public_verifier_mutations_fail_closed_after_hash_review(self):
+    def test_active_rc_public_verifier_mutations_fail_closed_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         verifier_header = "  verify_published:\n"
@@ -6248,7 +6346,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def _historical_round8_active_rc_public_verifier_rejects_all_gh_api_write_forms_after_hash_review(self):
+    def test_active_rc_public_verifier_rejects_all_gh_api_write_forms_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         verifier_header = "  verify_published:\n"
@@ -6289,7 +6387,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     ):
                         validate_rc_release_workflow(workflow, workflow_path)
 
-    def _historical_round8_active_rc_read_only_gh_api_allows_structurally_safe_forms_after_hash_review(self):
+    def test_active_rc_read_only_gh_api_allows_structurally_safe_forms_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         commands = (

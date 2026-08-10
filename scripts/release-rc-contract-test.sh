@@ -10,6 +10,8 @@ portable_schema="$root/tools/current-cpa-audit/second-machine-release-admission.
 github_validator="$root/scripts/release_rc_github_admission.py"
 cpa_store="$root/scripts/release_rc_cpa_store.py"
 cpa_store_test="$root/scripts/release_rc_cpa_store_test.py"
+work="$(mktemp -d)"
+trap 'rm -rf -- "$work"' EXIT
 
 for path in "$release_script" "$workflow" "$workflow_readme" "$portable" \
   "$portable_schema" "$github_validator" "$cpa_store" "$cpa_store_test"; do
@@ -102,6 +104,15 @@ for marker in (
 ):
     require(marker in workflow, f"workflow is missing {marker!r}")
 
+latest_function = workflow.split("latest_release_id() {", 1)[1].split(
+    "revalidate_second_machine()", 1
+)[0]
+require(
+    'if ! latest="$(jq -er' in latest_function
+    and 'printf \'%s\\n\' "$latest"' in latest_function,
+    "latest Release identity parser does not preserve jq failure status",
+)
+
 input_block = workflow.split("permissions: {}", 1)[0]
 inputs = re.findall(r"(?m)^      ([a-z0-9_]+):\s*$", input_block)
 require(
@@ -184,6 +195,9 @@ for marker in (
     "release_assert_rc_build",
     "seal_candidate()",
     "validate_portable_and_candidate",
+    "validate_dist_candidate() (",
+    'trap \'rm -rf -- "$stage"\' EXIT',
+    '--candidate-directory "$candidate_directory" >/dev/null || return $?',
     "create_source_archive",
     "write_release_evidence",
     "write_release_provenance",
@@ -215,6 +229,8 @@ for marker in (
 
 require(script.count('[[ "$require_attestation" =~ ^[01]$ ]]') == 1,
         "release verify must validate the attestation requirement exactly once")
+require("if ! validate_portable_and_candidate" not in script,
+        "candidate validation must not suppress fail-closed function status")
 
 for forbidden in (
     "build_assets()",
@@ -274,5 +290,50 @@ require("not a stable release or production approval" in normalized_readme,
 
 print("fixed RC byte-identity and staged-evidence contracts passed")
 PY
+
+python3 -B - "$release_script" "$work/validate-dist-candidate.sh" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+match = re.search(
+    r"(?ms)^validate_dist_candidate\(\) \(\n.*?^\)\n",
+    source,
+)
+if match is None:
+    raise SystemExit("release RC contract failed: cannot extract validate_dist_candidate")
+Path(sys.argv[2]).write_text(match.group(0), encoding="utf-8", newline="\n")
+PY
+
+for failure_mode in return exit; do
+  case_root="$work/$failure_mode"
+  mkdir -p "$case_root/dist" "$case_root/tmp"
+  printf 'payload\n' >"$case_root/dist/payload.bin"
+  printf 'checksums\n' >"$case_root/dist/audit-checksums.txt"
+  printf '{}\n' >"$case_root/dist/report.json"
+  if TMPDIR="$case_root/tmp" bash -euo pipefail -c '
+    source "$1"
+    dist="$2/dist"
+    candidate_input_assets=(payload.bin checksums.txt)
+    audit_checksums=audit-checksums.txt
+    rc_second_report=report.json
+    if [[ "$3" == return ]]; then
+      validate_portable_and_candidate() { return 42; }
+    else
+      validate_portable_and_candidate() { exit 43; }
+    fi
+    validate_dist_candidate
+  ' _ "$work/validate-dist-candidate.sh" "$case_root" "$failure_mode"; then
+    printf 'release RC candidate validation fault unexpectedly passed: %s\n' "$failure_mode" >&2
+    exit 1
+  fi
+  if find "$case_root/tmp" -mindepth 1 -print -quit | grep -q .; then
+    printf 'release RC candidate validation leaked staging data: %s\n' "$failure_mode" >&2
+    exit 1
+  fi
+done
+printf 'release RC candidate validation faults fail closed and clean staging\n'
 
 printf 'all v1.0.0-rc.1 release contracts passed\n'

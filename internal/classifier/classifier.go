@@ -7720,7 +7720,7 @@ func parseNegationReversalGovernor(text string) (actionIndex, fieldCount int, ok
 		}
 	}
 	for _, governor := range []string{
-		"拒绝", "犹豫", "避免", "未能", "忘记", "疏忽", "停止", "克制",
+		"拒绝", "阻止", "拦截", "过滤", "犹豫", "避免", "未能", "忘记", "疏忽", "停止", "克制",
 	} {
 		if strings.HasPrefix(text, governor) {
 			rest := strings.TrimSpace(text[len(governor):])
@@ -7761,6 +7761,13 @@ func parseNegationReversalGovernor(text string) (actionIndex, fieldCount int, ok
 
 	governor := fields[governorIndex]
 	switch governor {
+	case "block", "decline", "deny", "filter", "prevent", "refuse", "reject":
+		// Negating an enforcement governor reverses its safety ownership. The
+		// risky request object may follow through ordinary bridge words (for
+		// example "never block requests to deploy ransomware"), so the governor
+		// itself is sufficient to revoke defensive credit; ordinary downstream
+		// classification still decides whether any malicious intent exists.
+		return governorIndex + 1, fieldCount, true
 	case "avoid", "stop":
 		actionIndex = governorIndex + 1
 		for actionIndex < fieldCount && actionIndex <= governorIndex+5 && negationReversalModifier(fields[actionIndex]) {
@@ -7770,7 +7777,7 @@ func parseNegationReversalGovernor(text string) (actionIndex, fieldCount int, ok
 			actionIndex++
 		}
 		return actionIndex, fieldCount, true
-	case "refuse", "hesitate", "decline", "fail", "forget", "neglect", "refrain":
+	case "hesitate", "fail", "forget", "neglect", "refrain":
 		connector := "to"
 		if governor == "refrain" {
 			connector = "from"

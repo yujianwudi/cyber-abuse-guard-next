@@ -413,6 +413,223 @@ func TestRawCaptureHotDisablePurgesRetainedRows(t *testing.T) {
 	}
 }
 
+func TestRawCaptureHotAuditDisablePurgesRetainedRows(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	directory := t.TempDir()
+	dataDir := filepath.ToSlash(directory)
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+dataDir+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\n    max_bytes: 8192\n    ttl_hours: 72\nsubject_control:\n  enabled: false\n")
+
+	if route := callRoute(t, p, maliciousRequest); !route.Handled {
+		t.Fatalf("malicious fixture was not blocked: %+v", route)
+	}
+	oldState := p.runtime.Load()
+	if err := oldState.audit.Flush(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	before, err := oldState.audit.QueryRawCapturesPage(context.Background(), audit.RawCaptureQuery{Limit: 100})
+	if err != nil || len(before.Captures) != 1 {
+		t.Fatalf("pre-disable captures=%#v err=%v, want one", before, err)
+	}
+
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("audit disable reconfigure code=%d envelope=%s", code, raw)
+	}
+	state := p.runtime.Load()
+	if state == oldState || state.config.Audit.Enabled || state.audit != nil {
+		t.Fatalf("audit disable runtime=%#v old=%#v", state, oldState)
+	}
+	if !oldState.audit.Status().Closed {
+		t.Fatal("audit disable returned before closing the previous raw-capture Store")
+	}
+
+	databasePath := filepath.Join(directory, "events.db")
+	check, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(databasePath)+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer check.Close()
+	var count int
+	if err := check.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("post-audit-disable retained raw capture count=%d, want 0", count)
+	}
+	if info, err := os.Stat(databasePath + "-wal"); err == nil {
+		if info.Size() != 0 {
+			t.Fatalf("post-audit-disable WAL size=%d, want 0", info.Size())
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+}
+
+func TestRawCaptureHotAuditDisableRejectsInactiveStoreWithRetainedRows(t *testing.T) {
+	directory := t.TempDir()
+	databasePath := filepath.Join(directory, "events.db")
+	now := time.Date(2026, 8, 10, 13, 0, 0, 0, time.UTC)
+	rawRequest := []byte(`{"messages":[{"role":"user","content":"retained inactive Store review canary"}]}`)
+	eventID := "01234567-89ab-4def-8123-456789abcdee"
+	event := audit.Event{
+		ID: eventID, Timestamp: now, Action: "block", Mode: "balanced",
+		Category: "exploitation", RiskScore: 90, RequestHash: audit.HashRequest(rawRequest),
+		Classifier: "raw-capture-inactive-audit-disable-test", Decision: "block_malicious_text",
+		Coverage: "complete", Scanner: "streaming-scanner-v1",
+	}
+	seed, err := audit.Open(audit.Config{
+		Path: databasePath, Retention: 24 * time.Hour, MaxBytes: 8 << 20,
+		Now: func() time.Time { return now },
+		RawCapture: audit.RawCaptureConfig{
+			Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: 72 * time.Hour, RedactSecrets: true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !seed.Record(event) {
+		_ = seed.Close()
+		t.Fatal("audit event enqueue failed")
+	}
+	if err := seed.RecordRawCapture(audit.RawCaptureInput{
+		EventID: eventID, Timestamp: now, RequestHash: event.RequestHash,
+		Action: event.Action, Decision: event.Decision, RawRequest: rawRequest,
+	}); err != nil {
+		_ = seed.Close()
+		t.Fatal(err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	p := New()
+	t.Cleanup(p.Shutdown)
+	var storageFailed atomic.Bool
+	p.auditStorageInspect = func(path string, explicit, expected bool, maxBytes int64) auditStorageVerification {
+		if current := p.runtime.Load(); current != nil && current.audit != nil && current.audit.DatabaseAvailable() {
+			storageFailed.Store(true)
+		}
+		status := verifiedAuditStorageInspectorForTest(path, explicit, expected, maxBytes)
+		if storageFailed.Load() {
+			status.State = "read_only"
+			status.PersistenceVerified = false
+			status.PersistenceReason = "read_only"
+			status.Writable = false
+		}
+		return status
+	}
+	configYAML := "mode: balanced\naudit:\n  enabled: true\n  data_dir: \"" + filepath.ToSlash(directory) + "\"\n  require_persistent_storage: true\n  max_db_mb: 8\n  raw_capture:\n    enabled: true\n    only_blocked: true\n    redact_secrets: true\nsubject_control:\n  enabled: false\n"
+	state, err := p.buildRuntime([]byte(configYAML), true, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state == nil || state.audit == nil || state.audit.DatabaseAvailable() {
+		p.closeRuntime(state)
+		t.Fatalf("prepared inactive runtime=%#v", state)
+	}
+	p.runtime.Store(state)
+	if err := state.audit.Activate(context.Background()); !errors.Is(err, audit.ErrStorageBlocked) {
+		t.Fatalf("inactive fixture Activate error=%v, want ErrStorageBlocked", err)
+	}
+	if !storageFailed.Load() {
+		t.Fatal("inactive fixture did not reach the post-open storage verification")
+	}
+	if state.audit.IsActive() || !state.audit.DatabaseAvailable() {
+		t.Fatalf("inactive fixture active=%t available=%t", state.audit.IsActive(), state.audit.DatabaseAvailable())
+	}
+	before := snapshotAuditLifecycleArtifacts(t, directory, databasePath)
+
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("inactive audit disable reconfigure code=%d envelope=%s", code, raw)
+	}
+	if p.runtime.Load() != state || !state.config.Audit.Enabled || !state.config.Audit.RawCapture.Enabled {
+		t.Fatal("inactive Store audit disable replaced the previous runtime")
+	}
+	if message := p.lastReconfigureErrorMessage(); !strings.Contains(message, "requires restart") || !strings.Contains(message, "purge Store") {
+		t.Fatalf("inactive Store audit disable error=%q", message)
+	}
+	assertAuditLifecycleArtifactsUnchanged(t, before, directory, databasePath)
+
+	check, err := sql.Open("sqlite3", "file:"+filepath.ToSlash(databasePath)+"?mode=ro")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer check.Close()
+	var count int
+	if err := check.QueryRow("SELECT COUNT(*) FROM raw_request_captures").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("rejected inactive Store audit disable retained count=%d, want 1", count)
+	}
+
+	unlocked := make(chan struct{})
+	go func() {
+		p.opMu.Lock()
+		p.opMu.Unlock()
+		close(unlocked)
+	}()
+	select {
+	case <-unlocked:
+	case <-time.After(time.Second):
+		t.Fatal("inactive Store audit disable left the operation mutex locked")
+	}
+	status := managementJSON(t, p, http.MethodGet, managementBasePath+"/status", nil)
+	if status["audit_degraded"] != true || status["operational_ready"] != false {
+		t.Fatalf("inactive Store management status=%#v", status)
+	}
+}
+
+func TestRawCaptureHotAuditDisableRejectsNilStoreWithoutPublishing(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	directory := t.TempDir()
+	p.auditStorageInspect = func(path string, explicit, expected bool, _ int64) auditStorageVerification {
+		return auditStorageVerification{
+			StorageType: "tmpfs", State: "ephemeral", PathSource: "explicit", DatabasePath: path,
+			PersistenceExpected: expected, PersistenceReason: "ephemeral_filesystem",
+			SeparateMount: true, Writable: true, CapacityOK: true,
+		}
+	}
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+filepath.ToSlash(directory)+"\"\n  require_persistent_storage: true\n  raw_capture:\n    enabled: true\nsubject_control:\n  enabled: false\n")
+	state := p.runtime.Load()
+	if state == nil || state.audit != nil || !state.config.Audit.Enabled || !state.config.Audit.RawCapture.Enabled {
+		t.Fatalf("nil Store fixture runtime=%#v", state)
+	}
+
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("nil Store audit disable reconfigure code=%d envelope=%s", code, raw)
+	}
+	if p.runtime.Load() != state {
+		t.Fatal("nil Store audit disable published a replacement runtime")
+	}
+	if message := p.lastReconfigureErrorMessage(); !strings.Contains(message, "requires restart") || !strings.Contains(message, "purge Store") {
+		t.Fatalf("nil Store audit disable error=%q", message)
+	}
+
+	unlocked := make(chan struct{})
+	go func() {
+		p.opMu.Lock()
+		p.opMu.Unlock()
+		close(unlocked)
+	}()
+	select {
+	case <-unlocked:
+	case <-time.After(time.Second):
+		t.Fatal("nil Store audit disable left the operation mutex locked")
+	}
+	status := managementJSON(t, p, http.MethodGet, managementBasePath+"/status", nil)
+	if status["audit_degraded"] != true || status["operational_ready"] != false {
+		t.Fatalf("nil Store management status=%#v", status)
+	}
+}
+
 func TestRawCaptureHotDisableDrainsOldSamePathQueue(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
@@ -950,7 +1167,7 @@ func TestDeferredActivationFinalStorageVerificationLatchesChangedStoreBeforeUnlo
 	if state.auditStorageNeedsPostActivationCheck {
 		t.Fatal("final storage verification remained pending")
 	}
-	if !state.auditStorageFinalBindFailed {
+	if !state.auditStorageActivationDiscardRequired {
 		t.Fatal("final storage verification failure was not recorded")
 	}
 	if state.auditStorage.PersistenceReason != "read_only" || state.auditStorage.PersistenceVerified {

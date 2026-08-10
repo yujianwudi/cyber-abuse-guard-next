@@ -1155,39 +1155,39 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "78403ee2f486d75baef1c20a8d8cce8638627800a9e6bf718c4b59cd3af7d760"
+ACTIVE_RC_WORKFLOW_SHA256 = "edd555d540d65aced02e310aa52b104ae9a2e94915fd36d69f345125d285b4fd"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
-    "531e3f752eeaae4a675b58fd4efe85c839d9e64509ffa75df8a5411b9e4d47a1"
+    "d54ce8f6d59d503aa3e517966de266c3ef9fa2f0daaa5e8e70732ff916c0faea"
 )
 ROUND13_RC_CONTRACT_TEST_SCRIPT = "scripts/release-rc-contract-test.sh"
 ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256 = (
-    "25f1a52f1df2b39c14f476c5e692ada0012d608665116e45708b67c0e9a66b11"
+    "505629f9758214b5b7124bb15a96ee24155b426f2282726b34fb8ebcf6b80410"
 )
 ROUND13_RC_CPA_STORE_SCRIPT = "scripts/release_rc_cpa_store.py"
-ROUND13_RC_CPA_STORE_SCRIPT_SHA256 = "1abe639e21b1e865dbda7f0359938991a5126ca77849ce7c4335b1d1017bb98a"
+ROUND13_RC_CPA_STORE_SCRIPT_SHA256 = "9e38277b9e3bb3d85e915189f2cdac9efb0154fffb53ff7ef803df72183d0992"
 ROUND13_RC_CPA_STORE_TEST_SCRIPT = "scripts/release_rc_cpa_store_test.py"
-ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256 = "1f4db67e68405c6a13f43c78498a7f08c19ccc1d1840a75b2d77f7b9e249ef2d"
+ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256 = "4564852b958663eeeafd643b57318cb1470771345a7864c5450c925fac21c636"
 ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT = "integration/pluginstorecontract/archive_contract_test.go"
 ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT_SHA256 = "e94038dac3b09852e9c40d3c11a4f5658ce7333ac1ee845193854cf8a47e02e1"
 ROUND13_RC_CPA_STORE_HOST_CONTRACT = "integration/pluginstorecontract/host_source_contract_test.go"
 ROUND13_RC_CPA_STORE_HOST_CONTRACT_SHA256 = "639a1fb72a2a3cde90be982747f2a6ee82cce2882031cf4d1accefc86fdb8014"
 ROUND13_RC_CPA_STORE_OVERLAY = "integration/pluginstorecontract/testfixtures/release_rc_install_overlay_test.go.txt"
-ROUND13_RC_CPA_STORE_OVERLAY_SHA256 = "a6fbedd328e743eb2251d1153b7cc9447d2687c167c62dd3b2f716e3c1af61be"
+ROUND13_RC_CPA_STORE_OVERLAY_SHA256 = "8c196ab5656a27d9fe1219e95b65de272f0ebaabe155f3305f4b0cbf67f4b446"
 ROUND13_RC_ARTIFACT_ZIP_SCRIPT = "scripts/release_rc_artifact_zip.py"
 ROUND13_RC_ARTIFACT_ZIP_SCRIPT_SHA256 = (
-    "b6053cb0bcd1b2729b9c294b9a478b94d6bef0cab581f6cb4af790770a685830"
+    "09b14e8d58b5a4a5119400d89b8fe06b14d5cf7cf0dffbc4788c59102cb1414d"
 )
 ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT = "scripts/release_rc_artifact_zip_test.py"
 ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT_SHA256 = (
-    "2193ef7de9730537fdc26d022806ca07b18e567627786424ac0fb17998086914"
+    "d9174bbfff63073deff3fffdcc9069d293f2b789a7d9eadfed4dec1abd766602"
 )
 ROUND13_RC_GITHUB_ADMISSION_SCRIPT = "scripts/release_rc_github_admission.py"
-ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "d64122f3280ac7ceaca55f32b74063ca15d11a16c03b6ce10d0843a0bce0eed3"
+ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "7b740ac42a00db7edfc247229ec24494e351f432646ed686f619b6274c3079c9"
 ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT = "scripts/release_rc_github_admission_test.py"
-ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "41195b133f69968513185080ca9b871cb03d16023d1dc5d7724227e401ed9603"
+ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "66d3f21e6cb9bb1d56fecaa2fd4949ea29e251b3e50e28e81472145425467ad7"
 ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT = "tools/current-cpa-audit/second_machine_release_admission.py"
-ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "1af1f8d351ed97cfca871682800e23949a94022eecb0378b8057e5335f2a9a07"
+ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "efb4370893a836ba3300fadfa950f91469b13cf53eb00143b4022bf1e86ab783"
 ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT = "tools/current-cpa-audit/tests/test_second_machine_release_admission.py"
 ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256 = "3014cd6537da626806d5bc43941c0793a7d99a60b74f68b1c618b57f4ba9c697"
 ROUND13_RC_LINKED_CONTRACT_SHA256 = {
@@ -1206,26 +1206,26 @@ ROUND13_RC_LINKED_CONTRACT_SHA256 = {
     ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256,
     "tools/current-cpa-audit/second-machine-release-admission.schema.json": "65d5cba58840f3ed62b086444fd72db381c1881af9cf45223a7f181af428d15f",
     "tools/current-cpa-audit/Dockerfile.mock": "7a690961f1500b63d6a8a17e3081abf461619d9eeaadd8b1b97660b542712d85",
-    "tools/current-cpa-audit/README.md": "4388892dfbea8b1dc91a2b16b55629d7175c6047feebd8f08a3995355547f288",
-    "tools/current-cpa-audit/acquire.py": "fdb6d0d53abc22d59903ec0ad8c6bf381f71792c13a4fd3e2018637dcd5ea42d",
-    "tools/current-cpa-audit/audit_contract.py": "62a89b63836abd548ba7aa1364e76d1324279e703afed42296ee3f84b8b1b7a9",
+    "tools/current-cpa-audit/README.md": "4bb725aadbf11d3e3a701f2dcd83af26eb19e69ee15a2ca9795faa9fa88d6c63",
+    "tools/current-cpa-audit/acquire.py": "10eb85b7d14fb43f960e1885391899022879a9f334c199fc3d09846be29152fa",
+    "tools/current-cpa-audit/audit_contract.py": "81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e",
     "tools/current-cpa-audit/counted_mock.py": "bfc53f57a9621f9f73a57595b6c4f3c33c2e7f11d58d9409a69a7c0112d8beb7",
-    "tools/current-cpa-audit/make_run_config.py": "23b6a1b9900f4e6aff883ca241472edc62185fe5a79c85584357b9734c75dac5",
+    "tools/current-cpa-audit/make_run_config.py": "5cbfc5be2a24e4ee8cb1d81d6ecc6037938790f742ca7da59d626cd570c44734",
     "tools/current-cpa-audit/machine-evidence.schema.json": "b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6",
-    "tools/current-cpa-audit/repository-policy.json": "9b98eb1c31a148a1f4327cba270bea627ff97e775139df002b820cb24cfde225",
-    "tools/current-cpa-audit/run.py": "a6e1d254d19669be35fb6916ba7b714fe44552abbd4b24430eb48ec6f46e6d24",
+    "tools/current-cpa-audit/repository-policy.json": "06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26",
+    "tools/current-cpa-audit/run.py": "21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de",
     "tools/current-cpa-audit/supplemental-zip-policy.json": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb",
-    "tools/current-cpa-audit/supplemental_zip.py": "34077f072ae9ee1481101aa90b096db863b27e4a70e0ed61c6464cd1e63316ba",
+    "tools/current-cpa-audit/supplemental_zip.py": "eb65553db109879dc04aa7f22bcda85f0623f8120b1c20a2ea3cdde298848817",
     "tools/current-cpa-audit/validate.py": "07dab7f64a6a166a0c7a01ac798fbd690aeed68389f95d9fdacac7a5d2036551",
-    "tools/current-cpa-audit/host-performance-evidence.schema.json": "198d0c37f298c3bb3ebe2153b60bf128c8f4bba1c7f3024f27d6aa8a9243827f",
-    "tools/current-cpa-audit/host_performance.py": "2355ed8ed01cf36615ada2767f132aa0631071be5f57a6aa3b16897090ec678e",
-    "tools/current-cpa-audit/host_performance_workloads.py": "ac97084c61ee0560f9571145418ebbfdf47946829f57e844fab355d5f3d3f485",
+    "tools/current-cpa-audit/host-performance-evidence.schema.json": "b6c992a716bd18ba68809194442b166362c2007d88fd1e3a870d8970fa9101fd",
+    "tools/current-cpa-audit/host_performance.py": "dac4e4d7133ddc9ae1eda0a3c34390c1d66f4ef93a150df44b3ad6cae8baa8d6",
+    "tools/current-cpa-audit/host_performance_workloads.py": "b23fea073ed5593b092c1a4bd981d22b3422690f55a918d9e25a94f7931a082d",
     "tools/current-cpa-audit/native-host-special-paths.schema.json": "41c7ece82929e162cbc4971abb71a17950ad18dfa347371bb716bcd66d28700d",
-    "tools/current-cpa-audit/native_host_special_paths.py": "9546343b2e752f98ffe199d582390c3c2d7bc3a41eb7669c53c3a181e67db479",
-    "integration/host_integration_test.go": "611f0df8ab663cc7d568b2d044fa4356fb36d6a50dc7db8c285e0ec9ec70fe24",
-    "tools/current-cpa-audit/tests/test_host_performance_workloads.py": "35a925c6c939f5bdf03be425c1e1d194f2e11ae1827a7f0f73bc164a6a455b23",
-    "tools/current-cpa-audit/tests/test_native_host_special_paths.py": "8a285cde28182ebe1f885dfe43bdb9db3cbfe556170e8f79302e915d5fdcc01b",
-    "tools/current-cpa-audit/tests/test_supplemental_zip.py": "8ccba8d00e7ff6202572ec76761aa3084423344908e9bf6203e2ca611e7eb22e",
+    "tools/current-cpa-audit/native_host_special_paths.py": "29ceff9ee71db6d8fd6b2a310590e7cbaa01bdf6d36b021d0bdbd96a76396d47",
+    "integration/host_integration_test.go": "d822d599865422de033b712509ef70b76edca6fdf77a7f6faebea26377c710f1",
+    "tools/current-cpa-audit/tests/test_host_performance_workloads.py": "5f684a5fbb5831ab57fc273c4192ce13b5a459034c7bb64031d8003c1cd81855",
+    "tools/current-cpa-audit/tests/test_native_host_special_paths.py": "d41e2d0b2030a73ee3bdb9696185d62a579682c7a1c08a048d4cdae42b9197d2",
+    "tools/current-cpa-audit/tests/test_supplemental_zip.py": "0557142d9f2ea711ba13399a6c1c66a279f7f1c2e0767ee8b10188e0e0e3b3ba",
 }
 ROUND13_RC_INPUT_ORDER = (
     "ci_run_id",
@@ -1236,8 +1236,25 @@ ROUND13_RC_INPUT_ORDER = (
     "second_machine_asset_sha256",
     "authorize_prerelease",
 )
+ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS = {
+    "jobs.admission.steps[1].env.GH_TOKEN",
+    "jobs.admission.steps[2].env.GH_TOKEN",
+    "jobs.seal_candidate.steps[3].with.github-token",
+    "jobs.seal_candidate.steps[4].env.GH_TOKEN",
+    "jobs.seal_candidate.steps[5].env.GH_TOKEN",
+    "jobs.publish_prerelease.steps[2].env.GH_TOKEN",
+    "jobs.publish_prerelease.steps[3].env.GH_TOKEN",
+    "jobs.publish_prerelease.steps[4].env.GH_TOKEN",
+}
+ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
+    "run-name": "RC v1.0.0-rc.1 from ${{ github.ref_name }}",
+    "jobs.admission.steps[1].env.DISPATCH_REF": "${{ github.ref }}",
+    "jobs.admission.steps[1].env.DISPATCH_SHA": "${{ github.sha }}",
+    "jobs.admission.steps[1].env.WORKFLOW_REF": "${{ github.workflow_ref }}",
+    "jobs.admission.steps[1].env.WORKFLOW_SHA": "${{ github.workflow_sha }}",
+}
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "71e42b1233903e40624ada51f68ff42e955d844af7995611196571f5e3b8f15a"
+ROUND9_GATE_WORKFLOW_SHA256 = "84ea8d540d8ada9a3ba7f02c349c4ec975de02cf34160b6078ec83367d57b7cb"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "09ab4e5dedb90ffbfe8f2436c8dc7ee6353162dc825e9751c708bdca68c800e1"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1437,11 +1454,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "0ac6c5d520b0521199a08d3b5157c03a580d1f9bcf226e1c8d32332c8d820bb4"
+    "555103defbf36ded0166a4ef0e271fc68a3852e951c4b12429c97b1d35a8cb77"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "6c0ca127b6c3dc7f4281949b3b6fd31ac32abb270a3482babf460605acdb4dff",
-    "scripts/release-doc-consistency.sh": "2ecd6f4706308d1e16705c46ac63c4cd194c8a595825df45fcf9440fb3844430",
+    "scripts/release-doc-consistency-test.sh": "06eb989badc1c3a55b0bcecf89cba30075057d5520a1aa3bc6738b8ebc50e95d",
+    "scripts/release-doc-consistency.sh": "f0306820aa474571a3a5914bd48dedace2bc4252c35a85074072f0fcd893026c",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1578,7 +1595,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "2b7f1ebe0f77a373ff474e1a50364a20c64d409918d0f7f881409293b2667129"
+ROUND6_SAFE_GATE_TEST_SHA256 = "70297ea8183196fcd8a43ebe21397cee92a94d3a1fcaa71773a1b5dc3c673439"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -1847,6 +1864,38 @@ def is_safe_gate_node(step: MappingNode, source: Path, path: str) -> bool:
     return commands == SAFE_GATE_COMMANDS
 
 
+def validate_workflow_step_execution_context(
+    step: dict[str, Node], source: Path, step_path: str
+) -> None:
+    if "shell" in step:
+        raise ContractError(
+            f"workflow may not override the reviewed step shell at {step_path}: {source}"
+        )
+    env_node = step.get("env")
+    if env_node is None:
+        return
+    env_path = f"{step_path}.env"
+    env_values = yaml_mapping(env_node, source, env_path)
+    for env_name, env_value in env_values.items():
+        if not DANGEROUS_WORKFLOW_ENV.fullmatch(env_name):
+            continue
+        env_scalar = yaml_scalar(env_value, source, f"{env_path}.{env_name}")
+        explicitly_cleared = (
+            env_value.tag == "tag:yaml.org,2002:str" and env_scalar == ""
+        )
+        allowed_clean_value = (
+            env_path in CLEAN_EXECUTION_ENV_PATHS
+            and env_name in CLEAN_EXECUTION_ENV_MAP
+            and env_scalar == CLEAN_EXECUTION_ENV_MAP[env_name]
+        )
+        if explicitly_cleared or allowed_clean_value:
+            continue
+        raise ContractError(
+            "workflow defines dangerous execution-context environment "
+            f"{env_name} at {step_path}: {source}"
+        )
+
+
 def validate_workflow_semantic_safety(document: MappingNode, source: Path) -> None:
     root = yaml_mapping(document, source, "workflow")
     if "defaults" in root:
@@ -1906,34 +1955,7 @@ def validate_workflow_semantic_safety(document: MappingNode, source: Path) -> No
         for index, step_node in enumerate(steps):
             step_path = f"{job_path}.steps[{index}]"
             step = yaml_mapping(step_node, source, step_path)
-            if "shell" in step:
-                raise ContractError(
-                    f"workflow job {job_name} may not override the reviewed step shell: {source}"
-                )
-            env_node = step.get("env")
-            if env_node is not None:
-                env_path = f"{step_path}.env"
-                env_values = yaml_mapping(env_node, source, env_path)
-                for env_name, env_value in env_values.items():
-                    if DANGEROUS_WORKFLOW_ENV.fullmatch(env_name):
-                        env_scalar = yaml_scalar(
-                            env_value, source, f"{env_path}.{env_name}"
-                        )
-                        explicitly_cleared = (
-                            env_value.tag == "tag:yaml.org,2002:str"
-                            and env_scalar == ""
-                        )
-                        allowed_clean_value = (
-                            env_path in CLEAN_EXECUTION_ENV_PATHS
-                            and env_name in CLEAN_EXECUTION_ENV_MAP
-                            and env_scalar == CLEAN_EXECUTION_ENV_MAP[env_name]
-                        )
-                        if explicitly_cleared or allowed_clean_value:
-                            continue
-                        raise ContractError(
-                            "workflow defines dangerous execution-context environment "
-                            f"{env_name}: {source}"
-                        )
+            validate_workflow_step_execution_context(step, source, step_path)
             uses_node = step.get("uses")
             if uses_node is None:
                 continue
@@ -3596,6 +3618,15 @@ def validate_ci_workflow(text: str, source: Path) -> None:
     )
     if any(text.count(marker) != 1 for marker in current_identity_markers):
         raise ContractError("CI must report the exact current CPA source and commit identity")
+    same_repository_markers = (
+        'candidate_head_repository="$(jq -er \'.pull_request.head.repo.full_name\' "$GITHUB_EVENT_PATH")"',
+        '[[ "$candidate_head_repository" == "$GITHUB_REPOSITORY" ]]',
+        "fork pull-request heads cannot produce an admitted audit candidate",
+    )
+    if any(text.count(marker) != 2 for marker in same_repository_markers):
+        raise ContractError(
+            "CI audit candidates must reject fork pull-request heads before sealing and verification"
+        )
 
     fuzz_job = yaml_mapping(jobs.get("fuzz-long"), source, "jobs.fuzz-long")
     fuzz_steps = yaml_sequence(
@@ -7442,6 +7473,20 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         raise ContractError("Round 13 RC workflow differs from the exact reviewed contract")
 
     document = parse_workflow_yaml(text, source)
+    # The generic validate_workflow_safety contract intentionally rejects the
+    # RC lane's reviewed top-level bash default, empty permissions mapping,
+    # pinned builder container, and explicit step shells. The RC-specific
+    # structure checks below lock those exceptions exactly. Reuse the shared
+    # expression scanner here so refreshing the reviewed workflow hash can
+    # never authorize an extra token, identity, or secrets-context exposure.
+    validate_sensitive_workflow_expressions(
+        document,
+        source,
+        allowed_token_paths=ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS,
+        allowed_identity_expressions=(
+            ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS
+        ),
+    )
     root = require_yaml_keys(
         document,
         (
@@ -7611,6 +7656,37 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         )
         if exact_string_mapping(job["permissions"], source, f"{job_path}.permissions") != permissions:
             raise ContractError(f"Round 13 RC {job_name} permissions changed")
+
+    # Every current RC step is required to run under GitHub's default success()
+    # condition and fail the job on error. Keep an explicit empty allowlist so a
+    # future genuinely conditional step requires a reviewed expression here rather
+    # than silently accepting arbitrary conditions, failure overrides, shells,
+    # or dangerous execution-context environment mutations.
+    allowed_step_if: dict[tuple[str, int], str] = {}
+    for job_name, job in parsed_jobs.items():
+        steps = yaml_sequence(job["steps"], source, f"jobs.{job_name}.steps")
+        for index, step_node in enumerate(steps):
+            step_path = f"jobs.{job_name}.steps[{index}]"
+            step = yaml_mapping(step_node, source, step_path)
+            validate_workflow_step_execution_context(step, source, step_path)
+            if "continue-on-error" in step:
+                raise ContractError(
+                    f"Round 13 RC step must fail closed without continue-on-error: {step_path}"
+                )
+            expected_if = allowed_step_if.get((job_name, index))
+            if expected_if is None:
+                if "if" in step:
+                    raise ContractError(
+                        f"Round 13 RC step must remain unconditional: {step_path}"
+                    )
+            elif "if" not in step:
+                raise ContractError(
+                    f"Round 13 RC step is missing its reviewed condition: {step_path}"
+                )
+            else:
+                require_yaml_scalar(
+                    step["if"], expected_if, source, f"{step_path}.if"
+                )
 
     require_yaml_scalar(
         parsed_jobs["seal_candidate"]["needs"],
@@ -7903,7 +7979,7 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "test ! -e testdata/round9-independent-benign-v1/cases.jsonl",
         "test ! -e testdata/round9-independent-malicious-v1",
         "independent_corpus_executed=false",
-        "classifier-policy-v15",
+        "classifier-policy-v18",
         "1.0.10",
     ):
         if marker not in text:

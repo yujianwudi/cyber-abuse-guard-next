@@ -410,6 +410,73 @@ func TestRequiredPersistentOpenRejectsUnsafeDatabaseModeWithoutChmod(t *testing.
 	}
 }
 
+func TestMutationFreeCandidateRejectsUnsafeModeAndMissingDirectoryBeforeSQLiteOpen(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Unix mode contract is Linux-only")
+	}
+	t.Run("unsafe existing mode", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "events.db")
+		seed, err := Open(Config{Path: path, CleanupInterval: time.Hour})
+		if err != nil {
+			t.Fatalf("seed database: %v", err)
+		}
+		if err := seed.Close(); err != nil {
+			t.Fatalf("close seed database: %v", err)
+		}
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		postOpenCalls := 0
+		candidate, openErr := Open(Config{
+			Path:                   path,
+			SkipAllStartupMutation: true,
+			StoragePostOpenBind: func() error {
+				postOpenCalls++
+				return nil
+			},
+		})
+		if candidate == nil {
+			t.Fatal("unsafe mutation-free candidate returned a nil degraded Store")
+		}
+		t.Cleanup(func() { _ = candidate.Discard() })
+		if openErr == nil || !strings.Contains(openErr.Error(), "unsafe permissions") {
+			t.Fatalf("mutation-free unsafe-mode error=%v", openErr)
+		}
+		if postOpenCalls != 0 || candidate.DatabaseAvailable() {
+			t.Fatalf(
+				"unsafe candidate reached SQLite open: postOpenCalls=%d databaseAvailable=%t",
+				postOpenCalls,
+				candidate.DatabaseAvailable(),
+			)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o644 {
+			t.Fatalf("mutation-free candidate changed database mode to %04o", got)
+		}
+	})
+
+	t.Run("missing directory", func(t *testing.T) {
+		directory := filepath.Join(t.TempDir(), "missing", "audit")
+		candidate, openErr := Open(Config{
+			Path:                   filepath.Join(directory, "events.db"),
+			SkipAllStartupMutation: true,
+		})
+		if candidate == nil {
+			t.Fatal("missing-directory candidate returned a nil degraded Store")
+		}
+		t.Cleanup(func() { _ = candidate.Discard() })
+		if openErr == nil || !strings.Contains(openErr.Error(), "does not exist") {
+			t.Fatalf("mutation-free missing-directory error=%v", openErr)
+		}
+		if _, err := os.Lstat(directory); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("mutation-free candidate created a directory: %v", err)
+		}
+	})
+}
+
 func TestRequiredPersistentOpenCreatesPrivateSQLiteArtifacts(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Unix mode contract is Linux-only")
@@ -650,6 +717,310 @@ func TestRuntimeSidecarPermissionFailureDegradesStatus(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o644 {
 		t.Fatalf("runtime sidecar target mode changed to %04o, want 0644", got)
+	}
+}
+
+func TestQuiesceDrainsAcceptedWorkAndLeavesDatabaseOpen(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "quiesce-clean.db")
+	store, err := Open(Config{
+		Path:            path,
+		QueueSize:       4,
+		CleanupInterval: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Discard() })
+	for _, id := range []string{"quiesce-one", "quiesce-two"} {
+		if err := store.Enqueue(testEvent(id, time.Now().UTC())); err != nil {
+			t.Fatalf("enqueue %s: %v", id, err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := store.QuiesceContext(ctx); err != nil {
+		t.Fatalf("QuiesceContext: %v", err)
+	}
+	status := store.Status()
+	if !status.Closed || status.QueueDepth != 0 || status.Enqueued != 2 || status.Written != 2 ||
+		status.Dropped != 0 || !store.DatabaseAvailable() {
+		t.Fatalf("quiesced Store status=%#v databaseAvailable=%t", status, store.DatabaseAvailable())
+	}
+	select {
+	case <-store.workerCtx.Done():
+	default:
+		t.Fatal("quiesce returned before the worker and maintenance ticker stopped")
+	}
+	if err := store.Enqueue(testEvent("after-quiesce", time.Now().UTC())); !errors.Is(err, ErrClosed) {
+		t.Fatalf("post-quiesce admission error=%v, want ErrClosed", err)
+	}
+	var persisted int
+	if err := store.db.QueryRowContext(context.Background(),
+		`SELECT COUNT(*) FROM audit_events WHERE id IN (?, ?)`, "quiesce-one", "quiesce-two").Scan(&persisted); err != nil {
+		t.Fatalf("query quiesced open database: %v", err)
+	}
+	if persisted != 2 {
+		t.Fatalf("quiesced persisted events=%d, want 2", persisted)
+	}
+	if err := store.CloseContext(ctx); err != nil {
+		t.Fatalf("close quiesced Store: %v", err)
+	}
+	if store.DatabaseAvailable() {
+		t.Fatal("CloseContext left quiesced database open")
+	}
+}
+
+func TestQuiesceContextDeadlineContinuesDrainWithoutDroppingAcceptedWork(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "quiesce-timeout.db")
+	workerAtGate := make(chan struct{})
+	releaseWorker := make(chan struct{})
+	var releaseOnce sync.Once
+	var intercept atomic.Bool
+	var accessCalls atomic.Int32
+	storageGate := func() error {
+		if !intercept.Load() {
+			return nil
+		}
+		switch accessCalls.Add(1) {
+		case 1:
+			return nil
+		case 2:
+			close(workerAtGate)
+			<-releaseWorker
+			return nil
+		default:
+			return nil
+		}
+	}
+	store, err := Open(Config{
+		Path:              path,
+		QueueSize:         4,
+		CleanupInterval:   time.Hour,
+		StorageAccessGate: storageGate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseWorker) })
+		_ = store.Discard()
+	})
+	intercept.Store(true)
+	if err := store.Enqueue(testEvent("quiesce-timeout", time.Now().UTC())); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-workerAtGate:
+	case <-time.After(5 * time.Second):
+		t.Fatal("writer did not reach the quiesce timeout gate")
+	}
+
+	timeoutCtx, timeoutCancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer timeoutCancel()
+	if err := store.QuiesceContext(timeoutCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("QuiesceContext error=%v, want deadline exceeded", err)
+	}
+	status := store.Status()
+	if !status.Closed || status.Enqueued != 1 || status.Written != 0 || status.Dropped != 0 ||
+		!store.DatabaseAvailable() {
+		t.Fatalf("timed-out quiesce status=%#v databaseAvailable=%t", status, store.DatabaseAvailable())
+	}
+
+	const waiters = 4
+	waiterResults := make(chan error, waiters)
+	for range waiters {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			waiterResults <- store.QuiesceContext(ctx)
+		}()
+	}
+	select {
+	case err := <-waiterResults:
+		t.Fatalf("concurrent QuiesceContext returned before drain release: %v", err)
+	default:
+	}
+	discardCtx, discardCancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	if err := store.DiscardContext(discardCtx); !errors.Is(err, context.DeadlineExceeded) {
+		discardCancel()
+		t.Fatalf("DiscardContext during timed-out quiesce error=%v, want deadline exceeded", err)
+	}
+	discardCancel()
+	releaseOnce.Do(func() { close(releaseWorker) })
+	for range waiters {
+		if err := <-waiterResults; err != nil {
+			t.Fatalf("concurrent QuiesceContext after release: %v", err)
+		}
+	}
+	finishCtx, finishCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer finishCancel()
+	if err := store.DiscardContext(finishCtx); err != nil {
+		t.Fatalf("finish DiscardContext after quiesce timeout: %v", err)
+	}
+	status = store.Status()
+	if status.Written != 1 || status.Dropped != 0 || status.QueueDepth != 0 || store.DatabaseAvailable() {
+		t.Fatalf("completed background quiesce status=%#v databaseAvailable=%t", status, store.DatabaseAvailable())
+	}
+}
+
+func TestQuiesceWaitsForInFlightMaintenanceBeforeReturning(t *testing.T) {
+	maintenanceAtGate := make(chan struct{})
+	releaseMaintenance := make(chan struct{})
+	var releaseOnce sync.Once
+	var intercept atomic.Bool
+	var maintenanceCalls atomic.Int32
+	storageFailure := errors.New("synthetic maintenance storage latch")
+	storageGate := func() error {
+		if !intercept.Load() {
+			return nil
+		}
+		if maintenanceCalls.Add(1) == 1 {
+			close(maintenanceAtGate)
+			<-releaseMaintenance
+			return storageFailure
+		}
+		return storageFailure
+	}
+	store, err := Open(Config{
+		Path:              filepath.Join(t.TempDir(), "quiesce-maintenance.db"),
+		QueueSize:         4,
+		CleanupInterval:   time.Millisecond,
+		StorageAccessGate: storageGate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseMaintenance) })
+		_ = store.Discard()
+	})
+	intercept.Store(true)
+	select {
+	case <-maintenanceAtGate:
+	case <-time.After(5 * time.Second):
+		t.Fatal("maintenance ticker did not reach its storage gate")
+	}
+
+	quiesceDone := make(chan error, 1)
+	go func() { quiesceDone <- store.QuiesceContext(context.Background()) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !store.closedState.Load() && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	if !store.closedState.Load() {
+		t.Fatal("quiesce did not publish the terminal admission state")
+	}
+	select {
+	case err := <-quiesceDone:
+		t.Fatalf("quiesce returned before in-flight maintenance finished: %v", err)
+	default:
+	}
+	releaseOnce.Do(func() { close(releaseMaintenance) })
+	select {
+	case err := <-quiesceDone:
+		if err != nil {
+			t.Fatalf("quiesce after maintenance release: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("quiesce did not finish after maintenance release")
+	}
+	select {
+	case <-store.workerCtx.Done():
+	default:
+		t.Fatal("quiesce returned while maintenance worker remained live")
+	}
+	if maintenanceCalls.Load() != 1 {
+		t.Fatalf("maintenance gate calls=%d, want exactly the in-flight tick", maintenanceCalls.Load())
+	}
+	if err := store.Discard(); err != nil {
+		t.Fatalf("discard quiesced maintenance failure: %v", err)
+	}
+}
+
+func TestQuiesceWaitsForConcurrentActivateBeforeReturning(t *testing.T) {
+	store, err := Open(Config{
+		Path:                        filepath.Join(t.TempDir(), "quiesce-activate.db"),
+		SkipAllStartupMutation:      true,
+		AllowDeferredDatabaseCreate: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	activationPublished := make(chan struct{})
+	releaseActivation := make(chan struct{})
+	var releaseOnce sync.Once
+	store.activationBeforeWorkerStartHook = func() {
+		close(activationPublished)
+		<-releaseActivation
+	}
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseActivation) })
+		_ = store.Discard()
+	})
+
+	activationDone := make(chan error, 1)
+	go func() { activationDone <- store.Activate(context.Background()) }()
+	select {
+	case <-activationPublished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Activate did not reach the worker publication boundary")
+	}
+	quiesceDone := make(chan error, 1)
+	go func() { quiesceDone <- store.QuiesceContext(context.Background()) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !store.closedState.Load() && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	if !store.closedState.Load() {
+		t.Fatal("Quiesce did not publish closed admission during Activate")
+	}
+	select {
+	case err := <-quiesceDone:
+		t.Fatalf("Quiesce returned before Activate released activateMu: %v", err)
+	default:
+	}
+	releaseOnce.Do(func() { close(releaseActivation) })
+	select {
+	case err := <-activationDone:
+		if !errors.Is(err, ErrClosed) {
+			t.Fatalf("Activate error=%v, want ErrClosed", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Activate did not finish after release")
+	}
+	select {
+	case err := <-quiesceDone:
+		if err != nil {
+			t.Fatalf("Quiesce after Activate release: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Quiesce did not finish after Activate release")
+	}
+	if !store.DatabaseAvailable() || store.IsActive() {
+		t.Fatalf("quiesced activation databaseAvailable=%t active=%t",
+			store.DatabaseAvailable(), store.IsActive())
+	}
+}
+
+func TestDiscardAfterQuiesceKeepsNoCheckpointModeStable(t *testing.T) {
+	store, err := Open(Config{Path: filepath.Join(t.TempDir(), "quiesce-discard-mode.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Quiesce(); err != nil {
+		t.Fatalf("Quiesce: %v", err)
+	}
+	// A normal Close would report a checkpoint query failure on this closed
+	// pool. Discard must linearize no-checkpoint mode, and later Close callers
+	// must observe that same terminal result rather than changing modes.
+	if err := store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Discard(); err != nil {
+		t.Fatalf("Discard after Quiesce attempted checkpoint: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close changed the first terminal no-checkpoint mode: %v", err)
 	}
 }
 
@@ -946,6 +1317,35 @@ func TestCleanupEnforcesMaximumLiveSize(t *testing.T) {
 }
 
 func TestDeferredStoreCreatesNoDatabaseArtifactsOrSchemaBeforeActivate(t *testing.T) {
+	for name, path := range map[string]string{
+		"empty":      "",
+		"whitespace": " \t\n ",
+	} {
+		t.Run(name+" path fails closed", func(t *testing.T) {
+			store, err := Open(Config{
+				Path:                        path,
+				MaxBytes:                    8 << 20,
+				QueueSize:                   4,
+				SkipAllStartupMutation:      true,
+				AllowDeferredDatabaseCreate: true,
+			})
+			if store == nil {
+				t.Fatal("deferred-path rejection must retain a degraded Store")
+			}
+			t.Cleanup(func() { _ = store.Discard() })
+			if err == nil || !strings.Contains(err.Error(), "deferred database path is empty") {
+				t.Fatalf("Open() error=%v, want deferred empty-path rejection", err)
+			}
+			if store.DatabaseAvailable() || store.IsActive() {
+				t.Fatalf(
+					"rejected deferred Store databaseAvailable=%t active=%t",
+					store.DatabaseAvailable(),
+					store.IsActive(),
+				)
+			}
+		})
+	}
+
 	dataDir := t.TempDir()
 	path := filepath.Join(dataDir, "events.db")
 	store, err := Open(Config{

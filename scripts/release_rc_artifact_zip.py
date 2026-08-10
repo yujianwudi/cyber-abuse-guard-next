@@ -11,11 +11,13 @@ import zipfile
 from pathlib import Path
 
 
+VERSION = "1.0.0"
+SO_NAME = f"cyber-abuse-guard-v{VERSION}.so"
 EXPECTED_FILES = frozenset(
     {
-        "cyber-abuse-guard.so",
-        "cyber-abuse-guard.so.sha256",
-        "cyber-abuse-guard_1.0.0_linux_amd64.zip",
+        SO_NAME,
+        f"{SO_NAME}.sha256",
+        f"cyber-abuse-guard_{VERSION}_linux_amd64.zip",
         "audit-candidate-manifest.json",
         "build-metadata.json",
         "checksums.txt",

@@ -1213,6 +1213,42 @@ func (s *ScanSession) finishField(field *streamingField) {
 	fieldSegment := streamingSegmentForField(field, "")
 	profiledField := s.profiledRequest && !segmentUsesLegacyUntrustedFallback(fieldSegment)
 	fieldSegment = s.profiledStreamingRequestSegment(fieldSegment)
+	clearNonUserSafety := false
+	if profiledField && profiledNonUserSafetyCandidate(fieldSegment) {
+		if completeText, complete := completeStreamingNonUserSafetyText(field); complete {
+			completeSegment := fieldSegment
+			completeSegment.Text = completeText
+			candidate := s.classifier.classifyWithPolicy(
+				[]string{completeText}, s.mode, s.thresholds, s.policy, false,
+			)
+			clearNonUserSafety = s.classifier.profiledNonUserSafetySuppressionProven(
+				completeSegment, candidate, s.mode, s.thresholds, s.policy,
+			)
+			if !clearNonUserSafety && !candidate.Truncated &&
+				(candidate.Coverage.State == "" || candidate.Coverage.State == CoverageComplete) &&
+				(!field.hasBest || roleResultBetter(candidate, field.best)) {
+				// Exact whole-field proof rejected suppression. Rank the same complete
+				// candidate batch classification sees; the older streaming quote state
+				// may otherwise retain only a weak suffix fragment and diverge in
+				// action/category/eligibility for 513-4096 byte fields.
+				field.best = candidate
+				field.hasBest = true
+			}
+		}
+	}
+	if clearNonUserSafety {
+		// Earlier chunks are necessarily provisional until exact whole-field
+		// classification proves both the narrow refusal/policy predicate and the
+		// absence of every eligible malicious occurrence. Discard only this
+		// field's candidates and content-free risk facts; no result from a prior
+		// field has been ranked yet through this transaction.
+		field.best = Result{}
+		field.hasBest = false
+		field.riskFacts.reset()
+		field.independentActivation = Result{}
+		field.hasIndependentActivation = false
+		field.tailSafetyScoped = true
+	}
 	exactUntrustedOuterField := false
 	if profiledField && field.totalBytes > 0 {
 		completeFieldText := field.totalBytes == int64(len(field.buffer))
@@ -1582,6 +1618,20 @@ func (s *ScanSession) finishField(field *streamingField) {
 		clear(summary.sample)
 		summary.sample = nil
 	}
+	if clearNonUserSafety {
+		// Keep the structural field boundary, but do not replay the proven-safe
+		// system/assistant text through profiled group or adjacency classifiers.
+		clear(summary.head)
+		summary.head = nil
+		clear(summary.tail)
+		summary.tail = nil
+		clear(summary.sample)
+		summary.sample = nil
+		clear(summary.profiledLexicalRunSample)
+		summary.profiledLexicalRunSample = nil
+		summary.sampleComplete = false
+		summary.tailSafetyScoped = true
+	}
 	if profiledField {
 		s.considerProfiledRoleSummary(
 			summary, &field.riskFacts, bestBeforeField, hadBestBeforeField,
@@ -1676,6 +1726,21 @@ func completeStreamingFieldText(field *streamingField) (string, bool) {
 		return "", false
 	}
 	return string(field.roleSummary), true
+}
+
+func completeStreamingNonUserSafetyText(field *streamingField) (string, bool) {
+	if text, complete := completeStreamingFieldText(field); complete {
+		return text, true
+	}
+	if field == nil || field.totalBytes > maxDefensiveRequestObjectProofBytes ||
+		field.totalBytes != int64(len(field.buffer)) {
+		return "", false
+	}
+	// The complete field still fits in the bounded scan window. Reuse it only
+	// for this transient suppression proof; no request text survives field
+	// finalization. Batch and streaming share the same 4096-byte fail-active
+	// budget even though the ordinary role summary remains capped at 512 bytes.
+	return string(field.buffer), true
 }
 
 func (s *ScanSession) completeStreamingRequestLocalOwnerText(
@@ -7957,6 +8022,13 @@ func prepareStreamingRoleWindow(field *streamingField, text string, uniqueStart 
 	}
 	if field == nil || field.provenance != extract.ProvenanceContent ||
 		(field.role != extract.RoleAssistant && field.role != extract.RoleSystem) {
+		return ordinary
+	}
+	if field.totalBytes > maxDefensiveRequestObjectProofBytes {
+		// Batch/legacy safety-object suppression fails active above the shared
+		// 4096-byte proof budget. Do not let the older streaming quote state grant
+		// a broader whole-field exemption merely because it can discard quoted
+		// windows without retaining their text.
 		return ordinary
 	}
 	if uniqueStart < 0 {

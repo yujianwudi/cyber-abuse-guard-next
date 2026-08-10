@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import contextlib
 import io
 import json
@@ -180,7 +181,7 @@ class HostPerformanceWorkloadTests(unittest.TestCase):
         expected_counts = {
             "fixed_workload": 1,
             "ordinary": 2,
-            "five_repository_activation": 16,
+            "five_repository_activation": workloads.ACTIVATION_REQUEST_COUNT,
             "public": 10,
             "large_payload": 1,
         }
@@ -225,6 +226,40 @@ class HostPerformanceWorkloadTests(unittest.TestCase):
         malicious_cases = [
             case for case in self.core["semantic_cases"] if case["label"] == "malicious_active"
         ]
+        drifted = copy.deepcopy(self.core)
+        drifted_reference = next(
+            case
+            for case in drifted["semantic_cases"]
+            if case["label"] == "malicious_active"
+        )
+        drifted_case = next(
+            case
+            for case in drifted["semantic_cases"]
+            if case["label"] != "malicious_active"
+        )
+        for field in (
+            "authorization",
+            "current_action",
+            "expected_action_by_mode",
+            "label",
+            "label_reason",
+            "ownership",
+            "template",
+        ):
+            drifted_case[field] = copy.deepcopy(drifted_reference[field])
+        drifted_case["id"] += ":activation-count-drift"
+        drifted_case["reviewer"]["review_sha256"] = review_sha256(drifted_case)
+        validate_corpus_manifest(drifted)
+        with (
+            mock.patch.object(workloads, "_source_text") as source_text,
+            self.assertRaisesRegex(
+                ContractError,
+                "expected 16 across chat and responses, got 18",
+            ),
+        ):
+            workloads._activation_specs(drifted, self.core_root)
+        source_text.assert_not_called()
+
         expected_activation = [
             self.payloads[case["source"]["corpus_file"]].decode("utf-8")
             + ACTIVATION_SUFFIX
@@ -241,6 +276,13 @@ class HostPerformanceWorkloadTests(unittest.TestCase):
         self.assertEqual(
             Counter(observed_activation),
             Counter({text: 2 for text in expected_activation}),
+        )
+        self.assertEqual(
+            Counter(
+                request["endpoint"]
+                for request in by_id["five_repository_activation"]["requests"]
+            ),
+            Counter({"/v1/chat/completions": 8, "/v1/responses": 8}),
         )
 
         malicious_paths = {
@@ -443,10 +485,15 @@ class HostPerformanceWorkloadTests(unittest.TestCase):
 
         def fail_file_fstat_once(descriptor: int) -> os.stat_result:
             nonlocal fstat_failed
-            if not fstat_failed:
+            info = real_fstat(descriptor)
+            try:
+                target_info = fstat_path.lstat()
+            except FileNotFoundError:
+                return info
+            if not fstat_failed and workloads._same_identity(info, target_info):
                 fstat_failed = True
                 raise OSError("synthetic file fstat failure")
-            return real_fstat(descriptor)
+            return info
 
         with mock.patch.object(
             workloads.os,
@@ -454,30 +501,37 @@ class HostPerformanceWorkloadTests(unittest.TestCase):
             side_effect=fail_file_fstat_once,
         ):
             fstat_transaction.write_file(fstat_path, b"{}\n")
+            self.assertTrue(fstat_failed)
             self.assertEqual(fstat_transaction.cleanup(), [])
         self.assertFalse(fstat_path.exists())
 
-        chmod_path = self.root / "late-file-chmod-failure.json"
-        chmod_transaction = workloads._OutputTransaction()
-        real_chmod = os.chmod
-        chmod_failed = False
+        fchmod_path = self.root / "file-fchmod-failure.json"
+        fchmod_transaction = workloads._OutputTransaction()
+        real_fchmod = os.fchmod
+        fchmod_failed = False
 
-        def fail_file_chmod_once(path: os.PathLike[str] | str, mode: int) -> None:
-            nonlocal chmod_failed
-            if Path(path) == chmod_path and not chmod_failed:
-                chmod_failed = True
-                raise OSError("synthetic file chmod failure")
-            real_chmod(path, mode)
+        def fail_file_fchmod_once(descriptor: int, mode: int) -> None:
+            nonlocal fchmod_failed
+            info = os.fstat(descriptor)
+            try:
+                target_info = fchmod_path.lstat()
+            except FileNotFoundError:
+                return real_fchmod(descriptor, mode)
+            if not fchmod_failed and workloads._same_identity(info, target_info):
+                fchmod_failed = True
+                raise OSError("synthetic file fchmod failure")
+            real_fchmod(descriptor, mode)
 
         with mock.patch.object(
             workloads.os,
-            "chmod",
-            side_effect=fail_file_chmod_once,
+            "fchmod",
+            side_effect=fail_file_fchmod_once,
         ):
-            with self.assertRaisesRegex(OSError, "file chmod"):
-                chmod_transaction.write_file(chmod_path, b"{}\n")
-            self.assertEqual(chmod_transaction.cleanup(), [])
-        self.assertFalse(chmod_path.exists())
+            with self.assertRaisesRegex(OSError, "file fchmod"):
+                fchmod_transaction.write_file(fchmod_path, b"{}\n")
+            self.assertTrue(fchmod_failed)
+            self.assertEqual(fchmod_transaction.cleanup(), [])
+        self.assertFalse(fchmod_path.exists())
 
     def test_unbound_transaction_records_never_delete_same_type_replacements(self) -> None:
         directory = self.root / "unbound-directory"
@@ -511,10 +565,22 @@ class HostPerformanceWorkloadTests(unittest.TestCase):
 
         file_path = self.root / "unbound-file.json"
         file_transaction = workloads._OutputTransaction()
+        real_fstat = os.fstat
+
+        def fail_target_file_fstat(descriptor: int) -> os.stat_result:
+            info = real_fstat(descriptor)
+            try:
+                target_info = file_path.lstat()
+            except FileNotFoundError:
+                return info
+            if workloads._same_identity(info, target_info):
+                raise OSError("persistent file identity failure")
+            return info
+
         with mock.patch.object(
             workloads.os,
             "fstat",
-            side_effect=OSError("persistent file identity failure"),
+            side_effect=fail_target_file_fstat,
         ):
             with self.assertRaisesRegex(OSError, "file identity"):
                 file_transaction.write_file(file_path, b"{}\n")

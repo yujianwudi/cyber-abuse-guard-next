@@ -828,7 +828,6 @@ def load_supplemental_policy(path: Path) -> tuple[dict[str, Any], bytes]:
     )
     policy = validate_supplemental_policy(
         load_json_bytes(raw, "supplemental ZIP policy", MAX_POLICY_BYTES),
-        require_approved=True,
     )
     return policy, raw
 

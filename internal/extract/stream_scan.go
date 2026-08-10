@@ -3200,7 +3200,9 @@ func fallbackPlanTextKey(key string) bool {
 }
 
 func opaqueScalarCarrierRepresentative(key, value string, bounded bool, raw []byte, id uint64) (string, bool) {
-	if !isScalarMediaCarrierKeyCanonical(key) {
+	scalarCarrier := isScalarMediaCarrierKeyCanonical(key)
+	mediaNamedScalar := isMediaContainerKeyCanonical(key)
+	if !scalarCarrier && !mediaNamedScalar {
 		return "", false
 	}
 	candidate := value
@@ -3219,8 +3221,14 @@ func opaqueScalarCarrierRepresentative(key, value string, bounded bool, raw []by
 	case strings.HasPrefix(trimmed, "data:application/pdf"):
 		return "data:application/pdf;base64," + marker, true
 	case strings.HasPrefix(trimmed, "https://"):
+		if !scalarCarrier {
+			return "", false
+		}
 		return "https://opaque.invalid/" + marker, true
 	case strings.HasPrefix(trimmed, "http://"):
+		if !scalarCarrier {
+			return "", false
+		}
 		return "http://opaque.invalid/" + marker, true
 	default:
 		return "", false

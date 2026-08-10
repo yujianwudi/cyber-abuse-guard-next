@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from release_rc_cpa_store import (
+    AUDIT_CHECKSUM_NAMES,
     AUDIT_CHECKSUMS,
     AUDIT_ZIP,
     CPA_CHECKSUMS,
@@ -36,8 +37,23 @@ class CPAStoreReleaseTests(unittest.TestCase):
         (root / SO_NAME).write_bytes(payload)
         self.write_zip(root / AUDIT_ZIP, {SO_NAME: payload})
         create(root / SO_NAME, root / RC_ZIP)
+        supporting_assets = {
+            f"{SO_NAME}.sha256": hashlib.sha256(payload).hexdigest()
+            + f"  {SO_NAME}\n",
+            "build-metadata.json": "{}\n",
+            "ruleset-manifest.json": "{}\n",
+            "ruleset.sha256": "0" * 64 + "  rules/manifest.yaml\n",
+            "sbom.cdx.json": "{}\n",
+        }
+        for name, content in supporting_assets.items():
+            (root / name).write_text(content, encoding="ascii")
         (root / AUDIT_CHECKSUMS).write_text(
-            hashlib.sha256(payload).hexdigest() + f"  {SO_NAME}\n", encoding="ascii"
+            "".join(
+                hashlib.sha256((root / name).read_bytes()).hexdigest()
+                + f"  {name}\n"
+                for name in sorted(AUDIT_CHECKSUM_NAMES)
+            ),
+            encoding="ascii",
         )
         names = (SO_NAME, AUDIT_ZIP, RC_ZIP)
         (root / CPA_CHECKSUMS).write_text(
@@ -169,6 +185,9 @@ class CPAStoreReleaseTests(unittest.TestCase):
             "checksums-missing-rc": self.remove_rc_checksum,
             "checksums-wrong-hash": self.wrong_rc_checksum,
             "candidate-checksums-masquerade": self.copy_candidate_checksums,
+            "candidate-checksums-missing-asset": self.remove_audit_checksum,
+            "candidate-checksums-extra-asset": self.add_audit_checksum,
+            "candidate-checksums-wrong-hash": self.wrong_audit_checksum,
             "provenance-missing-derived": self.remove_derived,
             "provenance-symlink": self.symlink_provenance,
         }
@@ -196,6 +215,33 @@ class CPAStoreReleaseTests(unittest.TestCase):
     @staticmethod
     def copy_candidate_checksums(root: Path, _payload: bytes) -> None:
         (root / CPA_CHECKSUMS).write_bytes((root / AUDIT_CHECKSUMS).read_bytes())
+
+    @staticmethod
+    def remove_audit_checksum(root: Path, _payload: bytes) -> None:
+        rows = (root / AUDIT_CHECKSUMS).read_text("ascii").splitlines()
+        (root / AUDIT_CHECKSUMS).write_text(
+            "\n".join(row for row in rows if not row.endswith("  sbom.cdx.json"))
+            + "\n",
+            encoding="ascii",
+        )
+
+    @staticmethod
+    def add_audit_checksum(root: Path, _payload: bytes) -> None:
+        with (root / AUDIT_CHECKSUMS).open("a", encoding="ascii") as output:
+            output.write("0" * 64 + "  unreviewed.bin\n")
+
+    @staticmethod
+    def wrong_audit_checksum(root: Path, _payload: bytes) -> None:
+        text = (root / AUDIT_CHECKSUMS).read_text("ascii")
+        rows = [
+            "0" * 64 + f"  {AUDIT_ZIP}"
+            if row.endswith("  " + AUDIT_ZIP)
+            else row
+            for row in text.splitlines()
+        ]
+        (root / AUDIT_CHECKSUMS).write_text(
+            "\n".join(rows) + "\n", encoding="ascii"
+        )
 
     @staticmethod
     def remove_derived(root: Path, _payload: bytes) -> None:

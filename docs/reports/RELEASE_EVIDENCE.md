@@ -9,8 +9,22 @@ active_rc_tag: v1.0.0-rc.1
 active_release_artifact_version: 1.0.0-rc.1
 active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 active_platform: linux-amd64
-active_local_source_matrix: PASS / UNIT_RACE_VET_FUZZ_CORPUS_CONTRACT_AND_IN_PROCESS_PERFORMANCE
-active_native_host_and_exact_head_ci: NOT_RUN
+active_classifier_policy: classifier-policy-v18 / 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+active_source_policy_sha256: 06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26
+active_audit_runner_bundle_sha256: 6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f
+active_audit_contract_sha256: 81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e
+active_audit_run_source_sha256: 21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de
+active_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
+active_audit_tool_tests: PASS / LINUX / 231_OF_231
+active_local_source_matrix: DIRTY_WORKTREE_PASS / UNIT_RACE_VET_FUZZ_CORPUS_CONTRACT / NOT_FINAL_CANDIDATE
+active_local_development_corpus: MALICIOUS_RECALL_154_OF_154 / BENIGN_HITS_3_OF_142 / LOCAL_ONLY_NOT_SECOND_MACHINE_FP
+active_local_round10_performance: V18_DIRTY_SOURCE_ONLY_PASS / JSON_SHA256_CF416898BB4B6DFFBB3771D8C9529ED7D23989CEC0668C423A4BFAB005B0F73F / NOT_HOST_PERFORMANCE_OR_RSS
+active_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / SO_5693F2FB...F8393B / STORE_1CBF59E1...65EB23 / V18_NOT_RUN / NOT_FINAL_CANDIDATE / NOT_HOST_PERFORMANCE
+active_local_coderabbit: FINAL_V18_REVIEW_ITERATIONS_COMPLETE / 2_VALID_FINDINGS_FIXED / 3_STALE_FINDINGS_DISPROVED / OPEN_VALID_FINDINGS_0 / FINAL_PUSH_GITHUB_PENDING
+active_pr_required_checks: NOT_RUN
+active_premerge_second_machine: NOT_RUN
+active_postmain_required_checks: NOT_RUN
+active_postmain_release_admission: NOT_RUN
 active_release_type: prerelease
 active_make_latest: false
 active_exact_main_artifacts: NOT_BUILT
@@ -22,6 +36,29 @@ active_cpa_store_checksum_contract: checksums.txt / EXACT_STANDALONE_AND_TWO_STO
 active_tag_and_release: NOT_CREATED
 active_stable_production_approval: NOT_PROVIDED
 ```
+
+The 2026-08-10 root-isolated local CPA v7.2.125 Host/Router matrix passed in
+179.790 seconds using a `1.0.0-dirty` SO. Its SO SHA-256 is
+`5693f2fb9313a07b0c7ea171458e0386e7279bd14ca8cf926cbb462cbdf8393b`
+and its Store ZIP SHA-256 is
+`1cbf59e1fb6c77f2cc7bc2debc0bad20d509f4db3fa9a4ccbbb5f8af2665eb23`.
+This closes only a dirty-development functional check; it is not the clean PR
+or main artifact, does not provide Host latency/RSS evidence, and cannot
+authorize merge, tag, or release. The ordinary-user invocation separately
+stopped at the passwordless-sudo bind-mount preflight before Host execution.
+GitHub's current upstream latest is `v7.2.127`; the active release contract
+remains deliberately frozen to the exact v7.2.125 identity above.
+
+The selected v18 in-process performance report has SHA-256
+`3c86959ea1f132b322da03b1271c1b96aa17117de70ffc1f8c73cbdaf9ee62a2`:
+ordinary p95 is `2.303293 ms`, five-repository surrogate p95 is
+`105.194822 ms`, Codex-all surrogate p95 is `45.001980 ms`, public p95/p99
+is `8.702025/9.020208 ms`, SQLite c16 p95 is `1.311953 ms`, and all 2,304
+operations completed without a reported failure or recovered panic. This is
+source-only evidence, not CPA Host latency, RSS, paired throughput, or a
+production SLO. The final remote-enabled compatibility matrix verified the
+exact v7.2.125 tag and commit; two earlier low-speed failures are superseded.
+Exact pushed-head GitHub checks remain required.
 
 Publication is allowed only from the exact merged `main` after all Round 13
 Linux, required-check, CodeRabbit, second-machine, manifest, checksum, SBOM,
@@ -55,11 +92,11 @@ independent attestation. The classifier identity block immediately below is
 part of this active prologue.
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
-Last updated: 2026-08-09 (Asia/Shanghai)
+Last updated: 2026-08-10 (Asia/Shanghai)
 
 Everything below is frozen v0.16 / Round 12 history and does not transfer a
 PASS to CPA v7.2.125 or `v1.0.0-rc.1`.

@@ -93,7 +93,7 @@ bundle identity.
 A separately supplied complete Codex jailbreak ZIP is **not** part of the
 current five-repository, 11-source, 19-case denominator. Its implemented
 interface is an explicit `--supplemental-archive` input whose value names
-`/srv/cag-audit/supplemental/<authorized-codex-archive.zip>`, with its own source
+`/srv/cag-audit/supplemental/authorized-codex-archive.zip`, with its own source
 hash, case count, false-positive denominator, malicious-recall denominator,
 results, and cleanup status. Parser, runner, schemas, validators, and negative
 fixtures now fail closed together, but no real v7.2.125 candidate run has yet
@@ -110,9 +110,16 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-06; source drift fails.
+  five-repository source identities reviewed on 2026-08-10; source drift fails.
+  Keysmith is pinned to current default-branch commit
+  `3a9d2008ead29a261e2644963a50202e747c7c8a` / tree
+  `973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`; its two selected reviewed blobs
+  remain byte-identical to the preceding pin.
 - `audit_contract.py` — closed corpus, run-config, result, and machine-evidence
   validators. Unknown or missing fields fail.
+- `supplemental_zip.py` - closed, metadata-only supplemental ZIP parser and
+  caller-owned in-memory reviewed-text loader; it never extracts member text to
+  disk or executes archive content.
 - `counted_mock.py` and `Dockerfile.mock` — body-discarding upstream with
   independent `mock`, `auth`, and `provider` counters.
 - `make_run_config.py` — hashes local inputs and emits canonical mode-0600 JSON.
@@ -142,10 +149,11 @@ CANDIDATE_DIR=/srv/artifacts/candidate
 UPSTREAM_DIR=/srv/artifacts/upstream
 EVIDENCE_DIR="/srv/cag-audit/evidence-$RUN_ID"
 SUPPLEMENTAL_DIR="/srv/cag-audit/supplemental-metadata-$RUN_ID"
-SUPPLEMENTAL_ARCHIVE='/srv/cag-audit/supplemental/Codex全破.zip'
+SUPPLEMENTAL_ARCHIVE='/srv/cag-audit/supplemental/authorized-codex-archive.zip'
 RUN_CONFIG="/srv/cag-audit/run-config-$RUN_ID.json"
 test ! -e "$ACQUISITION_DIR"
 test ! -e "$EVIDENCE_DIR"
+test ! -e "$SUPPLEMENTAL_DIR"
 test ! -e "$RUN_CONFIG"
 ```
 
@@ -384,6 +392,29 @@ The evidence binds the input config SHA, a separate runtime config SHA for
 each cold start, every template SHA, individual runner source/schema/policy
 SHAs, and a bundle SHA over the operational file-name-to-SHA map.
 
+Generate the fixed Host-performance workload now, while the validated core
+corpus still exists and before `run.py` performs its exact text cleanup. Keep
+generated bodies outside the checkout and keep the manifest outside its private
+body root:
+
+```bash
+PERFORMANCE_WORKLOAD_ROOT="/srv/cag-audit/host-performance-workloads-$RUN_ID"
+PERFORMANCE_WORKLOAD_MANIFEST="/srv/cag-audit/host-performance-workloads-$RUN_ID.json"
+
+python3 -B tools/current-cpa-audit/host_performance_workloads.py generate \
+  --core-manifest "$ACQUISITION_DIR/corpus-manifest.json" \
+  --corpus-root "$ACQUISITION_DIR" \
+  --repository-root /srv/src/cyber-abuse-guard \
+  --output-root "$PERFORMANCE_WORKLOAD_ROOT" \
+  --manifest "$PERFORMANCE_WORKLOAD_MANIFEST"
+```
+
+The generator produces exactly 30 bodies: one fixed control, two ordinary
+controls, sixteen five-repository malicious-activation requests, ten sanitized
+public adversarial requests, and one exact 4 MiB wire body. The independently
+reviewed Host tool-identity approval must include the generator SHA-256; a
+hand-written lookalike manifest is not the approved fixed workload.
+
 ## 4. Run in isolation
 
 Disable external networking on the host as appropriate, while preserving the
@@ -531,27 +562,9 @@ criteria. The validator owns the exact map: `fixed_workload`, `ordinary`,
 requires CPA-only 200 and CPA+CAG 403. A manifest that changes any expected
 status, including to a fast 5xx, fails before acquisition.
 
-Generate the fixed workload while the validated core corpus still exists and
-before `run.py` performs its exact text cleanup. Keep generated bodies outside
-the checkout and keep the manifest outside its private body root:
-
-```bash
-PERFORMANCE_WORKLOAD_ROOT="/srv/cag-audit/host-performance-workloads-$RUN_ID"
-PERFORMANCE_WORKLOAD_MANIFEST="/srv/cag-audit/host-performance-workloads-$RUN_ID.json"
-
-python3 -B tools/current-cpa-audit/host_performance_workloads.py generate \
-  --core-manifest "$ACQUISITION_DIR/corpus-manifest.json" \
-  --corpus-root "$ACQUISITION_DIR" \
-  --repository-root /srv/src/cyber-abuse-guard \
-  --output-root "$PERFORMANCE_WORKLOAD_ROOT" \
-  --manifest "$PERFORMANCE_WORKLOAD_MANIFEST"
-```
-
-The generator produces exactly 30 bodies: one fixed control, two ordinary
-controls, sixteen five-repository malicious-activation requests, ten sanitized
-public adversarial requests, and one exact 4 MiB wire body. The independently
-reviewed Host tool-identity approval must include the generator SHA-256; a
-hand-written lookalike manifest is not the approved fixed workload.
+Reuse the immutable workload root and manifest generated before Section 4.
+`run.py` has removed the validated corpus text by this point, so do not try to
+regenerate the workload after the semantic audit.
 
 Create the immutable plan before collecting samples:
 
@@ -1019,6 +1032,7 @@ python3 -B -m py_compile \
   tools/current-cpa-audit/make_run_config.py \
   tools/current-cpa-audit/run.py \
   tools/current-cpa-audit/second_machine_release_admission.py \
+  tools/current-cpa-audit/supplemental_zip.py \
   tools/current-cpa-audit/validate.py
 ```
 
@@ -1035,6 +1049,7 @@ python -B -m py_compile `
   tools/current-cpa-audit/make_run_config.py `
   tools/current-cpa-audit/run.py `
   tools/current-cpa-audit/second_machine_release_admission.py `
+  tools/current-cpa-audit/supplemental_zip.py `
   tools/current-cpa-audit/validate.py
 ```
 

@@ -1631,6 +1631,16 @@ func (x *extractor) valueContext(stack []jsonFrame, initial contextKind, contain
 		// root declaration containers without depending on that second parse.
 		ctx = contextTool
 	}
+	if isToolTransactionContext(parent.context) && !containerValue &&
+		keyKind != mediaContextNone && !isOpaquePayloadKeyCanonical(canonical) {
+		// A scalar field name inside arbitrary tool/function arguments is not a
+		// provider media contract. Business tools routinely use names such as
+		// document, attachment, file, image, or input_file for ordinary identifiers
+		// and prose. Keep those values inspectable unless an enclosing structured
+		// media container or a concrete file_data/image_data payload establishes
+		// ownership. Type/MIME markers may then refine that established container.
+		keyKind = mediaContextNone
+	}
 	media := parent.media
 	if crossesToolBoundary(parent.context, ctx) {
 		// Media inherited from an enclosing conversational block must not turn

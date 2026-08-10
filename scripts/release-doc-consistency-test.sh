@@ -12,8 +12,8 @@ old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce
 stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
-round13_classifier_policy_version="classifier-policy-v15"
-round13_classifier_policy_sha256="12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9"
+round13_classifier_policy_version="classifier-policy-v18"
+round13_classifier_policy_sha256="9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -443,7 +443,7 @@ make_fixture() {
     >>"$fixture/docs/ROUND12_STATUS.md"
   printf '%s\n' \
     '' \
-    '## Round 12 working-tree pre-final Linux validation' \
+    '## Frozen Round 12 working-tree pre-final Linux validation' \
     '' \
     '```text' \
     "runner_bundle_sha256: $audit_runner_bundle_sha256" \
@@ -476,7 +476,11 @@ run_gate() {
 
 make_round13_fixture() {
   local fixture="$1" relative
-  mkdir -p "$fixture"
+  mkdir -p "$fixture/.github/workflows"
+  for relative in ci.yml codeql.yml policy-gate.yml release-rc.yml; do
+    cp -a -- "$root/.github/workflows/$relative" "$fixture/.github/workflows/$relative"
+  done
+  cp -a -- "$root/.github/workflows/README.md" "$fixture/.github/workflows/README.md"
   for relative in "${round13_documents[@]}"; do
     mkdir -p "$(dirname "$fixture/$relative")"
     cp -a -- "$root/$relative" "$fixture/$relative"
@@ -528,7 +532,28 @@ run_gate "$work/pass"
 make_round13_fixture "$work/round13-pass"
 run_round13_gate "$work/round13-pass"
 
+cp -a "$work/round13-pass" "$work/round13-missing-release-workflow"
+rm -- "$work/round13-missing-release-workflow/.github/workflows/release-rc.yml"
+round13_must_fail round13-missing-release-workflow \
+  "$work/round13-missing-release-workflow" \
+  'required Round 13 active workflow must be a regular non-symlink file: .github/workflows/release-rc.yml'
+
+cp -a "$work/round13-pass" "$work/round13-unreviewed-workflow"
+printf 'name: unreviewed\n' >"$work/round13-unreviewed-workflow/.github/workflows/unreviewed.yml"
+round13_must_fail round13-unreviewed-workflow \
+  "$work/round13-unreviewed-workflow" \
+  'workflow directory contains an unreviewed Round 13 active workflow: .github/workflows/unreviewed.yml'
+
+cp -a "$work/round13-pass" "$work/round13-stale-publication-boundary"
+sed -i 's/`release-rc.yml` is the sole publication entry point/Release publication is disabled/' \
+  "$work/round13-stale-publication-boundary/docs/README.md"
+round13_must_fail round13-stale-publication-boundary \
+  "$work/round13-stale-publication-boundary" \
+  'documentation index lost the sole Round 13 RC publication boundary'
+
 for mutation in \
+  'README.md:readme-current' \
+  'README_CN.md:readme-cn-current' \
   'docs/RULES.md:rules-active' \
   'docs/reports/CPA_INTEGRATION.md:cpa-integration-overlay' \
   'docs/reports/PRIVACY.md:privacy-overlay' \
@@ -537,7 +562,7 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/round13-classifier-$name"
   cp -a "$work/round13-pass" "$fixture"
-  sed -i '0,/current_classifier_policy_version: classifier-policy-v15/s//current_classifier_policy_version: classifier-policy-v12/' \
+  sed -i '0,/current_classifier_policy_version: classifier-policy-v18/s//current_classifier_policy_version: classifier-policy-v12/' \
     "$fixture/$relative"
   round13_must_fail "round13-classifier-$name" "$fixture" \
     "$relative lost the exact current classifier identity in its first 15 lines"
@@ -598,10 +623,29 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/$name"
   cp -a "$work/round13-pass" "$fixture"
-  sed -i '0,/229\/229 PASS/s//223\/223 PASS/' "$fixture/$relative"
+  sed -i '0,/231\/231 PASS/s//223\/223 PASS/' "$fixture/$relative"
   round13_must_fail "$name" "$fixture" \
-    "$relative: active Round 13 overlay must contain exactly one 229/229 PASS result"
+    "$relative: active Round 13 overlay must contain exactly one 231/231 PASS result"
 done
+
+for mutation in \
+  'docs/ROUND13_STATUS.md|round13_audit_runner_bundle_sha256|round13-status-audit-bundle' \
+  'docs/reports/TEST_REPORT.md|round13_audit_contract_sha256|round13-test-report-audit-contract'; do
+  IFS='|' read -r relative key name <<<"$mutation"
+  fixture="$work/$name"
+  cp -a "$work/round13-pass" "$fixture"
+  sed -i "s|^${key}: .*$|${key}: $(printf '0%.0s' {1..64})|" "$fixture/$relative"
+  round13_must_fail "$name" "$fixture" \
+    "$relative must bind the exact current Round 13 audit identity: $key"
+done
+
+cp -a "$work/round13-pass" "$work/round13-release-evidence-audit-run-source"
+sed -i \
+  "s|^active_audit_run_source_sha256: .*$|active_audit_run_source_sha256: $(printf '0%.0s' {1..64})|" \
+  "$work/round13-release-evidence-audit-run-source/docs/reports/RELEASE_EVIDENCE.md"
+round13_must_fail round13-release-evidence-audit-run-source \
+  "$work/round13-release-evidence-audit-run-source" \
+  'docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: active_audit_run_source_sha256'
 
 cp -a "$work/round13-pass" "$work/round13-duplicate-active-cpa-target"
 sed -i '/^active_cpa_target:/a active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' \

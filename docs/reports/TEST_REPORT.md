@@ -6,64 +6,83 @@
 round13_source_version: 1.0.0
 round13_rc_tag: v1.0.0-rc.1
 round13_cpa: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
-round13_local_source_evidence_commit: d358f0922d322deca1c86113b8c8aed2405f4364
-round13_local_source_evidence_tree: 52098fc6eeb03a7a9f7bfbe95e08e0390c575cf9
+round13_local_source_evidence_base_head: a672ab31eabed9ca32c90ad110a9f47b3ae407c6
+round13_local_source_evidence_head_tree: 9aee6ced9cacf5ed899c658ed8d8ed422580cee8
+round13_local_source_evidence_worktree: DIRTY_WORKTREE / NOT_FINAL_CANDIDATE
 round13_platform: linux-amd64
+round13_classifier_policy: classifier-policy-v18 / 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+round13_source_policy_sha256: 06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26
+round13_audit_runner_bundle_sha256: 6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f
+round13_audit_contract_sha256: 81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e
+round13_audit_run_source_sha256: 21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de
+round13_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
+round13_audit_tool_tests: PASS / LINUX / 231_OF_231
+round13_keysmith_reviewed_head_tree: 3a9d2008ead29a261e2644963a50202e747c7c8a / 973ce503bdb1131e3a642cbe2cc3acd2dd2bed94
 round13_local_source_matrix: PASS
-round13_local_native_host: NOT_RUN
+round13_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / V18_NOT_RUN / NOT_FINAL_CANDIDATE
 round13_exact_head_github_checks: NOT_RUN
 round13_second_machine: NOT_RUN
 round13_release: NOT_CREATED
 ```
 
-The following close-out commands passed on 2026-08-10 (Asia/Shanghai) against
-the source candidate commit/tree recorded above. They remain local source
-evidence; exact PR-head GitHub and native Host gates are separate:
+The following close-out commands passed on 2026-08-11 (Asia/Shanghai) against
+the uncommitted working tree based on the HEAD/tree recorded above. They remain
+dirty local development evidence; exact PR-head GitHub, clean-candidate Host,
+and release gates are separate:
 
 | Round 13 contract command | Result |
 |---|---|
 | `bash scripts/release-doc-consistency.sh` | `PASS` |
-| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 460.5s` |
+| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE`; rerun inside the final full script matrix |
 | `bash scripts/release-rc-contract-test.sh` | `PASS` |
 | `bash scripts/release-candidate-contract-test.sh` | `PASS` |
-| `make unit-test` | `PASS / 329.4s` |
-| `make race` | `PASS / 1123.7s / NO DATA RACE` |
-| `make round6-vet` | `PASS` |
-| `make fuzz-smoke` and `make round9-fuzz ROUND9_FUZZTIME=1s` | `PASS` |
-| `make corpus-regression development-public-jailbreak-corpus round9-corpus-contract round9-public-corpus` | `PASS` |
-| cached `actionlint v1.7.12` over all four active workflows | `PASS`; the equivalent `go run` wrapper separately hit a dependency-download timeout before lint execution |
-| `make round6-benchmark` | `PASS / 204.93s` |
-| `make round10-performance` | `SOURCE-ONLY PASS / ordinary p95 2.395298 ms / five-repository surrogate p95 134.449820 ms / public p95/p99 9.161171/9.392444 ms / failures+panics 0` |
+| exact Go 1.26.4 format and module verification | `PASS / 4.027s combined` |
+| `make unit-test` | `PASS / 363.760s` |
+| `make race` | `PASS / 1124.710s / NO DATA RACE`; audit `52.426s`, plugin `591.994s`, classifier `417.900s` |
+| `make round6-vet` | `PASS`; vet/fuzz/corpus plus bounded-fuzz lanes `148.900s` combined |
+| `make fuzz-smoke` and `make round9-fuzz ROUND9_FUZZTIME=5s` | `PASS` |
+| fuzz/corpus matrix | `6/6 PASS / malicious recall 154/154 / local development-benign hits 3/142`; the 3/142 result is not a second-machine false-positive result |
+| pinned `actionlint v1.7.12` over all four active workflows | `PASS / canonical go run command / Go 1.26.4`; a verified read-only local Go module proxy cache was used after the public proxy timed out |
+| `make round6-benchmark` | `PASS / 197.079s` |
+| selected additional `make round10-performance` evidence | `CLASSIFIER-POLICY-V18 DIRTY SOURCE-ONLY PASS / 2026-08-11 / 24.0s wall / 17.127s measured test / JSON SHA-256 3c86959ea1f132b322da03b1271c1b96aa17117de70ffc1f8c73cbdaf9ee62a2 / ordinary p95 2.303293 ms / five-repository surrogate p95 105.194822 ms / Codex-all surrogate p95 45.001980 ms / public p95/p99 8.702025/9.020208 ms / SQLite c16 p95 1.311953 ms / queue max 28/256 / 2,304 operations / failures+panics 0` |
 | `bash scripts/check-production-health-test.sh` | `PASS` |
-| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `229/229 PASS / LINUX` |
+| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `231/231 PASS / LINUX` |
 | `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` | `PASS` |
+| `make round6-script-test` | `PASS / 137.2s / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 231 CPA tests / Safe Gate 217 tests and 90 skips / RC / attestation / source exclusion / production health`; the exact actionlint module came from the verified local proxy cache after the public proxy timed out; the complete release-doc mutation suite separately passed in 391.5s |
+| `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make integration-test` as WSL root | `PRE_V18 PASS SUPERSEDED / CLASSIFIER-POLICY-V17 / 179.790s / native CPA v7.2.125 Host plus all 15 Router scenarios / SO 5693f2fb...f8393b / Store ZIP 1cbf59e1...65eb23 / V18 NATIVE HOST NOT RUN / DIRTY DEVELOPMENT BYTES / NOT FINAL CANDIDATE` |
+| fresh five-repository acquisition and validation | `PASS / policy 06e46d7b...9c26 / 5 repositories / 11 sources / 19 semantic cases / no third-party execution / ephemeral text cleaned` |
+| `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0 make cpa-latest-compat` | `PASS / 121.740s / exact v7.2.125 remote tag+commit / pinned source, compile, ABI, Host, Store, request logging, and schema-2 lifecycle contracts / latest check intentionally skipped for the pinned target` |
+| local CodeRabbit CLI 0.7.2 `review --base main --include-untracked --agent` | `ITERATIONS COMPLETE / 14 valid findings fixed / 6 stale-or-false findings disproved against current source / FINAL REVIEW findings=0`; final pushed-head GitHub CodeRabbit remains pending |
 
-Round 13 coverage status is deliberately split: no-copy is
-`SOURCE_CONTRACT_PASS / SOURCE_TEST_ADDED_AND_EXECUTED / NATIVE_HOST_PENDING`;
-`response.failed` and Codex `Originator` are each
-`SOURCE_CONTRACT_PASS / NATIVE_HOST_TEST_ADDED / NATIVE_HOST_PENDING`; Claude
-replay is `SOURCE_CONTRACT_PASS / NATIVE_HOST_TEST_ADDED / NATIVE_HOST_PENDING`.
-The Claude native test covers batch/stream restoration, single-lifecycle
-CAG/Auth/Provider counts, and clearing after an upstream bad request, but only
-its integration-tag compile has passed; the real Host execution is pending.
+Round 13 coverage status is deliberately split. The current v18 source
+contracts for no-copy, `response.failed`, Codex `Originator`, and Claude replay
+pass. Their only native Host execution is
+`PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17 /
+V18_NOT_RUN / FINAL_CANDIDATE_PENDING`. The Claude assertions ran inside that
+root-isolated pre-v18 matrix against the v17-bound SO; they do not transfer to
+classifier-policy-v18 or to the final candidate.
 
-These are source, fixture, lint, audit-harness, unit, race, vet, fuzz, corpus,
-and in-process performance results. No current native CPA Host was run locally;
-the isolated persistent-audit mount requires passwordless sudo, which this WSL
-instance does not provide. The exact clean native Host, exact-head GitHub and
-reproducibility lanes, second-machine, independent-attestation, release, and
-production gates remain pending or not provided.
+These are dirty-worktree source, fixture, lint, audit-harness, unit, race, vet,
+fuzz, corpus, in-process performance, and local native-Host development results.
+The ordinary WSL user path stopped before Host execution because passwordless
+sudo was unavailable; a separate root invocation used the script's native
+`EUID=0` path and passed the isolated Host/Router matrix without altering sudo,
+system, Git, business-service, container, or database state. The exact clean
+native Host, exact-head GitHub and reproducibility lanes, second-machine,
+independent-attestation, release, and production gates remain pending or not
+provided. The local Host lane does not provide CPA Host latency, throughput,
+RSS, or production SLO evidence.
 
 Only newly recorded results tied to the exact Round 13 commit/tree/SO may
 change these fields. All v7.2.124 and earlier results below are historical and
 non-transferable. See [Round 13 status](../ROUND13_STATUS.md).
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
-Last updated: 2026-08-10 (Asia/Shanghai)
+Last updated: 2026-08-11 (Asia/Shanghai)
 
 ## Frozen CPA v7.2.124 target — local source/compile PASS, exact candidate pending
 
@@ -213,13 +232,14 @@ cpa_v7.2.116_release_ready: NOT_PROVIDED
 cpa_v7.2.116_tag_and_release: NOT_CREATED / NOT_AUTHORIZED
 ```
 
-## Round 12 working-tree pre-final Linux validation
+## Frozen Round 12 working-tree pre-final Linux validation
 
-The current working tree implements the Round 12 capacity, subject-admission,
-classifier, repository-governance, and five-repository audit-tool changes. Its
-classifier identity is exactly `classifier-policy-v12` /
+This is a frozen historical record of the Round 12 tree, not the active Round 13
+working tree. That historical tree implemented the Round 12 capacity,
+subject-admission, classifier, repository-governance, and five-repository
+audit-tool changes. Its classifier identity was exactly `classifier-policy-v12` /
 `2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`.
-The current approved five-repository source policy and runner identities are:
+The frozen Round 12 five-repository source policy and runner identities were:
 
 ```text
 reviewed_repositories: 5
@@ -476,7 +496,7 @@ section above records only the newly rerun incident-response source checks.
 | Safe package tests with `sqlite_omit_load_extension` | **PASS** |
 | Race detector | **HISTORICAL `f37a25dd` SOURCE-ONLY PASS**; full Go 1.26.4 classifier race passed in 109.842 s, and the multilingual four-provider plugin route passed its targeted race in 7.903 s. A full plugin-package race was not rerun for that snapshot and remained an exact-main CI gate |
 | `make round6-vet` | **PASS** |
-| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 205 tests |
+| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 217 tests, 90 explicitly retired skips |
 | `scripts/round6_safe_gate_contract.py --root .` | **PASS**; 11 entrypoints, 40 Make targets, and 60 scripts |
 | Defensive-quote differential fuzz | **PASS**; 30 s, 18,158 executions, 20 new interesting inputs; arbitrary byte cuts and UTF-8 boundary seeds included |
 | Round 9 fuzz gate | **PASS**; 10 s each for classifier, request content-type extraction, and audit decision explanation |

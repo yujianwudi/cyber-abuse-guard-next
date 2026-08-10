@@ -496,10 +496,17 @@ func (s *Store) QueryRawCapturesPage(ctx context.Context, query RawCaptureQuery)
 			rollbackRawCaptureTransactionOrDiscard(conn)
 		}
 	}()
-	// The independent read gate deliberately runs after BEGIN and on the same
-	// checked-out connection that executes the SELECT. Runtime implementations
-	// must force a fresh pathname/mount/object probe here; a cached write verdict
-	// is not authority to release sensitive previews.
+	// SQLite BEGIN is deferred and does not establish a read snapshot by itself.
+	// Touch sqlite_schema on this same connection before the independent storage
+	// gate so a concurrent WAL writer cannot change the rows visible between the
+	// gate and the sensitive preview SELECT. This remains a read-only transaction;
+	// BEGIN IMMEDIATE would reserve the writer and can block the audit worker.
+	var schemaObjects int64
+	if err := conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_schema").Scan(&schemaObjects); err != nil {
+		return RawCapturePage{}, fmt.Errorf("%w: pin raw capture read snapshot: %v", ErrStorageBlocked, err)
+	}
+	// Runtime implementations must force a fresh pathname/mount/object probe
+	// here; a cached write verdict is not authority to release sensitive previews.
 	if err := s.checkSensitiveReadStorageAccess(); err != nil {
 		_, _ = conn.ExecContext(context.Background(), "ROLLBACK")
 		transactionOpen = false

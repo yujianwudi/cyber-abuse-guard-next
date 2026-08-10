@@ -1,5 +1,13 @@
 # Cyber-Abuse-Guard Next 第十三轮 CPA v7.2.125 与 v1.0.0-rc.1 任务书
 
+## Supplemental archive 状态分层
+
+Supplemental Codex archive 的源码合同在显式输入、policy、schema、validator、
+negative tests、固定分母和 Safe Gate pins 全部落地后，可标记为
+`IMPLEMENTED / CLOSED`。真实二号机 supplemental runtime audit 是独立门禁；
+在精确候选执行成功前必须保持 `NOT_RUN / NO_PASS_CLAIM`。本任务书后文若仅写
+`NOT_RUN`，均指 runtime audit，不否定已经闭合的源码合同。
+
 状态：**已批准实施 / 验收未完成 / 禁止提前合并或发布**
 工作分支：`agent/cpa-v7.2.125-v1-rc1`
 合并目标：`main`

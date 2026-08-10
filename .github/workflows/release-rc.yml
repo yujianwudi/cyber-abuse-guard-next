@@ -655,7 +655,7 @@ jobs:
           set -euo pipefail
 
           latest_release_id() {
-            local body status
+            local body latest status
             body="$(mktemp)"
             status="$(curl --silent --show-error --location \
               --output "$body" --write-out '%{http_code}' \
@@ -664,7 +664,13 @@ jobs:
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases/latest")"
             case "$status" in
-              200) jq -er '.id | select(type == "number" and . > 0)' "$body" ;;
+              200)
+                if ! latest="$(jq -er '.id | select(type == "number" and . > 0)' "$body")"; then
+                  rm -f -- "$body"
+                  return 1
+                fi
+                printf '%s\n' "$latest"
+                ;;
               404) printf 'NONE\n' ;;
               *)
                 printf 'latest Release query failed with HTTP %s\n' "$status" >&2

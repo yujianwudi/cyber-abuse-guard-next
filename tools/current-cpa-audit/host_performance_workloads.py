@@ -48,6 +48,7 @@ PUBLIC_GIT_BLOB = "8b70b69b76a117e3b55150d6cc86bc7183a84c89"
 PUBLIC_ROW_COUNT = 36
 PUBLIC_SELECTED_COUNT = 10
 PUBLIC_PROTOCOL_COUNTS = {"openai_chat": 7, "openai_responses": 3}
+ACTIVATION_REQUEST_COUNT = 16
 
 MAX_CORE_MANIFEST_BYTES = 8 * 1024 * 1024
 MAX_PUBLIC_BYTES = 2 * 1024 * 1024
@@ -391,6 +392,15 @@ def _activation_specs(core_manifest: Mapping[str, Any], corpus_root: Path) -> li
     represented = {case["source"]["repository_key"] for case in selected}
     if represented != set(FIXED_REPOSITORIES):
         fail("five_repository_activation does not cover the exact five core repositories")
+    protocols = ("chat", "responses")
+    observed_request_count = len(selected) * len(protocols)
+    if observed_request_count != ACTIVATION_REQUEST_COUNT:
+        fail(
+            "five_repository_activation request count is invalid: "
+            f"expected {ACTIVATION_REQUEST_COUNT} across chat and responses, "
+            f"got {observed_request_count} from "
+            f"{len(selected)} malicious_active core cases"
+        )
 
     result: list[BodySpec] = []
     request_ordinal = 0
@@ -399,7 +409,7 @@ def _activation_specs(core_manifest: Mapping[str, Any], corpus_root: Path) -> li
         if template_id != "activated-user-v1":
             fail("malicious_active core case does not use its activated template")
         text = _source_text(case, corpus_root, case_ordinal)
-        for protocol in ("chat", "responses"):
+        for protocol in protocols:
             request_ordinal += 1
             body = apply_template(template_id, text, protocol, False, MODEL)
             result.append(
@@ -577,13 +587,13 @@ class _OutputTransaction:
                     fail(f"short write while creating workload output: {path}")
                 handle.flush()
                 os.fsync(handle.fileno())
+                os.fchmod(handle.fileno(), mode)
                 current = os.fstat(handle.fileno())
                 if not _same_identity(info, current) or current.st_nlink != 1:
                     fail(f"new workload output acquired an external hard link: {path}")
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
-        os.chmod(path, mode)
         post = path.lstat()
         if (
             not _same_identity(info, post)

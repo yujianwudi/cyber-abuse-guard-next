@@ -89,7 +89,7 @@ grep -Fxq docs/ROUND9_HOST_RUNNER.md <<<"$listing" || \
   release_die "source archive lost the Round 9 Host runner contract"
 grep -Fxq integration/round9countedmock/README.md <<<"$listing" || \
   release_die "source archive lost the Round 9 counted-Mock documentation"
-grep -Fq '[Round 9 Linux Host runner and counted-Mock contract](ROUND9_HOST_RUNNER.md)' \
+grep -Fq '[Historical, non-executable Round 9 Host runner design](ROUND9_HOST_RUNNER.md)' \
   "$root/docs/README.md" || \
   release_die "documentation index lost the Round 9 Host runner link"
 grep -Fq '`docs/ROUND9_HOST_RUNNER.md`' \

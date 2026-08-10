@@ -1,8 +1,8 @@
 # CPA v7.2.125 schema-2 active contract and frozen historical validation
 
 ```text
-current_classifier_policy_version: classifier-policy-v15
-current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9
+current_classifier_policy_version: classifier-policy-v18
+current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
 ```
 
 ## Round 13 active compatibility overlay
@@ -13,20 +13,46 @@ module sum `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
 archive is 20,853,030 bytes with SHA-256
 `4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`;
-the contained binary SHA-256 is
-`656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+  the contained binary SHA-256 is
+  `656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+GitHub's upstream latest release is now `v7.2.127`, published after this target
+was frozen. Round 13 intentionally remains pinned to v7.2.125; no v7.2.127
+source, compile, Host, or release result is claimed.
 
-Round 13 source contracts and upstream-targeted tests cover no-copy/in-place
-payload reuse, Antigravity large-payload guards, Multi-Agent v2, Codex
-`response.failed` and `Originator`, Claude replay, session identity, public SDK
-ABI/API, and exact-tag CPA Plugin Store installation. Native Host tests were
-added for `response.failed`, Codex `Originator`, and Claude replay (including
-batch/stream restoration, single-lifecycle counters, and upstream bad-request
-clearing). The final dirty-development Router Host matrix passed locally, but
-the persistent-audit Host blackbox correctly stopped because this WSL instance
-has no passwordless sudo for its isolated bind mount. Unit, race, vet, fuzz, and
-Router results are development evidence only; the exact-clean native Host and
-release lanes remain open. See [Round 13 status](../ROUND13_STATUS.md).
+The current five-repository review policy has SHA-256
+`06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26`.
+Keysmith is reviewed at commit
+`3a9d2008ead29a261e2644963a50202e747c7c8a` / tree
+`973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`. A fresh acquisition validated
+5 repositories, 11 selected text sources, and 19 semantic cases without
+executing third-party code, then removed the ephemeral source text.
+
+Current classifier-policy-v18 source contracts and upstream-targeted tests
+cover no-copy/in-place payload reuse, Antigravity large-payload guards,
+Multi-Agent v2, Codex `response.failed` and `Originator`, Claude replay, session
+identity, public SDK ABI/API, and exact-tag CPA Plugin Store installation. The
+only native Host run covered those features plus batch/stream restoration,
+single-lifecycle counters, upstream bad-request clearing, persistent-audit
+readiness, startup privacy, hot reconfigure, request lifecycle, and the 6 MiB /
+8 MiB no-copy functional path, but it loaded classifier-policy-v17 bytes and is
+superseded; the v18 native Host lane remains `NOT_RUN`.
+
+The ordinary-user invocation stopped before the Host process because the
+isolated bind-mount helper requires passwordless sudo. A separate WSL root run
+used the helper's native `EUID=0` path and completed
+`GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make
+integration-test` in 179.790 seconds: the top-level Host test and all 15 Router
+  scenarios passed. This was the pre-v18 classifier-policy-v17 run. It loaded a
+  dirty-development SO with SHA-256
+`5693f2fb9313a07b0c7ea171458e0386e7279bd14ca8cf926cbb462cbdf8393b`
+from a Store ZIP with SHA-256
+`1cbf59e1fb6c77f2cc7bc2debc0bad20d509f4db3fa9a4ccbbb5f8af2665eb23`.
+Those bytes and results are
+`PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / V18_RERUN_REQUIRED /
+NOT_FINAL_CANDIDATE`; the current v18 and exact-clean native Host and release
+lanes remain open. The no-copy result is a superseded Host functional
+assertion, not an RSS/allocation or Host-performance result. See [Round 13
+status](../ROUND13_STATUS.md).
 
 ## Round 13 executed contract gates
 
@@ -37,11 +63,33 @@ The following commands passed on 2026-08-10 for this working tree:
 - `bash scripts/release-candidate-contract-test.sh` — `PASS`;
 - `make workflow-lint` — `PASS`;
 - `bash scripts/check-production-health-test.sh` — `PASS`;
-- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `229/229 PASS` on Linux;
+- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `231/231 PASS` on Linux;
 - `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` — `PASS`.
 
-These contract gates do not close the real native Host, race, complete Linux
-matrix, second-machine, independent-attestation, or production gates.
+The `make workflow-lint` row records the earlier dirty-tree run. After the v17
+change, the canonical `go run` entry stopped before lint because the module
+proxy timed out; the fixed local Actionlint v1.7.12 binary independently passed
+all four active workflows and has SHA-256
+`c872d6db8c6bf83a8eaa704fc93999f027d55dffbc63b8a6abdccb47df5f4cd4`.
+
+The current v18 working tree passed the exact Go 1.26.4 complete local
+unit/race/vet/fuzz/corpus/script matrix with no data race and a fresh
+five-repository acquisition of 11 reviewed text sources / 19 semantic cases
+without third-party execution. The root-isolated CPA v7.2.125 Host/Router
+integration in 179.790 seconds belongs only to the superseded v17 bytes above.
+These are dirty development evidence rather than final-candidate evidence. The local
+development-benign corpus retained 3/142 audit hits; that is not a Tencent Cloud
+#2 false-positive result and is not evidence of zero production false positives.
+
+The official Git tag recheck failed closed twice because the local Git transport
+fell below its 30-second low-speed threshold. This is recorded as
+`NETWORK_FAILED / NOT_CODE_FAILURE`, not as a compatibility PASS. The exact
+GitHub checks remain mandatory.
+
+These local gates do not close exact-commit GitHub checks, exact-candidate
+native Host, second-machine, Host performance/RSS, independent-attestation,
+release, or production gates. Exact PR checks, pre-merge second-machine
+diagnostics, post-main checks, and post-main release admission remain `NOT_RUN`.
 
 Everything below this overlay is the frozen Round 12 / CPA v7.2.124 report and
 must not be read as current v7.2.125 evidence.

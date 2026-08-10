@@ -194,10 +194,16 @@ func (c *Classifier) ClassifySegmentsWithPolicy(segments []extract.Segment, mode
 				[]string{segment.Text}, mode, thresholds, policy,
 				segment.Provenance == extract.ProvenanceToolPayload,
 			)
-			candidate = withRoleAwareFindingOrigin(candidate, findingOriginForSegment(segment), mode, thresholds)
-			truncated = truncated || candidate.Truncated
-			if roleResultBetter(candidate, best) {
-				best = candidate
+			if c.nonUserSafetySuppressionProven(
+				segment.Role, segment.Provenance, segment.Text, candidate, mode, thresholds, policy,
+			) {
+				classifySegment = false
+			} else {
+				candidate = withRoleAwareFindingOrigin(candidate, findingOriginForSegment(segment), mode, thresholds)
+				truncated = truncated || candidate.Truncated
+				if roleResultBetter(candidate, best) {
+					best = candidate
+				}
 			}
 		}
 		if segment.Role != extract.RoleUser || segment.Provenance != extract.ProvenanceContent {
@@ -1537,6 +1543,15 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			continue
 		}
 		candidate := c.classifyProfiledGroupWithPolicy(group, mode, thresholds, policy)
+		if len(group.refs) == 1 && c.profiledNonUserSafetySuppressionProven(
+			group.refs[0].segment, candidate, mode, thresholds, policy,
+		) {
+			// The complete physical field, rather than a prefix heuristic, proved
+			// that every classifier occurrence remained inside a genuine refusal or
+			// safety-policy scope. Do not publish its policy vocabulary as an audit.
+			quotedOrInertSuppressed = true
+			continue
+		}
 		origin := findingOriginForSegment(group.refs[0].segment)
 		roleOwnedWrapper := profiledRoleOwnedWrapper(candidate, origin)
 		if !group.activeDirective && !roleOwnedWrapper &&
@@ -3437,6 +3452,612 @@ func profiledTrustedCurrentUserNaturalLanguageDirective(segment extract.Segment)
 
 func profiledRequestLocalSystemDirective(segment extract.Segment) bool {
 	return enforcementScopeForSegment(segment) == EnforcementScopeRequestLocalSystem
+}
+
+// profiledClearNonUserSafetySegment is only the cheap structural and linguistic
+// admission gate for a possible whole-field suppression. It is never sufficient
+// on its own: the complete field must first be classified and
+// profiledNonUserSafetySuppressionProven must prove that no eligible malicious
+// occurrence survived. This prevents an attacker from escaping classification
+// by choosing an unenumerated negation-reversal governor.
+func profiledClearNonUserSafetySegment(segment extract.Segment) bool {
+	return profiledNonUserSafetyCandidate(segment) &&
+		isClearNonUserSafetyContent(segment.Role, segment.Text)
+}
+
+func (c *Classifier) profiledNonUserSafetySuppressionProven(
+	segment extract.Segment,
+	candidate Result,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if !profiledNonUserSafetyCandidate(segment) {
+		return false
+	}
+	return c.nonUserSafetySuppressionProven(
+		segment.Role, segment.Provenance, segment.Text, candidate, mode, thresholds, policy,
+	)
+}
+
+func (c *Classifier) nonUserSafetySuppressionProven(
+	role extract.Role,
+	provenance extract.SegmentProvenance,
+	value string,
+	candidate Result,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	// Keep the ordinary user/tool hot path allocation-free. Role ownership is a
+	// structural fact and must be checked before lowercasing or punctuation
+	// normalization.
+	if provenance != extract.ProvenanceContent {
+		return false
+	}
+	switch role {
+	case extract.RoleAssistant, extract.RoleSystem:
+	default:
+		return false
+	}
+	if !isClearNonUserSafetyContent(role, value) || candidate.Truncated ||
+		(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
+		return false
+	}
+	if !resultHasEligibleMaliciousOccurrence(candidate) {
+		return true
+	}
+	if c.systemPolicyDefensiveRequestResidualIsBenign(
+		role, value, mode, thresholds, policy,
+	) {
+		return true
+	}
+	return c.explicitScopedSafetyResidualIsBenign(
+		role, value, mode, thresholds, policy,
+	)
+}
+
+// explicitScopedSafetyResidualIsBenign masks only the bounded payload owned by
+// one explicit refusal/policy restatement. It never removes the whole clause:
+// unconsumed object bytes and every later continuation remain in the residual
+// and are classified again. This preserves benign provider refusals without
+// letting a caller-controlled role label hide a second speech act.
+func (c *Classifier) explicitScopedSafetyResidualIsBenign(
+	role extract.Role,
+	value string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil || len(value) > maxDefensiveRequestObjectProofBytes {
+		return false
+	}
+	text, complete := normalizedNonUserSafetyProofText(value)
+	if !complete || !isClearNonUserSafetyContent(role, text) ||
+		role == extract.RoleSystem && hasNegationReversalFraming(text) {
+		return false
+	}
+	objectStart, found := explicitScopedSafetyObjectStart(role, text)
+	if !found {
+		return false
+	}
+	if objectEnd, quoted := explicitQuotedSafetyObjectEnd(text, objectStart); quoted {
+		return c.nonUserSafetyResidualIsBenign(
+			strings.TrimSpace(text[:objectStart]+" "+text[objectEnd:]),
+			mode,
+			thresholds,
+			policy,
+		)
+	}
+	return c.nonUserSafetyRequestObjectResidualIsBenign(
+		text, objectStart, mode, thresholds, policy,
+	)
+}
+
+func normalizedNonUserSafetyProofText(value string) (string, bool) {
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{value}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return "", false
+	}
+	return strings.TrimSpace(roleSafetyPunctuation.Replace(string(views.standardRunes))), true
+}
+
+func explicitScopedSafetyObjectStart(role extract.Role, text string) (int, bool) {
+	var prefixes []string
+	switch role {
+	case extract.RoleAssistant:
+		prefixes = []string{
+			"the request was", "the forbidden request was", "the blocked request was",
+			"the quoted request was", "the request says", "that request was", "this request was",
+			"the blocked prompt was", "the forbidden prompt was", "the quoted prompt was",
+			"the blocked prompt said", "the forbidden prompt said", "the quoted prompt said",
+			"the user asked", "you asked",
+			"被禁止的请求是", "被拦截的请求是", "引用的请求是", "引用提示词是",
+			"该请求是", "这个请求是", "用户要求", "你要求",
+		}
+	case extract.RoleSystem:
+		prefixes = []string{
+			"the request was", "the forbidden request was", "the blocked request was",
+			"the quoted request was", "the blocked prompt was", "the forbidden prompt was",
+			"the quoted prompt was", "the blocked prompt said", "the forbidden prompt said",
+			"the quoted prompt said", "被禁止的请求是", "被拦截的请求是",
+			"引用的请求是", "引用提示词是", "该请求是", "这个请求是",
+		}
+	default:
+		return 0, false
+	}
+
+	objectStart := -1
+	for _, prefix := range prefixes {
+		searchFrom := 0
+		for searchFrom < len(text) {
+			index := strings.Index(text[searchFrom:], prefix)
+			if index < 0 {
+				break
+			}
+			index += searchFrom
+			searchFrom = index + len(prefix)
+			if !scopedSafetyPrefixAtClauseStart(text, index) {
+				continue
+			}
+			start := skipSafetyObjectDelimiters(text, searchFrom)
+			if start >= len(text) || objectStart >= 0 {
+				return 0, false
+			}
+			objectStart = start
+		}
+	}
+	return objectStart, objectStart >= 0
+}
+
+func scopedSafetyPrefixAtClauseStart(text string, index int) bool {
+	if index <= 0 {
+		return index == 0
+	}
+	prefix := strings.TrimRightFunc(text[:index], unicode.IsSpace)
+	if prefix == "" {
+		return true
+	}
+	last, _ := utf8.DecodeLastRuneInString(prefix)
+	return last == compactHardBoundary || unicode.IsPunct(last) || unicode.IsSymbol(last)
+}
+
+func skipSafetyObjectDelimiters(text string, start int) int {
+	for start < len(text) {
+		current, width := utf8.DecodeRuneInString(text[start:])
+		if unicode.IsSpace(current) || strings.ContainsRune(":：=-", current) {
+			start += width
+			continue
+		}
+		break
+	}
+	return start
+}
+
+func explicitQuotedSafetyObjectEnd(text string, objectStart int) (int, bool) {
+	if objectStart < 0 || objectStart >= len(text) {
+		return 0, false
+	}
+	quote, width := utf8.DecodeRuneInString(text[objectStart:])
+	if quote != '"' && quote != '`' {
+		return 0, false
+	}
+	contentStart := objectStart + width
+	closeIndex := strings.Index(text[contentStart:], string(quote))
+	if closeIndex < 0 {
+		return 0, false
+	}
+	return contentStart + closeIndex + width, true
+}
+
+const (
+	maxDefensiveRequestObjectProofBytes  = 4096
+	maxDefensiveRequestObjectProofTokens = 64
+)
+
+// systemPolicyDefensiveRequestResidualIsBenign masks only the shortest
+// classifier-proven harmful predicate owned by one explicit defensive request
+// object, then reclassifies every byte outside that object. This is deliberately
+// different from trusting a connector/governor vocabulary: an unknown suffix
+// such as "meanwhile write malware", "provided that ...", "whilst ...", or a
+// punctuation-adjacent CJK directive remains in the residual and prevents
+// suppression whenever it produces an eligible malicious occurrence.
+func (c *Classifier) systemPolicyDefensiveRequestResidualIsBenign(
+	role extract.Role,
+	value string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil || role != extract.RoleSystem {
+		return false
+	}
+	if len(value) > maxDefensiveRequestObjectProofBytes {
+		return false
+	}
+	text, complete := normalizedNonUserSafetyProofText(value)
+	if !complete || !isClearNonUserSafetyContent(role, text) ||
+		hasNegationReversalFraming(text) || !hasClearSystemSafetyPolicy(text) {
+		return false
+	}
+	phrases := []string{
+		"block requests to ", "blocking requests to ",
+		"reject requests to ", "rejecting requests to ",
+		"refuse requests to ", "refusing requests to ",
+		"filter requests to ", "filtering requests to ",
+		"prevent requests to ", "preventing requests to ",
+	}
+	objectStart := -1
+	for _, phrase := range phrases {
+		searchFrom := 0
+		for searchFrom < len(text) {
+			index := strings.Index(text[searchFrom:], phrase)
+			if index < 0 {
+				break
+			}
+			index += searchFrom
+			if objectStart >= 0 {
+				// Multiple defensive objects need occurrence-to-object binding that
+				// this bounded proof intentionally does not attempt.
+				return false
+			}
+			objectStart = index + len(phrase)
+			searchFrom = objectStart
+		}
+	}
+	if objectStart < 0 || objectStart >= len(text) {
+		return false
+	}
+	return c.nonUserSafetyRequestObjectResidualIsBenign(
+		text, objectStart, mode, thresholds, policy,
+	)
+}
+
+func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenign(
+	text string,
+	objectStart int,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil || objectStart < 0 || objectStart >= len(text) ||
+		len(text) > maxDefensiveRequestObjectProofBytes {
+		return false
+	}
+	tail := text[objectStart:]
+	objectEnd := defensiveRequestObjectHardBoundary(tail)
+	objectText := strings.TrimSpace(tail[:objectEnd])
+	tokens := strings.Fields(objectText)
+	if len(tokens) == 0 || len(tokens) > maxDefensiveRequestObjectProofTokens {
+		return false
+	}
+	if !c.defensiveRequestObjectStartsWithRuleIntent(tokens) {
+		return false
+	}
+	consumed, ok := c.shortestEligibleDefensiveObjectPrefix(
+		tokens, mode, thresholds, policy,
+	)
+	if !ok {
+		return false
+	}
+	for consumed < len(tokens) && defensiveRequestObjectCoordinator(tokens[consumed]) {
+		if !c.defensiveRequestObjectStartsWithRuleIntent(tokens[consumed+1:]) {
+			break
+		}
+		additional, found := c.shortestEligibleDefensiveObjectPrefix(
+			tokens[consumed+1:], mode, thresholds, policy,
+		)
+		if !found {
+			break
+		}
+		consumed += 1 + additional
+	}
+	residual := strings.TrimSpace(
+		text[:objectStart] + " " + strings.Join(tokens[consumed:], " ") + " " + tail[objectEnd:],
+	)
+	return c.nonUserSafetyResidualIsBenign(residual, mode, thresholds, policy)
+}
+
+func (c *Classifier) nonUserSafetyResidualIsBenign(
+	residual string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil {
+		return false
+	}
+	if residual == "" {
+		return true
+	}
+	residualCandidate := c.classifyWithPolicy(
+		[]string{residual}, mode, thresholds, policy, false,
+	)
+	return !residualCandidate.Truncated &&
+		(residualCandidate.Coverage.State == "" || residualCandidate.Coverage.State == CoverageComplete) &&
+		!resultHasEligibleMaliciousOccurrence(residualCandidate)
+}
+
+func defensiveRequestObjectHardBoundary(value string) int {
+	for index, current := range value {
+		if current == compactHardBoundary {
+			return index
+		}
+		if unicode.IsSpace(current) {
+			if current == '\n' || current == '\r' {
+				return index
+			}
+			continue
+		}
+		// The special proof owns only one plain request-object clause. Any
+		// punctuation or symbol (including paired brackets, quotes, and a dash)
+		// terminates that object before residual reclassification. Failing active
+		// on punctuation inside a rare object is safer than masking a new clause.
+		if unicode.IsPunct(current) || unicode.IsSymbol(current) {
+			return index
+		}
+	}
+	return len(value)
+}
+
+func (c *Classifier) defensiveRequestObjectStartsWithRuleIntent(tokens []string) bool {
+	if c == nil || len(tokens) == 0 {
+		return false
+	}
+	return directiveSuffixStartsRuleIntent(
+		[]rune(strings.Join(tokens, " ")), &c.directiveIntentStarts,
+	)
+}
+
+func (c *Classifier) shortestEligibleDefensiveObjectPrefix(
+	tokens []string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (int, bool) {
+	limit := c.defensiveRequestObjectClauseLimit(tokens, mode, thresholds, policy)
+	for end := 1; end <= limit; end++ {
+		candidate := c.classifyWithPolicy(
+			[]string{strings.Join(tokens[:end], " ")}, mode, thresholds, policy, false,
+		)
+		if candidate.Truncated ||
+			(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
+			return 0, false
+		}
+		if resultHasEligibleMaliciousOccurrence(candidate) {
+			return end, true
+		}
+	}
+	return 0, false
+}
+
+// defensiveRequestObjectClauseLimit is a fail-active grammar boundary. The
+// request object may be a bounded direct predicate, but proof must stop before a
+// subordinate/discourse clause or a newly introduced actor. This prevents a
+// benign object from borrowing an eligible occurrence in later unpunctuated
+// prose. These are clause classes, not negation-governor synonyms.
+func (c *Classifier) defensiveRequestObjectClauseLimit(
+	tokens []string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) int {
+	for index, token := range tokens {
+		normalized := strings.ToLower(strings.TrimSpace(token))
+		// The proof consumes whole whitespace-delimited tokens. A Han/ASCII
+		// transition inside one token has no trustworthy byte boundary here, so
+		// consuming the token could also erase an attached operational clause
+		// (for example, "poetry\u7ee7\u800cdeploy ransomware"). Fail active instead
+		// of trying to enumerate every possible CJK discourse connector.
+		if defensiveRequestObjectMixedScriptToken(normalized) {
+			return index
+		}
+		if defensiveRequestObjectClauseMarker(normalized) {
+			return index
+		}
+		if index > 0 && defensiveRequestObjectCoordinator(normalized) {
+			return index
+		}
+		if index > 0 && c.defensiveRequestObjectExplicitActor(
+			tokens, index, mode, thresholds, policy,
+		) {
+			return index
+		}
+	}
+	return len(tokens)
+}
+
+func defensiveRequestObjectMixedScriptToken(value string) bool {
+	containsHan := false
+	containsASCIIWord := false
+	for _, current := range value {
+		if unicode.Is(unicode.Han, current) {
+			containsHan = true
+		}
+		if current <= unicode.MaxASCII &&
+			((current >= 'a' && current <= 'z') ||
+				(current >= 'A' && current <= 'Z') ||
+				(current >= '0' && current <= '9')) {
+			containsASCIIWord = true
+		}
+		if containsHan && containsASCIIWord {
+			return true
+		}
+	}
+	return false
+}
+
+func defensiveRequestObjectClauseMarker(value string) bool {
+	switch value {
+	case "after", "although", "as", "assuming", "because", "before", "despite", "except",
+		"for", "given", "if", "lest", "meanwhile", "now", "once", "otherwise", "provided",
+		"providing", "since", "though", "unless", "until", "when", "whenever",
+		"where", "whereas", "wherever", "whether", "while", "whilst", "with", "without",
+		"additionally", "accordingly", "but", "consequently", "conversely", "else",
+		"hence", "however", "likewise", "moreover", "nevertheless", "nonetheless",
+		"nor", "plus", "separately", "so", "then", "thereafter", "therefore",
+		"thus", "whereupon", "yet", "afterward", "afterwards", "later":
+		return true
+	}
+	for _, marker := range []string{
+		"同时", "随后", "随即", "接着", "届时", "因为", "由于", "如果", "若", "假如", "除非", "否则", "然后",
+		"然而", "不过", "但是", "并由", "且由", "而由", "当", "虽然", "尽管",
+		"系统必须", "你必须", "您必须", "模型必须", "助手必须", "平台必须", "网关必须",
+		"服务必须", "请立即", "请现在",
+	} {
+		// CJK clauses are commonly written without spaces. A marker anywhere in
+		// one field token is therefore a hard proof boundary; returning the token
+		// index may conservatively retain some benign bytes, but can never mask the
+		// attached continuation.
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Classifier) defensiveRequestObjectExplicitActor(
+	tokens []string,
+	index int,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil || index < 0 || index >= len(tokens) {
+		return false
+	}
+	current := strings.ToLower(strings.TrimSpace(tokens[index]))
+	actorHead := false
+	finiteIntentOnly := false
+	switch current {
+	case "i", "we", "you", "it", "they", "he", "she":
+		actorHead = true
+	case "the", "a", "an":
+		actorHead = index+2 < len(tokens)
+	case "to", "that", "which", "who", "whom", "whose":
+		// Infinitive and relative predicates remain part of the leading request
+		// object. They still must reach eligibility before any later boundary.
+		return false
+	default:
+		if defensiveRequestObjectEmbeddedModifier(current) || defensiveRequestObjectEmbeddedArtifact(current) {
+			return false
+		}
+		if c.defensiveRequestObjectStartsWithRuleIntent(tokens[index:]) {
+			// A directly introduced secondary predicate (for example "to steal")
+			// remains part of the defensive object. Actor detection is only needed
+			// when a separate subject precedes that predicate.
+			return false
+		}
+		if index+1 < len(tokens) {
+			next := strings.ToLower(strings.TrimSpace(tokens[index+1]))
+			structuredVerb := defensiveRequestObjectActorModal(next) ||
+				defensiveRequestObjectActorAuxiliary(next)
+			finiteIntentOnly = !structuredVerb && c.defensiveRequestObjectFiniteIntentToken(next)
+			actorHead = structuredVerb || finiteIntentOnly
+		}
+	}
+	if !actorHead {
+		return false
+	}
+	candidate := c.classifyWithPolicy(
+		[]string{strings.Join(tokens[index:], " ")}, mode, thresholds, policy, false,
+	)
+	if candidate.Truncated ||
+		(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
+		return false
+	}
+	if !resultHasEligibleMaliciousOccurrence(candidate) {
+		return false
+	}
+	// Inflected intent lookup is deliberately broader than an English verb
+	// parser and can also see plural object nouns (for example "browser
+	// cookies"). Require an independently hard malicious suffix before treating
+	// that coarse form as a new finite predicate. Explicit modal/auxiliary actor
+	// clauses retain threshold-free occurrence ownership.
+	return !finiteIntentOnly || candidate.Score >= validThresholdsOrDefault(thresholds).HardBlock
+}
+
+func defensiveRequestObjectEmbeddedModifier(value string) bool {
+	return strings.HasSuffix(value, "ing") || strings.HasSuffix(value, "ed")
+}
+
+func defensiveRequestObjectEmbeddedArtifact(value string) bool {
+	switch value {
+	case "code", "malware", "program", "script", "software", "tool", "payload":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Classifier) defensiveRequestObjectFiniteIntentToken(value string) bool {
+	if c == nil || value == "" {
+		return false
+	}
+	stems := []string{value}
+	if strings.HasSuffix(value, "ies") && len(value) > 3 {
+		stems = append(stems, value[:len(value)-3]+"y")
+	}
+	for _, suffix := range []string{"s", "es", "ed", "ing"} {
+		if strings.HasSuffix(value, suffix) && len(value) > len(suffix) {
+			stems = append(stems, value[:len(value)-len(suffix)])
+		}
+	}
+	for _, stem := range stems {
+		if directiveSuffixStartsRuleIntent([]rune(stem), &c.directiveIntentStarts) {
+			return true
+		}
+	}
+	return false
+}
+
+func defensiveRequestObjectActorAuxiliary(value string) bool {
+	switch value {
+	case "am", "is", "are", "was", "were", "be", "been", "being",
+		"have", "has", "had", "do", "does", "did":
+		return true
+	default:
+		return false
+	}
+}
+
+func defensiveRequestObjectActorModal(value string) bool {
+	switch value {
+	case "must", "should", "shall", "will", "would", "can", "could", "may", "might",
+		"need", "needs", "needed", "ought":
+		return true
+	default:
+		return false
+	}
+}
+
+func defensiveRequestObjectCoordinator(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "or", "and", "and/or", "或", "或者", "以及":
+		return true
+	default:
+		return false
+	}
+}
+
+// profiledNonUserSafetyCandidate is the zero-allocation structural gate for the
+// expensive refusal/policy predicate. Provider tool schemas may contain safety
+// language, override examples, and repeated adversarial clauses, but they are
+// declarations rather than assistant/system natural-language turns. They remain
+// independently classified as audit-only and must not enter refusal suppression.
+func profiledNonUserSafetyCandidate(segment extract.Segment) bool {
+	if segment.Provenance != extract.ProvenanceContent ||
+		segment.ContentKind != extract.ContentKindNaturalLanguageDirective {
+		return false
+	}
+	switch segment.Role {
+	case extract.RoleAssistant, extract.RoleSystem:
+		return true
+	default:
+		return false
+	}
 }
 
 func profiledRequestLocalSystemCarrier(segment extract.Segment) bool {
@@ -6653,7 +7274,9 @@ func shouldClassifyRoleSegment(segment extract.Segment) bool {
 	case extract.RoleUser, extract.RoleTool:
 		return true
 	case extract.RoleAssistant, extract.RoleSystem:
-		return !isClearNonUserSafetyContent(segment.Role, segment.Text)
+		// A complete classifier result, rather than this structural dispatch gate,
+		// decides whether a legacy refusal/policy field may be suppressed.
+		return true
 	default:
 		// This branch is reachable only if this helper is used independently;
 		// ClassifySegmentsWithPolicy sends unknown provenance through its more
@@ -6670,7 +7293,8 @@ func isClearNonUserSafetyContent(role extract.Role, value string) bool {
 	text := strings.ToLower(strings.TrimSpace(value))
 	text = roleSafetyPunctuation.Replace(text)
 	text = strings.TrimLeft(text, " \t\r\n-*#>")
-	if text == "" || hasUnscopedNonUserSafetyOverride(role, text) || hasUnscopedSafetyContinuation(role, text) {
+	if text == "" || hasUnscopedNonUserSafetyOverride(role, text) ||
+		hasUnscopedSafetyContinuation(role, text) {
 		return false
 	}
 
@@ -6774,6 +7398,8 @@ func hasNonUserSafetyOverride(text string) bool {
 		"ignore the policy", "disregard the policy", "bypass the policy", "bypass safety", "policy is irrelevant",
 		"must not be denied", "must not deny", "do not deny", "don't deny", "must not be blocked", "must not block",
 		"do not block", "don't block", "must not be filtered", "do not filter", "disable guardrails", "remove guardrails",
+		"stop blocking", "cease blocking", "avoid blocking", "end blocking", "unblock requests", "stop filtering",
+		"cease filtering", "avoid filtering", "stop refusing", "cease refusing", "avoid refusing",
 		"disable safety checks", "skip safety checks", "must not enforce the policy", "must not apply safety",
 		"but here is the code", "however, here is the code", "instead, here is the code", "here's the working code",
 		"use the following code", "run the following code", "execute the following code", "nevertheless", "nonetheless",
@@ -6992,6 +7618,9 @@ func splitStrongSafetyClauses(text string) []string {
 }
 
 func isStrongSafetyBoundary(current, previous, next rune) bool {
+	if current == compactHardBoundary {
+		return true
+	}
 	if unicode.IsSpace(current) {
 		return current != ' '
 	}
@@ -7023,8 +7652,9 @@ func isSafetyWordRune(value rune) bool {
 }
 
 func lastSafetyClause(value string) string {
-	if index := strings.LastIndexAny(value, ".!?;\n\r。！？；"); index >= 0 {
-		value = value[index+1:]
+	if index := strings.LastIndexAny(value, ".!?;\n\r。！？；"+compactHardBoundaryText); index >= 0 {
+		_, width := utf8.DecodeRuneInString(value[index:])
+		value = value[index+width:]
 	}
 	return strings.TrimSpace(value)
 }

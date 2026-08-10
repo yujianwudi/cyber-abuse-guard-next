@@ -173,8 +173,8 @@ for digest in \
 done
 [[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
   fail "current CPA audit tool test count is invalid"
-[[ "$current_audit_tool_test_count" == 229 ]] || \
-  fail "current CPA audit harness must retain the reviewed 229-test closure"
+[[ "$current_audit_tool_test_count" == 231 ]] || \
+  fail "current CPA audit harness must retain the reviewed 231-test closure"
 [[ "$audit_cpa_module_sum" == "$round13_cpa_module_sum" ]] || \
   fail "current CPA audit harness module sum differs from the v7.2.125 authority"
 [[ "$audit_cpa_go_mod_sum" == "$round13_cpa_go_mod_sum" ]] || \
@@ -187,6 +187,70 @@ done
   fail "current CPA audit harness CAG source version differs from 1.0.0"
 [[ "$audit_cag_so_name" == cyber-abuse-guard-v1.0.0.so ]] || \
   fail "current CPA audit harness CAG SO name differs from source 1.0.0"
+
+verify_round13_repository_contracts() {
+  local workflow_directory="$doc_root/.github/workflows"
+  local workflow_index="$workflow_directory/README.md"
+  local relative workflow workflow_name
+  local -a active_workflows=(
+    .github/workflows/ci.yml
+    .github/workflows/codeql.yml
+    .github/workflows/policy-gate.yml
+    .github/workflows/release-rc.yml
+  )
+  local -A active_workflow_allowlist=()
+
+  verify_canonical_relative_path .github
+  verify_canonical_relative_path .github/workflows
+  [[ -d "$workflow_directory" && ! -L "$workflow_directory" ]] ||
+    fail "active workflow directory must be a regular non-symlink directory: .github/workflows"
+  for relative in "${active_workflows[@]}"; do
+    [[ -z "${active_workflow_allowlist[$relative]+x}" ]] ||
+      fail "active workflow allowlist contains a duplicate: $relative"
+    active_workflow_allowlist["$relative"]=1
+    verify_canonical_relative_path "$relative"
+    [[ -f "$doc_root/$relative" && ! -L "$doc_root/$relative" ]] ||
+      fail "required Round 13 active workflow must be a regular non-symlink file: $relative"
+  done
+  for workflow in "$workflow_directory"/*.yml "$workflow_directory"/*.yaml; do
+    [[ -e "$workflow" || -L "$workflow" ]] || continue
+    relative=".github/workflows/${workflow##*/}"
+    [[ -n "${active_workflow_allowlist[$relative]+x}" ]] ||
+      fail "workflow directory contains an unreviewed Round 13 active workflow: $relative"
+  done
+
+  verify_canonical_relative_path .github/workflows/README.md
+  [[ -f "$workflow_index" && ! -L "$workflow_index" ]] ||
+    fail "workflow index must be a regular non-symlink file: .github/workflows/README.md"
+  for relative in "${active_workflows[@]}"; do
+    workflow_name="${relative##*/}"
+    grep -Fq "| \`$workflow_name\` |" "$workflow_index" ||
+      fail "workflow index lost the Round 13 active workflow: $relative"
+  done
+  grep -Fq '`release-rc.yml` is the sole publication entry point' "$doc_root/docs/README.md" ||
+    fail "documentation index lost the sole Round 13 RC publication boundary"
+
+  if [[ "$doc_root" == "$root" ]]; then
+    grep -Fq '`docs/ROUND9_HOST_RUNNER.md`' \
+      "$root/integration/round9countedmock/README.md" ||
+      fail "Round 9 counted-Mock README lost its Host contract link"
+    grep -Fq '[Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 9 audit-schema link"
+    grep -Fq '[Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 11 task-book link"
+    grep -Fq '[Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 9 operator-runbook link"
+    grep -Fq '[Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 9 execution-record link"
+    grep -Fq 'HTTP `503` and the fixed `audit_unavailable` error' \
+      "$root/docs/ROUND9_AUDIT_SCHEMA_V6.md" ||
+      fail "Round 9 audit guide lost the enabled-but-unavailable management contract"
+  fi
+}
 
 if [[
   ("$fixture_mode" == 0 && "$current_release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$) ||
@@ -236,10 +300,13 @@ if [[
   )
   for relative in "${round13_documents[@]}"; do
     path="$doc_root/$relative"
+    verify_canonical_relative_path "$relative"
     [[ -f "$path" && ! -L "$path" ]] || fail "required Round 13 document is missing or unsafe: $relative"
   done
 
   current_classifier_prologue_documents=(
+    README.md
+    README_CN.md
     docs/ROUND6_CONFIG_MIGRATION.md
     docs/ROUND6_STREAMING_SCANNER_DESIGN.md
     docs/ROUND8_HOST_RUNNER.md
@@ -257,8 +324,8 @@ if [[
     docs/reports/ROUND8_CALIBRATION.md
     docs/reports/ROUND9_EXECUTION_RECORD.md
   )
-  current_policy_version='current_classifier_policy_version: classifier-policy-v15'
-  current_policy_sha='current_classifier_policy_sha256: 12f120fb06bc695b827bc4057380cd02b6f4410bd0e3186848bf93bdc06bd7c9'
+  current_policy_version='current_classifier_policy_version: classifier-policy-v18'
+  current_policy_sha='current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa'
   for relative in "${current_classifier_prologue_documents[@]}"; do
     document="$doc_root/$relative"
     prologue="$(sed -n '1,15p' "$document")"
@@ -297,6 +364,35 @@ if [[
   grep -Fq 'round13_rc_tag: v1.0.0-rc.1' "$doc_root/docs/ROUND13_STATUS.md" || \
     fail "ROUND13_STATUS.md lost the exact RC identity"
 
+  declare -A round13_audit_identities=(
+    [round13_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+    [round13_audit_contract_sha256]="$current_audit_contract_sha256"
+    [round13_audit_run_source_sha256]="$current_audit_run_source_sha256"
+    [round13_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
+    [round13_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
+  )
+  for relative in docs/ROUND13_STATUS.md docs/reports/TEST_REPORT.md; do
+    for key in "${!round13_audit_identities[@]}"; do
+      value="${round13_audit_identities[$key]}"
+      [[ "$(grep -Fxc -- "$key: $value" "$doc_root/$relative")" == 1 &&
+        "$(grep -Ec "^${key}:" "$doc_root/$relative")" == 1 ]] ||
+        fail "$relative must bind the exact current Round 13 audit identity: $key"
+    done
+  done
+  declare -A active_audit_identities=(
+    [active_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+    [active_audit_contract_sha256]="$current_audit_contract_sha256"
+    [active_audit_run_source_sha256]="$current_audit_run_source_sha256"
+    [active_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
+    [active_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
+  )
+  for key in "${!active_audit_identities[@]}"; do
+    value="${active_audit_identities[$key]}"
+    [[ "$(grep -Fxc -- "$key: $value" "$doc_root/docs/reports/RELEASE_EVIDENCE.md")" == 1 &&
+      "$(grep -Ec "^${key}:" "$doc_root/docs/reports/RELEASE_EVIDENCE.md")" == 1 ]] ||
+      fail "docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: $key"
+  done
+
   round13_identity_documents=(
     CHANGELOG.md
     docs/README.md
@@ -331,7 +427,7 @@ if [[
     document="$doc_root/$relative"
     grep -Fq 'v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' "$document" || \
       fail "$relative lost its active-tree CPA v7.2.125 overlay"
-    grep -Fq 'current_classifier_policy_version: classifier-policy-v15' "$document" || \
+    grep -Fq 'current_classifier_policy_version: classifier-policy-v18' "$document" || \
       fail "$relative lost its active-tree classifier overlay"
   done
 
@@ -497,8 +593,8 @@ for relative, marker in (
     ),
 ):
     active, _ = split_once(relative, marker)
-    if len(re.findall(r"(?<![0-9])229/229 PASS(?![0-9])", active)) != 1:
-        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 229/229 PASS result")
+    if len(re.findall(r"(?<![0-9])231/231 PASS(?![0-9])", active)) != 1:
+        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 231/231 PASS result")
 
 
 relative = "docs/reports/RELEASE_EVIDENCE.md"
@@ -572,10 +668,16 @@ PY
       fail "active CPA go.mod sum is not exact: $sumfile"
   done
 
+  verify_round13_repository_contracts
   printf 'release document consistency passed: source=%s rc=v%s-rc.1 cpa=v7.2.125 audit_tests=%s\n' \
     "$current_release_version" "$current_release_version" "$current_audit_tool_test_count"
   exit 0
 fi
+
+# The remaining body is the explicit v0.16 fixture-only compatibility gate.
+# The real source tree and Round 13 fixtures are fully checked above.
+[[ "$fixture_mode" == 1 ]] ||
+  fail "legacy release-document contracts may run only in fixture mode"
 
 documents=(
   README.md
@@ -906,7 +1008,7 @@ for key in "${!round12_audit_status_identities[@]}"; do
 done
 
 round12_test_report_section="$(awk '
-  $0 == "## Round 12 working-tree pre-final Linux validation" { inside = 1; next }
+  $0 == "## Frozen Round 12 working-tree pre-final Linux validation" { inside = 1; next }
   inside && /^## / { exit }
   inside { print }
 ' "$doc_root/docs/reports/TEST_REPORT.md")"

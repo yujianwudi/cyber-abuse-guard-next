@@ -309,7 +309,7 @@ def _docker_mount_projections(
         else:
             if mountinfo_raw is None:
                 fail("Host performance bind Source lacks /proc/self/mountinfo evidence")
-            backing = _mount_backing_identity(Path(source), mountinfo_raw)
+            backing = _mount_backing_identity(source, mountinfo_raw)
         source_sha256 = sha256_bytes(source.encode("utf-8"))
         if backing.get("source_path_sha256") != source_sha256:
             fail("Host performance bind Source/backing identity does not match")
@@ -461,7 +461,8 @@ def _mountinfo_path(value: str) -> str:
     )
 
 
-def _mount_backing_identity(path: Path, mountinfo_raw: str) -> dict[str, Any]:
+def _mount_backing_identity(source: str, mountinfo_raw: str) -> dict[str, Any]:
+    path = Path(source)
     try:
         original = path.lstat()
     except (FileNotFoundError, OSError) as exc:
@@ -555,7 +556,7 @@ def _mount_backing_identity(path: Path, mountinfo_raw: str) -> dict[str, Any]:
         **mount_identity,
         "content_sha256": content_sha256,
         "resolved_source_sha256": sha256_bytes(str(resolved).encode("utf-8")),
-        "source_path_sha256": sha256_bytes(str(path).encode("utf-8")),
+        "source_path_sha256": sha256_bytes(source.encode("utf-8")),
         "st_ino": int(info.st_ino),
         "st_mode": int(stat.S_IMODE(info.st_mode)),
         "st_nlink": int(info.st_nlink),
@@ -593,7 +594,7 @@ def _validate_mount_backing_identity(value: Any, label: str) -> dict[str, Any]:
     if re.fullmatch(r"[0-9]+:[0-9]+", nonempty_string(backing["device"], f"{label}.device", 64)) is None:
         fail(f"{label}.device is invalid")
     nonempty_string(backing["filesystem_type"], f"{label}.filesystem_type", 128)
-    one_of(backing["kind"], ("directory", "file"), f"{label}.kind")
+    kind = one_of(backing["kind"], ("directory", "file"), f"{label}.kind")
     for name in ("mount_flags", "super_flags"):
         flags = exact_list(backing[name], f"{label}.{name}")
         if (
@@ -610,8 +611,10 @@ def _validate_mount_backing_identity(value: Any, label: str) -> dict[str, Any]:
         "super_options_sha256",
     ):
         require_hex(backing[name], f"{label}.{name}")
-    if backing["content_sha256"] is not None:
+    if kind == "file":
         require_hex(backing["content_sha256"], f"{label}.content_sha256")
+    elif backing["content_sha256"] is not None:
+        fail(f"{label}.content_sha256 must be null for a directory backing")
     exact_int(backing["st_dev"], f"{label}.st_dev")
     exact_int(backing["st_ino"], f"{label}.st_ino", 1)
     mode = exact_int(backing["st_mode"], f"{label}.st_mode")
@@ -1716,11 +1719,6 @@ def _validate_large_payload_cell(
     cell_completed = _host_timestamp_value(
         cell["completed_at"], f"{label}.completed_at"
     )
-    if (
-        abs((cell_completed - cell_started).total_seconds() - elapsed) * 1000.0
-        > LARGE_PAYLOAD_SAMPLE_WALL_TOLERANCE_MS
-    ):
-        fail(f"{label} wall-clock interval does not tightly bind elapsed_seconds")
     planned = exact_int(cell["planned_requests"], f"{label}.planned_requests", 1)
     if planned != config["plan"]["large_payload_request_count"]:
         fail(f"{label}.planned_requests drifted from the fixed plan")

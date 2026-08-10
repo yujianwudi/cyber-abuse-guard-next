@@ -355,7 +355,7 @@ def _normalize_selected_text(raw: bytes, label: str) -> bytes:
 def inspect_supplemental_zip(
     archive_path: Path, policy_value: Any
 ) -> SupplementalInspection:
-    policy = validate_supplemental_policy(policy_value, require_approved=True)
+    policy = validate_supplemental_policy(policy_value)
     raw = _read_bound_archive(
         archive_path, SUPPLEMENTAL_ZIP_LIMITS["max_archive_bytes"]
     )
@@ -651,6 +651,11 @@ def _inspect_archive_bytes_impl(
         "zip64_entries": 0,
     }
     for key, expected in policy["archive"].items():
+        if key not in archive_summary:
+            fail(
+                "supplemental ZIP policy declares an unknown archive summary key "
+                + key
+            )
         if archive_summary[key] != expected:
             fail(f"supplemental ZIP observed archive summary differs at {key}")
 
@@ -758,7 +763,7 @@ def create_supplemental_manifest(
     policy_sha256: str,
     acquired_at: str,
 ) -> dict[str, Any]:
-    policy = validate_supplemental_policy(policy_value, require_approved=True)
+    policy = validate_supplemental_policy(policy_value)
     inspection = inspect_supplemental_zip(archive_path, policy)
     manifest = {
         "acquired_at": acquired_at,
@@ -788,10 +793,10 @@ def load_selected_supplemental_texts(
     manifest_value: Any | None = None,
     *,
     policy_sha256: str | None = None,
-) -> dict[str, bytes]:
-    """Return only the four reviewed normalized texts, without writing them."""
+) -> dict[str, bytearray]:
+    """Return four caller-owned mutable text buffers without writing them."""
 
-    policy = validate_supplemental_policy(policy_value, require_approved=True)
+    policy = validate_supplemental_policy(policy_value)
     inspection = inspect_supplemental_zip(archive_path, policy)
     if manifest_value is not None:
         manifest = validate_supplemental_manifest(
@@ -804,7 +809,10 @@ def load_selected_supplemental_texts(
             fail("supplemental ZIP bytes differ from the supplied validated manifest")
     if len(inspection.selected_texts) != EXPECTED_SUPPLEMENTAL_ZIP_ENTRY_COUNT:
         fail("supplemental ZIP loader did not return exactly four selected texts")
-    return dict(inspection.selected_texts)
+    return {
+        entry_id: bytearray(raw)
+        for entry_id, raw in inspection.selected_texts.items()
+    }
 
 
 __all__ = [

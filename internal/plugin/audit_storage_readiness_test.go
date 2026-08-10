@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -269,6 +270,704 @@ func TestAuditStorageActivationGateForcesRealtimeProbeFromUnarmedAndCachedStates
 			t.Fatalf("cached activation error=%v calls=%d, want cache-bypassing probe", err, calls.Load())
 		}
 	})
+}
+
+func TestAuditStorageActivationGateRebindsOnlyReleasedPriorStoreSidecars(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, 1)
+	baseline.identity = auditStorageIdentity{
+		directory: auditStorageObjectIdentity{present: true, device: 7, inode: 11},
+		database:  auditStorageObjectIdentity{present: true, device: 7, inode: 21},
+		wal:       auditStorageObjectIdentity{present: true, device: 7, inode: 31},
+		shm:       auditStorageObjectIdentity{present: true, device: 7, inode: 41},
+		mount:     "42:8:1",
+	}
+	live := baseline
+	live.identity.wal = auditStorageObjectIdentity{}
+	live.identity.shm = auditStorageObjectIdentity{}
+	gate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+		return live
+	})
+	gate.authorizePriorStoreSidecarRelease()
+
+	if err := gate.activationAccess(); err != nil {
+		t.Fatalf("released prior Store sidecars blocked activation: %v", err)
+	}
+	gate.mu.Lock()
+	normalized := gate.baseline
+	pendingRelease := gate.priorStoreSidecarsPendingRelease
+	gate.mu.Unlock()
+	if normalized.identity.wal.present || normalized.identity.shm.present || pendingRelease {
+		t.Fatalf("activation baseline was not normalized after prior Store close: baseline=%#v pending=%t", normalized.identity, pendingRelease)
+	}
+
+	live.identity.wal = auditStorageObjectIdentity{present: true, device: 7, inode: 32}
+	live.identity.shm = auditStorageObjectIdentity{present: true, device: 7, inode: 42}
+	bound, err := gate.bindAfterOpen()
+	if err != nil || !bound.PersistenceVerified {
+		t.Fatalf("candidate sidecar bind status=%#v error=%v", bound, err)
+	}
+
+	live.identity.wal = auditStorageObjectIdentity{present: true, device: 7, inode: 33}
+	if err := gate.readAccess(); err == nil || !strings.Contains(err.Error(), "wal_identity_changed") {
+		t.Fatalf("post-bind WAL replacement error=%v", err)
+	}
+}
+
+func TestAuditStorageActivationGatePriorStoreReleaseDoesNotMaskReplacement(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, 1)
+	baseline.identity = auditStorageIdentity{
+		directory: auditStorageObjectIdentity{present: true, device: 7, inode: 11},
+		database:  auditStorageObjectIdentity{present: true, device: 7, inode: 21},
+		wal:       auditStorageObjectIdentity{present: true, device: 7, inode: 31},
+		shm:       auditStorageObjectIdentity{present: true, device: 7, inode: 41},
+		mount:     "42:8:1",
+	}
+
+	for _, test := range []struct {
+		name   string
+		reason string
+		mutate func(*auditStorageVerification)
+	}{
+		{name: "directory", reason: "directory_identity_changed", mutate: func(status *auditStorageVerification) {
+			status.identity.directory.inode++
+		}},
+		{name: "mount", reason: "mount_identity_changed", mutate: func(status *auditStorageVerification) {
+			status.identity.mount = "42:8:2"
+		}},
+		{name: "database", reason: "database_identity_changed", mutate: func(status *auditStorageVerification) {
+			status.identity.database.inode++
+		}},
+		{name: "wal-replacement", reason: "wal_identity_changed", mutate: func(status *auditStorageVerification) {
+			status.identity.wal.inode++
+		}},
+		{name: "shm-replacement", reason: "shm_identity_changed", mutate: func(status *auditStorageVerification) {
+			status.identity.shm.inode++
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			live := baseline
+			test.mutate(&live)
+			gate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+				return live
+			})
+			gate.authorizePriorStoreSidecarRelease()
+			if err := gate.activationAccess(); err == nil || !strings.Contains(err.Error(), test.reason) {
+				t.Fatalf("activation replacement error=%v, want %s", err, test.reason)
+			}
+		})
+	}
+}
+
+func TestAuditStoragePriorStoreSidecarReleaseRequiresSuccessfulClose(t *testing.T) {
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, 1)
+	baseline.identity = auditStorageIdentity{
+		directory: auditStorageObjectIdentity{present: true, device: 7, inode: 11},
+		database:  auditStorageObjectIdentity{present: true, device: 7, inode: 21},
+		wal:       auditStorageObjectIdentity{present: true, device: 7, inode: 31},
+		shm:       auditStorageObjectIdentity{present: true, device: 7, inode: 41},
+		mount:     "42:8:1",
+	}
+	live := baseline
+	live.identity.wal = auditStorageObjectIdentity{}
+	live.identity.shm = auditStorageObjectIdentity{}
+	newGate := func() *auditStorageGate {
+		return newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+			return live
+		})
+	}
+
+	t.Run("candidate-construction-has-no-release-grant", func(t *testing.T) {
+		gate := newGate()
+		if err := gate.activationAccess(); err == nil || !strings.Contains(err.Error(), "wal_identity_changed") {
+			t.Fatalf("ungranted sidecar disappearance error=%v, want wal_identity_changed", err)
+		}
+	})
+
+	t.Run("failed-close-latches-candidate", func(t *testing.T) {
+		gate := newGate()
+		state := &runtimeState{auditStorage: baseline, auditStorageGate: gate}
+		state.completePriorAuditStoreClose(true, false, context.DeadlineExceeded)
+		status := gate.verification()
+		if status.PersistenceVerified || status.PersistenceReason != auditStoragePriorStoreCloseFailedReason ||
+			state.auditStorage.PersistenceReason != auditStoragePriorStoreCloseFailedReason {
+			t.Fatalf("failed prior close storage state=%#v gate=%#v", state.auditStorage, status)
+		}
+		if !state.auditStorageActivationDiscardRequired || state.auditStorageNeedsPostActivationCheck {
+			t.Fatalf("failed prior close discard=%t postActivation=%t",
+				state.auditStorageActivationDiscardRequired, state.auditStorageNeedsPostActivationCheck)
+		}
+		if err := gate.activationAccess(); err == nil || !strings.Contains(err.Error(), auditStoragePriorStoreCloseFailedReason) {
+			t.Fatalf("failed prior close activation error=%v", err)
+		}
+	})
+
+	t.Run("prelatched-recovery-discard-releases-without-durability", func(t *testing.T) {
+		store, err := audit.Open(audit.Config{Path: filepath.Join(t.TempDir(), "prior-events.db")})
+		if err != nil {
+			t.Fatalf("open prior SQLite Store: %v", err)
+		}
+		priorGate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+			return baseline
+		})
+		failedPrior := baseline
+		failedPrior.PersistenceVerified = false
+		failedPrior.PersistenceReason = "read_only"
+		priorGate.latch(failedPrior)
+		outcome := (&runtimeState{audit: store, auditStorageGate: priorGate}).close()
+		if outcome.err != nil || outcome.durable || !outcome.sidecarsReleased {
+			t.Fatalf("pre-latched recovery discard outcome=%#v, want release without durability claim", outcome)
+		}
+
+		gate := newGate()
+		state := &runtimeState{auditStorage: baseline, auditStorageGate: gate}
+		state.completePriorAuditStoreClose(true, outcome.sidecarsReleased, outcome.err)
+		if err := gate.activationAccess(); err != nil || state.auditStorageActivationDiscardRequired {
+			t.Fatalf("explicit recovery discard did not release prior sidecars: error=%v discard=%t",
+				err, state.auditStorageActivationDiscardRequired)
+		}
+	})
+
+	t.Run("failure-discovered-during-close-cannot-release", func(t *testing.T) {
+		store, err := audit.Open(audit.Config{Path: filepath.Join(t.TempDir(), "prior-events.db")})
+		if err != nil {
+			t.Fatalf("open prior SQLite Store: %v", err)
+		}
+		failedPrior := baseline
+		failedPrior.PersistenceVerified = false
+		failedPrior.PersistenceReason = "read_only"
+		priorGate := newAuditStorageGate(baseline, 1, func(string, bool, bool, int64) auditStorageVerification {
+			return failedPrior
+		})
+		priorGate.arm(baseline)
+		outcome := (&runtimeState{audit: store, auditStorageGate: priorGate}).close()
+		if outcome.err != nil || outcome.durable || outcome.sidecarsReleased {
+			t.Fatalf("newly failed discard outcome=%#v, want no release grant", outcome)
+		}
+
+		gate := newGate()
+		state := &runtimeState{auditStorage: baseline, auditStorageGate: gate}
+		state.completePriorAuditStoreClose(true, outcome.sidecarsReleased, outcome.err)
+		if status := gate.verification(); status.PersistenceReason != auditStoragePriorStoreCloseFailedReason ||
+			!state.auditStorageActivationDiscardRequired {
+			t.Fatalf("new close failure authorized candidate: storage=%#v discard=%t",
+				status, state.auditStorageActivationDiscardRequired)
+		}
+		if err := gate.activationAccess(); err == nil || !strings.Contains(err.Error(), auditStoragePriorStoreCloseFailedReason) {
+			t.Fatalf("new close failure activation error=%v", err)
+		}
+	})
+
+	t.Run("successful-close-signs-one-release", func(t *testing.T) {
+		gate := newGate()
+		state := &runtimeState{auditStorage: baseline, auditStorageGate: gate}
+		state.completePriorAuditStoreClose(true, true, nil)
+		if err := gate.activationAccess(); err != nil {
+			t.Fatalf("successfully closed prior Store did not release sidecars: %v", err)
+		}
+		gate.mu.Lock()
+		pending := gate.priorStoreSidecarsPendingRelease
+		normalized := gate.baseline.identity
+		gate.mu.Unlock()
+		if pending || normalized.wal.present || normalized.shm.present || state.auditStorageActivationDiscardRequired {
+			t.Fatalf("release was not consumed exactly once: pending=%t identity=%#v discard=%t",
+				pending, normalized, state.auditStorageActivationDiscardRequired)
+		}
+	})
+
+	t.Run("unrelated-close-cannot-authorize-release", func(t *testing.T) {
+		gate := newGate()
+		state := &runtimeState{auditStorage: baseline, auditStorageGate: gate}
+		state.completePriorAuditStoreClose(false, true, nil)
+		if err := gate.activationAccess(); err == nil || !strings.Contains(err.Error(), "wal_identity_changed") {
+			t.Fatalf("unrelated close authorized sidecar disappearance: %v", err)
+		}
+	})
+}
+
+func TestAuditStorageGateRealSQLiteSidecarHandoff(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("real inode-bound SQLite sidecar handoff is a Linux contract")
+	}
+	dataDir := t.TempDir()
+	databasePath := filepath.Join(dataDir, "events.db")
+	const maxBytes = int64(8 << 20)
+	event := func(id string) audit.Event {
+		return audit.Event{ID: id, Timestamp: time.Now().UTC(), Action: "allow", Mode: "balanced"}
+	}
+
+	prior, err := audit.Open(audit.Config{Path: databasePath, MaxBytes: maxBytes})
+	if err != nil {
+		t.Fatalf("open prior SQLite Store: %v", err)
+	}
+	if err := prior.Enqueue(event("prior-event")); err != nil {
+		t.Fatalf("enqueue prior event: %v", err)
+	}
+	if err := prior.Flush(context.Background()); err != nil {
+		t.Fatalf("flush prior event: %v", err)
+	}
+	baseline := inspectAuditStorage(databasePath, true, false, maxBytes)
+	if !baseline.identity.database.present || !baseline.identity.wal.present || !baseline.identity.shm.present {
+		t.Fatalf("prior SQLite identities were incomplete before close: %#v", baseline.identity)
+	}
+	gate := newAuditStorageGate(baseline, maxBytes, inspectAuditStorage)
+	if err := prior.Close(); err != nil {
+		t.Fatalf("durably close prior SQLite Store: %v", err)
+	}
+	afterClose := inspectAuditStorage(databasePath, true, false, maxBytes)
+	if afterClose.identity.wal.present || afterClose.identity.shm.present {
+		t.Fatalf("prior SQLite sidecars survived last-owner close: %#v", afterClose.identity)
+	}
+
+	gate.authorizePriorStoreSidecarRelease()
+	if err := gate.activationAccess(); err != nil {
+		t.Fatalf("consume successful prior close release: %v", err)
+	}
+	candidate, err := audit.Open(audit.Config{Path: databasePath, MaxBytes: maxBytes})
+	if err != nil {
+		t.Fatalf("open candidate SQLite Store: %v", err)
+	}
+	bound, err := gate.bindAfterOpen()
+	if err != nil || !bound.identity.wal.present || !bound.identity.shm.present {
+		_ = candidate.Close()
+		t.Fatalf("bind candidate SQLite sidecars status=%#v error=%v", bound, err)
+	}
+	if err := candidate.Enqueue(event("candidate-event")); err != nil {
+		_ = candidate.Close()
+		t.Fatalf("enqueue candidate event: %v", err)
+	}
+	if err := candidate.Flush(context.Background()); err != nil {
+		_ = candidate.Close()
+		t.Fatalf("flush candidate event: %v", err)
+	}
+	if err := candidate.Close(); err != nil {
+		t.Fatalf("close candidate SQLite Store: %v", err)
+	}
+
+	reopened, err := audit.Open(audit.Config{Path: databasePath, MaxBytes: maxBytes})
+	if err != nil {
+		t.Fatalf("reopen handed-off SQLite Store: %v", err)
+	}
+	defer reopened.Close()
+	events, err := reopened.Query(context.Background(), audit.Query{Limit: 10})
+	if err != nil {
+		t.Fatalf("query handed-off audit events: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, persisted := range events {
+		seen[persisted.ID] = true
+	}
+	if !seen["prior-event"] || !seen["candidate-event"] {
+		t.Fatalf("SQLite handoff lost events: seen=%v", seen)
+	}
+}
+
+func TestRuntimeCloseDoesNotReleaseSidecarsForFinalPersistenceLatch(t *testing.T) {
+	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
+	p := New()
+	t.Cleanup(p.Shutdown)
+	dataDir := t.TempDir()
+	var failProbe atomic.Bool
+	p.auditStorageInspect = func(path string, explicit, expected bool, maxBytes int64) auditStorageVerification {
+		status := verifiedAuditStorageInspectorForTest(path, explicit, expected, maxBytes)
+		if failProbe.Load() {
+			status.State = "read_only"
+			status.PersistenceVerified = false
+			status.PersistenceReason = "read_only"
+			status.Writable = false
+		}
+		return status
+	}
+	configYAML := "mode: balanced\naudit:\n  enabled: true\n  data_dir: \"" + filepath.ToSlash(dataDir) + "\"\n" +
+		"  require_persistent_storage: true\n  max_db_mb: 8\nsubject_control:\n  enabled: true\n  persistence: true\n"
+	register(t, p, configYAML)
+	state := p.runtime.Load()
+	if state == nil || state.audit == nil || state.persistence == nil || !state.persistence.started.Load() ||
+		state.auditStorageGate == nil || state.auditStorageGate.latchedBeforeClose() {
+		t.Fatalf("subject-persistent runtime was not ready before close: %#v", state)
+	}
+	state.auditStorageGate.mu.Lock()
+	state.auditStorageGate.nextProbeAt = time.Time{}
+	state.auditStorageGate.mu.Unlock()
+	failProbe.Store(true)
+	outcome := state.close()
+	if outcome.err != nil || outcome.durable || outcome.sidecarsReleased {
+		t.Fatalf("final persistence latch close outcome=%#v, want newly failed discard without release", outcome)
+	}
+	if status := state.auditStorageGate.verification(); status.PersistenceReason != "read_only" {
+		t.Fatalf("final persistence failure did not latch old gate: %#v", status)
+	}
+}
+
+func TestRuntimeCloseWorkerDrainFirstLatchCannotReleaseOrRebaseline(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("worker-drain SQLite sidecar lifecycle is a Linux contract")
+	}
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	const maxBytes = int64(8 << 20)
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, maxBytes)
+	baseline.identity = auditStorageIdentity{
+		directory: auditStorageObjectIdentity{present: true, device: 7, inode: 11},
+		database:  auditStorageObjectIdentity{present: true, device: 7, inode: 21},
+		wal:       auditStorageObjectIdentity{present: true, device: 7, inode: 31},
+		shm:       auditStorageObjectIdentity{present: true, device: 7, inode: 41},
+		mount:     "42:8:1",
+	}
+	failure := baseline
+	failure.State = "identity_changed"
+	failure.PersistenceVerified = false
+	failure.PersistenceReason = "wal_identity_changed"
+	failure.Writable = false
+	var failProbe atomic.Bool
+	var priorProbeCalls atomic.Int32
+	priorGate := newAuditStorageGate(baseline, maxBytes, func(string, bool, bool, int64) auditStorageVerification {
+		priorProbeCalls.Add(1)
+		if failProbe.Load() {
+			return failure
+		}
+		return baseline
+	})
+	// Freeze the gate clock so the close-time verification deterministically
+	// observes the healthy one-second cache. The worker expires it explicitly
+	// only after close has entered its drain boundary.
+	fixedNow := time.Unix(1_700_000_000, 0)
+	priorGate.mu.Lock()
+	priorGate.now = func() time.Time { return fixedNow }
+	priorGate.mu.Unlock()
+	priorGate.arm(baseline)
+	if err := priorGate.access(); err != nil || priorProbeCalls.Load() != 1 {
+		t.Fatalf("prime prior storage cache error=%v probes=%d", err, priorProbeCalls.Load())
+	}
+
+	workerAtGate := make(chan struct{})
+	releaseWorker := make(chan struct{})
+	var releaseOnce sync.Once
+	var interceptWorker atomic.Bool
+	var accessCalls atomic.Int32
+	storageAccess := func() error {
+		if !interceptWorker.Load() {
+			return nil
+		}
+		switch accessCalls.Add(1) {
+		case 1:
+			// Admission uses the primed healthy cache.
+			return priorGate.access()
+		case 2:
+			// The writer owns the queued item here. Hold it until runtime close has
+			// either published the legacy CloseContext state or queued the new
+			// explicit Flush barrier, then make this the first failing live probe.
+			close(workerAtGate)
+			<-releaseWorker
+			failProbe.Store(true)
+			priorGate.mu.Lock()
+			priorGate.nextProbeAt = time.Time{}
+			priorGate.mu.Unlock()
+			return priorGate.access()
+		default:
+			return priorGate.access()
+		}
+	}
+
+	var store *audit.Store
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseWorker) })
+		if store != nil {
+			_ = store.Discard()
+		}
+	})
+	var err error
+	store, err = audit.Open(audit.Config{
+		Path:                     databasePath,
+		MaxBytes:                 maxBytes,
+		QueueSize:                4,
+		CleanupInterval:          time.Hour,
+		RequirePersistentStorage: true,
+		StorageAccessGate:        storageAccess,
+	})
+	if err != nil {
+		t.Fatalf("open prior SQLite Store: %v", err)
+	}
+	interceptWorker.Store(true)
+	if err := store.Enqueue(audit.Event{
+		ID:        "drain-first-latch",
+		Timestamp: time.Now().UTC(),
+		Action:    "allow",
+		Mode:      "balanced",
+	}); err != nil {
+		t.Fatalf("enqueue drain-first-latch event: %v", err)
+	}
+	select {
+	case <-workerAtGate:
+	case <-time.After(5 * time.Second):
+		t.Fatal("writer did not reach the drain storage gate")
+	}
+
+	outcomeCh := make(chan runtimeCloseOutcome, 1)
+	go func() {
+		outcomeCh <- (&runtimeState{audit: store, auditStorageGate: priorGate}).close()
+	}()
+	// Both the vulnerable CloseContext path and the fixed quiesce phase publish
+	// Closed before waiting for this in-flight worker. Releasing only after that
+	// boundary guarantees the initial cached verdict was already consumed and
+	// makes the worker drain the first operation that can latch storage.
+	deadline := time.NewTimer(5 * time.Second)
+	poll := time.NewTicker(time.Millisecond)
+	boundaryReached := false
+	for !boundaryReached {
+		select {
+		case <-poll.C:
+			boundaryReached = store.Status().Closed
+		case <-deadline.C:
+			poll.Stop()
+			t.Fatal("runtime close did not publish the terminal admission boundary")
+		}
+	}
+	poll.Stop()
+	if !deadline.Stop() {
+		select {
+		case <-deadline.C:
+		default:
+		}
+	}
+	releaseOnce.Do(func() { close(releaseWorker) })
+
+	var outcome runtimeCloseOutcome
+	select {
+	case outcome = <-outcomeCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime close did not finish after releasing the drain gate")
+	}
+	if outcome.err != nil || outcome.durable || outcome.sidecarsReleased {
+		t.Fatalf("drain-first latch close outcome=%#v, want discard without durability or release", outcome)
+	}
+	if priorProbeCalls.Load() != 2 {
+		t.Fatalf("drain-first latch probes=%d, want cache prime plus worker live failure", priorProbeCalls.Load())
+	}
+	if status := priorGate.verification(); status.PersistenceReason != "wal_identity_changed" {
+		t.Fatalf("worker failure did not latch prior gate: %#v", status)
+	}
+
+	candidateLive := baseline
+	candidateLive.identity.wal = auditStorageObjectIdentity{}
+	candidateLive.identity.shm = auditStorageObjectIdentity{}
+	var candidateProbeCalls atomic.Int32
+	candidateGate := newAuditStorageGate(baseline, maxBytes, func(string, bool, bool, int64) auditStorageVerification {
+		candidateProbeCalls.Add(1)
+		return candidateLive
+	})
+	candidate := &runtimeState{
+		auditStorage:                         baseline,
+		auditStorageGate:                     candidateGate,
+		auditStorageNeedsPostActivationCheck: true,
+	}
+	candidate.completePriorAuditStoreClose(true, outcome.sidecarsReleased, outcome.err)
+	candidateGate.mu.Lock()
+	pendingRelease := candidateGate.priorStoreSidecarsPendingRelease
+	candidateBaseline := candidateGate.baseline.identity
+	candidateGate.mu.Unlock()
+	if pendingRelease || !reflect.DeepEqual(candidateBaseline, baseline.identity) || candidateProbeCalls.Load() != 0 {
+		t.Fatalf("failed drain close rebased candidate: pending=%t baseline=%#v probes=%d",
+			pendingRelease, candidateBaseline, candidateProbeCalls.Load())
+	}
+	if candidate.auditStorage.PersistenceReason != auditStoragePriorStoreCloseFailedReason ||
+		!candidate.auditStorageActivationDiscardRequired || candidate.auditStorageNeedsPostActivationCheck {
+		t.Fatalf("candidate lifecycle state=%#v discard=%t postActivation=%t",
+			candidate.auditStorage, candidate.auditStorageActivationDiscardRequired,
+			candidate.auditStorageNeedsPostActivationCheck)
+	}
+	if err := candidateGate.activationAccess(); err == nil ||
+		!strings.Contains(err.Error(), auditStoragePriorStoreCloseFailedReason) {
+		t.Fatalf("candidate activation error=%v, want %s", err, auditStoragePriorStoreCloseFailedReason)
+	}
+}
+
+func TestRuntimeCloseMaintenanceDrainFirstLatchCannotRelease(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("maintenance-drain SQLite sidecar lifecycle is a Linux contract")
+	}
+	databasePath := filepath.Join(t.TempDir(), "events.db")
+	const maxBytes = int64(8 << 20)
+	baseline := verifiedAuditStorageInspectorForTest(databasePath, true, true, maxBytes)
+	baseline.identity = auditStorageIdentity{
+		directory: auditStorageObjectIdentity{present: true, device: 7, inode: 11},
+		database:  auditStorageObjectIdentity{present: true, device: 7, inode: 21},
+		wal:       auditStorageObjectIdentity{present: true, device: 7, inode: 31},
+		shm:       auditStorageObjectIdentity{present: true, device: 7, inode: 41},
+		mount:     "42:8:1",
+	}
+	failure := baseline
+	failure.State = "identity_changed"
+	failure.PersistenceVerified = false
+	failure.PersistenceReason = "mount_identity_changed"
+	failure.Writable = false
+	var failProbe atomic.Bool
+	var probeCalls atomic.Int32
+	gate := newAuditStorageGate(baseline, maxBytes, func(string, bool, bool, int64) auditStorageVerification {
+		probeCalls.Add(1)
+		if failProbe.Load() {
+			return failure
+		}
+		return baseline
+	})
+	fixedNow := time.Unix(1_700_000_100, 0)
+	gate.mu.Lock()
+	gate.now = func() time.Time { return fixedNow }
+	gate.mu.Unlock()
+	gate.arm(baseline)
+	if err := gate.access(); err != nil || probeCalls.Load() != 1 {
+		t.Fatalf("prime maintenance storage cache error=%v probes=%d", err, probeCalls.Load())
+	}
+
+	maintenanceAtGate := make(chan struct{})
+	releaseMaintenance := make(chan struct{})
+	var releaseOnce sync.Once
+	var interceptMaintenance atomic.Bool
+	var maintenanceCalls atomic.Int32
+	storageAccess := func() error {
+		if !interceptMaintenance.Load() {
+			return nil
+		}
+		if maintenanceCalls.Add(1) == 1 {
+			close(maintenanceAtGate)
+			<-releaseMaintenance
+			failProbe.Store(true)
+			gate.mu.Lock()
+			gate.nextProbeAt = time.Time{}
+			gate.mu.Unlock()
+		}
+		return gate.access()
+	}
+
+	var store *audit.Store
+	t.Cleanup(func() {
+		releaseOnce.Do(func() { close(releaseMaintenance) })
+		if store != nil {
+			_ = store.Discard()
+		}
+	})
+	var err error
+	store, err = audit.Open(audit.Config{
+		Path:                     databasePath,
+		MaxBytes:                 maxBytes,
+		QueueSize:                4,
+		CleanupInterval:          time.Millisecond,
+		RequirePersistentStorage: true,
+		StorageAccessGate:        storageAccess,
+	})
+	if err != nil {
+		t.Fatalf("open prior SQLite Store: %v", err)
+	}
+	interceptMaintenance.Store(true)
+	select {
+	case <-maintenanceAtGate:
+	case <-time.After(5 * time.Second):
+		t.Fatal("maintenance ticker did not reach the storage gate")
+	}
+
+	outcomeCh := make(chan runtimeCloseOutcome, 1)
+	go func() {
+		outcomeCh <- (&runtimeState{audit: store, auditStorageGate: gate}).close()
+	}()
+	deadline := time.Now().Add(5 * time.Second)
+	for !store.Status().Closed && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	if !store.Status().Closed {
+		t.Fatal("runtime close did not stop admission before draining maintenance")
+	}
+	select {
+	case outcome := <-outcomeCh:
+		t.Fatalf("runtime close returned before maintenance drain release: %#v", outcome)
+	default:
+	}
+	releaseOnce.Do(func() { close(releaseMaintenance) })
+
+	var outcome runtimeCloseOutcome
+	select {
+	case outcome = <-outcomeCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runtime close did not finish after maintenance drain release")
+	}
+	if outcome.err != nil || outcome.durable || outcome.sidecarsReleased {
+		t.Fatalf("maintenance-first latch close outcome=%#v, want discard without durability or release", outcome)
+	}
+	if maintenanceCalls.Load() != 1 || probeCalls.Load() != 2 {
+		t.Fatalf("maintenance calls=%d probes=%d, want one tick and its first live failure",
+			maintenanceCalls.Load(), probeCalls.Load())
+	}
+	if status := gate.verification(); status.PersistenceReason != "mount_identity_changed" {
+		t.Fatalf("maintenance failure did not latch prior gate: %#v", status)
+	}
+}
+
+func TestSamePathHotReconfigureRebindsSidecarsOwnedByPreviousStore(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	dataDir := t.TempDir()
+	databasePath := filepath.Join(dataDir, "events.db")
+	live := verifiedAuditStorageInspectorForTest(databasePath, true, true, 8<<20)
+	live.identity = auditStorageIdentity{
+		directory: auditStorageObjectIdentity{present: true, device: 7, inode: 11},
+		database:  auditStorageObjectIdentity{present: true, device: 7, inode: 21},
+		wal:       auditStorageObjectIdentity{present: true, device: 7, inode: 31},
+		shm:       auditStorageObjectIdentity{present: true, device: 7, inode: 41},
+		mount:     "42:8:1",
+	}
+	var liveMu sync.RWMutex
+	p.auditStorageInspect = func(path string, explicit, expected bool, _ int64) auditStorageVerification {
+		liveMu.RLock()
+		status := live
+		liveMu.RUnlock()
+		status.DatabasePath = path
+		status.PersistenceExpected = expected
+		if explicit {
+			status.PathSource = "explicit"
+		}
+		return status
+	}
+	var reconfiguring atomic.Bool
+	p.auditActivationHook = func(stage auditActivationStage) {
+		if !reconfiguring.Load() {
+			return
+		}
+		liveMu.Lock()
+		defer liveMu.Unlock()
+		switch stage {
+		case auditActivationAfterPriorCloseBeforeOpen:
+			live.identity.wal = auditStorageObjectIdentity{}
+			live.identity.shm = auditStorageObjectIdentity{}
+		case auditActivationAfterOpenBeforeBind:
+			live.identity.wal = auditStorageObjectIdentity{present: true, device: 7, inode: 32}
+			live.identity.shm = auditStorageObjectIdentity{present: true, device: 7, inode: 42}
+		}
+	}
+	configYAML := "mode: balanced\naudit:\n  enabled: true\n  data_dir: \"" + filepath.ToSlash(dataDir) + "\"\n" +
+		"  require_persistent_storage: true\n  max_db_mb: 8\nsubject_control:\n  enabled: false\n"
+	register(t, p, configYAML)
+	previous := p.runtime.Load()
+	if previous == nil || previous.audit == nil || !previous.audit.IsActive() {
+		t.Fatalf("initial audit Store is not active: %#v", previous)
+	}
+
+	reconfiguring.Store(true)
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t, configYAML))
+	if code != 0 {
+		t.Fatalf("same-path reconfigure code=%d envelope=%s", code, raw)
+	}
+	decodeOKResult(t, raw, &map[string]any{})
+	state := p.runtime.Load()
+	if state == nil || state == previous || state.audit == nil || !state.audit.IsActive() || !state.audit.DatabaseAvailable() {
+		t.Fatalf("same-path reconfigure did not publish an active replacement: old=%p new=%#v", previous, state)
+	}
+	storage := state.currentAuditStorageVerification()
+	if state.audit.Status().Degraded || !storage.PersistenceVerified || storage.PersistenceReason != "" {
+		t.Fatalf("same-path reconfigure audit=%#v storage=%#v", state.audit.Status(), storage)
+	}
+	if message := p.lastReconfigureErrorMessage(); message != "" {
+		t.Fatalf("same-path reconfigure retained error=%q", message)
+	}
 }
 
 func TestAuditStorageSensitiveReadGateIsIndependentFromWriteCache(t *testing.T) {

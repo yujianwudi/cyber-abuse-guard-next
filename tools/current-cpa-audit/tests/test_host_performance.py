@@ -34,6 +34,7 @@ from host_performance import (
     _parse_size_mib,
     _proc_cpu_values,
     _proc_self_cpu_ticks,
+    _validate_mount_backing_identity,
     _validate_arm_specific_backing_equivalence,
     _validate_large_payload_cell,
     main as performance_main,
@@ -59,6 +60,11 @@ from host_performance_fixtures import (
     workload_manifest,
 )
 import validate as validator_cli
+
+try:
+    from jsonschema import Draft202012Validator
+except ImportError:  # pragma: no cover - optional local schema verifier
+    Draft202012Validator = None  # type: ignore[assignment]
 
 
 def drifted_tool_identities(
@@ -169,6 +175,110 @@ class HostPerformanceContractTests(unittest.TestCase):
                 self.good_baseline,
                 self.good_extra,
             )
+
+    def test_mount_backing_kind_closes_content_digest_semantics(self) -> None:
+        file_backing = copy.deepcopy(
+            self.good_measurements["paired_cells"][0]["runtime"][
+                "mount_identity_projection"
+            ]["common_mounts"][0]["backing"]
+        )
+        directory_backing = copy.deepcopy(file_backing)
+        directory_backing["kind"] = "directory"
+        directory_backing["content_sha256"] = None
+        directory_backing["identity_sha256"] = sha256_bytes(
+            canonical_bytes(
+                {
+                    key: item
+                    for key, item in directory_backing.items()
+                    if key != "identity_sha256"
+                }
+            )
+        )
+
+        self.assertEqual(
+            _validate_mount_backing_identity(file_backing, "file backing"),
+            file_backing,
+        )
+        self.assertEqual(
+            _validate_mount_backing_identity(
+                directory_backing, "directory backing"
+            ),
+            directory_backing,
+        )
+
+        mutations = (
+            ("file", None),
+            ("directory", sha256_bytes(b"forged-directory-content")),
+        )
+        for kind, content_sha256 in mutations:
+            forged = copy.deepcopy(file_backing)
+            forged["kind"] = kind
+            forged["content_sha256"] = content_sha256
+            forged["identity_sha256"] = sha256_bytes(
+                canonical_bytes(
+                    {
+                        key: item
+                        for key, item in forged.items()
+                        if key != "identity_sha256"
+                    }
+                )
+            )
+            with self.subTest(kind=kind), self.assertRaisesRegex(
+                ContractError, "content_sha256"
+            ):
+                _validate_mount_backing_identity(forged, f"{kind} backing")
+
+    @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
+    def test_mount_backing_schema_closes_content_digest_semantics(self) -> None:
+        schema = json.loads(
+            (TOOL / "host-performance-evidence.schema.json").read_text("utf-8")
+        )
+        backing_schema = {
+            "$schema": schema["$schema"],
+            "$defs": schema["$defs"],
+            **schema["$defs"]["mount_backing_identity"],
+        }
+        Draft202012Validator.check_schema(backing_schema)
+        validator = Draft202012Validator(backing_schema)
+        file_backing = copy.deepcopy(
+            self.good_measurements["paired_cells"][0]["runtime"][
+                "mount_identity_projection"
+            ]["common_mounts"][0]["backing"]
+        )
+        directory_backing = copy.deepcopy(file_backing)
+        directory_backing["kind"] = "directory"
+        directory_backing["content_sha256"] = None
+        directory_backing["identity_sha256"] = sha256_bytes(
+            canonical_bytes(
+                {
+                    key: item
+                    for key, item in directory_backing.items()
+                    if key != "identity_sha256"
+                }
+            )
+        )
+        self.assertTrue(validator.is_valid(file_backing))
+        self.assertTrue(validator.is_valid(directory_backing))
+
+        mutations = (
+            ("file", None),
+            ("directory", sha256_bytes(b"forged-directory-content")),
+        )
+        for kind, content_sha256 in mutations:
+            forged = copy.deepcopy(file_backing)
+            forged["kind"] = kind
+            forged["content_sha256"] = content_sha256
+            forged["identity_sha256"] = sha256_bytes(
+                canonical_bytes(
+                    {
+                        key: item
+                        for key, item in forged.items()
+                        if key != "identity_sha256"
+                    }
+                )
+            )
+            with self.subTest(kind=kind):
+                self.assertFalse(validator.is_valid(forged))
 
     def test_tool_identity_manifest_is_closed_and_bundle_bound(self) -> None:
         approved = tool_identities()
@@ -1084,6 +1194,48 @@ class HostPerformanceContractTests(unittest.TestCase):
             ),
         )
 
+        if sys.platform == "linux":
+            mountinfo_raw = Path("/proc/self/mountinfo").read_text("utf-8")
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                canonical_source = str(Path(temporary_directory).resolve())
+                for suffix in ("", "/", "//", "/./"):
+                    source = canonical_source + suffix
+                    info = {
+                        "Config": {},
+                        "HostConfig": {},
+                        "Mounts": [
+                            {
+                                "Destination": "/cag/workloads",
+                                "Mode": "ro",
+                                "Propagation": "rprivate",
+                                "RW": False,
+                                "Source": source,
+                                "Type": "bind",
+                            }
+                        ],
+                    }
+                    with self.subTest(raw_bind_source=source):
+                        projection = _docker_comparable_projection(
+                            info, mountinfo_raw
+                        )
+                        record = projection["mounts"][0]
+                        expected_source_sha256 = sha256_bytes(
+                            source.encode("utf-8")
+                        )
+                        self.assertEqual(
+                            record["source_path_sha256"], expected_source_sha256
+                        )
+                        self.assertEqual(
+                            record["backing"]["source_path_sha256"],
+                            expected_source_sha256,
+                        )
+                        self.assertEqual(
+                            record["backing"]["resolved_source_sha256"],
+                            sha256_bytes(
+                                str(Path(source).resolve()).encode("utf-8")
+                            ),
+                        )
+
     def test_arm_specific_mounts_reject_different_filesystem_backing(self) -> None:
         baseline = copy.deepcopy(
             next(
@@ -1753,8 +1905,8 @@ class HostPerformanceContractTests(unittest.TestCase):
                 self.good_workload,
             )
 
-    def test_large_payload_wall_tolerance_is_closed_at_five_ms(self) -> None:
-        for offset_ms, accepted in ((5, True), (6, False)):
+    def test_large_payload_wall_tolerances_are_closed_by_scope(self) -> None:
+        for offset_ms, accepted in ((5000, True), (5001, False)):
             with self.subTest(field="cell", offset_ms=offset_ms):
                 value = copy.deepcopy(self.good_measurements)
                 cell = value["large_payload_cells"][0]
@@ -1784,6 +1936,7 @@ class HostPerformanceContractTests(unittest.TestCase):
                             self.good_workload,
                         )
 
+        for offset_ms, accepted in ((5, True), (6, False)):
             with self.subTest(field="rss_sample", offset_ms=offset_ms):
                 value = copy.deepcopy(self.good_measurements)
                 sample = value["large_payload_cells"][0]["rss_baseline_samples"][0]
