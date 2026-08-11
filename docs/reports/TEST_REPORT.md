@@ -51,7 +51,7 @@ and release gates are separate:
 | `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make integration-test` as WSL root | `PRE_V18 PASS SUPERSEDED / CLASSIFIER-POLICY-V17 / 179.790s / native CPA v7.2.125 Host plus all 15 Router scenarios / SO 5693f2fb...f8393b / Store ZIP 1cbf59e1...65eb23 / V18 NATIVE HOST NOT RUN / DIRTY DEVELOPMENT BYTES / NOT FINAL CANDIDATE` |
 | fresh five-repository acquisition and validation | `PASS / policy a4ca2e98...ec5f / 5 repositories / 11 sources / 19 semantic cases / no third-party execution / ephemeral text cleaned` |
 | `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0 make cpa-latest-compat` | `PASS / 121.740s / exact v7.2.125 remote tag+commit / pinned source, compile, ABI, Host, Store, request logging, and schema-2 lifecycle contracts / latest check intentionally skipped for the pinned target` |
-| local CodeRabbit CLI 0.7.2 `review --base main --include-untracked --agent` | `PASS / findings 0 / 28 valid findings fixed / 11 stale, false, or conditional findings disproved against current source`; final pushed-head GitHub CodeRabbit remains pending |
+| local CodeRabbit CLI 0.7.2 | `PASS / findings 0 / cumulative 31 valid findings fixed / 14 stale, false, or conditional findings disproved against current source`; the final docs-only rerun reviewed all six changed evidence documents with zero findings; pushed-head GitHub CodeRabbit remains pending |
 
 Round 13 coverage status is deliberately split. The current v18 source
 contracts for no-copy, `response.failed`, Codex `Originator`, and Claude replay

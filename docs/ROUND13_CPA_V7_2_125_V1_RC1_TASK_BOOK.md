@@ -122,7 +122,9 @@ v7.2.124 到 v7.2.125 共七个上游提交，必须覆盖以下高风险面：
 - 本地 module cache 的 Origin 必须是 tag `v7.2.125` 和提交 `2e6b1d83…`；
 - ABI 1、schema 2、plugin store 安装、注册、reconfigure、shutdown、Host fail-open/fail-closed 合同全部通过；
 - 上游 pluginhost、Responses handler、Multi-Agent v2、no-copy invariant 与大载荷测试按显式名称存在并执行；
-- `CPA_COMPAT_REQUIRE_LATEST=1` 时远端最新正式 tag 必须仍为 v7.2.125，否则 fail closed。
+- `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0` 时必须验证远端固定 tag
+  `v7.2.125` 仍精确解析到提交 `2e6b1d83…`；远端 latest 可以前移，但不得替换或
+  阻断本轮固定目标。
 
 ### R13-03：no-copy 载体所有权与 Responses 流错误（P0）
 

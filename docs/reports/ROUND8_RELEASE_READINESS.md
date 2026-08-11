@@ -14,9 +14,9 @@ Historical snapshot last updated: 2026-07-22 (Asia/Shanghai)
 
 > **Frozen historical snapshot.** This report preserves the Round 8
 > `v0.16-rc.2` source-tree release contract as recorded on the date above. Every
-> embedded CPA v7.2.95 value and every "current" or "only current" statement is
-> relative to that frozen Round 8 snapshot; none is the active repository release
-> identity.
+> embedded CPA v7.2.95 value and every "current", "only current", or "active"
+> statement, including the eight-workflow count, is relative to that frozen
+> Round 8 snapshot; none is the active repository release identity.
 >
 > The current active-tree overlay is CAG source `1.0.0`, planned
 > `v1.0.0-rc.1` on Linux amd64, and:

@@ -1,15 +1,17 @@
-# Round 12 active status and evidence boundary
+# Round 12 frozen status and evidence boundary
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
 current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
-This page is the short, current status overlay for
+This page is the frozen Round 12 status record for
 [the Round 12 task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md). Historical
 Round 6 through Round 11 documents remain evidence for their named source and
 CPA identities; they do not override this overlay or transfer a PASS to the
-Round 12 working tree.
+Round 12 working tree. Every PASS below is explicitly scoped to CPA v7.2.124
+or a named pre-v7.2.124 historical identity; none transfers to Round 13,
+CPA v7.2.125, or `v1.0.0-rc.1`.
 
 <!-- round12-status:start -->
 ```text
@@ -18,9 +20,9 @@ round12_baseline_main: 21267e742b624b29a75bd3683fd6914f76c764b5
 round12_baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
 round12_cpa_target: v7.2.124 / 197f520426374e514218ed155933ac546c98d345
 round12_go_platform: go1.26.4 / linux-amd64
-round12_local_cpa_source_compile: PASS / GO1.26.4 / LINUX_AMD64 / FULL_LOCAL_MATRIX / PROFILES_PRIMARY / REMOTE_TAG_CHECK_SKIPPED / REMOTE_LATEST_CHECK_SKIPPED
-round12_remote_latest_release_api: PASS / v7.2.124 / INDEPENDENT_API_VERIFICATION
-round12_remote_tag_ref_api: PASS / 197f520426374e514218ed155933ac546c98d345 / COMMIT_VERIFIED / INDEPENDENT_API_VERIFICATION
+round12_local_cpa_source_compile: CPA_V7.2.124_PASS / GO1.26.4 / LINUX_AMD64 / FULL_LOCAL_MATRIX / PROFILES_PRIMARY / REMOTE_TAG_CHECK_SKIPPED / REMOTE_LATEST_CHECK_SKIPPED
+round12_remote_latest_release_api: CPA_V7.2.124_PASS / v7.2.124 / INDEPENDENT_API_VERIFICATION
+round12_remote_tag_ref_api: CPA_V7.2.124_PASS / 197f520426374e514218ed155933ac546c98d345 / COMMIT_VERIFIED / INDEPENDENT_API_VERIFICATION
 round12_remote_combined_make_gate: NETWORK_FAILED / GITHUB_GIT_CURL_52 / NOT_CODE_FAILURE
 round12_native_host_so: NOT_RUN / LOCAL_DEPLOYMENT_PROHIBITED
 round12_classifier_policy: HISTORICAL_ROUND12 / classifier-policy-v12 / 2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b
@@ -29,25 +31,25 @@ round12_audit_runner_bundle: 6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae
 round12_audit_contract: 0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680
 round12_audit_run_source: cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73
 round12_audit_machine_schema: 063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060
-round12_local_audit_tool_tests: PASS / LINUX / 148_OF_148
-round12_second_machine_bind_preflight: PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
-round12_local_safe_gate: PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
+round12_local_audit_tool_tests: CPA_V7.2.124_PASS / LINUX / 148_OF_148
+round12_second_machine_bind_preflight: HISTORICAL_PRE_CPA124_PASS / NORMAL_BIND_RUNC_START / RPRIVATE / HOSTCONFIG_TMPFS_CLOSED / MOUNTS_TMPFS_OMITTED / NOT_FINAL_CANDIDATE
+round12_local_safe_gate: CPA_V7.2.124_PASS / 211_TESTS / 91_RETIRED_SKIPS / 3_ENTRYPOINTS / 38_TARGETS / 47_SCRIPTS
 round12_local_go_unit: HISTORICAL_PRE_CPA124 / GO1.26.4_LINUX / REVALIDATION_REQUIRED
 round12_local_go_race: HISTORICAL_PRE_CPA124 / GO1.26.4_LINUX_AMD64 / REVALIDATION_REQUIRED / EXACT_CI_REQUIRED
 round12_local_coderabbit: INITIAL_REVIEW_12_ISSUES / 6_MAJOR_6_MINOR / ALL_REMEDIATED / EXACT_COMMIT_FOLLOWUP_PENDING
-round12_host_performance_contract: PASS / SIX_SOURCE_TOOL_CLOSURE / WARM_CADENCE_3601_TO_3602 / REQUEST_OUTCOME_CONSERVATION
-round12_candidate_manifest_gate: PASS / CLEAN_EXACT_EIGHT_FILE_CI_SEAL / TRACKED_AND_UNTRACKED_CLEAN
-round12_baseline_engineering_ci: PASS / HISTORICAL_V7.2.116_EXACT_MAIN_ONLY / NOT_TRANSFERABLE
+round12_host_performance_contract: CPA_V7.2.124_PASS / SIX_SOURCE_TOOL_CLOSURE / WARM_CADENCE_3601_TO_3602 / REQUEST_OUTCOME_CONSERVATION
+round12_candidate_manifest_gate: CPA_V7.2.124_PASS / CLEAN_EXACT_EIGHT_FILE_CI_SEAL / TRACKED_AND_UNTRACKED_CLEAN
+round12_baseline_engineering_ci: HISTORICAL_PRE_CPA124_PASS / V7.2.116_EXACT_MAIN_ONLY / NOT_TRANSFERABLE
 round12_superseded_pr_head: 9782eaf9da37d466ffc0b644b052d3c842f7f1ca
-round12_superseded_pr_head_engineering_ci: PASS / CI_31016759352 / POLICY_31016760807 / CODEQL_31016759262
+round12_superseded_pr_head_engineering_ci: CPA_V7.2.124_PASS / CI_31016759352 / POLICY_31016760807 / CODEQL_31016759262
 round12_superseded_pr_head_second_machine: FAIL_CLOSED / ERROR_32a64d93ec0f3ed9 / NO_MACHINE_EVIDENCE
 round12_prior_remediated_pr_head: 30b613e82a1be97938dbfe974b98d4cb76a359a0
 round12_prior_remediated_merge_ref: 2be72ccd7f431344b4f6bb18811fa08949105121
-round12_prior_remediated_engineering_ci: PASS / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
+round12_prior_remediated_engineering_ci: CPA_V7.2.124_PASS / CI_31031462761 / POLICY_31031462702 / CODEQL_31031462510
 round12_prior_remediated_second_machine: FAIL_CLOSED / ERROR_2f0ba84bbf89fe0c / DIRTY_CANDIDATE_READINESS_MISMATCH / NO_MACHINE_EVIDENCE
 round12_current_remediation: MDX_V45_CLASSIFIER / HOST_PERFORMANCE_FALSE_PASS_CLOSURE / CI_CANDIDATE_BINDING / CLEAN_EXACT_MERGE_CANDIDATE_REQUIRED
 round12_sbom_repro_remediation: EXACT_IDENTITY_NORMALIZATION / TWO_INDEPENDENT_BLOBLESS_SPARSE_CLONES / LOCAL_CONTRACT_PASS / EXACT_CI_PENDING
-round12_second_machine_envfile_smoke: PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
+round12_second_machine_envfile_smoke: CPA_V7.2.124_PASS / PROC_FD_DOCKER_CLI / SUCCESS_AND_EXPECTED_FAILURE / JOURNAL_FIELD_MENTIONS_0 / RESIDUALS_0 / NOT_FINAL_CANDIDATE
 round12_working_candidate_engineering_ci: NOT_RUN / PENDING_EXACT_HEAD
 round12_input_second_machine_report: HISTORICAL_V7.2.116_DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
 round12_final_candidate_second_machine: NOT_RUN / PENDING_EXACT_HEAD_EXECUTION
