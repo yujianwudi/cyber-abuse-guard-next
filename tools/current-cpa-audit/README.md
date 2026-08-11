@@ -112,9 +112,12 @@ are the explicitly audited runtime, not corpus execution.
   per-source human-review pins. The checked-in file is approved for the exact
   five-repository source identities reviewed on 2026-08-11; source drift fails.
   Keysmith is pinned to current default-branch commit
-  `b113fcfc21d14e4760ee826918be0076dca89eb8` / tree
-  `286c53f2de2c5566692b3dab5b002bf04fcbfcb1`; its two selected reviewed blobs
-  remain byte-identical to the preceding pin.
+  `b2b87df296f96f3d4049cadd82fd61c9a6a34595` / tree
+  `98cf7431b1d1a3d189930dd9929c12c756f032ea`; its two selected reviewed blobs
+  remain byte-identical to the preceding pin. Codex-X is pinned to commit
+  `826a142fc040920a5c23c3dafabbfc8d21655478` / tree
+  `95e2638756c97b844179a905513d41ea2e8aea0e`; its three selected reviewed blobs
+  likewise remain byte-identical.
 - `audit_contract.py` — closed corpus, run-config, result, and machine-evidence
   validators. Unknown or missing fields fail.
 - `supplemental_zip.py` - closed, metadata-only supplemental ZIP parser and
