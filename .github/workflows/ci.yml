@@ -379,16 +379,18 @@ jobs:
           retention-days: 14
       - name: Report post-upload candidate artifact admission coordinates
         env:
-          CANDIDATE_ARTIFACT_DIGEST: ${{ steps.upload_audit_candidate.outputs.artifact-digest }}
+          CANDIDATE_ARTIFACT_DIGEST_RAW: ${{ steps.upload_audit_candidate.outputs.artifact-digest }}
           CANDIDATE_ARTIFACT_ID: ${{ steps.upload_audit_candidate.outputs.artifact-id }}
           CANDIDATE_ARTIFACT_NAME: cyber-abuse-guard-linux-amd64-audit-candidate
         run: |
           set -euo pipefail
           [[ "$CANDIDATE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
-          [[ "$CANDIDATE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$CANDIDATE_ARTIFACT_DIGEST_RAW" =~ ^[0-9a-f]{64}$ ]]
+          candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"
+          [[ "$candidate_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
           printf 'candidate_artifact_id=%s\n' "$CANDIDATE_ARTIFACT_ID"
           printf 'candidate_artifact_name=%s\n' "$CANDIDATE_ARTIFACT_NAME"
-          printf 'candidate_artifact_digest=%s\n' "$CANDIDATE_ARTIFACT_DIGEST"
+          printf 'candidate_artifact_digest=%s\n' "$candidate_artifact_digest"
   reproducibility:
     needs: quality-and-artifacts
     runs-on: ubuntu-24.04

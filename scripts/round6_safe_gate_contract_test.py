@@ -2997,6 +2997,46 @@ jobs:
             with self.assertRaisesRegex(ContractError, "historical Round 8 counted-Mock"):
                 validate_ci_workflow(workflow, source)
 
+    def test_ci_workflow_requires_exact_post_upload_digest_normalization(self):
+        source = Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml"
+        original = source.read_text(encoding="utf-8")
+        validate_ci_workflow(original, source)
+        mutations = (
+            original.replace(
+                '[[ "$CANDIDATE_ARTIFACT_DIGEST_RAW" =~ ^[0-9a-f]{64}$ ]]',
+                '[[ "$CANDIDATE_ARTIFACT_DIGEST_RAW" =~ ^sha256:[0-9a-f]{64}$ ]]',
+                1,
+            ),
+            original.replace(
+                'candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"',
+                'candidate_artifact_digest="sha256:sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"',
+                1,
+            ),
+            original.replace(
+                '^[0-9a-f]{64}$',
+                '^[0-9A-Fa-f]{64}$',
+                1,
+            ),
+            original.replace(
+                '          CANDIDATE_ARTIFACT_DIGEST_RAW: ${{ steps.upload_audit_candidate.outputs.artifact-digest }}\n',
+                '          CANDIDATE_ARTIFACT_DIGEST: ${{ steps.upload_audit_candidate.outputs.artifact-digest }}\n',
+                1,
+            ),
+            original.replace(
+                '          candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"\n',
+                '          # candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"\n'
+                '          candidate_artifact_digest="$CANDIDATE_ARTIFACT_DIGEST_RAW"\n',
+                1,
+            ),
+        )
+        for workflow in mutations:
+            self.assertNotEqual(workflow, original)
+            with self.assertRaisesRegex(
+                ContractError,
+                "post-upload candidate artifact admission|exact scalar",
+            ):
+                validate_ci_workflow(workflow, source)
+
     def test_ci_workflow_requires_exact_remote_cpa_verification_step(self):
         source = Path(__file__).resolve().parent.parent / ".github/workflows/ci.yml"
         original = source.read_text(encoding="utf-8")
@@ -4517,6 +4557,12 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 1,
             ),
             original.replace("    runs-on: ubuntu-24.04\n", "    runs-on: ubuntu-latest\n", 1),
+            original.replace(
+                "      artifact_digest: ${{ format('sha256:{0}', steps.upload.outputs.artifact-digest) }}\n",
+                "      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}\n"
+                "      # artifact_digest: ${{ format('sha256:{0}', steps.upload.outputs.artifact-digest) }}\n",
+                1,
+            ),
         ) + step_gate_mutations + sensitive_expression_mutations + execution_context_mutations
         for index, mutation in enumerate(mutations):
             with self.subTest(mutation=index):

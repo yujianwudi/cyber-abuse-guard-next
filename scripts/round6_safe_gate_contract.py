@@ -1155,7 +1155,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "edd555d540d65aced02e310aa52b104ae9a2e94915fd36d69f345125d285b4fd"
+ACTIVE_RC_WORKFLOW_SHA256 = "c8ba6d0cafc6ea75150a10e14351a4979654f300e210cb4d4c9a6dd7a150a497"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
     "d54ce8f6d59d503aa3e517966de266c3ef9fa2f0daaa5e8e70732ff916c0faea"
@@ -1595,7 +1595,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "3594b46b55afd4be6a0c552b74633b2eb8fa350885106b410a5d311dc8a96e6d"
+ROUND6_SAFE_GATE_TEST_SHA256 = "c22dedd841156fc1b1897ba5acfc82152dd8022b86fa7855fdf29e375aa20fb6"
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -3627,6 +3627,56 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         raise ContractError(
             "CI audit candidates must reject fork pull-request heads before sealing and verification"
         )
+
+    admission_matches: list[tuple[int, Node, dict[str, Node]]] = []
+    for step_index, step_node in enumerate(steps):
+        step_path = f"jobs.quality-and-artifacts.steps[{step_index}]"
+        step = yaml_mapping(step_node, source, step_path)
+        if "name" in step and yaml_scalar(step["name"], source, f"{step_path}.name") == (
+            "Report post-upload candidate artifact admission coordinates"
+        ):
+            admission_matches.append((step_index, step_node, step))
+    if len(admission_matches) != 1:
+        raise ContractError(
+            "CI must contain exactly one post-upload candidate artifact admission step"
+        )
+    admission_index, admission_node, admission_step = admission_matches[0]
+    admission_path = f"jobs.quality-and-artifacts.steps[{admission_index}]"
+    require_yaml_keys(admission_node, ("name", "env", "run"), source, admission_path)
+    if exact_string_mapping(
+        admission_step["env"], source, f"{admission_path}.env"
+    ) != (
+        (
+            "CANDIDATE_ARTIFACT_DIGEST_RAW",
+            "${{ steps.upload_audit_candidate.outputs.artifact-digest }}",
+        ),
+        (
+            "CANDIDATE_ARTIFACT_ID",
+            "${{ steps.upload_audit_candidate.outputs.artifact-id }}",
+        ),
+        (
+            "CANDIDATE_ARTIFACT_NAME",
+            "cyber-abuse-guard-linux-amd64-audit-candidate",
+        ),
+    ):
+        raise ContractError(
+            "CI post-upload candidate artifact admission environment changed"
+        )
+    expected_admission_run = '''set -euo pipefail
+[[ "$CANDIDATE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+[[ "$CANDIDATE_ARTIFACT_DIGEST_RAW" =~ ^[0-9a-f]{64}$ ]]
+candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"
+[[ "$candidate_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+printf 'candidate_artifact_id=%s\\n' "$CANDIDATE_ARTIFACT_ID"
+printf 'candidate_artifact_name=%s\\n' "$CANDIDATE_ARTIFACT_NAME"
+printf 'candidate_artifact_digest=%s\\n' "$candidate_artifact_digest"
+'''
+    require_yaml_scalar(
+        admission_step["run"],
+        expected_admission_run,
+        source,
+        f"{admission_path}.run",
+    )
 
     fuzz_job = yaml_mapping(jobs.get("fuzz-long"), source, "jobs.fuzz-long")
     fuzz_steps = yaml_sequence(
@@ -7694,6 +7744,28 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         source,
         "jobs.seal_candidate.needs",
     )
+    require_yaml_keys(
+        parsed_jobs["seal_candidate"]["outputs"],
+        ("artifact_digest", "artifact_id", "attestation_id", "attestation_url"),
+        source,
+        "jobs.seal_candidate.outputs",
+    )
+    if exact_string_mapping(
+        parsed_jobs["seal_candidate"]["outputs"],
+        source,
+        "jobs.seal_candidate.outputs",
+    ) != (
+        (
+            "artifact_digest",
+            "${{ format('sha256:{0}', steps.upload.outputs.artifact-digest) }}",
+        ),
+        ("artifact_id", "${{ steps.upload.outputs.artifact-id }}"),
+        ("attestation_id", "${{ steps.attest.outputs.attestation-id }}"),
+        ("attestation_url", "${{ steps.attest.outputs.attestation-url }}"),
+    ):
+        raise ContractError(
+            "Round 13 RC seal candidate outputs changed from the reviewed digest contract"
+        )
     publish_needs = yaml_sequence(
         parsed_jobs["publish_prerelease"]["needs"],
         source,

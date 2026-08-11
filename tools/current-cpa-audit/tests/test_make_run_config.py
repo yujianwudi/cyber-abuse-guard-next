@@ -161,6 +161,19 @@ class MakeRunConfigTests(unittest.TestCase):
             "steps.upload_audit_candidate.outputs.artifact-digest", admission
         )
         self.assertIn("steps.upload_audit_candidate.outputs.artifact-id", admission)
+        self.assertIn("CANDIDATE_ARTIFACT_DIGEST_RAW", admission)
+        self.assertIn(
+            '[[ "$CANDIDATE_ARTIFACT_DIGEST_RAW" =~ ^[0-9a-f]{64}$ ]]',
+            admission,
+        )
+        self.assertIn(
+            'candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"',
+            admission,
+        )
+        self.assertIn(
+            "printf 'candidate_artifact_digest=%s\\n' \"$candidate_artifact_digest\"",
+            admission,
+        )
 
     def test_require_git_clean_includes_and_rejects_untracked_files(self) -> None:
         completed = subprocess.CompletedProcess([], 0, stdout="?? local.txt\n", stderr="")

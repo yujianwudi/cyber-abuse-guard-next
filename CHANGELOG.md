@@ -47,6 +47,11 @@ Source-tree status updated: 2026-08-11 (Asia/Shanghai)
   exact zero-allocation rune comparisons. Restore 12 retired Round 8 workflow
   tests to unittest discovery so Safe Gate reports `217` tests / `78` explicit
   skips instead of silently omitting them.
+- Normalize the pinned `actions/upload-artifact@v7.0.1` bare SHA-256 output to
+  the canonical `sha256:<hex>` admission identity in both CI and the RC seal
+  job. YAML-structural contracts and digest mutation tests prevent comments or
+  stale reviewed hashes from masking a regression; Safe Gate now reports `218`
+  tests / `78` explicit skips.
 - Make hot reconfiguration generation-safe. Subject state is prepared in an
   independent controller before candidate database work, failed reconfiguration
   cannot mutate the active controller, and a successful swap clears old
