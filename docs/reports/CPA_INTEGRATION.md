@@ -20,10 +20,10 @@ was frozen. Round 13 intentionally remains pinned to v7.2.125; no v7.2.127
 source, compile, Host, or release result is claimed.
 
 The current five-repository review policy has SHA-256
-`a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f`.
+`ab3151ad5976d1ce094fb3000be57aa30ef3468b6c280c407794174a19d2b104`.
 Keysmith is reviewed at commit
-`6910586a012308cb445f68620d9a990348aef06f` / tree
-`feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`. A fresh acquisition validated
+`b113fcfc21d14e4760ee826918be0076dca89eb8` / tree
+`286c53f2de2c5566692b3dab5b002bf04fcbfcb1`. A fresh acquisition validated
 5 repositories, 11 selected text sources, and 19 semantic cases without
 executing third-party code, then removed the ephemeral source text.
 

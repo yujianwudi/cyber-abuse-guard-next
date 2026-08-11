@@ -110,10 +110,10 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-10; source drift fails.
+  five-repository source identities reviewed on 2026-08-11; source drift fails.
   Keysmith is pinned to current default-branch commit
-  `6910586a012308cb445f68620d9a990348aef06f` / tree
-  `feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`; its two selected reviewed blobs
+  `b113fcfc21d14e4760ee826918be0076dca89eb8` / tree
+  `286c53f2de2c5566692b3dab5b002bf04fcbfcb1`; its two selected reviewed blobs
   remain byte-identical to the preceding pin.
 - `audit_contract.py` — closed corpus, run-config, result, and machine-evidence
   validators. Unknown or missing fields fail.

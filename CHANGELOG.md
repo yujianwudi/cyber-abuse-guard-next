@@ -66,14 +66,14 @@ Source-tree status updated: 2026-08-11 (Asia/Shanghai)
   by a leading line break now collapses to one hard boundary instead of charging
   duplicate normalization and directive-analysis capacity.
 - Refresh the live five-repository review policy to SHA-256
-  `a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f`.
-  Keysmith advances to commit `6910586a012308cb445f68620d9a990348aef06f` /
-  tree `feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`; its two selected blobs remain
+  `ab3151ad5976d1ce094fb3000be57aa30ef3468b6c280c407794174a19d2b104`.
+  Keysmith advances to commit `b113fcfc21d14e4760ee826918be0076dca89eb8` /
+  tree `286c53f2de2c5566692b3dab5b002bf04fcbfcb1`; its two selected blobs remain
   byte-identical. A fresh read-only acquisition validates all five repositories,
   11 selected text sources, and 19 semantic cases without executing third-party
   code, then removes the ephemeral text.
 - Rebind the current CPA audit runner to bundle
-  `6066fe6cd81005770113f3624982729301d45fa7dc416ae780c71bdaa656ac0d`,
+  `da165ec967c2ddaa9b029a2d2da50d709b1a90ea9d4e56b6f97d40163148a552`,
   audit contract
   `01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3`,
   run source
