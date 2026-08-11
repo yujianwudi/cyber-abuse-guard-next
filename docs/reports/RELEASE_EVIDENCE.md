@@ -9,7 +9,7 @@ active_rc_tag: v1.0.0-rc.1
 active_release_artifact_version: 1.0.0-rc.1
 active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 active_platform: linux-amd64
-active_classifier_policy: classifier-policy-v18 / 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+active_classifier_policy: classifier-policy-v19 / b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 active_source_policy_sha256: ab3151ad5976d1ce094fb3000be57aa30ef3468b6c280c407794174a19d2b104
 active_audit_runner_bundle_sha256: da165ec967c2ddaa9b029a2d2da50d709b1a90ea9d4e56b6f97d40163148a552
 active_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
@@ -92,8 +92,8 @@ independent attestation. The classifier identity block immediately below is
 part of this active prologue.
 
 ```text
-current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+current_classifier_policy_version: classifier-policy-v19
+current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 ```
 
 Last updated: 2026-08-11 (Asia/Shanghai)

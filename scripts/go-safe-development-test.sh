@@ -715,6 +715,13 @@ require_reviewed_entries ./internal/plugin "round-twelve plugin" \
 
 expected_round13_classifier_entries=(
 	BenchmarkRound13DefensiveRequestObjectProofBudget4KB64Tokens
+	TestSupplementalTerminalSkillActivationCannotBorrowSiblingField
+	TestSupplementalTerminalSkillActivationLaterFieldCancellationParity
+	TestSupplementalTerminalSkillActivationNegativeMatrix
+	TestSupplementalTerminalSkillActivationParserAndAuthorityBoundaries
+	TestSupplementalTerminalSkillActivationPromotionGateMutations
+	TestSupplementalTerminalSkillActivationProtocolMatrix
+	TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit
 	TestRound13AssistantMixedScriptContinuationCannotBeSuppressed
 	TestRound13AssistantQuotedRestatementProofBudgetParity
 	TestRound13AssistantQuotedRestatementSuffixRemainsDetectable
@@ -1093,10 +1100,11 @@ case "$mode" in
       ${#expected_round12_classifier_entries[@]} +
       ${#expected_round12_plugin_entries[@]}
     ))
-    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d round12_entries=%d\n' \
+    round13_entry_count=${#expected_round13_classifier_entries[@]}
+    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d round12_entries=%d round13_entries=%d\n' \
       "${#safe_packages[@]}" "${#expected_safe_classifier_entries[@]}" \
       "$round8_entry_count" "$round9_entry_count" "$round10_entry_count" \
-      "$round12_entry_count"
+      "$round12_entry_count" "$round13_entry_count"
     ;;
   test)
     "$go_bin" test -tags="$test_tags" -count=1 "${safe_packages[@]}"

@@ -8,8 +8,8 @@
 > tracked in [ROUND13_STATUS.md](ROUND13_STATUS.md).
 
 ```text
-current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+current_classifier_policy_version: classifier-policy-v19
+current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 ```
 
 Last updated: 2026-08-11 (Asia/Shanghai)

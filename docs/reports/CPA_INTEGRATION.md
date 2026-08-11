@@ -1,8 +1,8 @@
 # CPA v7.2.125 schema-2 active contract and frozen historical validation
 
 ```text
-current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+current_classifier_policy_version: classifier-policy-v19
+current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 ```
 
 ## Round 13 active compatibility overlay
@@ -27,7 +27,7 @@ Keysmith is reviewed at commit
 5 repositories, 11 selected text sources, and 19 semantic cases without
 executing third-party code, then removed the ephemeral source text.
 
-Current classifier-policy-v18 source contracts and upstream-targeted tests
+Current classifier-policy-v19 source contracts and upstream-targeted tests
 cover no-copy/in-place payload reuse, Antigravity large-payload guards,
 Multi-Agent v2, Codex `response.failed` and `Originator`, Claude replay, session
 identity, public SDK ABI/API, and exact-tag CPA Plugin Store installation. The

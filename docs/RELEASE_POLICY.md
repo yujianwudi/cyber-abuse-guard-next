@@ -5,8 +5,8 @@ current_source_version: 1.0.0
 current_binary_version: 1.0.0
 current_rc_tag: v1.0.0-rc.1
 current_release_artifact_version: 1.0.0-rc.1
-current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+current_classifier_policy_version: classifier-policy-v19
+current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 current_rc_prerelease: true
 current_rc_make_latest: false
 current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e

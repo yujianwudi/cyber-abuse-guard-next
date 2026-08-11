@@ -1079,7 +1079,7 @@ func (s *ScanSession) Finish() Result {
 	return result
 }
 
-func (s *ScanSession) consume(field *streamingField, text []byte, finalChunk bool) {
+func (s *ScanSession) consume(field *streamingField, text []byte, _ bool) {
 	for len(text) > 0 && s.coverage.State == CoverageComplete {
 		remainingTotal := s.limits.MaxTotalBytes - int(s.coverage.Bytes)
 		if remainingTotal <= 0 {
@@ -1118,10 +1118,12 @@ func (s *ScanSession) consume(field *streamingField, text []byte, finalChunk boo
 		text = text[count:]
 		if len(field.buffer) == s.limits.WindowBytes {
 			// A field that ends exactly at the window bound is one complete
-			// normalization/classification window. Defer it to finishField so
-			// LastBoundary does not manufacture a second overlap window solely
-			// because the scanner had not yet observed the logical End marker.
-			if !(finalChunk && len(text) == 0) && !s.flushFullWindow(field) {
+			// normalization/classification window. When the current AddSegment
+			// has no more bytes, defer it even if its End marker arrives in a
+			// later empty chunk. A subsequent non-empty chunk enters through the
+			// full-buffer branch above and flushes before appending, so retention
+			// remains bounded while exact-window field parity is preserved.
+			if len(text) > 0 && !s.flushFullWindow(field) {
 				return
 			}
 		}
@@ -1213,6 +1215,9 @@ func (s *ScanSession) finishField(field *streamingField) {
 	fieldSegment := streamingSegmentForField(field, "")
 	profiledField := s.profiledRequest && !segmentUsesLegacyUntrustedFallback(fieldSegment)
 	fieldSegment = s.profiledStreamingRequestSegment(fieldSegment)
+	if profiledField && !s.captureProfiledTerminalSkillActivation(field, fieldSegment) {
+		return
+	}
 	clearNonUserSafety := false
 	if profiledField && profiledNonUserSafetyCandidate(fieldSegment) {
 		if completeText, complete := completeStreamingNonUserSafetyText(field); complete {
@@ -2762,6 +2767,60 @@ func profiledStreamingGenericGroupView(
 	return genericParts, genericRefs
 }
 
+func (s *ScanSession) captureProfiledTerminalSkillActivation(
+	field *streamingField,
+	segment extract.Segment,
+) bool {
+	if s == nil || s.classifier == nil || field == nil ||
+		!profiledTrustedCurrentUserNaturalLanguageDirective(segment) ||
+		field.totalBytes <= 0 {
+		return true
+	}
+	if !profiledTerminalSkillActivationBytesMayMatch(field.buffer) {
+		return true
+	}
+	completeField := field.totalBytes == int64(len(field.buffer))
+	if !completeField {
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return false
+	}
+	raw := string(field.buffer)
+	referent, reactivated, proofComplete := profiledTerminalSkillActivationReferent(raw)
+	if !proofComplete {
+		s.setCoverage(CoverageUnavailable, CoverageReasonClassifierWindow)
+		return false
+	}
+	if !reactivated {
+		return true
+	}
+	if s.coverage.Windows >= s.limits.MaxChunks {
+		s.setCoverage(CoverageBudgetExhausted, CoverageReasonClassificationLimit)
+		return false
+	}
+	s.coverage.Windows++
+	segment.Text = raw
+	ref := profiledSegmentRef{index: s.profiledGroupPhysicalOrdinal, segment: segment}
+	candidate, promoted, complete := s.classifier.profiledTerminalSkillActivationCandidate(
+		referent, ref, s.mode, s.thresholds, s.policy,
+	)
+	if !complete {
+		reason := CoverageReasonClassifierWindow
+		if candidate.Truncated && classifierIncompleteCoverageReason(
+			classifierIncompleteReason(candidate),
+		) {
+			reason = classifierIncompleteReason(candidate)
+		}
+		s.setCoverage(CoverageUnavailable, reason)
+		return false
+	}
+	if promoted && (!field.hasIndependentActivation ||
+		roleResultBetter(candidate, field.independentActivation)) {
+		field.independentActivation = cloneProfiledReferentResult(candidate)
+		field.hasIndependentActivation = true
+	}
+	return true
+}
+
 func (s *ScanSession) considerProfiledRoleSummary(
 	current *streamingFieldSummary,
 	currentRisk *streamingFieldRiskFacts,
@@ -3815,7 +3874,8 @@ func (s *ScanSession) profiledStreamingCurrentReferentUnit(
 		// bounded Result; the surrounding code carrier stays inert and no prompt
 		// bytes cross the field boundary.
 		unit.result = cloneProfiledReferentResult(current.independentActivation)
-		if s != nil && s.classifier != nil {
+		if s != nil && s.classifier != nil &&
+			!unit.result.candidateIdentity.referentLinked {
 			s.classifier.annotateProfiledResult(
 				&unit.result, []profiledSegmentRef{unit.ref}, false,
 				s.policy, s.mode, s.thresholds,
@@ -7724,29 +7784,269 @@ type profiledStructuredQuoteSpan struct {
 
 const maxProfiledStructuredQuoteSpans = 1024
 
+func profiledStructuredLineEnd(text string, start int) (int, int) {
+	for index := start; index < len(text); index++ {
+		switch text[index] {
+		case '\n':
+			return index, index + 1
+		case '\r':
+			next := index + 1
+			if next < len(text) && text[next] == '\n' {
+				next++
+			}
+			return index, next
+		}
+	}
+	return len(text), len(text)
+}
+
+func profiledStructuredClosingFenceLine(line string, marker byte, minimum int) bool {
+	spaces := 0
+	for spaces < len(line) && line[spaces] == ' ' && spaces < 4 {
+		spaces++
+	}
+	if spaces > 3 || spaces >= len(line) || line[spaces] != marker {
+		return false
+	}
+	end := spaces
+	for end < len(line) && line[end] == marker {
+		end++
+	}
+	if end-spaces < minimum {
+		return false
+	}
+	for ; end < len(line); end++ {
+		if line[end] != ' ' && line[end] != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
+// profiledStructuredMarkdownFenceSpanEnd recognizes only line-level Markdown
+// fences: the opening marker must begin after at most three ASCII spaces, a
+// closer must use the same marker with at least the opening run length, and its
+// tail may contain only ASCII space/tab. An unclosed opener owns the remaining
+// field so terminal text inside it cannot become an execution speech act.
+func profiledStructuredMarkdownFenceOpening(
+	text string,
+	index int,
+) (int, int, byte, int, bool) {
+	if index < 0 || index >= len(text) || text[index] != '~' && text[index] != '`' {
+		return 0, 0, 0, 0, false
+	}
+	lineStart := index
+	for lineStart > 0 && text[lineStart-1] == ' ' && index-lineStart < 4 {
+		lineStart--
+	}
+	if index-lineStart > 3 || lineStart > 0 &&
+		text[lineStart-1] != '\n' && text[lineStart-1] != '\r' {
+		return 0, 0, 0, 0, false
+	}
+	lineEnd, nextLine := profiledStructuredLineEnd(text, index)
+	opening := text[lineStart:lineEnd]
+	markerOffset := 0
+	for markerOffset < len(opening) && opening[markerOffset] == ' ' && markerOffset < 4 {
+		markerOffset++
+	}
+	marker, count, ok := profiledFenceMarkerLine(opening)
+	if !ok || marker != text[index] || lineStart+markerOffset != index {
+		return 0, 0, 0, 0, false
+	}
+	if marker == '`' && strings.Contains(opening[markerOffset+count:], "`") {
+		return 0, 0, 0, 0, false
+	}
+	return lineEnd, nextLine, marker, count, true
+}
+
+func profiledStructuredMarkdownFenceSpanEnd(text string, index int) (int, bool) {
+	lineEnd, nextLine, marker, count, ok := profiledStructuredMarkdownFenceOpening(
+		text, index,
+	)
+	if !ok {
+		return 0, false
+	}
+	if nextLine == len(text) && lineEnd == len(text) {
+		return len(text), true
+	}
+	for cursor := nextLine; cursor <= len(text); {
+		closingEnd, followingLine := profiledStructuredLineEnd(text, cursor)
+		closing := text[cursor:closingEnd]
+		if profiledStructuredClosingFenceLine(closing, marker, count) {
+			return closingEnd, true
+		}
+		if followingLine == len(text) && closingEnd == len(text) {
+			break
+		}
+		cursor = followingLine
+	}
+	return len(text), true
+}
+
+func profiledStructuredBacktickRun(text string, index int) int {
+	run := 0
+	for index+run < len(text) && text[index+run] == '`' {
+		run++
+	}
+	return run
+}
+
+func profiledStructuredASCIIWhitespaceLine(line string) bool {
+	for index := range len(line) {
+		if line[index] != ' ' && line[index] != '\t' {
+			return false
+		}
+	}
+	return true
+}
+
+func profiledStructuredConsumeWork(budget *int, amount int) bool {
+	if budget == nil || amount < 0 || amount > *budget {
+		if budget != nil {
+			*budget = 0
+		}
+		return false
+	}
+	*budget -= amount
+	return true
+}
+
+func profiledStructuredParagraphEnd(text string, start int, budget *int) (int, bool) {
+	lineEnd, nextLine := profiledStructuredLineEnd(text, start)
+	if !profiledStructuredConsumeWork(budget, nextLine-start) {
+		return 0, false
+	}
+	if lineEnd == len(text) && nextLine == len(text) {
+		return len(text), true
+	}
+	for cursor := nextLine; cursor <= len(text); {
+		lineEnd, followingLine := profiledStructuredLineEnd(text, cursor)
+		if !profiledStructuredConsumeWork(budget, followingLine-cursor) {
+			return 0, false
+		}
+		if profiledStructuredASCIIWhitespaceLine(text[cursor:lineEnd]) {
+			return cursor, true
+		}
+		if lineEnd == len(text) && followingLine == len(text) {
+			return len(text), true
+		}
+		cursor = followingLine
+	}
+	return len(text), true
+}
+
+func profiledStructuredBlankLineEndAt(text string, index int) (int, bool) {
+	if index < 0 || index > len(text) || index > 0 &&
+		text[index-1] != '\n' && text[index-1] != '\r' {
+		return 0, false
+	}
+	if index > 0 && index < len(text) && text[index-1] == '\r' && text[index] == '\n' {
+		return 0, false
+	}
+	lineEnd, nextLine := profiledStructuredLineEnd(text, index)
+	if lineEnd == len(text) || !profiledStructuredASCIIWhitespaceLine(text[index:lineEnd]) {
+		return 0, false
+	}
+	return nextLine, true
+}
+
+func profiledStructuredMatchingBacktickRunEnd(
+	text string,
+	index int,
+	run int,
+	budget *int,
+) (int, bool, bool, int) {
+	paragraphEnd, complete := profiledStructuredParagraphEnd(text, index+run, budget)
+	if !complete {
+		return 0, false, false, 0
+	}
+	for cursor := index + run; cursor < paragraphEnd; {
+		offset := strings.IndexByte(text[cursor:paragraphEnd], '`')
+		if offset < 0 {
+			if !profiledStructuredConsumeWork(budget, paragraphEnd-cursor) {
+				return 0, false, false, 0
+			}
+			return 0, false, true, paragraphEnd
+		}
+		candidate := cursor + offset
+		candidateRun := profiledStructuredBacktickRun(text, candidate)
+		if !profiledStructuredConsumeWork(budget, offset+candidateRun) {
+			return 0, false, false, 0
+		}
+		if _, _, _, _, fenceOpener := profiledStructuredMarkdownFenceOpening(
+			text, candidate,
+		); fenceOpener {
+			return 0, false, true, candidate
+		}
+		if candidateRun == run {
+			return candidate + candidateRun, true, true, paragraphEnd
+		}
+		cursor = candidate + candidateRun
+	}
+	return 0, false, true, paragraphEnd
+}
+
 // profiledStructuredQuoteSpans indexes the field once. Candidate recovery then
 // checks each bounded range by binary search instead of rescanning the whole
-// prefix for every activation-shaped clause. An unmatched structured delimiter
-// owns the remaining tail; an unmatched ASCII apostrophe retains the classifier's
-// existing prose behavior and is not treated as a quotation.
+// prefix for every activation-shaped clause. Unclosed quote/tag/fence owners
+// retain the remaining tail, while unmatched CommonMark code-span backtick runs
+// and ASCII apostrophes retain their literal prose behavior.
 func profiledStructuredQuoteSpans(text string) ([]profiledStructuredQuoteSpan, bool) {
 	spans := make([]profiledStructuredQuoteSpan, 0, 8)
 	asciiSingleQuoteTailExhausted := false
+	var unmatchedBacktickRuns map[int]struct{}
+	unmatchedBacktickScopeEnd := 0
+	maxInt := int(^uint(0) >> 1)
+	backtickWorkBudget := maxInt
+	if len(text) <= (maxInt-1024)/16 {
+		backtickWorkBudget = len(text)*16 + 1024
+	}
 	for index := 0; index < len(text); {
+		if unmatchedBacktickScopeEnd > 0 && index >= unmatchedBacktickScopeEnd {
+			clear(unmatchedBacktickRuns)
+			unmatchedBacktickScopeEnd = 0
+		}
+		if blankLineEnd, blank := profiledStructuredBlankLineEndAt(text, index); blank {
+			if unmatchedBacktickRuns != nil {
+				clear(unmatchedBacktickRuns)
+			}
+			unmatchedBacktickScopeEnd = 0
+			index = blankLineEnd
+			continue
+		}
 		spanStart := index
 		spanEnd := -1
-		if text[index] == '`' {
-			run := 1
-			for index+run < len(text) && text[index+run] == '`' {
-				run++
-			}
-			if run >= 3 {
-				delimiter := text[index : index+run]
-				if closeAt := strings.Index(text[index+run:], delimiter); closeAt >= 0 {
-					spanEnd = index + run + closeAt + run
-				} else {
-					spanEnd = len(text)
+		if text[index] == '~' || text[index] == '`' {
+			if fenceEnd, ok := profiledStructuredMarkdownFenceSpanEnd(text, index); ok {
+				spanEnd = fenceEnd
+				if unmatchedBacktickRuns != nil {
+					clear(unmatchedBacktickRuns)
 				}
+				unmatchedBacktickScopeEnd = 0
+			}
+		}
+		if spanEnd < 0 && text[index] == '`' {
+			run := profiledStructuredBacktickRun(text, index)
+			if _, knownUnmatched := unmatchedBacktickRuns[run]; knownUnmatched {
+				index += run
+				continue
+			}
+			closingEnd, matched, complete, scopeEnd := profiledStructuredMatchingBacktickRunEnd(
+				text, index, run, &backtickWorkBudget,
+			)
+			if !complete {
+				return nil, false
+			}
+			if matched {
+				spanEnd = closingEnd
+			} else {
+				if unmatchedBacktickRuns == nil {
+					unmatchedBacktickRuns = make(map[int]struct{})
+				}
+				unmatchedBacktickRuns[run] = struct{}{}
+				unmatchedBacktickScopeEnd = scopeEnd
+				index += run
+				continue
 			}
 		}
 		if spanEnd < 0 && strings.HasPrefix(text[index:], "<sample>") {
@@ -7775,8 +8075,6 @@ func profiledStructuredQuoteSpans(text string) ([]profiledStructuredQuoteSpan, b
 				closeDelimiter = "\u300d"
 			case '\u300e':
 				closeDelimiter = "\u300f"
-			case '`':
-				closeDelimiter = "`"
 			case '\'':
 				if !asciiSingleQuoteTailExhausted && metaOverrideSingleQuoteOpens(text, index, size) {
 					closeDelimiter = "'"

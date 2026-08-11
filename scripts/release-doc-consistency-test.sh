@@ -12,8 +12,8 @@ old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce
 stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
-round13_classifier_policy_version="classifier-policy-v18"
-round13_classifier_policy_sha256="64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82"
+round13_classifier_policy_version="classifier-policy-v19"
+round13_classifier_policy_sha256="b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -562,7 +562,7 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/round13-classifier-$name"
   cp -a "$work/round13-pass" "$fixture"
-  sed -i '0,/current_classifier_policy_version: classifier-policy-v18/s//current_classifier_policy_version: classifier-policy-v12/' \
+  sed -i '0,/current_classifier_policy_version: classifier-policy-v19/s//current_classifier_policy_version: classifier-policy-v12/' \
     "$fixture/$relative"
   round13_must_fail "round13-classifier-$name" "$fixture" \
     "$relative lost the exact current classifier identity in its first 15 lines"

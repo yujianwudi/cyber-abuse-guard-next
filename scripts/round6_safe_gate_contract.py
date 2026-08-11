@@ -1254,7 +1254,7 @@ ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
     "jobs.admission.steps[1].env.WORKFLOW_SHA": "${{ github.workflow_sha }}",
 }
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "84ea8d540d8ada9a3ba7f02c349c4ec975de02cf34160b6078ec83367d57b7cb"
+ROUND9_GATE_WORKFLOW_SHA256 = "826e93fe533e81fa90b5609f9fbae3274517501af70931ef9597bf5034143f95"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "09ab4e5dedb90ffbfe8f2436c8dc7ee6353162dc825e9751c708bdca68c800e1"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1454,11 +1454,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "6e6fc727d860b8a6feb4a355c82b225595cabaa50c56ab7c20ef04db4370fce3"
+    "db894cba71e3598f59e2191e4c356e1cb9f9a9d5fb9c73073936ce617988ed7a"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "82d304fbc74cd2277f28f919f9b32a94929206844affec0944e21f4b8dd835c8",
-    "scripts/release-doc-consistency.sh": "a79709772d229805cd1037af4b6d0d6c7e98e498cd5dbcaf6676e6fb826429eb",
+    "scripts/release-doc-consistency-test.sh": "0c22289020a91cd493485a16f1b5ac207aaa5b98d241c695a7343be8c004ab0f",
+    "scripts/release-doc-consistency.sh": "a9a4525ca83e74c1a3c7213eccb5766e2ae52ae6a4b4ec8a98ca35779433eb3c",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1595,7 +1595,16 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "c22dedd841156fc1b1897ba5acfc82152dd8022b86fa7855fdf29e375aa20fb6"
+ROUND6_SAFE_GATE_TEST_SHA256 = "9fae92f83648b2ef1a40a923dc063f7adb63f8a06f55b5c620e121889027bb2a"
+ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS = (
+    "TestSupplementalTerminalSkillActivationCannotBorrowSiblingField",
+    "TestSupplementalTerminalSkillActivationLaterFieldCancellationParity",
+    "TestSupplementalTerminalSkillActivationNegativeMatrix",
+    "TestSupplementalTerminalSkillActivationParserAndAuthorityBoundaries",
+    "TestSupplementalTerminalSkillActivationPromotionGateMutations",
+    "TestSupplementalTerminalSkillActivationProtocolMatrix",
+    "TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit",
+)
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
 
@@ -8051,7 +8060,7 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "test ! -e testdata/round9-independent-benign-v1/cases.jsonl",
         "test ! -e testdata/round9-independent-malicious-v1",
         "independent_corpus_executed=false",
-        "classifier-policy-v18",
+        "classifier-policy-v19",
         "1.0.10",
     ):
         if marker not in text:
@@ -10004,6 +10013,27 @@ def validate_round6_go_safe_development_script(text: str, source: Path) -> None:
     if any(text.count(command) != 1 for command in required_round9_commands):
         raise ContractError(
             f"safe-development test modes lost the exact Round 9 counted-Mock contract: {source}"
+        )
+    round13_inventory = re.search(
+        r"(?ms)^expected_round13_classifier_entries=\(\n(?P<body>.*?)^\)\n",
+        text,
+    )
+    if round13_inventory is None:
+        raise ContractError(
+            f"safe-development test modes lost the Round 13 classifier inventory: {source}"
+        )
+    round13_entries = tuple(
+        line.strip()
+        for line in round13_inventory.group("body").splitlines()
+        if line.strip()
+    )
+    if any(
+        round13_entries.count(name) != 1
+        for name in ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS
+    ):
+        raise ContractError(
+            "safe-development test modes lost the exact supplemental terminal "
+            f"activation regression inventory: {source}"
         )
     required_race_commands = (
         'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 "${safe_packages[@]}"',

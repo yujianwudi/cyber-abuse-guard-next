@@ -324,8 +324,8 @@ if [[
     docs/reports/ROUND8_CALIBRATION.md
     docs/reports/ROUND9_EXECUTION_RECORD.md
   )
-  current_policy_version='current_classifier_policy_version: classifier-policy-v18'
-  current_policy_sha='current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82'
+  current_policy_version='current_classifier_policy_version: classifier-policy-v19'
+  current_policy_sha='current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1'
   for relative in "${current_classifier_prologue_documents[@]}"; do
     document="$doc_root/$relative"
     prologue="$(sed -n '1,15p' "$document")"
@@ -427,7 +427,7 @@ if [[
     document="$doc_root/$relative"
     grep -Fq 'v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' "$document" || \
       fail "$relative lost its active-tree CPA v7.2.125 overlay"
-    grep -Fq 'current_classifier_policy_version: classifier-policy-v18' "$document" || \
+    grep -Fq 'current_classifier_policy_version: classifier-policy-v19' "$document" || \
       fail "$relative lost its active-tree classifier overlay"
   done
 

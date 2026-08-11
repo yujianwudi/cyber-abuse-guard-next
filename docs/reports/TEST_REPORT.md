@@ -10,7 +10,7 @@ round13_local_source_evidence_base_head: a672ab31eabed9ca32c90ad110a9f47b3ae407c
 round13_local_source_evidence_head_tree: 9aee6ced9cacf5ed899c658ed8d8ed422580cee8
 round13_local_source_evidence_worktree: DIRTY_WORKTREE / NOT_FINAL_CANDIDATE
 round13_platform: linux-amd64
-round13_classifier_policy: classifier-policy-v18 / 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+round13_classifier_policy: classifier-policy-v19 / b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 round13_source_policy_sha256: ab3151ad5976d1ce094fb3000be57aa30ef3468b6c280c407794174a19d2b104
 round13_audit_runner_bundle_sha256: da165ec967c2ddaa9b029a2d2da50d709b1a90ea9d4e56b6f97d40163148a552
 round13_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
@@ -78,8 +78,8 @@ change these fields. All v7.2.124 and earlier results below are historical and
 non-transferable. See [Round 13 status](../ROUND13_STATUS.md).
 
 ```text
-current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+current_classifier_policy_version: classifier-policy-v19
+current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
 ```
 
 Last updated: 2026-08-11 (Asia/Shanghai)

@@ -2622,6 +2622,28 @@ jobs:
                 with self.assertRaisesRegex(ContractError, "finite 20-minute timeout"):
                     validate_round6_go_safe_development_script(mutation, source)
 
+    def test_safe_development_locks_terminal_activation_regression_inventory(self):
+        source = Path(__file__).with_name("go-safe-development-test.sh")
+        original = source.read_text(encoding="utf-8")
+        validate_round6_go_safe_development_script(original, source)
+        required = (
+            "TestSupplementalTerminalSkillActivationCannotBorrowSiblingField",
+            "TestSupplementalTerminalSkillActivationLaterFieldCancellationParity",
+            "TestSupplementalTerminalSkillActivationNegativeMatrix",
+            "TestSupplementalTerminalSkillActivationParserAndAuthorityBoundaries",
+            "TestSupplementalTerminalSkillActivationPromotionGateMutations",
+            "TestSupplementalTerminalSkillActivationProtocolMatrix",
+            "TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit",
+        )
+        for name in required:
+            with self.subTest(name=name):
+                mutation = original.replace(f"\t{name}\n", "", 1)
+                self.assertNotEqual(mutation, original)
+                with self.assertRaisesRegex(
+                    ContractError, "supplemental terminal activation regression inventory"
+                ):
+                    validate_round6_go_safe_development_script(mutation, source)
+
     def test_round6_makefile_candidate_script_gates_are_reachable(self):
         source = Path(__file__).parent.parent / "Makefile"
         original = source.read_text(encoding="utf-8")

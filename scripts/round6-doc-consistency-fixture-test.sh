@@ -4,8 +4,8 @@ set -euo pipefail
 root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 fixture="$root/scripts/release-doc-consistency-test.sh"
 gate="$root/scripts/release-doc-consistency.sh"
-expected_fixture_sha256='82d304fbc74cd2277f28f919f9b32a94929206844affec0944e21f4b8dd835c8'
-expected_gate_sha256='a79709772d229805cd1037af4b6d0d6c7e98e498cd5dbcaf6676e6fb826429eb'
+expected_fixture_sha256='0c22289020a91cd493485a16f1b5ac207aaa5b98d241c695a7343be8c004ab0f'
+expected_gate_sha256='a9a4525ca83e74c1a3c7213eccb5766e2ae52ae6a4b4ec8a98ca35779433eb3c'
 
 for required in sha256sum awk; do
   command -v "$required" >/dev/null 2>&1 || {
