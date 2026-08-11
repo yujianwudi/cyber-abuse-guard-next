@@ -1,8 +1,8 @@
 # CPA v7.2.125 schema-2 active contract and frozen historical validation
 
 ```text
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
 ## Round 13 active compatibility overlay
@@ -30,7 +30,7 @@ byte-identical to the preceding review. A fresh acquisition validated 5
 repositories, 11 selected text sources, and 19 semantic cases without executing
 third-party code, then removed the ephemeral source text.
 
-Current classifier-policy-v19 source contracts and upstream-targeted tests
+Current classifier-policy-v20 source contracts and upstream-targeted tests
 cover no-copy/in-place payload reuse, Antigravity large-payload guards,
 Multi-Agent v2, Codex `response.failed` and `Originator`, Claude replay, session
 identity, public SDK ABI/API, and exact-tag CPA Plugin Store installation. The

@@ -1,8 +1,8 @@
 # Round 8 synthetic score calibration
 
 ```text
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 historical_report_classifier_policy_version: classifier-policy-v7
 historical_report_classifier_policy_sha256: ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d8e6092e9f6a82d
 historical_report_ruleset_version: 1.0.9

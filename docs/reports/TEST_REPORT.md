@@ -6,11 +6,11 @@
 round13_source_version: 1.0.0
 round13_rc_tag: v1.0.0-rc.1
 round13_cpa: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
-round13_local_source_evidence_base_head: a672ab31eabed9ca32c90ad110a9f47b3ae407c6
-round13_local_source_evidence_head_tree: 9aee6ced9cacf5ed899c658ed8d8ed422580cee8
+round13_local_source_evidence_base_head: b6cac4bddfef8a725244146a06380ee14d79d33c
+round13_local_source_evidence_head_tree: DIRTY_WORKTREE_NOT_COMMITTED
 round13_local_source_evidence_worktree: DIRTY_WORKTREE / NOT_FINAL_CANDIDATE
 round13_platform: linux-amd64
-round13_classifier_policy: classifier-policy-v19 / b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+round13_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 round13_source_policy_sha256: 516a5aac90676cb079466ed2bb795f2683d88f859d5e11d283d089cb2d17de87
 round13_audit_runner_bundle_sha256: 84985080bef45c821d687d2e82bf89ffd42ad3de18d42a057bb29cf07902f0ea
 round13_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
@@ -19,49 +19,52 @@ round13_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac4383322
 round13_audit_tool_tests: PASS / LINUX / 244_OF_244
 round13_keysmith_reviewed_head_tree: b2b87df296f96f3d4049cadd82fd61c9a6a34595 / 98cf7431b1d1a3d189930dd9929c12c756f032ea
 round13_codexx_reviewed_head_tree: 826a142fc040920a5c23c3dafabbfc8d21655478 / 95e2638756c97b844179a905513d41ea2e8aea0e
-round13_local_source_matrix: PASS
-round13_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / V18_NOT_RUN / NOT_FINAL_CANDIDATE
+round13_local_source_matrix: V20_LOCAL_UNIT_VET_RACE_FUZZ_SCRIPT_DOC_MUTATION_PASS / DIRTY_WORKTREE_NOT_FINAL_CANDIDATE
+round13_local_native_host: PRE_V20_DIRTY_WORKTREE_PASS_SUPERSEDED / V20_NOT_RUN / NOT_FINAL_CANDIDATE
 round13_exact_head_github_checks: NOT_RUN
 round13_second_machine: NOT_RUN
 round13_release: NOT_CREATED
 ```
 
-The following close-out commands passed on 2026-08-11 (Asia/Shanghai) against
-the uncommitted working tree based on the HEAD/tree recorded above. They remain
-dirty local development evidence; exact PR-head GitHub, clean-candidate Host,
-and release gates are separate:
+The v20 terminal-META classifier matrix, plugin audit-event route, full unit,
+race, vet, bounded fuzz, script, Safe Gate, CPA audit-tool, and release-document
+mutation gates pass on Linux. These remain dirty-worktree local source evidence;
+exact pushed-head CI, clean-candidate native Host, second-machine performance,
+merge, and release gates remain separate:
 
 | Round 13 contract command | Result |
 |---|---|
-| `bash scripts/release-doc-consistency.sh` | `PASS` |
-| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 452.28s` against the final 244-test working tree |
+| v20 terminal META carrier and plugin regressions | `PASS / LINUX / BATCH+STREAM / AUDIT+BALANCED+STRICT`; context-bait, authorization/ownership relations, word-boundary negation, migration-label, proof-budget, cross-field cancellation, and logical-field risk identity boundaries covered |
+| `bash scripts/release-doc-consistency.sh` | `PASS / 3.4s` |
+| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 462.5s` against the final v20 evidence tree |
 | `bash scripts/release-rc-contract-test.sh` | `PASS` |
 | `bash scripts/release-candidate-contract-test.sh` | `PASS` |
 | exact Go 1.26.4 format and module verification | `PASS / 4.027s combined` |
-| `make unit-test round6-vet` | `PASS / 343.3s wall`; classifier `149.240s`, plugin `144.703s` |
-| `make race` | `PASS / 1103.8s wall / NO DATA RACE`; audit `54.982s`, plugin `616.824s`, classifier `436.656s` |
-| `make fuzz-smoke` and `make round9-fuzz ROUND9_FUZZTIME=5s` | `PASS` |
+| `make unit-test round6-vet` | `PASS / 448.2s wall`; classifier `201.701s`, plugin `173.369s` |
+| `make race` | `PASS / 1334.3s wall / NO DATA RACE`; audit `58.492s`, plugin `699.094s`, classifier `585.814s` |
+| `make fuzz-smoke` and `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go make round9-fuzz ROUND9_FUZZTIME=5s` | `PASS / 10.6s seed smoke / 43.2s three bounded fuzz targets` |
 | fuzz/corpus matrix | `6/6 PASS / malicious recall 154/154 / local development-benign hits 3/142`; the 3/142 result is not a second-machine false-positive result |
 | pinned `actionlint v1.7.12` over all four active workflows | `PASS / canonical go run command / Go 1.26.4`; a verified read-only local Go module proxy cache was used after the public proxy timed out |
 | `make round6-benchmark` | `PASS / 197.079s` |
 | selected additional `make round10-performance` evidence | `CLASSIFIER-POLICY-V18 DIRTY SOURCE-ONLY PASS / 2026-08-11 / 27.23s wall / 21.516s measured Go test / JSON SHA-256 adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d / ordinary c16 p95 2.012662 ms / five-repository surrogate p95 108.288998 ms / Codex-all surrogate p95 46.827635 ms / public p95/p99 8.728750/9.440184 ms / SQLite c16 p95 2.549483 ms / queue max 30/256 / 2,304 operations / failures+panics 0` |
 | `bash scripts/check-production-health-test.sh` | `PASS` |
-| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `244/244 PASS / LINUX` |
+| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `244/244 PASS / LINUX / 55.416s` |
 | `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` | `PASS` |
-| `make round6-script-test` | `PASS / 184.61s / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 244 CPA tests / Safe Gate 217 tests and 78 skips / RC / attestation / source exclusion / production health`; the exact actionlint module came from the verified read-only local Go module proxy cache after the public proxy timed out; the complete release-doc mutation suite separately passed in 452.28s |
+| `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go GOPROXY=file:///home/yujian/go/pkg/mod/cache/download make round6-script-test` | `PASS / 190.6s / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 244 CPA tests / Safe Gate 219 tests and 78 skips / Store / production health`; the exact actionlint module came from the verified local file proxy after the public proxy timed out; the complete release-doc mutation suite separately passed in 462.5s |
 | post-upload digest admission regression rerun | `PASS / 2026-08-11 / current-CPA audit 244 tests and 20 skips / Safe Gate 218 tests and 78 skips / RC contract / actionlint`; fixes the observed run `31461730894` failure where pinned `upload-artifact` emitted bare lowercase SHA-256 while the coordinate step required the canonical `sha256:` prefix; no Host or release PASS is inferred |
 | `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make integration-test` as WSL root | `PRE_V18 PASS SUPERSEDED / CLASSIFIER-POLICY-V17 / 179.790s / native CPA v7.2.125 Host plus all 15 Router scenarios / SO 5693f2fb...f8393b / Store ZIP 1cbf59e1...65eb23 / V18 NATIVE HOST NOT RUN / DIRTY DEVELOPMENT BYTES / NOT FINAL CANDIDATE` |
 | fresh five-repository acquisition and validation | `PASS / policy a4ca2e98...ec5f / 5 repositories / 11 sources / 19 semantic cases / no third-party execution / ephemeral text cleaned` |
 | `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0 make cpa-latest-compat` | `PASS / 121.740s / exact v7.2.125 remote tag+commit / pinned source, compile, ABI, Host, Store, request logging, and schema-2 lifecycle contracts / latest check intentionally skipped for the pinned target` |
 | local CodeRabbit CLI 0.7.2 | `PASS / findings 0 / cumulative 31 valid findings fixed / 14 stale, false, or conditional findings disproved against current source`; the final docs-only rerun reviewed all six changed evidence documents with zero findings; pushed-head GitHub CodeRabbit remains pending |
 
-Round 13 coverage status is deliberately split. The current v18 source
-contracts for no-copy, `response.failed`, Codex `Originator`, and Claude replay
-pass. Their only native Host execution is
+Round 13 coverage status is deliberately split. The v20 local source gates pass,
+while the no-copy, `response.failed`, Codex `Originator`, and Claude replay
+contracts still have only pre-v20 native Host execution:
 `PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17 /
 V18_NOT_RUN / FINAL_CANDIDATE_PENDING`. The Claude assertions ran inside that
 root-isolated pre-v18 matrix against the v17-bound SO; they do not transfer to
-classifier-policy-v18 or to the final candidate.
+classifier-policy-v20 or to the final candidate. The v20 local source results
+listed above do not claim the still-pending native Host or second-machine matrix.
 
 These are dirty-worktree source, fixture, lint, audit-harness, unit, race, vet,
 fuzz, corpus, in-process performance, and local native-Host development results.
@@ -79,11 +82,11 @@ change these fields. All v7.2.124 and earlier results below are historical and
 non-transferable. See [Round 13 status](../ROUND13_STATUS.md).
 
 ```text
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
-Last updated: 2026-08-11 (Asia/Shanghai)
+Last updated: 2026-08-12 (Asia/Shanghai)
 
 ## Frozen CPA v7.2.124 target — local source/compile PASS, exact candidate pending
 

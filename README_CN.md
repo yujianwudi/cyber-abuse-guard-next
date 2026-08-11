@@ -9,8 +9,8 @@ current_rc_plugin_store_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / ца
 current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_2
 current_platform: linux-amd64
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 current_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_MERGE / NO_RELEASE
 ```
 

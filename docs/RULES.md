@@ -1,8 +1,8 @@
 # Rule System — ruleset 1.0.10
 
 ```text
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
 The default rule set is embedded into the shared object from `/rules`. Every
@@ -285,8 +285,8 @@ This identity covers the embedded YAML rule assets. The complete code-level
 policy is separately identified as:
 
 ```text
-current_release_classifier_policy_version: classifier-policy-v19
-current_release_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_release_classifier_policy_version: classifier-policy-v20
+current_release_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
 The policy digest test binds the deterministic classifier, matcher,
@@ -313,7 +313,7 @@ trusted. A role-attribution failure clears every tentative trust bit.
 Commit `21ceb57e6b6030e56d7820c9a67a8eecd068c669` passed push and PR CI as
 an earlier classifier-policy-v3 checkpoint. It does not verify the historical
 v0.15 classifier-policy-v5 identity, any historical v7 or v10 identity, the
-  current classifier-policy-v19 identity, or either final candidate. Automated
+  current classifier-policy-v20 identity, or either final candidate. Automated
 review is development feedback only.
 The final PR head must have no unresolved, non-outdated actionable review
 threads before merge; no independent approval is claimed.

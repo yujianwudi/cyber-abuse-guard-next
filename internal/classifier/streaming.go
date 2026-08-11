@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
@@ -737,6 +738,8 @@ type ScanSession struct {
 	previousUserComplete               bool
 	profiledPreviousUserRisk           streamingFieldRiskFacts
 	profiledPreviousUserRiskScope      profiledCurrentReferentScopeKey
+	profiledPreviousUserRiskField      extract.Segment
+	profiledPreviousUserRiskFieldSet   bool
 	profiledHasPreviousUserRisk        bool
 	profiledPreviousUserComplete       bool
 	previousQuotedReferent             Result
@@ -2881,13 +2884,15 @@ func (s *ScanSession) considerProfiledRoleSummary(
 	}
 	if !current.sampleComplete {
 		if profiledRiskOwner {
-			if current.hasInertQuotedReferent {
+			if current.hasInertQuotedReferent || current.hasIndependentActivation {
 				// The closed defensive wrapper has an exact, content-free carrier
-				// Result in the current referent scope. Do not also retain its
-				// window signal aggregate: a later exact affirmative anchor must be
-				// resolved against that carrier instead of falling through to the
-				// incomplete signal-only fail-closed path.
-				s.clearProfiledPreviousUserRisk()
+				// Result in the current referent scope. An independent activation has
+				// likewise classified its complete carrier and exact terminal owner.
+				// Do not also retain either field's window signal aggregate: a later
+				// derived view or exact affirmative anchor must be resolved against
+				// that Result instead of falling through to the incomplete signal-only
+				// follow-up path.
+				s.clearProfiledPreviousUserRiskForLogicalField(segment)
 			} else {
 				if !s.considerProfiledStreamingUserFollowUp(
 					segment, currentRisk, false, current.quotedFollowUp,
@@ -6831,7 +6836,21 @@ func (s *ScanSession) rememberProfiledPreviousUserRisk(
 	s.profiledPreviousUserRiskScope = profiledCurrentReferentScopeKey{
 		turnIndex: segment.TurnIndex, scopeID: segment.ScopeID,
 	}
+	// Retain only structural identity. Request text is not needed to prove that
+	// a later derived view belongs to this exact logical field.
+	segment.Text = ""
+	s.profiledPreviousUserRiskField = segment
+	s.profiledPreviousUserRiskFieldSet = true
 	s.profiledPreviousUserComplete = complete
+}
+
+func (s *ScanSession) clearProfiledPreviousUserRiskForLogicalField(segment extract.Segment) {
+	if s == nil || !s.profiledHasPreviousUserRisk ||
+		!s.profiledPreviousUserRiskFieldSet ||
+		!profiledSegmentsShareLogicalTextField(s.profiledPreviousUserRiskField, segment) {
+		return
+	}
+	s.clearProfiledPreviousUserRisk()
 }
 
 func (s *ScanSession) clearProfiledPreviousUserRisk() {
@@ -6841,6 +6860,8 @@ func (s *ScanSession) clearProfiledPreviousUserRisk() {
 	s.profiledPreviousUserRisk.reset()
 	s.profiledPreviousUserRisk = streamingFieldRiskFacts{}
 	s.profiledPreviousUserRiskScope = profiledCurrentReferentScopeKey{}
+	s.profiledPreviousUserRiskField = extract.Segment{}
+	s.profiledPreviousUserRiskFieldSet = false
 	s.profiledHasPreviousUserRisk = false
 	s.profiledPreviousUserComplete = false
 }
@@ -7753,6 +7774,9 @@ func profiledEmbeddedMaterialCancellation(classifier *Classifier, text string) b
 	if classifier == nil || strings.TrimSpace(text) == "" {
 		return false
 	}
+	if profiledTerminalSkillCancellation(text) {
+		return true
+	}
 	disposition := quotedReviewFollowUpDisposition(
 		text, classifier.implementationStarts, classifier.implementationPatterns,
 	)
@@ -7763,8 +7787,33 @@ func profiledEmbeddedMaterialCancellation(classifier *Classifier, text string) b
 	return containsAnyLiteral(text,
 		"embedded material", "embedded content", "preceding material", "preceding content",
 		"execute it", "apply it", "use it", "follow it", "operationalize it",
+		"skill above", "its default workflow", "the default workflow",
 		"嵌入材料", "嵌入内容", "前述材料", "前述内容", "执行它", "应用它", "使用它", "遵循它",
 	)
+}
+
+func profiledTerminalSkillCancellation(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(text)))
+	text = strings.Join(strings.Fields(text), " ")
+	text = strings.TrimRightFunc(text, func(value rune) bool {
+		return unicode.IsSpace(value) || unicode.IsPunct(value)
+	})
+	for _, prefix := range []string{"actually, ", "actually ", "instead, ", "instead "} {
+		text = strings.TrimSpace(strings.TrimPrefix(text, prefix))
+	}
+	switch text {
+	case "do not install or activate the skill above",
+		"do not install and activate the skill above",
+		"do not install the skill above",
+		"do not activate the skill above",
+		"do not execute its default workflow now",
+		"do not execute the default workflow now",
+		"do not execute its default workflow",
+		"do not execute the default workflow":
+		return true
+	default:
+		return false
+	}
 }
 
 func profiledEmbeddedCarrierBoundaryLabel(text string) bool {

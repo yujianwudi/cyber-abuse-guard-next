@@ -9,18 +9,18 @@ active_rc_tag: v1.0.0-rc.1
 active_release_artifact_version: 1.0.0-rc.1
 active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 active_platform: linux-amd64
-active_classifier_policy: classifier-policy-v19 / b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+active_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 active_source_policy_sha256: 516a5aac90676cb079466ed2bb795f2683d88f859d5e11d283d089cb2d17de87
 active_audit_runner_bundle_sha256: 84985080bef45c821d687d2e82bf89ffd42ad3de18d42a057bb29cf07902f0ea
 active_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
 active_audit_run_source_sha256: 808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb
 active_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
 active_audit_tool_tests: PASS / LINUX / 244_OF_244
-active_local_source_matrix: DIRTY_WORKTREE_PASS / UNIT_RACE_VET_FUZZ_CORPUS_CONTRACT / NOT_FINAL_CANDIDATE
+active_local_source_matrix: DIRTY_WORKTREE_V20_LOCAL_LINUX_PASS / UNIT_VET_RACE_FUZZ_SCRIPT_DOC_MUTATION / CPA_AUDIT_244_OF_244 / NOT_FINAL_CANDIDATE
 active_local_development_corpus: MALICIOUS_RECALL_154_OF_154 / BENIGN_HITS_3_OF_142 / LOCAL_ONLY_NOT_SECOND_MACHINE_FP
-active_local_round10_performance: V18_DIRTY_SOURCE_ONLY_PASS / JSON_SHA256_ADAEAB59CFAA0323F78B98FEB4765B358FAF9A913DFA622FB7FE1BF8D472A80D / NOT_HOST_PERFORMANCE_OR_RSS
-active_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / SO_5693F2FB...F8393B / STORE_1CBF59E1...65EB23 / V18_NOT_RUN / NOT_FINAL_CANDIDATE / NOT_HOST_PERFORMANCE
-active_local_coderabbit: FINAL_LOCAL_REVIEW_PASS / FINDINGS_0 / 31_VALID_FINDINGS_FIXED / 14_STALE_FALSE_OR_CONDITIONAL_FINDINGS_DISPROVED / FINAL_PUSH_GITHUB_PENDING
+active_local_round10_performance: PRE_V20_V18_DIRTY_SOURCE_ONLY_PASS_SUPERSEDED / V20_RERUN_PENDING / NOT_HOST_PERFORMANCE_OR_RSS
+active_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / SO_5693F2FB...F8393B / STORE_1CBF59E1...65EB23 / V20_NOT_RUN / V20_RERUN_REQUIRED / NOT_FINAL_CANDIDATE / NOT_HOST_PERFORMANCE
+active_local_coderabbit: PRE_V20_LOCAL_REVIEW_SUPERSEDED / V20_INTERNAL_FINAL_REVIEW_CLEAN / GITHUB_PENDING
 active_pr_required_checks: NOT_RUN
 active_premerge_second_machine: NOT_RUN
 active_postmain_required_checks: NOT_RUN
@@ -92,11 +92,11 @@ independent attestation. The classifier identity block immediately below is
 part of this active prologue.
 
 ```text
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
-Last updated: 2026-08-11 (Asia/Shanghai)
+Last updated: 2026-08-12 (Asia/Shanghai)
 
 Everything below is frozen v0.16 / Round 12 history and does not transfer a
 PASS to CPA v7.2.125 or `v1.0.0-rc.1`.

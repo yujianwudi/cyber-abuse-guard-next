@@ -722,6 +722,16 @@ expected_round13_classifier_entries=(
 	TestSupplementalTerminalSkillActivationPromotionGateMutations
 	TestSupplementalTerminalSkillActivationProtocolMatrix
 	TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit
+	TestSupplementalTerminalMetaCarrierNegativeMatrix
+	TestSupplementalTerminalMetaCarrierAffirmativeWitnessMatrix
+	TestSupplementalTerminalMetaCarrierContextBaitCannotBypass
+	TestSupplementalTerminalMetaCarrierLaterFieldCancellationParity
+	TestSupplementalTerminalMetaCarrierProofBudgetIsIncomplete
+	TestSupplementalTerminalMetaCarrierPromotionGateMutations
+	TestSupplementalTerminalMetaCarrierProtocolMatrix
+	TestSupplementalTerminalMetaCarrierResponsesContentBlockMatrix
+	TestSupplementalTerminalMetaCarrierStreamingRiskFieldIdentity
+	TestSupplementalTerminalMetaCarrierTypedClauseProofs
 	TestRound13AssistantMixedScriptContinuationCannotBeSuppressed
 	TestRound13AssistantQuotedRestatementProofBudgetParity
 	TestRound13AssistantQuotedRestatementSuffixRemainsDetectable
@@ -736,6 +746,12 @@ expected_round13_classifier_entries=(
 	TestRound13SystemQuotedRestatementSuffixProfiledParity
 	TestRound13ToolPayloadSafetyFramingCannotSuppress
 )
+
+expected_round13_plugin_entries=(
+	TestRound13TerminalMetaCarrierResponsesPersistsEligibleEvent
+)
+require_reviewed_entries ./internal/plugin "round-thirteen plugin" \
+  '^TestRound13[A-Za-z0-9_]*$' "${expected_round13_plugin_entries[@]}"
 
 # Every classifier test-like entry visible without the consumed_evaluation build
 # tag is explicitly classified. Restricted evaluation/holdout tests are not
@@ -1100,7 +1116,10 @@ case "$mode" in
       ${#expected_round12_classifier_entries[@]} +
       ${#expected_round12_plugin_entries[@]}
     ))
-    round13_entry_count=${#expected_round13_classifier_entries[@]}
+    round13_entry_count=$((
+      ${#expected_round13_classifier_entries[@]} +
+      ${#expected_round13_plugin_entries[@]}
+    ))
     printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d round12_entries=%d round13_entries=%d\n' \
       "${#safe_packages[@]}" "${#expected_safe_classifier_entries[@]}" \
       "$round8_entry_count" "$round9_entry_count" "$round10_entry_count" \

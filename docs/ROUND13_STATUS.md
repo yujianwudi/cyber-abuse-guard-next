@@ -7,7 +7,7 @@ identities and do not transfer a PASS to this round.
 
 <!-- round13-status:start -->
 ```text
-round13_status: DIRTY_WORKTREE_SOURCE_ENGINEERING_PASS / PRE_V18_NATIVE_HOST_SUPERSEDED / CPA_V7.2.125_CONTRACT_PASS / PREMERGE_DIAGNOSTIC_NOT_RUN / POSTMAIN_RELEASE_ADMISSION_NOT_RUN / NO_MERGE / NO_RELEASE
+round13_status: DIRTY_WORKTREE_V20_FULL_LOCAL_LINUX_GATES_PASS / PR_REQUIRED_CHECKS_NOT_RUN / PRE_V20_NATIVE_HOST_SUPERSEDED / PREMERGE_DIAGNOSTIC_NOT_RUN / NO_MERGE / NO_RELEASE
 round13_baseline_main: 11199dde1da5741ecec009be17b8a55294e39421
 round13_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 round13_cpa_module: github.com/router-for-me/CLIProxyAPI/v7@v7.2.125
@@ -18,7 +18,7 @@ round13_cpa_linux_binary_sha256: 656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d9
 round13_cpa_plugin_abi_rpc_schema: 1 / 2
 round13_source_version: 1.0.0
 round13_rc_tag: v1.0.0-rc.1
-round13_classifier_policy: classifier-policy-v19 / b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+round13_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 round13_source_policy: 516a5aac90676cb079466ed2bb795f2683d88f859d5e11d283d089cb2d17de87
 round13_audit_runner_bundle_sha256: 84985080bef45c821d687d2e82bf89ffd42ad3de18d42a057bb29cf07902f0ea
 round13_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
@@ -33,20 +33,21 @@ round13_mixed_script_safety_boundary: IMPLEMENTED / SYSTEM_ASSISTANT_LEGACY_BATC
 round13_confirmed_p1_hot_reconfigure_atomicity: IMPLEMENTED / COMPLETE_LINUX_UNIT_AND_RACE_PASS
 round13_confirmed_p1_request_lifecycle_generation: IMPLEMENTED / COMPLETE_LINUX_UNIT_AND_RACE_PASS
 round13_candidate_database_preflight: IMPLEMENTED / SUBJECT_FEASIBILITY_FIRST / HOT_DATA_DIR_IMMUTABLE / COMPLETE_LINUX_UNIT_AND_RACE_PASS
-round13_no_copy_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
-round13_response_failed_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
-round13_codex_originator_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
-round13_claude_replay_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
-round13_cpa_contract_and_audit_harness: V18_PASS / CPA_V7.2.125_SOURCE_COMPILE_ABI_HOST_STORE_PASS / AUDIT_TOOL_244_OF_244_PASS / REMOTE_TAG_VERIFIED
-round13_fragment_boundary_bypass: IMPLEMENTED / V18_NORMALIZATION_UNIT_RACE_CORPUS_PASS
+round13_no_copy_contract: SOURCE_CONTRACT_PASS / PRE_V20_NATIVE_HOST_SUPERSEDED / V20_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
+round13_response_failed_contract: SOURCE_CONTRACT_PASS / PRE_V20_NATIVE_HOST_SUPERSEDED / V20_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
+round13_codex_originator_contract: SOURCE_CONTRACT_PASS / PRE_V20_NATIVE_HOST_SUPERSEDED / V20_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
+round13_claude_replay_contract: SOURCE_CONTRACT_PASS / PRE_V20_NATIVE_HOST_SUPERSEDED / V20_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
+round13_cpa_contract_and_audit_harness: V20_LOCAL_SOURCE_PASS / CPA_AUDIT_244_OF_244 / NATIVE_HOST_RERUN_REQUIRED
+round13_fragment_boundary_bypass: IMPLEMENTED / V20_FULL_UNIT_AND_RACE_PASS / NATIVE_HOST_RERUN_REQUIRED
+round13_terminal_meta_carrier_recovery: V20_FULL_LOCAL_LINUX_PASS / CLAUSE_LOCAL_AFFIRMATIVE_PROOF / CONTEXT_BAIT_REJECTED / NEGATION_LABEL_AND_AUTHORIZATION_FALSE_POSITIVES_REJECTED / OCCURRENCE_BUDGET_FAILS_INCOMPLETE / CROSS_FIELD_CANCELLATION_AND_RISK_IDENTITY_PASS
 round13_release_admission_contract: IMPLEMENTED / STAGED_REPORT_AND_CI_ARTIFACT_FIXTURES_PASS / LIVE_GITHUB_ADMISSION_NOT_RUN
 round13_rc_binary_byte_identity: IMPLEMENTED / AUDITED_V1.0.0_SO_REUSE / NO_RC_RECOMPILE_OR_RENAME / LIVE_SEAL_NOT_RUN
 round13_cpa_store_rc_install: IMPLEMENTED / RC_ARCHIVE_EXACT / ROOT_UNVERSIONED_SO / PAYLOAD_BYTE_IDENTICAL / CPA_V7.2.125_OVERLAY_PASS / LIVE_RELEASE_NOT_RUN
-round13_local_linux_tests: V18_DIRTY_WORKTREE_FULL_MATRIX_PASS / UNIT_VET_WALL_343.3S / UNIT_CLASSIFIER_149.240S / UNIT_PLUGIN_144.703S / RACE_WALL_1103.8S_NO_DATA_RACE / RACE_AUDIT_54.982S / RACE_PLUGIN_616.824S / RACE_CLASSIFIER_436.656S / FUZZ_CORPUS_MODULE_SCRIPT_PASS / NOT_FINAL_CANDIDATE
-round13_local_cpa_host_blackbox: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17_SHA256_036A6B54C7C7F3DE400B09BB5CC6269C0EBA426FD7C50EBDA6255BAFE03E8464 / SO_SHA256_5693F2FB9313A07B0C7EA171458E0386E7279BD14CA8CF926CBB462CBDF8393B / STORE_ARCHIVE_SHA256_1CBF59E1FB6C77F2CC7BC2DEBC0BAD20D509F4DB3FA9A4CCBBB5F8AF2665EB23 / V18_RERUN_REQUIRED
+round13_local_linux_tests: PASS / DIRTY_WORKTREE_V20 / UNIT_VET_RACE_FUZZ_SCRIPT_AND_DOC_MUTATION / NOT_FINAL_CANDIDATE
+round13_local_cpa_host_blackbox: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17_SHA256_036A6B54C7C7F3DE400B09BB5CC6269C0EBA426FD7C50EBDA6255BAFE03E8464 / SO_SHA256_5693F2FB9313A07B0C7EA171458E0386E7279BD14CA8CF926CBB462CBDF8393B / STORE_ARCHIVE_SHA256_1CBF59E1FB6C77F2CC7BC2DEBC0BAD20D509F4DB3FA9A4CCBBB5F8AF2665EB23 / V20_NOT_RUN / V20_RERUN_REQUIRED
 round13_local_round10_performance: V18_DIRTY_WORKTREE_SOURCE_ONLY_PASS / WALL_27.23S / GO_TEST_21.516S / JSON_SHA256_ADAEAB59CFAA0323F78B98FEB4765B358FAF9A913DFA622FB7FE1BF8D472A80D / ORDINARY_C16_P95_2.012662MS / FIVE_REPOSITORY_SURROGATE_P95_108.288998MS / CODEX_ALL_P95_46.827635MS / PUBLIC_P95_P99_8.728750_9.440184MS / SQLITE_C16_P95_2.549483MS / SQLITE_QUEUE_MAX_30_OF_256 / 2304_OPS_ZERO_FAILURE_PANIC / NOT_HOST_PERFORMANCE
-round13_local_script_matrix: V18_PASS / ROUND6_184.61S / RELEASE_DOC_MUTATION_452.28S / ACTIONLINT_1.7.12 / SHELLCHECK_SECRET_SCAN_SAFE_GATE_217_78_RC_ATTESTATION_SOURCE_EXCLUSION_PRIVACY_DOC_MUTATION_PASS
-round13_coderabbit: FINAL_LOCAL_REVIEW_PASS / FINDINGS_0 / 31_VALID_FINDINGS_FIXED / 14_STALE_FALSE_OR_CONDITIONAL_FINDINGS_DISPROVED_AGAINST_CURRENT_SOURCE / FINAL_PUSH_GITHUB_CODERABBIT_PENDING
+round13_local_script_matrix: V20_PASS / SECRET_SCAN / ACTIONLINT_1.7.12_GO_1.26.4_LOCAL_PROXY / SHELLCHECK_0.10.0 / SAFE_GATE_219_TESTS_78_SKIPS / CPA_AUDIT_244_OF_244 / DOC_MUTATION_PASS
+round13_coderabbit: PRE_V20_LOCAL_REVIEW_SUPERSEDED / V20_INTERNAL_FINAL_REVIEW_CLEAN / GITHUB_CODERABBIT_PENDING
 round13_second_machine_layout: CANDIDATE=/srv/artifacts/candidate / UPSTREAM=/srv/artifacts/upstream / EVIDENCE=/srv/cag-audit/evidence-$RUN_ID
 round13_pr_required_checks: NOT_RUN
 round13_premerge_second_machine: NOT_RUN / PR_SYNTHETIC_MERGE_FULL_DIAGNOSTIC_ONLY / PORTABLE_PACK_FORBIDDEN
@@ -86,17 +87,17 @@ round13_stable_production_approved: NOT_PROVIDED
 
 ## Completed gates
 
-The pinned v7.2.125 source/API/ABI/RPC contracts, complete Linux source unit and
-race lanes, vet, bounded fuzz, public corpus, release contracts, Safe Gate,
-ShellCheck, secret scan, in-process performance gates, and an isolated root
-execution of the dirty-development native CPA Host/Router matrix pass. The
-final remote-enabled pinned compatibility matrix verified the exact v7.2.125
-tag and commit; two earlier low-speed network failures are superseded and were
-not code failures. The latest-release drift check remained intentionally
-skipped because this round is fixed to v7.2.125. The ordinary-user invocation
-separately stopped at the expected passwordless-sudo
-mount preflight; it did not enter the Host test process. Both observations are
-development evidence only.
+The pinned v7.2.125 source/API/ABI/RPC contracts, complete v20 Linux source unit
+and race lanes, vet, bounded fuzz, public corpus, release contracts, Safe Gate,
+ShellCheck, secret scan, and release-document mutation suite pass. The
+remote-enabled pinned compatibility matrix verified the exact v7.2.125 tag and
+commit; two earlier low-speed network failures are superseded and were not code
+failures. The latest-release drift check remained intentionally skipped because
+this round is fixed to v7.2.125. In-process performance and the isolated native
+CPA Host/Router result remain pre-v20 dirty-development evidence and do not
+transfer to v20. The ordinary-user invocation separately stopped at the
+expected passwordless-sudo mount preflight; it did not enter the Host test
+process.
 
 The separately supplied complete Codex jailbreak ZIP contract is implemented
 and closed at the source-contract layer: `--supplemental-archive`, its schemas,

@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 )
 
 const maxRoleClassifierSegments = 64
@@ -1987,7 +1988,13 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 					referent, ref, mode, thresholds, policy,
 				)
 				if !complete {
-					pendingClassifierIncomplete.rememberField(CoverageReasonClassifierWindow, ref)
+					reason := CoverageReasonClassifierWindow
+					if candidate.Truncated && classifierIncompleteCoverageReason(
+						classifierIncompleteReason(candidate),
+					) {
+						reason = classifierIncompleteReason(candidate)
+					}
+					pendingClassifierIncomplete.rememberField(reason, ref)
 				} else if promoted {
 					recoveredThisField = true
 					if !hasRecoveredActivation || roleResultBetter(candidate, recoveredActivation) {
@@ -3363,6 +3370,50 @@ func profiledTerminalSkillActivationMayPromote(
 		explanation.EvidenceOccurrenceCount == len(result.EvidenceOccurrences)
 }
 
+func profiledTerminalSkillActivatedMetaCandidate(
+	result Result,
+	thresholds Thresholds,
+) bool {
+	thresholds = validThresholdsOrDefault(thresholds)
+	if result.Truncated ||
+		result.Coverage.State != "" && result.Coverage.State != CoverageComplete ||
+		result.Category != rules.CategoryEvasion ||
+		result.Score < thresholds.HardBlock || result.BlockEligibility == nil ||
+		result.DecisionExplanation == nil || len(result.EvidenceOccurrences) == 0 ||
+		!resultContainsRuleID(result, metaOverrideRuleID) {
+		return false
+	}
+	eligibility := *result.BlockEligibility
+	if !eligibility.Eligible || !eligibility.InspectionComplete ||
+		!eligibility.EvidenceOwnedByCurrentUser ||
+		eligibility.EnforcementScope != EnforcementScopeCurrentUser ||
+		!eligibility.CurrentExecutionActProven || !eligibility.HarmfulCoreComplete ||
+		!eligibility.OperationallyActionable ||
+		eligibility.AuthorizationClaim != AuthorizationAbsent ||
+		!eligibility.SecurityControlEvasion || eligibility.ExplicitVictimOrNonConsent ||
+		eligibility.CovertAcquisition || eligibility.ExfiltrationOrTakeover ||
+		eligibility.MaliciousPersistence || eligibility.DestructiveOutcome ||
+		eligibility.DefensiveScopeConflict || eligibility.QuotedOrAnalyticalScope ||
+		eligibility.CrossScopeComposition || !eligibility.ReferentProofComplete ||
+		eligibility.EvidenceAmbiguous {
+		return false
+	}
+	explanation := result.DecisionExplanation
+	if explanation.WinningRuleID != metaOverrideRuleID ||
+		explanation.WinningCategory != string(rules.CategoryEvasion) ||
+		!explanation.CorePredicateComplete ||
+		explanation.EvidenceOccurrenceCount != len(result.EvidenceOccurrences) {
+		return false
+	}
+	for _, evidence := range result.Evidence {
+		if evidence.ID == metaOverrideTerminalSkillControlCarrierEvidenceID &&
+			evidence.Kind == "meta_override" {
+			return resultHasEligibleMaliciousWinner(result, thresholds)
+		}
+	}
+	return false
+}
+
 func (c *Classifier) profiledTerminalSkillActivationCandidate(
 	referent string,
 	ref profiledSegmentRef,
@@ -3397,7 +3448,26 @@ func (c *Classifier) profiledTerminalSkillActivationCandidate(
 		&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
 	)
 	if !profiledTerminalSkillActivationMayPromote(candidate, thresholds) {
-		return candidate, false, true
+		if candidate.Category != "" {
+			return candidate, false, true
+		}
+		activatedMeta := c.classifyActivatedTerminalSkillMetaReferentWithPolicy(
+			referent, mode, thresholds, policy,
+		)
+		if activatedMeta.Truncated ||
+			activatedMeta.Coverage.State != "" && activatedMeta.Coverage.State != CoverageComplete {
+			return activatedMeta, false, false
+		}
+		activatedMeta = withRoleAwareFindingOrigin(
+			activatedMeta, FindingOriginUserContent, mode, thresholds,
+		)
+		c.annotateProfiledResult(
+			&activatedMeta, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
+		)
+		if !profiledTerminalSkillActivatedMetaCandidate(activatedMeta, thresholds) {
+			return candidate, false, true
+		}
+		candidate = activatedMeta
 	}
 	markResultReferentActivated(&candidate, true, true, mode, thresholds)
 	bindResultCandidateReferentAnchor(&candidate, ref, true, mode, thresholds)

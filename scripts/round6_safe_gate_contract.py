@@ -1254,7 +1254,7 @@ ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
     "jobs.admission.steps[1].env.WORKFLOW_SHA": "${{ github.workflow_sha }}",
 }
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "826e93fe533e81fa90b5609f9fbae3274517501af70931ef9597bf5034143f95"
+ROUND9_GATE_WORKFLOW_SHA256 = "664c0feef414fe20c88fca2116e950f88114c06a8f0c6381739a92e379e72f7e"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "09ab4e5dedb90ffbfe8f2436c8dc7ee6353162dc825e9751c708bdca68c800e1"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1454,11 +1454,11 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "db894cba71e3598f59e2191e4c356e1cb9f9a9d5fb9c73073936ce617988ed7a"
+    "b8c46c9b8e03d4e99e81672567d886aacdfc87900307a913f3ae192c4e0f0213"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "0c22289020a91cd493485a16f1b5ac207aaa5b98d241c695a7343be8c004ab0f",
-    "scripts/release-doc-consistency.sh": "a9a4525ca83e74c1a3c7213eccb5766e2ae52ae6a4b4ec8a98ca35779433eb3c",
+    "scripts/release-doc-consistency-test.sh": "cfb2fca8bea55014afc93d2c47f71c4116f7840dd59e2b5352257a49fca66726",
+    "scripts/release-doc-consistency.sh": "1a08f2b68ef7f4e2cfcb3cae2964fd7a3ea920620b49ffa852fd895a17026f2b",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1604,6 +1604,19 @@ ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS = (
     "TestSupplementalTerminalSkillActivationPromotionGateMutations",
     "TestSupplementalTerminalSkillActivationProtocolMatrix",
     "TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit",
+    "TestSupplementalTerminalMetaCarrierAffirmativeWitnessMatrix",
+    "TestSupplementalTerminalMetaCarrierContextBaitCannotBypass",
+    "TestSupplementalTerminalMetaCarrierLaterFieldCancellationParity",
+    "TestSupplementalTerminalMetaCarrierNegativeMatrix",
+    "TestSupplementalTerminalMetaCarrierProofBudgetIsIncomplete",
+    "TestSupplementalTerminalMetaCarrierPromotionGateMutations",
+    "TestSupplementalTerminalMetaCarrierProtocolMatrix",
+    "TestSupplementalTerminalMetaCarrierResponsesContentBlockMatrix",
+    "TestSupplementalTerminalMetaCarrierStreamingRiskFieldIdentity",
+    "TestSupplementalTerminalMetaCarrierTypedClauseProofs",
+)
+ROUND13_TERMINAL_META_PLUGIN_TESTS = (
+    "TestRound13TerminalMetaCarrierResponsesPersistsEligibleEvent",
 )
 GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
 
@@ -8060,7 +8073,7 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "test ! -e testdata/round9-independent-benign-v1/cases.jsonl",
         "test ! -e testdata/round9-independent-malicious-v1",
         "independent_corpus_executed=false",
-        "classifier-policy-v19",
+        "classifier-policy-v20",
         "1.0.10",
     ):
         if marker not in text:
@@ -10035,6 +10048,35 @@ def validate_round6_go_safe_development_script(text: str, source: Path) -> None:
             "safe-development test modes lost the exact supplemental terminal "
             f"activation regression inventory: {source}"
         )
+    round13_plugin_inventory = re.search(
+        r"(?ms)^expected_round13_plugin_entries=\(\n(?P<body>.*?)^\)\n",
+        text,
+    )
+    if round13_plugin_inventory is None:
+        raise ContractError(
+            f"safe-development test modes lost the Round 13 plugin inventory: {source}"
+        )
+    round13_plugin_entries = tuple(
+        line.strip()
+        for line in round13_plugin_inventory.group("body").splitlines()
+        if line.strip()
+    )
+    if any(
+        round13_plugin_entries.count(name) != 1
+        for name in ROUND13_TERMINAL_META_PLUGIN_TESTS
+    ):
+        raise ContractError(
+            "safe-development test modes lost the exact terminal META plugin "
+            f"regression inventory: {source}"
+        )
+    for marker in (
+        'require_reviewed_entries ./internal/plugin "round-thirteen plugin"',
+        "'^TestRound13[A-Za-z0-9_]*$'",
+    ):
+        if text.count(marker) != 1:
+            raise ContractError(
+                f"safe-development test modes lost the closed Round 13 plugin boundary: {source}"
+            )
     required_race_commands = (
         'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 "${safe_packages[@]}"',
         'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier',

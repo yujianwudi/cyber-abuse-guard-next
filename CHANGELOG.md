@@ -1,14 +1,23 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v19
-current_classifier_policy_sha256: b9ee45401a50ae5c6fafa80d219e8f47e726bdfe15b5fc7838a96edd095460a1
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
-Source-tree status updated: 2026-08-11 (Asia/Shanghai)
+Source-tree status updated: 2026-08-12 (Asia/Shanghai)
 
 ## Unreleased - v1.0.0-rc.1
 
+- Advance the classifier contract to `classifier-policy-v20` /
+  `888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd`.
+  A terminal install/activate sentence can recover the previously missed
+  descriptive META carrier only when clause-local, affirmative evidence proves
+  a jailbreak purpose, an instruction-file injection, unrestricted mode, and
+  disabled filters. Word boundaries, common negations, migration-label text,
+  bounded occurrence proof, structured defensive/owned-lab owners, and exact
+  cross-field cancellation keep ordinary documentation nonblocking. Streaming
+  deduplication now clears pending risk only for the same logical field.
 - Pin the sole active Host contract to official CLIProxyAPI `v7.2.125` at
   `2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`, Go module sum
   `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, go.mod sum
