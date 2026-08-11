@@ -267,6 +267,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         sealed_candidate_identity = candidate_identity(
             candidate_value,
             candidate_raw,
+            cag_identity=cag_identity,
             artifact_id=args.candidate_artifact_id,
             artifact_name=args.candidate_artifact_name,
             artifact_digest=args.candidate_artifact_digest,

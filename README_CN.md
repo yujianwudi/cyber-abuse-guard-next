@@ -10,7 +10,7 @@ current_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_2
 current_platform: linux-amd64
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 current_status: IMPLEMENTATION_IN_PROGRESS / ACCEPTANCE_INCOMPLETE / NO_MERGE / NO_RELEASE
 ```
 

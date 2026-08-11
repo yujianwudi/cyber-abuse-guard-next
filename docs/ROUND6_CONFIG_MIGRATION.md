@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**. Configuration

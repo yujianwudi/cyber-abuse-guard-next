@@ -4,6 +4,7 @@ import copy
 import contextlib
 import io
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -67,6 +68,36 @@ except ImportError:  # pragma: no cover - optional local schema verifier
     Draft202012Validator = None  # type: ignore[assignment]
 
 
+REAL_TIME_RSS_TEST_SKIP_ENV = "CAG_HOST_PERF_ALLOW_REAL_TIME_RSS_TEST_SKIP"
+REAL_TIME_RSS_TEST_SKIP_VALUE = "1"
+
+
+def _fail_or_skip_real_time_rss_deadline(
+    test_case: unittest.TestCase,
+    exc: ContractError,
+    sampler_error_ids: list[str],
+) -> None:
+    recorded_sampler_error_ids = list(
+        getattr(exc, "sampler_error_ids", ()) or sampler_error_ids
+    )
+    expected_missed_deadline = (
+        type(exc) is PerformanceError
+        and str(exc) == "Host performance large-payload RSS sampler failed"
+        and recorded_sampler_error_ids == ["large_payload_rss:MissedDeadline"]
+    )
+    if (
+        expected_missed_deadline
+        and os.environ.get(REAL_TIME_RSS_TEST_SKIP_ENV)
+        == REAL_TIME_RSS_TEST_SKIP_VALUE
+    ):
+        test_case.skipTest(
+            "test-host scheduler stalled beyond the production RSS deadline; "
+            f"explicitly allowed by {REAL_TIME_RSS_TEST_SKIP_ENV}="
+            f"{REAL_TIME_RSS_TEST_SKIP_VALUE}"
+        )
+    raise exc
+
+
 def drifted_tool_identities(
     key: str = "host_performance_source_sha256",
 ) -> dict[str, str]:
@@ -112,6 +143,19 @@ class HostPerformanceContractTests(unittest.TestCase):
         self.assertGreaterEqual(validated["metrics"]["host_throughput_vs_cpa_only"], 0.90)
         self.assertLess(validated["metrics"]["audit_queue_peak_ratio"], 0.80)
         self.assertLessEqual(validated["metrics"]["warm_rss_growth_60m_mib"], 64)
+        large_payload = validated["large_payload_resident_memory"]
+        self.assertEqual(large_payload["rss_sample_gap_deadline_ms"], 30)
+        self.assertEqual(large_payload["rss_sample_gap_hard_limit_ms"], 60)
+        self.assertEqual(large_payload["rss_sample_gap_overrun_limit_per_cell"], 1)
+        for comparison in large_payload["comparisons"]:
+            self.assertEqual(comparison["cpa_only_rss_max_sample_gap_ms"], 20.0)
+            self.assertEqual(comparison["cpa_cag_rss_max_sample_gap_ms"], 20.0)
+            self.assertEqual(
+                comparison["cpa_only_rss_sample_gap_overrun_count"], 0
+            )
+            self.assertEqual(
+                comparison["cpa_cag_rss_sample_gap_overrun_count"], 0
+            )
 
         partial_queue_summaries = copy.deepcopy(self.good_summaries)
         nullable_group = next(
@@ -744,6 +788,141 @@ class HostPerformanceContractTests(unittest.TestCase):
         self.assertTrue(queue_stop.is_set())
         self.assertEqual(queue_errors, ["queue_sample:RuntimeAuditFailure"])
 
+    def test_large_payload_rss_sampler_has_one_bounded_gap_tolerance(self) -> None:
+        class FakeClock:
+            def __init__(self) -> None:
+                self.current = 0.0
+
+            def monotonic(self) -> float:
+                return self.current
+
+            def sleep(self, seconds: float) -> None:
+                self.current += seconds
+
+        collector = object.__new__(LinuxHostCollector)
+        collector.config = self.good_config
+
+        def run_sampler(
+            elapsed_samples: list[float],
+            *,
+            initial_sample_gap_overruns: int = 0,
+            stop_after_last_sample: bool = False,
+        ) -> tuple[list[dict[str, object]], list[str], threading.Event]:
+            clock = FakeClock()
+            stop = threading.Event()
+            rows: list[dict[str, object]] = [{"elapsed_ms": 0.0}]
+            errors: list[str] = []
+            observations = iter(elapsed_samples)
+
+            def observe(*_args, **_kwargs) -> dict[str, object]:
+                elapsed_ms = next(observations)
+                if stop_after_last_sample and elapsed_ms == elapsed_samples[-1]:
+                    stop.set()
+                return {"elapsed_ms": elapsed_ms}
+
+            collector._rss_observation = observe
+            with (
+                mock.patch("host_performance.time.monotonic", clock.monotonic),
+                mock.patch("host_performance.time.sleep", clock.sleep),
+            ):
+                collector._large_payload_rss_loop(
+                    "cpa_only",
+                    {"pid": 4101, "start_time_ticks": 987654},
+                    0.0,
+                    0.0,
+                    stop,
+                    rows,
+                    initial_sample_gap_overruns,
+                    errors,
+                )
+            return rows, errors, stop
+
+        rows, errors, stop = run_sampler([40.0], stop_after_last_sample=True)
+        self.assertTrue(stop.is_set())
+        self.assertEqual(errors, [])
+        self.assertEqual([row["elapsed_ms"] for row in rows], [0.0, 40.0])
+
+        for case, elapsed_samples, initial_sample_gap_overruns in (
+            ("consecutive_request_overruns", [40.0, 80.0], 0),
+            ("baseline_budget_already_consumed", [40.0], 1),
+            ("hard_limit", [61.0], 0),
+        ):
+            with self.subTest(case=case):
+                rows, errors, stop = run_sampler(
+                    elapsed_samples,
+                    initial_sample_gap_overruns=initial_sample_gap_overruns,
+                )
+                self.assertTrue(stop.is_set())
+                self.assertEqual(errors, ["large_payload_rss:MissedDeadline"])
+                self.assertEqual(len(rows), len(elapsed_samples))
+
+    def test_large_payload_baseline_tolerance_avoids_dense_catch_up(self) -> None:
+        class FakeClock:
+            def __init__(self) -> None:
+                self.current = 0.0
+
+            def monotonic(self) -> float:
+                return self.current
+
+            def sleep(self, seconds: float) -> None:
+                self.current += max(0.0, seconds)
+
+        collector = object.__new__(LinuxHostCollector)
+        collector.config = self.good_config
+        workload_map = {
+            item["id"]: item for item in self.good_workload["workloads"]
+        }
+        collector.workloads = {
+            key: value["requests"] for key, value in workload_map.items()
+        }
+        collector._verify_arm_configuration = mock.Mock()
+        collector._warmup = mock.Mock(return_value=(0, []))
+        collector._drain_audit_queue = mock.Mock()
+        collector._reset_mock = mock.Mock()
+        collector._mock_snapshot = mock.Mock(
+            return_value={"auth": 0, "mock": 0, "provider": 0}
+        )
+        collector._process_identity = mock.Mock(
+            return_value={"pid": 4101, "start_time_ticks": 987654}
+        )
+        clock = FakeClock()
+        observed_elapsed_ms: list[float] = []
+
+        def observe(*_args, **_kwargs) -> dict[str, float]:
+            sample_index = len(observed_elapsed_ms)
+            if sample_index == 1:
+                clock.current += 0.020
+            elif sample_index == 3:
+                clock.current += 0.051
+            elapsed_ms = clock.current * 1000.0
+            observed_elapsed_ms.append(elapsed_ms)
+            return {"elapsed_ms": elapsed_ms}
+
+        collector._rss_observation = mock.Mock(side_effect=observe)
+        collector._drive_batch = mock.Mock()
+
+        with (
+            mock.patch("host_performance.time.monotonic", clock.monotonic),
+            mock.patch("host_performance.time.sleep", clock.sleep),
+            self.assertRaisesRegex(
+                PerformanceError,
+                "Host performance large-payload RSS sampler failed",
+            ) as caught,
+        ):
+            collector._measure_large_payload_cell("cpa_only", 1, 0)
+
+        self.assertEqual(collector._rss_observation.call_count, 4)
+        self.assertAlmostEqual(observed_elapsed_ms[1] - observed_elapsed_ms[0], 40.0)
+        self.assertGreaterEqual(
+            observed_elapsed_ms[2] - observed_elapsed_ms[1], 10.0
+        )
+        self.assertGreater(observed_elapsed_ms[3] - observed_elapsed_ms[2], 60.0)
+        self.assertEqual(
+            caught.exception.sampler_error_ids,
+            ("large_payload_rss:MissedDeadline",),
+        )
+        collector._drive_batch.assert_not_called()
+
     def test_real_time_large_payload_collector_output_validates(self) -> None:
         collector = object.__new__(LinuxHostCollector)
         collector.config = self.good_config
@@ -790,12 +969,46 @@ class HostPerformanceContractTests(unittest.TestCase):
         self.assertEqual(deterministic_validated, deterministic_cell)
         self.assertEqual(deterministic_summary["successful_samples"], 16)
 
-        genuine_gap = copy.deepcopy(deterministic_cell)
-        genuine_gap["rss_samples"][1]["elapsed_ms"] = 131.0
-        with self.assertRaisesRegex(ContractError, "observation gap"):
+        single_scheduler_gap = copy.deepcopy(deterministic_cell)
+        single_scheduler_gap["rss_samples"] = [
+            sample
+            for sample in single_scheduler_gap["rss_samples"]
+            if sample["elapsed_ms"] != 120.0
+        ]
+        validated, summary = _validate_large_payload_cell(
+            single_scheduler_gap,
+            "single bounded large-payload deadline gap",
+            config=self.good_config,
+            workload_map=workload_map,
+        )
+        self.assertEqual(validated, single_scheduler_gap)
+        self.assertEqual(summary["rss_max_sample_gap_ms"], 40.0)
+        self.assertEqual(summary["rss_sample_gap_overrun_count"], 1)
+
+        consecutive_gaps = copy.deepcopy(deterministic_cell)
+        consecutive_gaps["rss_samples"] = [
+            sample
+            for sample in consecutive_gaps["rss_samples"]
+            if sample["elapsed_ms"] not in (120.0, 160.0)
+        ]
+        with self.assertRaisesRegex(ContractError, "bounded tolerance"):
             _validate_large_payload_cell(
-                genuine_gap,
-                "genuine large-payload deadline gap",
+                consecutive_gaps,
+                "consecutive large-payload deadline gaps",
+                config=self.good_config,
+                workload_map=workload_map,
+            )
+
+        hard_limit_gap = copy.deepcopy(deterministic_cell)
+        hard_limit_gap["rss_samples"] = [
+            sample
+            for sample in hard_limit_gap["rss_samples"]
+            if sample["elapsed_ms"] not in (120.0, 140.0, 160.0)
+        ]
+        with self.assertRaisesRegex(ContractError, "hard observation gap limit"):
+            _validate_large_payload_cell(
+                hard_limit_gap,
+                "hard-limit large-payload deadline gap",
                 config=self.good_config,
                 workload_map=workload_map,
             )
@@ -831,19 +1044,69 @@ class HostPerformanceContractTests(unittest.TestCase):
                 workload_map=workload_map,
             )
         except ContractError as exc:
-            if not (
-                type(exc) is PerformanceError
-                and str(exc) == "Host performance large-payload RSS sampler failed"
-                and sampler_error_ids == ["large_payload_rss:MissedDeadline"]
-            ):
-                raise
-            self.skipTest(
-                "test-host scheduler stalled beyond the production RSS deadline"
-            )
+            _fail_or_skip_real_time_rss_deadline(self, exc, sampler_error_ids)
         self.assertEqual(validated, cell)
         self.assertEqual(summary["successful_samples"], 16)
         self.assertEqual(len(cell["rss_baseline_samples"]), 5)
         self.assertGreaterEqual(len(cell["rss_samples"]), 3)
+
+    def test_real_time_large_payload_deadline_skip_requires_explicit_opt_out(
+        self,
+    ) -> None:
+        def missed_deadline() -> PerformanceError:
+            return PerformanceError(
+                "Host performance large-payload RSS sampler failed"
+            )
+
+        sampler_error_ids = ["large_payload_rss:MissedDeadline"]
+
+        failure = missed_deadline()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(PerformanceError) as caught:
+                _fail_or_skip_real_time_rss_deadline(
+                    self, failure, sampler_error_ids
+                )
+        self.assertIs(caught.exception, failure)
+
+        with mock.patch.dict(
+            os.environ,
+            {REAL_TIME_RSS_TEST_SKIP_ENV: REAL_TIME_RSS_TEST_SKIP_VALUE},
+            clear=True,
+        ):
+            with self.assertRaises(unittest.SkipTest) as caught_skip:
+                _fail_or_skip_real_time_rss_deadline(
+                    self, missed_deadline(), sampler_error_ids
+                )
+        self.assertIn(
+            f"{REAL_TIME_RSS_TEST_SKIP_ENV}={REAL_TIME_RSS_TEST_SKIP_VALUE}",
+            str(caught_skip.exception),
+        )
+
+        baseline_failure = PerformanceError(
+            "Host performance large-payload RSS sampler failed",
+            sampler_error_ids=sampler_error_ids,
+        )
+        with mock.patch.dict(
+            os.environ,
+            {REAL_TIME_RSS_TEST_SKIP_ENV: REAL_TIME_RSS_TEST_SKIP_VALUE},
+            clear=True,
+        ):
+            with self.assertRaises(unittest.SkipTest):
+                _fail_or_skip_real_time_rss_deadline(self, baseline_failure, [])
+
+        for value in ("", "0", "true", "TRUE", "yes", " 1", "1 "):
+            with self.subTest(value=value):
+                failure = missed_deadline()
+                with mock.patch.dict(
+                    os.environ,
+                    {REAL_TIME_RSS_TEST_SKIP_ENV: value},
+                    clear=True,
+                ):
+                    with self.assertRaises(PerformanceError) as caught:
+                        _fail_or_skip_real_time_rss_deadline(
+                            self, failure, sampler_error_ids
+                        )
+                self.assertIs(caught.exception, failure)
 
     def test_large_payload_completion_excludes_post_rss_identity_inspection(
         self,
@@ -1789,6 +2052,95 @@ class HostPerformanceContractTests(unittest.TestCase):
                     self.good_config_raw,
                     self.good_workload,
                 )
+
+    def test_large_payload_bounded_gap_is_published_from_raw_samples(self) -> None:
+        def apply_baseline_jitter(cell: dict[str, object]) -> None:
+            started = datetime.fromisoformat(
+                str(cell["started_at"]).replace("Z", "+00:00")
+            )
+            baseline_samples = cell["rss_baseline_samples"]
+            for sample, elapsed_ms in zip(
+                baseline_samples, (0.0, 20.0, 60.0, 70.0, 80.0), strict=True
+            ):
+                sample["elapsed_ms"] = elapsed_ms
+                sample["observed_at"] = (
+                    started + timedelta(milliseconds=elapsed_ms)
+                ).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+        for gap_series in ("baseline", "request"):
+            with self.subTest(gap_series=gap_series):
+                jittered = copy.deepcopy(self.good_measurements)
+                cell = jittered["large_payload_cells"][0]
+                if gap_series == "baseline":
+                    apply_baseline_jitter(cell)
+                else:
+                    cell["rss_samples"] = [
+                        sample
+                        for sample in cell["rss_samples"]
+                        if sample["elapsed_ms"] != 120.0
+                    ]
+                raw = canonical_bytes(jittered) + b"\n"
+                validated, summaries, baseline, extra = validate_measurements(
+                    jittered,
+                    raw,
+                    self.good_config,
+                    self.good_config_raw,
+                    self.good_workload,
+                )
+                evidence = build_evidence(
+                    self.good_config,
+                    self.good_config_raw,
+                    validated,
+                    raw,
+                    summaries,
+                    baseline,
+                    extra,
+                )
+                comparison = next(
+                    item
+                    for item in evidence["large_payload_resident_memory"][
+                        "comparisons"
+                    ]
+                    if item["repetition"] == cell["repetition"]
+                )
+                prefix = cell["arm"]
+                self.assertEqual(
+                    comparison[f"{prefix}_rss_max_sample_gap_ms"], 40.0
+                )
+                self.assertEqual(
+                    comparison[f"{prefix}_rss_sample_gap_overrun_count"], 1
+                )
+
+        exhausted = copy.deepcopy(self.good_measurements)
+        exhausted_cell = exhausted["large_payload_cells"][0]
+        apply_baseline_jitter(exhausted_cell)
+        exhausted_cell["rss_samples"] = [
+            sample
+            for sample in exhausted_cell["rss_samples"]
+            if sample["elapsed_ms"] != 120.0
+        ]
+        with self.assertRaisesRegex(ContractError, "bounded tolerance"):
+            validate_measurements(
+                exhausted,
+                canonical_bytes(exhausted) + b"\n",
+                self.good_config,
+                self.good_config_raw,
+                self.good_workload,
+            )
+
+    def test_readme_documents_shared_large_payload_gap_budget(self) -> None:
+        readme = " ".join((TOOL / "README.md").read_text(encoding="utf-8").split())
+        self.assertIn(
+            "Across the baseline and request RSS series together, each cell may "
+            "retain at most one gap above the 30 ms deadline and no greater than "
+            "the hard 60 ms limit",
+            readme,
+        )
+        self.assertIn(
+            "total overrun count across the combined baseline and request series",
+            readme,
+        )
+        self.assertNotIn("each request series may retain one gap", readme)
 
     def test_host_timestamp_requires_exact_three_digit_utc_shape(self) -> None:
         accepted = "2026-08-09T12:34:56.123Z"

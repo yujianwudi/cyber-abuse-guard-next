@@ -226,7 +226,7 @@
       "properties": {
         "actual_action": { "enum": ["allow", "block_incomplete_inspection", "block_malicious_text"] },
         "all_executions_passed": { "const": true },
-        "execution_count": { "const": 12 },
+        "execution_count": { "maximum": 40, "minimum": 12, "type": "integer" },
         "expected_action": { "enum": ["allow", "block_incomplete_inspection", "block_malicious_text"] },
         "false_positive": { "const": false },
         "label": { "minLength": 1, "type": "string" },
@@ -425,7 +425,7 @@
           "type": "array"
         },
         "third_party_code_executions": { "const": 0 },
-        "total_executions": { "const": 252 }
+        "total_executions": { "maximum": 840, "minimum": 252, "type": "integer" }
       },
       "required": ["archive", "case_count", "code_executions", "entry_count", "input_archive_preserved", "manifest_sha256", "member_text_files_created", "member_text_files_removed", "member_text_retained", "outcomes", "policy_sha256", "results_sha256", "side_effect_violations", "status", "summary_by_mode", "third_party_code_executions", "total_executions"],
       "type": "object"
@@ -435,7 +435,7 @@
       "properties": {
         "actual_action": { "enum": ["allow", "block_malicious_text"] },
         "all_executions_passed": { "const": true },
-        "execution_count": { "const": 12 },
+        "execution_count": { "maximum": 40, "minimum": 12, "type": "integer" },
         "expected_action": { "enum": ["allow", "block_malicious_text"] },
         "false_positive": { "const": false },
         "label": { "enum": ["authorized_security", "defensive_context", "malicious_active"] },

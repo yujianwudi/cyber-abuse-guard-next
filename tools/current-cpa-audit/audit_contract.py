@@ -252,24 +252,105 @@ def sha256_bytes(raw: bytes | bytearray) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+_REGULAR_FILE_STABILITY_FIELDS = (
+    "st_dev",
+    "st_ino",
+    "st_nlink",
+    "st_size",
+    "st_mtime_ns",
+    "st_ctime_ns",
+)
+
+
+def _regular_file_stability_identity(
+    info: os.stat_result, label: str
+) -> tuple[int, ...]:
+    values: list[int] = []
+    for field in _REGULAR_FILE_STABILITY_FIELDS:
+        value = getattr(info, field, None)
+        if type(value) is not int:
+            fail(f"{label} cannot report required file metadata {field}")
+        values.append(value)
+    return tuple(values)
+
+
+def _regular_file_descriptor_path_identity(
+    info: os.stat_result, label: str
+) -> tuple[int, ...]:
+    # Windows reports ctime differently for path stat and descriptor fstat.
+    # Linux, the audit platform, can and must cross-check it as well.
+    fields = (
+        _REGULAR_FILE_STABILITY_FIELDS
+        if os.name != "nt"
+        else _REGULAR_FILE_STABILITY_FIELDS[:-1]
+    )
+    values: list[int] = []
+    for field in fields:
+        value = getattr(info, field, None)
+        if type(value) is not int:
+            fail(f"{label} cannot report required file metadata {field}")
+        values.append(value)
+    return tuple(values)
+
+
 def sha256_file(
-    path: Path, maximum: int = 1 << 31, *, require_single_link: bool = False
+    path: Path,
+    maximum: int = 1 << 31,
+    *,
+    require_single_link: bool = False,
+    expected_info: os.stat_result | None = None,
 ) -> str:
     digest = hashlib.sha256()
-    descriptor, info = open_regular(
+    descriptor, opened = open_regular(
         path, "hash input", require_single_link=require_single_link
     )
-    if info.st_size > maximum:
+    try:
+        opened_identity = _regular_file_stability_identity(opened, "opened hash input")
+        opened_path_identity = _regular_file_descriptor_path_identity(
+            opened, "opened hash input"
+        )
+        expected_identity = None
+        if (
+            expected_info is not None
+            and _regular_file_descriptor_path_identity(
+                expected_info, "expected hash input"
+            )
+            != opened_path_identity
+        ):
+            fail(f"hash input changed before it could be opened: {path}")
+        if expected_info is not None:
+            expected_identity = _regular_file_stability_identity(
+                expected_info, "expected hash input"
+            )
+        if opened.st_size > maximum:
+            fail(f"hash input exceeds the reviewed byte bound: {path}")
+        total = 0
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                total += len(chunk)
+                if total > maximum:
+                    fail(f"hash input grew beyond the reviewed byte bound: {path}")
+                digest.update(chunk)
+        after_read = os.fstat(descriptor)
+        named = regular_file_info(
+            path, "hash input", require_single_link=require_single_link
+        )
+        if (
+            total != opened.st_size
+            or _regular_file_stability_identity(after_read, "read hash input")
+            != opened_identity
+            or _regular_file_descriptor_path_identity(named, "named hash input")
+            != opened_path_identity
+            or (
+                expected_identity is not None
+                and _regular_file_stability_identity(named, "named hash input")
+                != expected_identity
+            )
+        ):
+            fail(f"hash input identity or content metadata changed while being read: {path}")
+        return digest.hexdigest()
+    finally:
         os.close(descriptor)
-        fail(f"hash input exceeds the reviewed byte bound: {path}")
-    total = 0
-    with os.fdopen(descriptor, "rb", closefd=True) as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            total += len(chunk)
-            if total > maximum:
-                fail(f"hash input grew beyond the reviewed byte bound: {path}")
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def reject_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -2170,6 +2251,7 @@ def candidate_identity(
     manifest: Mapping[str, Any],
     raw: bytes,
     *,
+    cag_identity: Mapping[str, Any],
     artifact_id: Any,
     artifact_name: Any,
     artifact_digest: Any,
@@ -2219,13 +2301,7 @@ def candidate_identity(
     }
     validate_candidate_identity(
         identity,
-        {
-            "commit": identity["source"]["commit"],
-            "so_name": identity["so"]["name"],
-            "so_sha256": identity["so"]["sha256"],
-            "source_version": identity["source"]["version"],
-            "tree": identity["source"]["tree"],
-        },
+        cag_identity,
         "candidate identity",
     )
     return identity
@@ -2537,6 +2613,7 @@ def validate_candidate_manifest_file(
     expected = candidate_identity(
         manifest,
         raw,
+        cag_identity=cag,
         artifact_id=configured_candidate["artifact"]["id"],
         artifact_name=configured_candidate["artifact"]["name"],
         artifact_digest=configured_candidate["artifact"]["digest"],
@@ -2581,6 +2658,7 @@ def validate_supplemental_run_config_files(
             archive_path,
             SUPPLEMENTAL_ZIP_LIMITS["max_archive_bytes"],
             require_single_link=True,
+            expected_info=archive_info,
         )
         != supplemental["archive_sha256"]
     ):
@@ -2628,9 +2706,17 @@ def validate_supplemental_run_config_files(
     archive_post = regular_file_info(
         archive_path, "supplemental ZIP archive", require_single_link=True
     )
-    identity_fields = ("st_dev", "st_ino", "st_nlink", "st_size")
-    if any(getattr(archive_info, key) != getattr(archive_post, key) for key in identity_fields):
-        fail("supplemental ZIP archive identity changed during validation")
+    # These snapshots narrow normal overwrite/replacement races, but a path is
+    # not made immutable against a malicious process sharing the audit UID.
+    if _regular_file_stability_identity(
+        archive_info, "initial supplemental ZIP archive"
+    ) != _regular_file_stability_identity(
+        archive_post, "final supplemental ZIP archive"
+    ):
+        fail(
+            "supplemental ZIP archive identity or content metadata changed "
+            "during validation"
+        )
     return manifest, manifest_raw, policy, policy_raw, archive_post
 
 

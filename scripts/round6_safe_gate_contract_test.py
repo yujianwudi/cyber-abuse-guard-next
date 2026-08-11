@@ -49,6 +49,7 @@ from round6_safe_gate_contract import (
     EXTERNAL_ATTESTATION_SCRIPT_SHA256,
     FORMAL_OPERATION_SCRIPTS,
     FORBIDDEN_TARGETS,
+    HISTORICAL_ROUND8_RC_WORKFLOW_SHA256,
     RC_SOURCE_ARCHIVE_BACKUP_BINARY_ARCHIVE_PATH_PATTERN,
     RC_SOURCE_ARCHIVE_TRANSIENT_GUARD_BLOCK,
     RC_SOURCE_ARCHIVE_TRANSIENT_PATH_PATTERN,
@@ -126,11 +127,13 @@ from round6_safe_gate_contract import (
 
 
 CHECKOUT_SHA = "a" * 40
+HISTORICAL_ROUND8_RC_WORKFLOW_REVISION = (
+    "5409bc618da58fac9b39530410702db90a5cf7dc"
+)
 
 
 class Round6SafeGateContractTest(unittest.TestCase):
     _RETIRED_WORKFLOW_TEST_PREFIXES = (
-        "test_active_rc_",
         "test_blocked_prerelease_",
         "test_candidate_",
         "test_formal_release_",
@@ -154,6 +157,32 @@ class Round6SafeGateContractTest(unittest.TestCase):
             self._RETIRED_WORKFLOW_TEST_PREFIXES
         ):
             self.skipTest("retired executable workflow surface is archived and non-runnable")
+
+    def historical_round8_rc_workflow(self) -> tuple[str, Path]:
+        root = Path(__file__).resolve().parent.parent
+        completed = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(root),
+                "show",
+                f"{HISTORICAL_ROUND8_RC_WORKFLOW_REVISION}:{ACTIVE_RC_WORKFLOW_PATH}",
+            ],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stderr.decode("utf-8", errors="replace"),
+        )
+        workflow = completed.stdout.decode("utf-8")
+        self.assertEqual(
+            hashlib.sha256(completed.stdout).hexdigest(),
+            HISTORICAL_ROUND8_RC_WORKFLOW_SHA256,
+        )
+        return workflow, Path("historical-round8-release-rc.yml")
 
     def test_repository_local_pyyaml_shadow_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -4371,11 +4400,13 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         validate_rc_release_workflow(workflow, workflow_path)
 
     def test_historical_round8_rc_hash_error_is_labeled_historical(self):
+        workflow, workflow_path = self.historical_round8_rc_workflow()
+        validate_historical_round8_rc_release_workflow(workflow, workflow_path)
         with self.assertRaisesRegex(
             ContractError, "historical Round 8 RC workflow"
         ):
             validate_historical_round8_rc_release_workflow(
-                "{}\n", Path(".github/workflows/round8-release-rc.yml")
+                "{}\n", workflow_path
             )
 
     def test_round13_rc_semantic_mutations_fail_after_hash_review(self):
@@ -4662,19 +4693,18 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             with self.assertRaisesRegex(ContractError, r"outside \.github/workflows"):
                 validate_rc_release_workflow(workflow, apparent_workflow)
 
-    def active_rc_host_zip_extractor(self) -> str:
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        workflow = workflow_path.read_text(encoding="utf-8")
+    def historical_round8_rc_host_zip_extractor(self) -> str:
+        workflow, _ = self.historical_round8_rc_workflow()
         start_marker = '          python3 -B - "$archive" "$host_dir" <<\'PY\'\n'
         end_marker = '          PY\n          evidence="$host_dir/round8-host-evidence.json"'
         start = workflow.index(start_marker) + len(start_marker)
         end = workflow.index(end_marker, start)
         return textwrap.dedent(workflow[start:end])
 
-    def run_active_rc_host_zip_extractor(
+    def run_historical_round8_rc_host_zip_extractor(
         self, entries: tuple[tuple[str, bytes, int], ...]
     ) -> tuple[subprocess.CompletedProcess[str], Path]:
-        script = self.active_rc_host_zip_extractor()
+        script = self.historical_round8_rc_host_zip_extractor()
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
@@ -4707,9 +4737,9 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         )
         return result, destination
 
-    def test_active_rc_host_zip_extractor_accepts_only_the_two_reviewed_files(self):
+    def test_historical_round8_rc_host_zip_extractor_accepts_only_the_two_reviewed_files(self):
         regular = stat.S_IFREG | 0o600
-        result, destination = self.run_active_rc_host_zip_extractor(
+        result, destination = self.run_historical_round8_rc_host_zip_extractor(
             (
                 ("round8-host-evidence.json", b"{}", regular),
                 (
@@ -4726,7 +4756,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             b"0" * 64 + b"  round8-host-evidence.json\n",
         )
 
-    def test_active_rc_host_zip_extractor_rejects_unsafe_archives(self):
+    def test_historical_round8_rc_host_zip_extractor_rejects_unsafe_archives(self):
         regular = stat.S_IFREG | 0o600
         evidence = "round8-host-evidence.json"
         sidecar = "round8-host-evidence.json.sha256"
@@ -4790,7 +4820,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         )
         for name, entries, error in cases:
             with self.subTest(case=name):
-                result, _ = self.run_active_rc_host_zip_extractor(entries)
+                result, _ = self.run_historical_round8_rc_host_zip_extractor(entries)
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(error, result.stderr)
 
@@ -5614,9 +5644,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 with self.assertRaises(ContractError):
                     validate_round8_host_workflow(mutated, workflow_path)
 
-    def test_active_rc_protected_host_admission_mutations_fail_closed(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_protected_host_admission_mutations_fail_closed(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         mutations = (
             original.replace(
                 "    environment:\n      name: round8-rc-publication\n", "", 1
@@ -5649,14 +5678,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 self.assertNotEqual(mutated, original)
                 reviewed_hash = hashlib.sha256(mutated.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256", reviewed_hash
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
                 ):
                     with self.assertRaises(ContractError):
-                        validate_rc_release_workflow(mutated, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            mutated, workflow_path
+                        )
 
-    def test_active_rc_host_artifact_zip_mutations_fail_closed_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_host_artifact_zip_mutations_fail_closed_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         mutations = (
             original.replace(
                 "            --argjson max_size 1048576 '\n",
@@ -5726,14 +5757,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 self.assertNotEqual(mutated, original)
                 reviewed_hash = hashlib.sha256(mutated.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256", reviewed_hash
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
                 ):
                     with self.assertRaisesRegex(ContractError, "Host artifact"):
-                        validate_rc_release_workflow(mutated, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            mutated, workflow_path
+                        )
 
-    def test_active_rc_ordinary_asset_attestation_mutations_fail_closed_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_ordinary_asset_attestation_mutations_fail_closed_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         exact_block = (
             '                --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-rc.yml" \\\n'
             '                --signer-digest "$EXPECTED_COMMIT" \\\n'
@@ -5805,14 +5838,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 self.assertNotEqual(mutated, original)
                 reviewed_hash = hashlib.sha256(mutated.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256", reviewed_hash
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
                 ):
                     with self.assertRaises(ContractError):
-                        validate_rc_release_workflow(mutated, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            mutated, workflow_path
+                        )
 
-    def test_active_rc_workflow_security_mutations_fail_closed(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_workflow_security_mutations_fail_closed(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         mutations = (
             original.replace("[[ \"$TAG\" == v0.16-rc.2 ]]", "[[ \"$TAG\" == v0.16-rc.* ]]", 1),
             original.replace("--latest=false", "--latest", 1),
@@ -5835,11 +5870,12 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         for workflow in mutations:
             self.assertNotEqual(workflow, original)
             with self.assertRaisesRegex(ContractError, "exact reviewed contract"):
-                validate_rc_release_workflow(workflow, workflow_path)
+                validate_historical_round8_rc_release_workflow(
+                    workflow, workflow_path
+                )
 
-    def test_active_rc_two_stage_semantic_mutations_fail_closed_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_two_stage_semantic_mutations_fail_closed_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         mutations = (
             original.replace(
                 "  publish:\n"
@@ -6150,15 +6186,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 self.assertNotEqual(workflow, original)
                 reviewed_hash = hashlib.sha256(workflow.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256",
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
                     reviewed_hash,
                 ):
                     with self.assertRaises(ContractError):
-                        validate_rc_release_workflow(workflow, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            workflow, workflow_path
+                        )
 
-    def test_active_rc_already_public_recovery_is_read_only_and_byte_exact(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_already_public_recovery_is_read_only_and_byte_exact(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         mutations = (
             original.replace(
                 '              [[ "$(jq -r \'.immutable\' <<<"$release")" == true ]]\n',
@@ -6182,17 +6219,19 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             self.assertNotEqual(workflow, original)
             reviewed_hash = hashlib.sha256(workflow.encode("utf-8")).hexdigest()
             with mock.patch(
-                "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256", reviewed_hash
+                "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
+                reviewed_hash,
             ):
                 with self.assertRaisesRegex(
                     ContractError,
                     "already-public recovery|19-asset non-latest prerelease|exact reviewed contract",
                 ):
-                    validate_rc_release_workflow(workflow, workflow_path)
+                    validate_historical_round8_rc_release_workflow(
+                        workflow, workflow_path
+                    )
 
-    def test_active_rc_admission_rejects_all_gh_api_write_forms_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_admission_rejects_all_gh_api_write_forms_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         admission_header = "  admission:\n"
         build_header = "  build:\n"
         prefix, remainder = original.split(admission_header, 1)
@@ -6233,14 +6272,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 )
                 reviewed_hash = hashlib.sha256(workflow.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256", reviewed_hash
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
                 ):
                     with self.assertRaisesRegex(ContractError, "admission must remain read-only"):
-                        validate_rc_release_workflow(workflow, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            workflow, workflow_path
+                        )
 
-    def test_active_rc_public_verifier_mutations_fail_closed_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_public_verifier_mutations_fail_closed_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         verifier_header = "  verify_published:\n"
         prefix, verifier = original.split(verifier_header, 1)
 
@@ -6340,15 +6381,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 self.assertNotEqual(workflow, original)
                 reviewed_hash = hashlib.sha256(workflow.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256",
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
                     reviewed_hash,
                 ):
                     with self.assertRaises(ContractError):
-                        validate_rc_release_workflow(workflow, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            workflow, workflow_path
+                        )
 
-    def test_active_rc_public_verifier_rejects_all_gh_api_write_forms_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_public_verifier_rejects_all_gh_api_write_forms_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         verifier_header = "  verify_published:\n"
         prefix, verifier = original.split(verifier_header, 1)
         commands = (
@@ -6380,16 +6422,18 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 workflow = prefix + verifier_header + mutated_verifier
                 reviewed_hash = hashlib.sha256(workflow.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256", reviewed_hash
+                    "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
+                    reviewed_hash,
                 ):
                     with self.assertRaisesRegex(
                         ContractError, "public verifier must not mutate"
                     ):
-                        validate_rc_release_workflow(workflow, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            workflow, workflow_path
+                        )
 
-    def test_active_rc_read_only_gh_api_allows_structurally_safe_forms_after_hash_review(self):
-        workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
-        original = workflow_path.read_text(encoding="utf-8")
+    def test_historical_round8_rc_read_only_gh_api_allows_structurally_safe_forms_after_hash_review(self):
+        original, workflow_path = self.historical_round8_rc_workflow()
         commands = (
             'gh api "repos/${GITHUB_REPOSITORY}/releases" | jq -f filter.jq',
             '# gh api -f draft=false "repos/${GITHUB_REPOSITORY}/releases/1"',
@@ -6422,10 +6466,12 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     workflow = prefix + job_header + mutated_job + suffix
                     reviewed_hash = hashlib.sha256(workflow.encode("utf-8")).hexdigest()
                     with mock.patch(
-                        "round6_safe_gate_contract.ACTIVE_RC_WORKFLOW_SHA256",
+                        "round6_safe_gate_contract.HISTORICAL_ROUND8_RC_WORKFLOW_SHA256",
                         reviewed_hash,
                     ):
-                        validate_rc_release_workflow(workflow, workflow_path)
+                        validate_historical_round8_rc_release_workflow(
+                            workflow, workflow_path
+                        )
 
     def test_archived_rc_workflow_mutation_fails_closed(self):
         workflow_path = Path(__file__).resolve().parent.parent / ARCHIVED_RC_WORKFLOW_PATH

@@ -3653,9 +3653,33 @@ func explicitQuotedSafetyObjectEnd(text string, objectStart int) (int, bool) {
 }
 
 const (
-	maxDefensiveRequestObjectProofBytes  = 4096
-	maxDefensiveRequestObjectProofTokens = 64
+	maxDefensiveRequestObjectProofBytes           = 4096
+	maxDefensiveRequestObjectProofTokens          = 64
+	maxDefensiveRequestObjectProofClassifications = 2 * maxDefensiveRequestObjectProofTokens
 )
+
+// defensiveRequestObjectProofBudget makes the request-object proof's existing
+// 2N classifier bound explicit and shared. Clause scans can classify at most
+// N-1 suffixes, prefix scans at most N prefixes, and the residual at most once;
+// coordinators partition rather than duplicate the N-token input. Exhaustion
+// must fail active instead of granting a non-user safety suppression.
+type defensiveRequestObjectProofBudget struct {
+	remaining int
+}
+
+func newDefensiveRequestObjectProofBudget() defensiveRequestObjectProofBudget {
+	return defensiveRequestObjectProofBudget{
+		remaining: maxDefensiveRequestObjectProofClassifications,
+	}
+}
+
+func (budget *defensiveRequestObjectProofBudget) consumeClassification() bool {
+	if budget == nil || budget.remaining <= 0 {
+		return false
+	}
+	budget.remaining--
+	return true
+}
 
 // systemPolicyDefensiveRequestResidualIsBenign masks only the shortest
 // classifier-proven harmful predicate owned by one explicit defensive request
@@ -3722,6 +3746,20 @@ func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenign(
 	thresholds Thresholds,
 	policy Policy,
 ) bool {
+	budget := newDefensiveRequestObjectProofBudget()
+	return c.nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+		text, objectStart, mode, thresholds, policy, &budget,
+	)
+}
+
+func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+	text string,
+	objectStart int,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) bool {
 	if c == nil || objectStart < 0 || objectStart >= len(text) ||
 		len(text) > maxDefensiveRequestObjectProofBytes {
 		return false
@@ -3737,7 +3775,7 @@ func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenign(
 		return false
 	}
 	consumed, ok := c.shortestEligibleDefensiveObjectPrefix(
-		tokens, mode, thresholds, policy,
+		tokens, mode, thresholds, policy, budget,
 	)
 	if !ok {
 		return false
@@ -3747,7 +3785,7 @@ func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenign(
 			break
 		}
 		additional, found := c.shortestEligibleDefensiveObjectPrefix(
-			tokens[consumed+1:], mode, thresholds, policy,
+			tokens[consumed+1:], mode, thresholds, policy, budget,
 		)
 		if !found {
 			break
@@ -3757,7 +3795,9 @@ func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenign(
 	residual := strings.TrimSpace(
 		text[:objectStart] + " " + strings.Join(tokens[consumed:], " ") + " " + tail[objectEnd:],
 	)
-	return c.nonUserSafetyResidualIsBenign(residual, mode, thresholds, policy)
+	return c.nonUserSafetyResidualIsBenignWithBudget(
+		residual, mode, thresholds, policy, budget,
+	)
 }
 
 func (c *Classifier) nonUserSafetyResidualIsBenign(
@@ -3766,11 +3806,27 @@ func (c *Classifier) nonUserSafetyResidualIsBenign(
 	thresholds Thresholds,
 	policy Policy,
 ) bool {
+	budget := newDefensiveRequestObjectProofBudget()
+	return c.nonUserSafetyResidualIsBenignWithBudget(
+		residual, mode, thresholds, policy, &budget,
+	)
+}
+
+func (c *Classifier) nonUserSafetyResidualIsBenignWithBudget(
+	residual string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) bool {
 	if c == nil {
 		return false
 	}
 	if residual == "" {
 		return true
+	}
+	if !budget.consumeClassification() {
+		return false
 	}
 	residualCandidate := c.classifyWithPolicy(
 		[]string{residual}, mode, thresholds, policy, false,
@@ -3816,9 +3872,18 @@ func (c *Classifier) shortestEligibleDefensiveObjectPrefix(
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
 ) (int, bool) {
-	limit := c.defensiveRequestObjectClauseLimit(tokens, mode, thresholds, policy)
+	limit, budgetAvailable := c.defensiveRequestObjectClauseLimit(
+		tokens, mode, thresholds, policy, budget,
+	)
+	if !budgetAvailable {
+		return 0, false
+	}
 	for end := 1; end <= limit; end++ {
+		if !budget.consumeClassification() {
+			return 0, false
+		}
 		candidate := c.classifyWithPolicy(
 			[]string{strings.Join(tokens[:end], " ")}, mode, thresholds, policy, false,
 		)
@@ -3843,7 +3908,8 @@ func (c *Classifier) defensiveRequestObjectClauseLimit(
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
-) int {
+	budget *defensiveRequestObjectProofBudget,
+) (int, bool) {
 	for index, token := range tokens {
 		normalized := strings.ToLower(strings.TrimSpace(token))
 		// The proof consumes whole whitespace-delimited tokens. A Han/ASCII
@@ -3852,21 +3918,27 @@ func (c *Classifier) defensiveRequestObjectClauseLimit(
 		// (for example, "poetry\u7ee7\u800cdeploy ransomware"). Fail active instead
 		// of trying to enumerate every possible CJK discourse connector.
 		if defensiveRequestObjectMixedScriptToken(normalized) {
-			return index
+			return index, true
 		}
 		if defensiveRequestObjectClauseMarker(normalized) {
-			return index
+			return index, true
 		}
 		if index > 0 && defensiveRequestObjectCoordinator(normalized) {
-			return index
+			return index, true
 		}
-		if index > 0 && c.defensiveRequestObjectExplicitActor(
-			tokens, index, mode, thresholds, policy,
-		) {
-			return index
+		if index > 0 {
+			explicitActor, budgetAvailable := c.defensiveRequestObjectExplicitActor(
+				tokens, index, mode, thresholds, policy, budget,
+			)
+			if !budgetAvailable {
+				return 0, false
+			}
+			if explicitActor {
+				return index, true
+			}
 		}
 	}
-	return len(tokens)
+	return len(tokens), true
 }
 
 func defensiveRequestObjectMixedScriptToken(value string) bool {
@@ -3924,9 +3996,10 @@ func (c *Classifier) defensiveRequestObjectExplicitActor(
 	mode Mode,
 	thresholds Thresholds,
 	policy Policy,
-) bool {
+	budget *defensiveRequestObjectProofBudget,
+) (bool, bool) {
 	if c == nil || index < 0 || index >= len(tokens) {
-		return false
+		return false, false
 	}
 	current := strings.ToLower(strings.TrimSpace(tokens[index]))
 	actorHead := false
@@ -3939,16 +4012,16 @@ func (c *Classifier) defensiveRequestObjectExplicitActor(
 	case "to", "that", "which", "who", "whom", "whose":
 		// Infinitive and relative predicates remain part of the leading request
 		// object. They still must reach eligibility before any later boundary.
-		return false
+		return false, true
 	default:
 		if defensiveRequestObjectEmbeddedModifier(current) || defensiveRequestObjectEmbeddedArtifact(current) {
-			return false
+			return false, true
 		}
 		if c.defensiveRequestObjectStartsWithRuleIntent(tokens[index:]) {
 			// A directly introduced secondary predicate (for example "to steal")
 			// remains part of the defensive object. Actor detection is only needed
 			// when a separate subject precedes that predicate.
-			return false
+			return false, true
 		}
 		if index+1 < len(tokens) {
 			next := strings.ToLower(strings.TrimSpace(tokens[index+1]))
@@ -3959,24 +4032,27 @@ func (c *Classifier) defensiveRequestObjectExplicitActor(
 		}
 	}
 	if !actorHead {
-		return false
+		return false, true
+	}
+	if !budget.consumeClassification() {
+		return false, false
 	}
 	candidate := c.classifyWithPolicy(
 		[]string{strings.Join(tokens[index:], " ")}, mode, thresholds, policy, false,
 	)
 	if candidate.Truncated ||
 		(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
-		return false
+		return false, true
 	}
 	if !resultHasEligibleMaliciousOccurrence(candidate) {
-		return false
+		return false, true
 	}
 	// Inflected intent lookup is deliberately broader than an English verb
 	// parser and can also see plural object nouns (for example "browser
 	// cookies"). Require an independently hard malicious suffix before treating
 	// that coarse form as a new finite predicate. Explicit modal/auxiliary actor
 	// clauses retain threshold-free occurrence ownership.
-	return !finiteIntentOnly || candidate.Score >= validThresholdsOrDefault(thresholds).HardBlock
+	return !finiteIntentOnly || candidate.Score >= validThresholdsOrDefault(thresholds).HardBlock, true
 }
 
 func defensiveRequestObjectEmbeddedModifier(value string) bool {

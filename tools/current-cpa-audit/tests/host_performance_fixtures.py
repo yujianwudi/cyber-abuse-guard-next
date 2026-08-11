@@ -108,6 +108,7 @@ def run_config() -> tuple[dict[str, Any], bytes]:
             "candidate": build_candidate_identity(
                 manifest,
                 manifest_raw,
+                cag_identity=cag,
                 artifact_id="987654321",
                 artifact_name=CANDIDATE_ARTIFACT_NAME,
                 artifact_digest="sha256:" + "e" * 64,

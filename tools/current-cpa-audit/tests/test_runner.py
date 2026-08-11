@@ -120,12 +120,28 @@ class RunnerPureTests(unittest.TestCase):
             "two": bytearray(b"second-sensitive-buffer"),
         }
         retained_views = [memoryview(raw) for raw in owned_buffers.values()]
-        run._zeroize_supplemental_texts(owned_buffers)
+        self.assertTrue(run._zeroize_supplemental_texts(owned_buffers))
         self.assertEqual(owned_buffers, {})
         for retained in retained_views:
             self.assertGreater(len(retained), 0)
             self.assertTrue(all(value == 0 for value in retained))
             retained.release()
+
+        class RetainingDictionary(dict[str, bytearray]):
+            def clear(self) -> None:
+                pass
+
+        retained_mapping = RetainingDictionary(one=bytearray(b"sensitive"))
+        self.assertFalse(run._zeroize_supplemental_texts(retained_mapping))
+        self.assertTrue(retained_mapping)
+        self.assertTrue(run._zeroize_supplemental_texts({}))
+
+        harness = object.__new__(run.Harness)
+        harness.supplemental_texts = {}
+        harness.supplemental_texts_zeroized = False
+        self.assertTrue(harness.supplemental_member_text_retained)
+        harness.supplemental_texts_zeroized = True
+        self.assertFalse(harness.supplemental_member_text_retained)
 
     def test_supplemental_archive_verification_preserves_bytes_and_rejects_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

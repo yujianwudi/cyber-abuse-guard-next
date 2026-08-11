@@ -714,11 +714,13 @@ require_reviewed_entries ./internal/plugin "round-twelve plugin" \
   '^TestRound12[A-Za-z0-9_]*$' "${expected_round12_plugin_entries[@]}"
 
 expected_round13_classifier_entries=(
+	BenchmarkRound13DefensiveRequestObjectProofBudget4KB64Tokens
 	TestRound13AssistantMixedScriptContinuationCannotBeSuppressed
 	TestRound13AssistantQuotedRestatementProofBudgetParity
 	TestRound13AssistantQuotedRestatementSuffixRemainsDetectable
 	TestRound13AssistantScopedRestatementCannotHideOperationalContinuation
 	TestRound13AssistantScopedRestatementProofBudgetParity
+	TestRound13DefensiveRequestObjectClassificationBudget
 	TestRound13MixedScriptSafetyObjectCannotConsumeOperationalContinuation
 	TestRound13ProfiledClearNonUserSafetyFieldsAllow
   TestRound13ProfiledNegationReversalPolicyRemainsDetectable

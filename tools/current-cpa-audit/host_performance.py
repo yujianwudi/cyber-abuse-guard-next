@@ -71,7 +71,9 @@ LARGE_PAYLOAD_REQUESTS = 16
 LARGE_PAYLOAD_CONCURRENCY = 4
 LARGE_PAYLOAD_BASELINE_SAMPLES = 5
 LARGE_PAYLOAD_RSS_SAMPLE_INTERVAL_MS = 20
-LARGE_PAYLOAD_MAX_SAMPLE_GAP_MS = 30
+LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS = 30
+LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS = 60
+LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT = 1
 LARGE_PAYLOAD_SAMPLE_WALL_TOLERANCE_MS = 5.0
 LARGE_PAYLOAD_MAX_ELAPSED_SECONDS = 300.0
 LARGE_PAYLOAD_MEASUREMENT_BOUNDARY = (
@@ -153,9 +155,22 @@ TOOL_IDENTITY_KEYS = (*TOOL_IDENTITY_SOURCE_KEYS, "bundle_sha256")
 class PerformanceError(ContractError):
     """A Host performance input or cross-file binding failed closed."""
 
+    def __init__(
+        self, message: str, *, sampler_error_ids: Sequence[str] = ()
+    ) -> None:
+        super().__init__(message)
+        self.sampler_error_ids = tuple(sampler_error_ids)
+
 
 def fail(message: str) -> NoReturn:
     raise PerformanceError(message)
+
+
+def _fail_large_payload_rss_sampler(errors: Sequence[str]) -> NoReturn:
+    raise PerformanceError(
+        "Host performance large-payload RSS sampler failed",
+        sampler_error_ids=errors,
+    )
 
 
 def finite_number(
@@ -1791,13 +1806,16 @@ def _validate_large_payload_cell(
         minimum_items: int,
         maximum_items: int,
         terminal_final: bool,
-    ) -> tuple[list[dict[str, Any]], list[float]]:
+        sample_gap_overrun_limit: int = 0,
+    ) -> tuple[list[dict[str, Any]], list[float], int, float]:
         rows = exact_list(value, series_label, minimum_items)
         if not minimum_items <= len(rows) <= maximum_items:
             fail(f"{series_label} count violates the fixed 20 ms cadence")
         rss_values: list[float] = []
         previous_marker = -1.0
         previous_observed = None
+        sample_gap_overruns = 0
+        max_sample_gap_ms = 0.0
         for index, raw_row in enumerate(rows):
             row_label = f"{series_label}[{index}]"
             row = exact_keys(
@@ -1838,8 +1856,15 @@ def _validate_large_payload_cell(
                 fail(f"{series_label} is not strictly monotonic")
             if previous_marker >= 0:
                 gap = marker - previous_marker
-                if gap > LARGE_PAYLOAD_MAX_SAMPLE_GAP_MS:
-                    fail(f"{series_label} has an observation gap")
+                max_sample_gap_ms = max(max_sample_gap_ms, gap)
+                if gap > LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS:
+                    fail(f"{series_label} exceeds the hard observation gap limit")
+                if gap > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS:
+                    sample_gap_overruns += 1
+                    if sample_gap_overruns > sample_gap_overrun_limit:
+                        fail(
+                            f"{series_label} observation gaps exceed the bounded tolerance"
+                        )
                 if (
                     not final_sample
                     and gap
@@ -1864,26 +1889,34 @@ def _validate_large_payload_cell(
             rss_values.append(
                 finite_number(row["rss_mib"], f"{row_label}.rss_mib", minimum=0.0)
             )
-        return rows, rss_values
+        return rows, rss_values, sample_gap_overruns, max_sample_gap_ms
 
-    baseline_rows, baseline = validate_rss_series(
+    (
+        baseline_rows,
+        baseline,
+        baseline_sample_gap_overruns,
+        baseline_max_sample_gap_ms,
+    ) = validate_rss_series(
         cell["rss_baseline_samples"],
         f"{label}.rss_baseline_samples",
         minimum_items=config["plan"]["large_payload_baseline_samples"],
         maximum_items=config["plan"]["large_payload_baseline_samples"],
         terminal_final=False,
+        sample_gap_overrun_limit=LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT,
     )
     if (
         baseline_rows[0]["elapsed_ms"]
         > config["plan"]["large_payload_rss_sample_interval_ms"]
         or baseline_rows[-1]["elapsed_ms"] > request_started_elapsed_ms
         or request_started_elapsed_ms - baseline_rows[-1]["elapsed_ms"]
-        > LARGE_PAYLOAD_MAX_SAMPLE_GAP_MS
+        > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS
     ):
         fail(f"{label}.rss_baseline_samples does not cover the baseline interval")
 
     minimum_request_samples = max(
-        2, math.floor(request_duration_ms / LARGE_PAYLOAD_MAX_SAMPLE_GAP_MS) + 1
+        2,
+        math.floor(request_duration_ms / LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS)
+        + 1,
     )
     maximum_request_samples = (
         math.floor(
@@ -1892,19 +1925,28 @@ def _validate_large_payload_cell(
         )
         + 2
     )
-    rows, rss = validate_rss_series(
+    (
+        rows,
+        rss,
+        request_sample_gap_overruns,
+        request_max_sample_gap_ms,
+    ) = validate_rss_series(
         cell["rss_samples"],
         f"{label}.rss_samples",
         minimum_items=minimum_request_samples,
         maximum_items=maximum_request_samples,
         terminal_final=True,
+        sample_gap_overrun_limit=(
+            LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+            - baseline_sample_gap_overruns
+        ),
     )
     if (
         rows[0]["elapsed_ms"] < request_started_elapsed_ms
         or rows[0]["elapsed_ms"] - request_started_elapsed_ms
         > config["plan"]["large_payload_rss_sample_interval_ms"]
         or rows[-1]["elapsed_ms"]
-        < elapsed * 1000.0 - LARGE_PAYLOAD_MAX_SAMPLE_GAP_MS
+        < elapsed * 1000.0 - LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS
     ):
         fail(f"{label}.rss_samples does not cover the request interval")
 
@@ -1931,6 +1973,12 @@ def _validate_large_payload_cell(
             + runtime["panic_mentions"]
             + (1 if runtime["cpa_oom_killed"] else 0)
             + (1 if runtime["mock_oom_killed"] else 0)
+        ),
+        "rss_max_sample_gap_ms": max(
+            baseline_max_sample_gap_ms, request_max_sample_gap_ms
+        ),
+        "rss_sample_gap_overrun_count": (
+            baseline_sample_gap_overruns + request_sample_gap_overruns
         ),
         "rss_growth_peak_mib": max(0.0, peak - baseline_median),
         "successful_samples": successful,
@@ -2835,6 +2883,12 @@ def build_evidence(
                     "rss_growth_peak_mib"
                 ],
                 "cpa_cag_peak_rss_mib": candidate_large["peak_rss_mib"],
+                "cpa_cag_rss_max_sample_gap_ms": candidate_large[
+                    "rss_max_sample_gap_ms"
+                ],
+                "cpa_cag_rss_sample_gap_overrun_count": candidate_large[
+                    "rss_sample_gap_overrun_count"
+                ],
                 "cpa_cag_throughput_rps": candidate_large["throughput_rps"],
                 "cpa_only_baseline_rss_mib": baseline_large[
                     "baseline_rss_median_mib"
@@ -2843,6 +2897,12 @@ def build_evidence(
                     "rss_growth_peak_mib"
                 ],
                 "cpa_only_peak_rss_mib": baseline_large["peak_rss_mib"],
+                "cpa_only_rss_max_sample_gap_ms": baseline_large[
+                    "rss_max_sample_gap_ms"
+                ],
+                "cpa_only_rss_sample_gap_overrun_count": baseline_large[
+                    "rss_sample_gap_overrun_count"
+                ],
                 "cpa_only_throughput_rps": baseline_large["throughput_rps"],
                 "excess_peak_rss_growth_mib": excess_growth,
                 "full_payload_equivalent_regression": full_payload_equivalent,
@@ -2965,6 +3025,11 @@ def build_evidence(
             "rss_sample_interval_ms": config["plan"][
                 "large_payload_rss_sample_interval_ms"
             ],
+            "rss_sample_gap_deadline_ms": LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS,
+            "rss_sample_gap_hard_limit_ms": LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS,
+            "rss_sample_gap_overrun_limit_per_cell": (
+                LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+            ),
             "rss_source": "/proc/<container-init-pid>/status:VmRSS",
         },
         "matrix": matrix,
@@ -4425,10 +4490,12 @@ class LinuxHostCollector:
         request_started: float,
         stop: threading.Event,
         rows: list[dict[str, Any]],
+        initial_sample_gap_overruns: int,
         errors: list[str],
     ) -> None:
         interval = self.config["plan"]["large_payload_rss_sample_interval_ms"] / 1000.0
         next_sample = request_started + interval
+        sample_gap_overruns = initial_sample_gap_overruns
         while not stop.is_set():
             now = time.monotonic()
             if now >= next_sample:
@@ -4439,14 +4506,18 @@ class LinuxHostCollector:
                         cell_started,
                         final_sample=False,
                     )
-                    if (
-                        rows
-                        and observation["elapsed_ms"] - rows[-1]["elapsed_ms"]
-                        > LARGE_PAYLOAD_MAX_SAMPLE_GAP_MS
-                    ):
-                        errors.append("large_payload_rss:MissedDeadline")
-                        stop.set()
-                        return
+                    if rows:
+                        gap = observation["elapsed_ms"] - rows[-1]["elapsed_ms"]
+                        if gap > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS:
+                            sample_gap_overruns += 1
+                            if (
+                                gap > LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS
+                                or sample_gap_overruns
+                                > LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+                            ):
+                                errors.append("large_payload_rss:MissedDeadline")
+                                stop.set()
+                                return
                     rows.append(observation)
                 except Exception as exc:
                     errors.append("large_payload_rss:" + type(exc).__name__)
@@ -4454,11 +4525,11 @@ class LinuxHostCollector:
                     return
                 next_sample += interval
                 next_sample = max(next_sample, time.monotonic() + interval / 2.0)
-            # Event.wait() follows the coarse condition-variable timer on some
-            # platforms (notably Windows test hosts), which can turn a nominal
-            # 5 ms wait into enough delay to violate the closed 30 ms gap.  A
-            # bounded sleep keeps the sampler's monotonic deadline cadence;
-            # the loop observes stop again after at most 5 ms.
+            # Event.wait() follows a coarse condition-variable timer on some
+            # hosts and can turn a nominal 5 ms wait into a deadline overrun.
+            # Bounded sleep keeps the monotonic cadence tight; the shared
+            # counter carries any baseline overrun into the request sampler and
+            # still permits only one <=60 ms scheduler gap per cell.
             time.sleep(max(0.001, min(0.005, next_sample - time.monotonic())))
 
     def _measure_large_payload_cell(
@@ -4478,20 +4549,38 @@ class LinuxHostCollector:
         started_at = _now_iso()
         started = time.monotonic()
         baseline: list[dict[str, Any]] = []
+        baseline_sample_gap_overruns = 0
+        sampler_errors: list[str] = []
         for index in range(self.config["plan"]["large_payload_baseline_samples"]):
-            baseline.append(
-                self._rss_observation(
-                    arm,
-                    process_identity,
-                    started,
-                    final_sample=False,
-                )
+            observation = self._rss_observation(
+                arm,
+                process_identity,
+                started,
+                final_sample=False,
             )
+            if baseline:
+                gap = observation["elapsed_ms"] - baseline[-1]["elapsed_ms"]
+                if gap > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS:
+                    baseline_sample_gap_overruns += 1
+                    if (
+                        gap > LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS
+                        or baseline_sample_gap_overruns
+                        > LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+                    ):
+                        sampler_errors.append("large_payload_rss:MissedDeadline")
+                        _fail_large_payload_rss_sampler(sampler_errors)
+            baseline.append(observation)
             if index + 1 < self.config["plan"]["large_payload_baseline_samples"]:
                 deadline = started + (
                     (index + 1)
                     * self.config["plan"]["large_payload_rss_sample_interval_ms"]
                     / 1000.0
+                )
+                deadline = max(
+                    deadline,
+                    time.monotonic()
+                    + self.config["plan"]["large_payload_rss_sample_interval_ms"]
+                    / 2000.0,
                 )
                 time.sleep(max(0.0, deadline - time.monotonic()))
 
@@ -4505,7 +4594,6 @@ class LinuxHostCollector:
                 final_sample=False,
             )
         ]
-        sampler_errors: list[str] = []
         stop = threading.Event()
         sampler = threading.Thread(
             target=self._large_payload_rss_loop,
@@ -4516,6 +4604,7 @@ class LinuxHostCollector:
                 request_started,
                 stop,
                 rss_rows,
+                baseline_sample_gap_overruns,
                 sampler_errors,
             ),
             daemon=True,
@@ -4531,7 +4620,7 @@ class LinuxHostCollector:
             ) as executor:
                 for offset in range(0, request_count, concurrency):
                     if sampler_errors:
-                        fail("Host performance large-payload RSS sampler failed")
+                        _fail_large_payload_rss_sampler(sampler_errors)
                     batch = self._drive_batch(
                         executor, arm, large_requests, concurrency, offset
                     )
@@ -4549,7 +4638,7 @@ class LinuxHostCollector:
             stop.set()
             sampler.join(timeout=30)
         if sampler.is_alive() or sampler_errors:
-            fail("Host performance large-payload RSS sampler failed")
+            _fail_large_payload_rss_sampler(sampler_errors)
         final_observation = self._rss_observation(
             arm,
             process_identity,

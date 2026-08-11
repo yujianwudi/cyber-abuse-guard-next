@@ -249,7 +249,7 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
             validated["reviewer"],
             {
                 "identity": "Codex Round 13 exact-source review",
-                "reviewed_at": "2026-08-10T11:47:52.749Z",
+                "reviewed_at": "2026-08-10T23:14:37.838Z",
                 "status": "approved",
             },
         )

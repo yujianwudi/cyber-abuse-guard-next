@@ -336,6 +336,31 @@ class HostPerformanceSchemaTests(unittest.TestCase):
             {"const": 20},
         )
 
+        resident_memory = load_schema()["$defs"]["large_payload_resident_memory"]
+        resident_properties = resident_memory["properties"]
+        self.assertEqual(
+            resident_properties["rss_sample_gap_deadline_ms"], {"const": 30}
+        )
+        self.assertEqual(
+            resident_properties["rss_sample_gap_hard_limit_ms"], {"const": 60}
+        )
+        self.assertEqual(
+            resident_properties["rss_sample_gap_overrun_limit_per_cell"],
+            {"const": 1},
+        )
+        comparison_properties = load_schema()["$defs"]["large_payload_comparison"][
+            "properties"
+        ]
+        for arm in ("cpa_only", "cpa_cag"):
+            self.assertEqual(
+                comparison_properties[f"{arm}_rss_max_sample_gap_ms"],
+                {"type": "number", "minimum": 0, "maximum": 60},
+            )
+            self.assertEqual(
+                comparison_properties[f"{arm}_rss_sample_gap_overrun_count"],
+                {"type": "integer", "minimum": 0, "maximum": 1},
+            )
+
         warm_rss = load_schema()["$defs"]["warm_rss_60m"]["properties"]
         self.assertEqual(warm_rss["duration_seconds"], {"const": 3600})
         self.assertEqual(warm_rss["concurrency"], {"const": 16})

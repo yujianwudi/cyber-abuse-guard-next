@@ -9,18 +9,18 @@ active_rc_tag: v1.0.0-rc.1
 active_release_artifact_version: 1.0.0-rc.1
 active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 active_platform: linux-amd64
-active_classifier_policy: classifier-policy-v18 / 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
-active_source_policy_sha256: 06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26
-active_audit_runner_bundle_sha256: 6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f
-active_audit_contract_sha256: 81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e
-active_audit_run_source_sha256: 21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de
+active_classifier_policy: classifier-policy-v18 / 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+active_source_policy_sha256: a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f
+active_audit_runner_bundle_sha256: 6066fe6cd81005770113f3624982729301d45fa7dc416ae780c71bdaa656ac0d
+active_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
+active_audit_run_source_sha256: 808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb
 active_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
-active_audit_tool_tests: PASS / LINUX / 231_OF_231
+active_audit_tool_tests: PASS / LINUX / 244_OF_244
 active_local_source_matrix: DIRTY_WORKTREE_PASS / UNIT_RACE_VET_FUZZ_CORPUS_CONTRACT / NOT_FINAL_CANDIDATE
 active_local_development_corpus: MALICIOUS_RECALL_154_OF_154 / BENIGN_HITS_3_OF_142 / LOCAL_ONLY_NOT_SECOND_MACHINE_FP
-active_local_round10_performance: V18_DIRTY_SOURCE_ONLY_PASS / JSON_SHA256_CF416898BB4B6DFFBB3771D8C9529ED7D23989CEC0668C423A4BFAB005B0F73F / NOT_HOST_PERFORMANCE_OR_RSS
+active_local_round10_performance: V18_DIRTY_SOURCE_ONLY_PASS / JSON_SHA256_ADAEAB59CFAA0323F78B98FEB4765B358FAF9A913DFA622FB7FE1BF8D472A80D / NOT_HOST_PERFORMANCE_OR_RSS
 active_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / SO_5693F2FB...F8393B / STORE_1CBF59E1...65EB23 / V18_NOT_RUN / NOT_FINAL_CANDIDATE / NOT_HOST_PERFORMANCE
-active_local_coderabbit: FINAL_V18_REVIEW_ITERATIONS_COMPLETE / 2_VALID_FINDINGS_FIXED / 3_STALE_FINDINGS_DISPROVED / OPEN_VALID_FINDINGS_0 / FINAL_PUSH_GITHUB_PENDING
+active_local_coderabbit: FINAL_LOCAL_REVIEW_PASS / FINDINGS_0 / 28_VALID_FINDINGS_FIXED / 11_STALE_FALSE_OR_CONDITIONAL_FINDINGS_DISPROVED / FINAL_PUSH_GITHUB_PENDING
 active_pr_required_checks: NOT_RUN
 active_premerge_second_machine: NOT_RUN
 active_postmain_required_checks: NOT_RUN
@@ -50,10 +50,10 @@ GitHub's current upstream latest is `v7.2.127`; the active release contract
 remains deliberately frozen to the exact v7.2.125 identity above.
 
 The selected v18 in-process performance report has SHA-256
-`3c86959ea1f132b322da03b1271c1b96aa17117de70ffc1f8c73cbdaf9ee62a2`:
-ordinary p95 is `2.303293 ms`, five-repository surrogate p95 is
-`105.194822 ms`, Codex-all surrogate p95 is `45.001980 ms`, public p95/p99
-is `8.702025/9.020208 ms`, SQLite c16 p95 is `1.311953 ms`, and all 2,304
+`adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d`:
+ordinary p95 is `2.012662 ms`, five-repository surrogate p95 is
+`108.288998 ms`, Codex-all surrogate p95 is `46.827635 ms`, public p95/p99
+is `8.728750/9.440184 ms`, SQLite c16 p95 is `2.549483 ms`, and all 2,304
 operations completed without a reported failure or recovered panic. This is
 source-only evidence, not CPA Host latency, RSS, paired throughput, or a
 production SLO. The final remote-enabled compatibility matrix verified the
@@ -93,10 +93,10 @@ part of this active prologue.
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
-Last updated: 2026-08-10 (Asia/Shanghai)
+Last updated: 2026-08-11 (Asia/Shanghai)
 
 Everything below is frozen v0.16 / Round 12 history and does not transfer a
 PASS to CPA v7.2.125 or `v1.0.0-rc.1`.

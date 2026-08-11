@@ -1825,13 +1825,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 candidate_artifact_size=args.candidate_artifact_size,
                 generated_at=datetime.now(timezone.utc),
             )
-            write_exclusive(args.output, report)
-            # Preserve failed task-scoped output for explicit cleanup. A
-            # pathname unlink cannot be made conditional on inode identity
-            # without a same-UID replacement race.
             reverify_supplemental_archive(
                 supplemental_archive_path, supplemental_archive_binding
             )
+            write_exclusive(args.output, report)
             print(json.dumps({"report_sha256": sha256_bytes(canonical_bytes(report) + b"\n"), "status": report["status"], "valid": True}, sort_keys=True))
             return 0
         raw = read_regular_bytes(args.report, "portable release admission", MAX_REPORT_BYTES, require_single_link=True)

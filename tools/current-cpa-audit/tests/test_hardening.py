@@ -214,6 +214,7 @@ def candidate_bound_config(
     config["identities"]["candidate"] = candidate_identity(
         candidate,
         candidate_raw,
+        cag_identity=config["identities"]["cag"],
         artifact_id="123456789",
         artifact_name=CANDIDATE_ARTIFACT_NAME,
         artifact_digest="sha256:" + digest("candidate-artifact-admission"),
@@ -975,6 +976,150 @@ class ClosedContractRegressionTests(unittest.TestCase):
             so_path.write_bytes(b"same name, different SO")
             with self.assertRaisesRegex(ContractError, "SO drifted"):
                 validate_candidate_manifest_file(config)
+
+    def test_sha256_file_rejects_same_inode_equal_length_overwrite_after_read(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archive.zip"
+            original = b"A" * 4096
+            replacement = b"B" * len(original)
+            path.write_bytes(original)
+            self.assertEqual(
+                audit_contract.sha256_file(path, len(original)),
+                sha256_bytes(original),
+            )
+            initial = path.stat()
+            real_fstat = audit_contract.os.fstat
+            fstat_calls = 0
+
+            def overwrite_before_post_read_fstat(descriptor: int) -> os.stat_result:
+                nonlocal fstat_calls
+                fstat_calls += 1
+                if fstat_calls == 2:
+                    with path.open("r+b") as output:
+                        output.write(replacement)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    os.utime(
+                        path,
+                        ns=(initial.st_atime_ns, initial.st_mtime_ns + 10_000_000_000),
+                    )
+                    changed = path.stat()
+                    self.assertEqual(
+                        (changed.st_dev, changed.st_ino, changed.st_size),
+                        (initial.st_dev, initial.st_ino, initial.st_size),
+                    )
+                return real_fstat(descriptor)
+
+            with (
+                mock.patch.object(
+                    audit_contract.os,
+                    "fstat",
+                    side_effect=overwrite_before_post_read_fstat,
+                ),
+                self.assertRaisesRegex(ContractError, "content metadata changed"),
+            ):
+                audit_contract.sha256_file(
+                    path,
+                    len(original),
+                    require_single_link=True,
+                    expected_info=initial,
+                )
+
+    def test_supplemental_archive_rejects_post_hash_same_inode_overwrite(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            archive_path = root / "archive.zip"
+            policy_path = root / "policy.json"
+            manifest_path = root / "manifest.json"
+            original = b"stable supplemental archive" * 128
+            replacement = b"B" * len(original)
+            archive_path.write_bytes(original)
+            policy: dict[str, Any] = {}
+            policy_raw = canonical_bytes(policy) + b"\n"
+            policy_path.write_bytes(policy_raw)
+            supplemental = {
+                "archive_bytes": len(original),
+                "archive_sha256": sha256_bytes(original),
+                "manifest_sha256": "",
+                "policy_sha256": sha256_bytes(policy_raw),
+                "selected_entry_count": 0,
+                "unique_reviewed_cases": 0,
+            }
+            manifest = {
+                "archive": {
+                    "bytes": supplemental["archive_bytes"],
+                    "sha256": supplemental["archive_sha256"],
+                },
+                "policy_sha256": supplemental["policy_sha256"],
+                "selected_entry_count": supplemental["selected_entry_count"],
+                "unique_reviewed_cases": supplemental["unique_reviewed_cases"],
+            }
+            manifest_raw = canonical_bytes(manifest) + b"\n"
+            supplemental["manifest_sha256"] = sha256_bytes(manifest_raw)
+            manifest_path.write_bytes(manifest_raw)
+            config = {
+                "paths": {
+                    "supplemental_zip": str(archive_path),
+                    "supplemental_zip_manifest": str(manifest_path),
+                    "supplemental_zip_policy": str(policy_path),
+                },
+                "supplemental_zip": supplemental,
+            }
+
+            with (
+                mock.patch.object(
+                    audit_contract,
+                    "SUPPLEMENTAL_ZIP_POLICY_SHA256",
+                    supplemental["policy_sha256"],
+                ),
+                mock.patch.object(
+                    audit_contract,
+                    "validate_supplemental_policy",
+                    return_value=policy,
+                ),
+                mock.patch.object(
+                    audit_contract,
+                    "validate_supplemental_manifest",
+                    return_value=manifest,
+                ),
+            ):
+                validated = audit_contract.validate_supplemental_run_config_files(
+                    config
+                )
+                self.assertEqual(validated[0], manifest)
+                real_sha256_file = audit_contract.sha256_file
+
+                def overwrite_after_hash(path: Path, *args: object, **kwargs: object) -> str:
+                    digest_value = real_sha256_file(path, *args, **kwargs)
+                    before = path.stat()
+                    with path.open("r+b") as output:
+                        output.write(replacement)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    os.utime(
+                        path,
+                        ns=(before.st_atime_ns, before.st_mtime_ns + 10_000_000_000),
+                    )
+                    changed = path.stat()
+                    self.assertEqual(
+                        (changed.st_dev, changed.st_ino, changed.st_size),
+                        (before.st_dev, before.st_ino, before.st_size),
+                    )
+                    return digest_value
+
+                with (
+                    mock.patch.object(
+                        audit_contract,
+                        "sha256_file",
+                        side_effect=overwrite_after_hash,
+                    ),
+                    self.assertRaisesRegex(ContractError, "content metadata changed"),
+                ):
+                    audit_contract.validate_supplemental_run_config_files(config)
 
     def test_runner_preflight_revalidates_candidate_before_other_inputs(self) -> None:
         harness = object.__new__(run.Harness)

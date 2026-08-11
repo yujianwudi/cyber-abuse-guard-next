@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import os
 import struct
@@ -28,7 +29,12 @@ from audit_contract import (  # noqa: E402
     CPA_OFFICIAL_BINARY_SHA256,
     CPA_TAG,
     ContractError,
+    EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT,
+    MAX_COLD_STARTS,
+    MIN_COLD_STARTS,
     MODES,
+    PROTOCOLS,
+    STREAM_VALUES,
     SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY,
     SUPPLEMENTAL_ZIP_POLICY_SHA256,
     candidate_identity,
@@ -350,6 +356,7 @@ class PortableAdmissionTests(unittest.TestCase):
             candidate = candidate_identity(
                 candidate_manifest,
                 candidate_raw,
+                cag_identity=cag,
                 artifact_id="2002",
                 artifact_name="cyber-abuse-guard-linux-amd64-audit-candidate",
                 artifact_digest="sha256:" + "5" * 64,
@@ -639,13 +646,13 @@ class PortableAdmissionTests(unittest.TestCase):
                     evidence_policy_path=evidence_policy,
                 )
 
-    def test_post_pack_archive_drift_preserves_replaced_output(self) -> None:
+    def test_archive_reverification_precedes_report_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             output = root / "second-machine-release-admission.json"
             archive = root / "supplemental.zip"
-            replacement = b"replacement-owned-by-another-writer\n"
-            values = {
+            report = valid_report()
+            values: dict[str, Any] = {
                 "supplemental_archive_binding": {
                     "bytes": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["bytes"],
                     "sha256": SUPPLEMENTAL_ZIP_ARCHIVE_IDENTITY["sha256"],
@@ -653,9 +660,8 @@ class PortableAdmissionTests(unittest.TestCase):
                 "supplemental_archive_path": archive,
             }
 
-            def replace_then_fail(*_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
-                output.unlink()
-                output.write_bytes(replacement)
+            def fail_before_write(*_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+                self.assertFalse(output.exists())
                 raise AdmissionError("supplemental archive drift")
 
             arguments = [
@@ -681,32 +687,47 @@ class PortableAdmissionTests(unittest.TestCase):
             ]
             module = main.__module__
             with (
-                mock.patch(f"{module}.load_validated_inputs", return_value=values),
-                mock.patch(f"{module}.build_report", return_value=valid_report()),
+                mock.patch(f"{module}.load_validated_inputs", return_value=dict(values)),
+                mock.patch(f"{module}.build_report", return_value=report),
                 mock.patch(
                     f"{module}.reverify_supplemental_archive",
-                    side_effect=replace_then_fail,
+                    side_effect=fail_before_write,
                 ),
                 mock.patch("sys.stderr"),
+                mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
             ):
                 self.assertEqual(main(arguments), 2)
-            self.assertEqual(output.read_bytes(), replacement)
+            self.assertFalse(output.exists())
+            self.assertEqual(stdout.getvalue(), "")
 
-            preserved_output = root / "preserved-failed-admission.json"
-            arguments[-1] = str(preserved_output)
-            values["supplemental_archive_path"] = archive
+            def pass_before_write(*_args, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+                self.assertFalse(output.exists())
+
             with (
-                mock.patch(f"{module}.load_validated_inputs", return_value=values),
-                mock.patch(f"{module}.build_report", return_value=valid_report()),
+                mock.patch(f"{module}.load_validated_inputs", return_value=dict(values)),
+                mock.patch(f"{module}.build_report", return_value=report),
                 mock.patch(
                     f"{module}.reverify_supplemental_archive",
-                    side_effect=AdmissionError("supplemental archive drift"),
+                    side_effect=pass_before_write,
                 ),
-                mock.patch("sys.stderr"),
+                mock.patch("sys.stdout", new_callable=io.StringIO) as stdout,
             ):
-                self.assertEqual(main(arguments), 2)
+                self.assertEqual(main(arguments), 0)
+            expected_raw = canonical_bytes(report) + b"\n"
             self.assertEqual(
-                preserved_output.read_bytes(), canonical_bytes(valid_report()) + b"\n"
+                output.read_bytes(), expected_raw
+            )
+            self.assertEqual(
+                stdout.getvalue(),
+                json.dumps(
+                    {
+                        "report_sha256": hashlib.sha256(expected_raw).hexdigest(),
+                        "status": report["status"],
+                        "valid": True,
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
             )
 
     def assert_rejected(self, mutate, *, when: datetime = NOW) -> None:  # type: ignore[no-untyped-def]
@@ -878,6 +899,52 @@ class PortableAdmissionTests(unittest.TestCase):
             "validate_candidate_directory(",
         ):
             self.assertIn(marker, source)
+
+    @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
+    def test_json_schema_execution_bounds_track_cold_start_contract(self) -> None:
+        schema = json.loads((TOOL / "second-machine-release-admission.schema.json").read_text("utf-8"))
+        transport_multiplier = len(PROTOCOLS) * len(STREAM_VALUES)
+        minimum_per_outcome = transport_multiplier * MIN_COLD_STARTS
+        maximum_per_outcome = transport_multiplier * MAX_COLD_STARTS
+        supplemental_cell_count = EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT * len(MODES)
+        minimum_supplemental_total = supplemental_cell_count * minimum_per_outcome
+        maximum_supplemental_total = supplemental_cell_count * maximum_per_outcome
+        contracts = (
+            (
+                "outcome.execution_count",
+                schema["$defs"]["outcome"]["properties"]["execution_count"],
+                minimum_per_outcome,
+                maximum_per_outcome,
+            ),
+            (
+                "supplemental_outcome.execution_count",
+                schema["$defs"]["supplemental_outcome"]["properties"]["execution_count"],
+                minimum_per_outcome,
+                maximum_per_outcome,
+            ),
+            (
+                "supplemental_archive.total_executions",
+                schema["$defs"]["supplemental_archive"]["properties"]["total_executions"],
+                minimum_supplemental_total,
+                maximum_supplemental_total,
+            ),
+        )
+
+        for label, contract, minimum, maximum in contracts:
+            with self.subTest(label=label):
+                self.assertEqual(
+                    contract,
+                    {"maximum": maximum, "minimum": minimum, "type": "integer"},
+                )
+                validator = Draft202012Validator(contract)
+                self.assertTrue(validator.is_valid(minimum), "minimum must be accepted")
+                self.assertTrue(validator.is_valid(maximum), "maximum must be accepted")
+                self.assertFalse(
+                    validator.is_valid(minimum - 1), "value below minimum must be rejected"
+                )
+                self.assertFalse(
+                    validator.is_valid(maximum + 1), "value above maximum must be rejected"
+                )
 
     @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
     def test_report_validates_against_closed_json_schema(self) -> None:

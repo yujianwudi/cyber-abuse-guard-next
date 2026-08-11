@@ -45,13 +45,28 @@ def create(source: Path, output: Path) -> None:
     info.flag_bits = 0
     info.extra = b""
     info.comment = b""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    created = False
+    descriptor: int | None = None
     try:
-        with output.open("xb") as raw, zipfile.ZipFile(raw, "w") as archive:
-            archive.comment = b""
-            archive.writestr(info, payload)
-        os.chmod(output, 0o644)
+        descriptor = os.open(output, flags, 0o600)
+        created = True
+        raw = os.fdopen(descriptor, "wb", closefd=True)
+        descriptor = None
+        with raw:
+            with zipfile.ZipFile(raw, "w") as archive:
+                archive.comment = b""
+                archive.writestr(info, payload)
+            raw.flush()
+            os.fsync(raw.fileno())
+            os.fchmod(raw.fileno(), 0o644)
     except BaseException:
-        output.unlink(missing_ok=True)
+        if descriptor is not None:
+            os.close(descriptor)
+        if created:
+            output.unlink(missing_ok=True)
         raise
 
 

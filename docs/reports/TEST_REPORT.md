@@ -10,14 +10,14 @@ round13_local_source_evidence_base_head: a672ab31eabed9ca32c90ad110a9f47b3ae407c
 round13_local_source_evidence_head_tree: 9aee6ced9cacf5ed899c658ed8d8ed422580cee8
 round13_local_source_evidence_worktree: DIRTY_WORKTREE / NOT_FINAL_CANDIDATE
 round13_platform: linux-amd64
-round13_classifier_policy: classifier-policy-v18 / 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
-round13_source_policy_sha256: 06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26
-round13_audit_runner_bundle_sha256: 6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f
-round13_audit_contract_sha256: 81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e
-round13_audit_run_source_sha256: 21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de
+round13_classifier_policy: classifier-policy-v18 / 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+round13_source_policy_sha256: a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f
+round13_audit_runner_bundle_sha256: 6066fe6cd81005770113f3624982729301d45fa7dc416ae780c71bdaa656ac0d
+round13_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
+round13_audit_run_source_sha256: 808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb
 round13_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
-round13_audit_tool_tests: PASS / LINUX / 231_OF_231
-round13_keysmith_reviewed_head_tree: 3a9d2008ead29a261e2644963a50202e747c7c8a / 973ce503bdb1131e3a642cbe2cc3acd2dd2bed94
+round13_audit_tool_tests: PASS / LINUX / 244_OF_244
+round13_keysmith_reviewed_head_tree: 6910586a012308cb445f68620d9a990348aef06f / feb5bccb7f811209a3cbcbae5adadb40a1e2ce49
 round13_local_source_matrix: PASS
 round13_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / V18_NOT_RUN / NOT_FINAL_CANDIDATE
 round13_exact_head_github_checks: NOT_RUN
@@ -33,26 +33,25 @@ and release gates are separate:
 | Round 13 contract command | Result |
 |---|---|
 | `bash scripts/release-doc-consistency.sh` | `PASS` |
-| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE`; rerun inside the final full script matrix |
+| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 452.28s` against the final 244-test working tree |
 | `bash scripts/release-rc-contract-test.sh` | `PASS` |
 | `bash scripts/release-candidate-contract-test.sh` | `PASS` |
 | exact Go 1.26.4 format and module verification | `PASS / 4.027s combined` |
-| `make unit-test` | `PASS / 363.760s` |
-| `make race` | `PASS / 1124.710s / NO DATA RACE`; audit `52.426s`, plugin `591.994s`, classifier `417.900s` |
-| `make round6-vet` | `PASS`; vet/fuzz/corpus plus bounded-fuzz lanes `148.900s` combined |
+| `make unit-test round6-vet` | `PASS / 343.3s wall`; classifier `149.240s`, plugin `144.703s` |
+| `make race` | `PASS / 1103.8s wall / NO DATA RACE`; audit `54.982s`, plugin `616.824s`, classifier `436.656s` |
 | `make fuzz-smoke` and `make round9-fuzz ROUND9_FUZZTIME=5s` | `PASS` |
 | fuzz/corpus matrix | `6/6 PASS / malicious recall 154/154 / local development-benign hits 3/142`; the 3/142 result is not a second-machine false-positive result |
 | pinned `actionlint v1.7.12` over all four active workflows | `PASS / canonical go run command / Go 1.26.4`; a verified read-only local Go module proxy cache was used after the public proxy timed out |
 | `make round6-benchmark` | `PASS / 197.079s` |
-| selected additional `make round10-performance` evidence | `CLASSIFIER-POLICY-V18 DIRTY SOURCE-ONLY PASS / 2026-08-11 / 24.0s wall / 17.127s measured test / JSON SHA-256 3c86959ea1f132b322da03b1271c1b96aa17117de70ffc1f8c73cbdaf9ee62a2 / ordinary p95 2.303293 ms / five-repository surrogate p95 105.194822 ms / Codex-all surrogate p95 45.001980 ms / public p95/p99 8.702025/9.020208 ms / SQLite c16 p95 1.311953 ms / queue max 28/256 / 2,304 operations / failures+panics 0` |
+| selected additional `make round10-performance` evidence | `CLASSIFIER-POLICY-V18 DIRTY SOURCE-ONLY PASS / 2026-08-11 / 27.23s wall / 21.516s measured Go test / JSON SHA-256 adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d / ordinary c16 p95 2.012662 ms / five-repository surrogate p95 108.288998 ms / Codex-all surrogate p95 46.827635 ms / public p95/p99 8.728750/9.440184 ms / SQLite c16 p95 2.549483 ms / queue max 30/256 / 2,304 operations / failures+panics 0` |
 | `bash scripts/check-production-health-test.sh` | `PASS` |
-| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `231/231 PASS / LINUX` |
+| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `244/244 PASS / LINUX` |
 | `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` | `PASS` |
-| `make round6-script-test` | `PASS / 137.2s / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 231 CPA tests / Safe Gate 217 tests and 90 skips / RC / attestation / source exclusion / production health`; the exact actionlint module came from the verified local proxy cache after the public proxy timed out; the complete release-doc mutation suite separately passed in 391.5s |
+| `make round6-script-test` | `PASS / 184.61s / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 244 CPA tests / Safe Gate 217 tests and 78 skips / RC / attestation / source exclusion / production health`; the exact actionlint module came from the verified read-only local Go module proxy cache after the public proxy timed out; the complete release-doc mutation suite separately passed in 452.28s |
 | `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make integration-test` as WSL root | `PRE_V18 PASS SUPERSEDED / CLASSIFIER-POLICY-V17 / 179.790s / native CPA v7.2.125 Host plus all 15 Router scenarios / SO 5693f2fb...f8393b / Store ZIP 1cbf59e1...65eb23 / V18 NATIVE HOST NOT RUN / DIRTY DEVELOPMENT BYTES / NOT FINAL CANDIDATE` |
-| fresh five-repository acquisition and validation | `PASS / policy 06e46d7b...9c26 / 5 repositories / 11 sources / 19 semantic cases / no third-party execution / ephemeral text cleaned` |
+| fresh five-repository acquisition and validation | `PASS / policy a4ca2e98...ec5f / 5 repositories / 11 sources / 19 semantic cases / no third-party execution / ephemeral text cleaned` |
 | `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0 make cpa-latest-compat` | `PASS / 121.740s / exact v7.2.125 remote tag+commit / pinned source, compile, ABI, Host, Store, request logging, and schema-2 lifecycle contracts / latest check intentionally skipped for the pinned target` |
-| local CodeRabbit CLI 0.7.2 `review --base main --include-untracked --agent` | `ITERATIONS COMPLETE / 14 valid findings fixed / 6 stale-or-false findings disproved against current source / FINAL REVIEW findings=0`; final pushed-head GitHub CodeRabbit remains pending |
+| local CodeRabbit CLI 0.7.2 `review --base main --include-untracked --agent` | `PASS / findings 0 / 28 valid findings fixed / 11 stale, false, or conditional findings disproved against current source`; final pushed-head GitHub CodeRabbit remains pending |
 
 Round 13 coverage status is deliberately split. The current v18 source
 contracts for no-copy, `response.failed`, Codex `Originator`, and Claude replay
@@ -79,7 +78,7 @@ non-transferable. See [Round 13 status](../ROUND13_STATUS.md).
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 Last updated: 2026-08-11 (Asia/Shanghai)
@@ -254,7 +253,7 @@ machine_schema_sha256: 063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340
 
 | Working-tree check | Result and evidence boundary |
 |---|---|
-| Current CPA audit tool | **PASS**, Linux 148/148. Includes pending/approved review separation, exact v7.2.124 source and official plugin-capable asset pins, the distinct `audit_malicious_text` disposition and `audit_eligible_malicious_text` decision-kind contract, hardlink/directory-swap/rename cleanup, closed functional and Host A/B performance evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. CPA mode changes use only the isolated writable `/cag/config` bind and fail closed on config file-set, owner, hardlink, size, or access-mode drift. The Host A/B lane now binds six executable/schema sources plus their bundle hash, enforces 3,601-3,602 one-second warm samples, conserves planned/completed/success/error outcomes, and rejects schema/validator identity drift. Semantic run configuration requires a clean exact eight-file CI candidate manifest and rejects tracked or untracked repository drift. Descriptor safety checks remain active under optimized Python, counted-Mock accepted sockets have a finite idle timeout, and cleanup cannot replace an already-propagating primary failure. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. Runner operations serialize in-process read/write/verify/unlink/cleanup/close transitions; Linux still has no ordinary-file unlink-by-descriptor API, so a hostile process sharing the dedicated UID remains outside the harness threat model. No third-party repository code was executed by these unit tests. |
+| Frozen Round 12 CPA audit tool | **PASS**, Linux 148/148. Includes pending/approved review separation, exact v7.2.124 source and official plugin-capable asset pins, the distinct `audit_malicious_text` disposition and `audit_eligible_malicious_text` decision-kind contract, hardlink/directory-swap/rename cleanup, closed functional and Host A/B performance evidence schemas, concatenated-ZIP prefix rejection, non-object evidence CLI normalization, stopped-image Mock source/Entrypoint verification before execution, full absolute evidence-path dev/inode snapshots, private parent/root mode continuity, symlink and ancestor/evidence/subdirectory replacement failures, normal-path Docker handoff, and exact Source/Destination/RW/rprivate closure for five binds. CPA mode changes use only the isolated writable `/cag/config` bind and fail closed on config file-set, owner, hardlink, size, or access-mode drift. The Host A/B lane now binds six executable/schema sources plus their bundle hash, enforces 3,601-3,602 one-second warm samples, conserves planned/completed/success/error outcomes, and rejects schema/validator identity drift. Semantic run configuration requires a clean exact eight-file CI candidate manifest and rejects tracked or untracked repository drift. Descriptor safety checks remain active under optimized Python, counted-Mock accepted sockets have a finite idle timeout, and cleanup cannot replace an already-propagating primary failure. `HostConfig.Tmpfs` must contain only the hardened `/tmp`; Docker's observed real-host behavior omits that tmpfs from `.Mounts`, so tests accept zero or one matching `/tmp` entry there while rejecting duplicates, extra binds, volumes, and other non-bind mounts. Clean CAG readiness rejects dirty development bytes. Generated Mock credentials use a single-link mode-0600 `--env-file`, never appear as argv values, are removed on both Docker success and failure, and fail closed under replacement, hardlink, unlink, mode, or content mutation. Evidence writes remain on the runner-PID fd path. Runner operations serialize in-process read/write/verify/unlink/cleanup/close transitions; Linux still has no ordinary-file unlink-by-descriptor API, so a hostile process sharing the dedicated UID remains outside the harness threat model. No third-party repository code was executed by these unit tests. |
 | Audit database capacity | **PASS**: subject-snapshot replacement streams bounded rows inside the transaction, measures tentative live pages, and rejects overflow without replacing prior state or deleting audit events. Committed event deletion, Raw Capture purge, and subject-state deletion remeasure capacity without evicting evidence outside the requested maintenance scope. |
 | Safe development inventory | **PASS**, `packages=20`, `classifier_entries=582`, `round12_entries=15`. |
 | Complete unit lane | **HISTORICAL PRE-v7.2.124 PASS / REVALIDATION REQUIRED**. `make unit-test` completed in 313.5 seconds with exact Go 1.26.4 on Linux before the CPA pin and classifier source identity changed. It is not transferred to the v7.2.124 working tree. |
@@ -496,7 +495,7 @@ section above records only the newly rerun incident-response source checks.
 | Safe package tests with `sqlite_omit_load_extension` | **PASS** |
 | Race detector | **HISTORICAL `f37a25dd` SOURCE-ONLY PASS**; full Go 1.26.4 classifier race passed in 109.842 s, and the multilingual four-provider plugin route passed its targeted race in 7.903 s. A full plugin-package race was not rerun for that snapshot and remained an exact-main CI gate |
 | `make round6-vet` | **PASS** |
-| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 217 tests, 90 explicitly retired skips |
+| `scripts/round6_safe_gate_contract_test.py` | **PASS**; 217 tests, 78 explicitly retired skips |
 | `scripts/round6_safe_gate_contract.py --root .` | **PASS**; 11 entrypoints, 40 Make targets, and 60 scripts |
 | Defensive-quote differential fuzz | **PASS**; 30 s, 18,158 executions, 20 new interesting inputs; arbitrary byte cuts and UTF-8 boundary seeds included |
 | Round 9 fuzz gate | **PASS**; 10 s each for classifier, request content-type extraction, and audit decision explanation |

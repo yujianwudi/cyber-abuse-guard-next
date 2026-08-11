@@ -13,7 +13,7 @@ stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
 round13_classifier_policy_version="classifier-policy-v18"
-round13_classifier_policy_sha256="9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa"
+round13_classifier_policy_sha256="64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -623,9 +623,9 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/$name"
   cp -a "$work/round13-pass" "$fixture"
-  sed -i '0,/231\/231 PASS/s//223\/223 PASS/' "$fixture/$relative"
+  sed -i '0,/244\/244 PASS/s//223\/223 PASS/' "$fixture/$relative"
   round13_must_fail "$name" "$fixture" \
-    "$relative: active Round 13 overlay must contain exactly one 231/231 PASS result"
+    "$relative: active Round 13 overlay must contain exactly one 244/244 PASS result"
 done
 
 for mutation in \

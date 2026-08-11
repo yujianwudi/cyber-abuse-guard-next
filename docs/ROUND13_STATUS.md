@@ -18,14 +18,14 @@ round13_cpa_linux_binary_sha256: 656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d9
 round13_cpa_plugin_abi_rpc_schema: 1 / 2
 round13_source_version: 1.0.0
 round13_rc_tag: v1.0.0-rc.1
-round13_classifier_policy: classifier-policy-v18 / 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
-round13_source_policy: 06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26
-round13_audit_runner_bundle_sha256: 6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f
-round13_audit_contract_sha256: 81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e
-round13_audit_run_source_sha256: 21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de
+round13_classifier_policy: classifier-policy-v18 / 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
+round13_source_policy: a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f
+round13_audit_runner_bundle_sha256: 6066fe6cd81005770113f3624982729301d45fa7dc416ae780c71bdaa656ac0d
+round13_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
+round13_audit_run_source_sha256: 808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb
 round13_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
-round13_audit_tool_tests: PASS / LINUX / 231_OF_231
-round13_keysmith_reviewed_head_tree: 3a9d2008ead29a261e2644963a50202e747c7c8a / 973ce503bdb1131e3a642cbe2cc3acd2dd2bed94
+round13_audit_tool_tests: PASS / LINUX / 244_OF_244
+round13_keysmith_reviewed_head_tree: 6910586a012308cb445f68620d9a990348aef06f / feb5bccb7f811209a3cbcbae5adadb40a1e2ce49
 round13_live_five_repository_acquisition: PASS / 5_REPOSITORIES / 11_SOURCES / 19_SEMANTIC_CASES / THIRD_PARTY_CODE_EXECUTIONS_0 / EPHEMERAL_TEXT_CLEANED
 round13_cpa_remote_git_recheck: PASS / EXACT_V7.2.125_TAG_COMMIT_VERIFIED / LATEST_CHECK_SKIPPED_PINNED_TARGET
 round13_mixed_script_safety_boundary: IMPLEMENTED / SYSTEM_ASSISTANT_LEGACY_BATCH_STREAM_REGRESSION_PASS
@@ -36,16 +36,16 @@ round13_no_copy_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_H
 round13_response_failed_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
 round13_codex_originator_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
 round13_claude_replay_contract: SOURCE_CONTRACT_PASS / PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / V18_RERUN_REQUIRED / FINAL_CANDIDATE_PENDING
-round13_cpa_contract_and_audit_harness: V18_PASS / CPA_V7.2.125_SOURCE_COMPILE_ABI_HOST_STORE_PASS / AUDIT_TOOL_231_OF_231_PASS / REMOTE_TAG_VERIFIED
+round13_cpa_contract_and_audit_harness: V18_PASS / CPA_V7.2.125_SOURCE_COMPILE_ABI_HOST_STORE_PASS / AUDIT_TOOL_244_OF_244_PASS / REMOTE_TAG_VERIFIED
 round13_fragment_boundary_bypass: IMPLEMENTED / V18_NORMALIZATION_UNIT_RACE_CORPUS_PASS
 round13_release_admission_contract: IMPLEMENTED / STAGED_REPORT_AND_CI_ARTIFACT_FIXTURES_PASS / LIVE_GITHUB_ADMISSION_NOT_RUN
 round13_rc_binary_byte_identity: IMPLEMENTED / AUDITED_V1.0.0_SO_REUSE / NO_RC_RECOMPILE_OR_RENAME / LIVE_SEAL_NOT_RUN
 round13_cpa_store_rc_install: IMPLEMENTED / RC_ARCHIVE_EXACT / ROOT_UNVERSIONED_SO / PAYLOAD_BYTE_IDENTICAL / CPA_V7.2.125_OVERLAY_PASS / LIVE_RELEASE_NOT_RUN
-round13_local_linux_tests: V18_DIRTY_WORKTREE_FULL_MATRIX_PASS / UNIT_363.760S / RACE_1124.710S_NO_DATA_RACE / VET_FUZZ_CORPUS_MODULE_SCRIPT_PASS / NOT_FINAL_CANDIDATE
+round13_local_linux_tests: V18_DIRTY_WORKTREE_FULL_MATRIX_PASS / UNIT_VET_WALL_343.3S / UNIT_CLASSIFIER_149.240S / UNIT_PLUGIN_144.703S / RACE_WALL_1103.8S_NO_DATA_RACE / RACE_AUDIT_54.982S / RACE_PLUGIN_616.824S / RACE_CLASSIFIER_436.656S / FUZZ_CORPUS_MODULE_SCRIPT_PASS / NOT_FINAL_CANDIDATE
 round13_local_cpa_host_blackbox: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17_SHA256_036A6B54C7C7F3DE400B09BB5CC6269C0EBA426FD7C50EBDA6255BAFE03E8464 / SO_SHA256_5693F2FB9313A07B0C7EA171458E0386E7279BD14CA8CF926CBB462CBDF8393B / STORE_ARCHIVE_SHA256_1CBF59E1FB6C77F2CC7BC2DEBC0BAD20D509F4DB3FA9A4CCBBB5F8AF2665EB23 / V18_RERUN_REQUIRED
-round13_local_round10_performance: V18_DIRTY_WORKTREE_SOURCE_ONLY_PASS / JSON_SHA256_3C86959EA1F132B322DA03B1271C1B96AA17117DE70FFC1F8C73CBDAF9EE62A2 / ORDINARY_WORST_P95_2.303293MS / FIVE_REPOSITORY_SURROGATE_P95_105.194822MS / CODEX_ALL_P95_45.001980MS / PUBLIC_P95_P99_8.702025_9.020208MS / SQLITE_C16_P95_1.311953MS / SQLITE_QUEUE_MAX_28_OF_256 / 2304_OPS_ZERO_FAILURE_PANIC / NOT_HOST_PERFORMANCE
-round13_local_script_matrix: V18_PASS / ACTIONLINT_1.7.12 / SHELLCHECK_SECRET_SCAN_SAFE_GATE_217_90_RC_ATTESTATION_SOURCE_EXCLUSION_PRIVACY_DOC_MUTATION_PASS
-round13_coderabbit: FINAL_V18_LOCAL_REVIEW_ITERATIONS_COMPLETE / 14_VALID_FINDINGS_FIXED / 6_STALE_OR_FALSE_FINDINGS_DISPROVED_AGAINST_CURRENT_SOURCE / FINAL_REVIEW_FINDINGS_0 / FINAL_PUSH_GITHUB_CODERABBIT_PENDING
+round13_local_round10_performance: V18_DIRTY_WORKTREE_SOURCE_ONLY_PASS / WALL_27.23S / GO_TEST_21.516S / JSON_SHA256_ADAEAB59CFAA0323F78B98FEB4765B358FAF9A913DFA622FB7FE1BF8D472A80D / ORDINARY_C16_P95_2.012662MS / FIVE_REPOSITORY_SURROGATE_P95_108.288998MS / CODEX_ALL_P95_46.827635MS / PUBLIC_P95_P99_8.728750_9.440184MS / SQLITE_C16_P95_2.549483MS / SQLITE_QUEUE_MAX_30_OF_256 / 2304_OPS_ZERO_FAILURE_PANIC / NOT_HOST_PERFORMANCE
+round13_local_script_matrix: V18_PASS / ROUND6_184.61S / RELEASE_DOC_MUTATION_452.28S / ACTIONLINT_1.7.12 / SHELLCHECK_SECRET_SCAN_SAFE_GATE_217_78_RC_ATTESTATION_SOURCE_EXCLUSION_PRIVACY_DOC_MUTATION_PASS
+round13_coderabbit: FINAL_LOCAL_REVIEW_PASS / FINDINGS_0 / 28_VALID_FINDINGS_FIXED / 11_STALE_FALSE_OR_CONDITIONAL_FINDINGS_DISPROVED_AGAINST_CURRENT_SOURCE / FINAL_PUSH_GITHUB_CODERABBIT_PENDING
 round13_second_machine_layout: CANDIDATE=/srv/artifacts/candidate / UPSTREAM=/srv/artifacts/upstream / EVIDENCE=/srv/cag-audit/evidence-$RUN_ID
 round13_pr_required_checks: NOT_RUN
 round13_premerge_second_machine: NOT_RUN / PR_SYNTHETIC_MERGE_FULL_DIAGNOSTIC_ONLY / PORTABLE_PACK_FORBIDDEN
@@ -83,7 +83,7 @@ round13_stable_production_approved: NOT_PROVIDED
   mutate the active Subject controller before a later raw-capture failure, and
   that successful reconfiguration does not clear the request-lifecycle cache.
 
-## Open gates
+## Completed gates
 
 The pinned v7.2.125 source/API/ABI/RPC contracts, complete Linux source unit and
 race lanes, vet, bounded fuzz, public corpus, release contracts, Safe Gate,
@@ -92,26 +92,29 @@ execution of the dirty-development native CPA Host/Router matrix pass. The
 final remote-enabled pinned compatibility matrix verified the exact v7.2.125
 tag and commit; two earlier low-speed network failures are superseded and were
 not code failures. The latest-release drift check remained intentionally
-skipped because this round is fixed to v7.2.125, and the exact GitHub checks
-for the final pushed head remain mandatory. The
-ordinary-user invocation separately stopped at the expected passwordless-sudo
+skipped because this round is fixed to v7.2.125. The ordinary-user invocation
+separately stopped at the expected passwordless-sudo
 mount preflight; it did not enter the Host test process. Both observations are
-development evidence only. The pre-merge
+development evidence only.
+
+The separately supplied complete Codex jailbreak ZIP contract is implemented
+and closed at the source-contract layer: `--supplemental-archive`, its schemas,
+validators, negative tests, fixed archive identity, and Safe Gate pins land
+together. Its fixed 4-entry/7-case/252-execution denominator stays separate
+from the five-repository 11-source/19-case/684-execution result.
+
+## Open gates
+
+The exact GitHub checks for the final pushed head remain mandatory. The pre-merge
 PR synthetic-merge diagnostic and the post-squash protected-main release
 admission are separate, fresh second-machine executions; both are currently
 `NOT_RUN`. The pre-merge run may authorize only an author squash merge and may
 not produce a portable report. Because the SO embeds its commit, no PR-phase
 artifact, bytes, hash, evidence, or PASS transfers to the new main commit. The
 post-main run must wait for all five exact-main push checks and then repeat the
-full matrix from the new main artifact before `pack` is permitted.
-
-The separately supplied complete Codex jailbreak ZIP contract is implemented
-and closed at the source-contract layer: `--supplemental-archive`, its schemas,
-validators, negative tests, fixed archive identity, and Safe Gate pins land
-together. Its fixed 4-entry/7-case/252-execution denominator stays separate
-from the five-repository 11-source/19-case/684-execution result. A real
-second-machine run remains `NOT_RUN`; no supplemental runtime PASS is claimed.
-Exact required
+full matrix from the new main artifact before `pack` is permitted. A real
+supplemental second-machine run remains `NOT_RUN`; no supplemental runtime PASS
+is claimed. Exact required
 checks, the exact-candidate native CPA Host stages, GitHub CodeRabbit status for
 the final pushed head, merge, a genuine
 signed annotated tag from a real authorized signer, and prerelease gates remain

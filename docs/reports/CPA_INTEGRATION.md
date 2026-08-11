@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 ## Round 13 active compatibility overlay
@@ -20,10 +20,10 @@ was frozen. Round 13 intentionally remains pinned to v7.2.125; no v7.2.127
 source, compile, Host, or release result is claimed.
 
 The current five-repository review policy has SHA-256
-`06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26`.
+`a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f`.
 Keysmith is reviewed at commit
-`3a9d2008ead29a261e2644963a50202e747c7c8a` / tree
-`973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`. A fresh acquisition validated
+`6910586a012308cb445f68620d9a990348aef06f` / tree
+`feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`. A fresh acquisition validated
 5 repositories, 11 selected text sources, and 19 semantic cases without
 executing third-party code, then removed the ephemeral source text.
 
@@ -63,7 +63,7 @@ The following commands passed on 2026-08-10 for this working tree:
 - `bash scripts/release-candidate-contract-test.sh` — `PASS`;
 - `make workflow-lint` — `PASS`;
 - `bash scripts/check-production-health-test.sh` — `PASS`;
-- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `231/231 PASS` on Linux;
+- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `244/244 PASS` on Linux;
 - `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` — `PASS`.
 
 The `make workflow-lint` row records the earlier dirty-tree run. After the v17

@@ -321,23 +321,24 @@ def manifest() -> dict[str, Any]:
     }
 
 
-def supplemental_manifest_fixture() -> tuple[dict[str, Any], dict[str, Any], bytes]:
-    policy_path = Path(__file__).resolve().parent.parent / "supplemental-zip-policy.json"
-    policy_raw = policy_path.read_bytes()
-    policy = json.loads(policy_raw)
+def _fabricated_supplemental_entries(
+    entries: list[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
     approved: list[dict[str, Any]] = []
-    for index, entry in enumerate(policy["entries"]):
+    local_header_offset = 900
+    for entry in entries:
+        data_offset = local_header_offset + 100
         approved.append(
             {
                 "compressed_bytes": entry["compressed_bytes"],
                 "compression_method": entry["compression_method"],
                 "content_sha256": entry["content_sha256"],
                 "crc32": entry["crc32"],
-                "data_offset": 1000 + index * 100000,
+                "data_offset": data_offset,
                 "encoding": entry["encoding"],
                 "entry_id": entry["entry_id"],
                 "flags": 0,
-                "local_header_offset": 900 + index * 100000,
+                "local_header_offset": local_header_offset,
                 "normalized_text_sha256": entry["normalized_text_sha256"],
                 "path": entry["path"],
                 "raw_name_sha256": entry["raw_name_sha256"],
@@ -345,6 +346,15 @@ def supplemental_manifest_fixture() -> tuple[dict[str, Any], dict[str, Any], byt
                 "uncompressed_bytes": entry["uncompressed_bytes"],
             }
         )
+        local_header_offset = data_offset + entry["compressed_bytes"]
+    return approved
+
+
+def supplemental_manifest_fixture() -> tuple[dict[str, Any], dict[str, Any], bytes]:
+    policy_path = Path(__file__).resolve().parent.parent / "supplemental-zip-policy.json"
+    policy_raw = policy_path.read_bytes()
+    policy = json.loads(policy_raw)
+    approved = _fabricated_supplemental_entries(policy["entries"])
     supplemental = {
         "acquired_at": STAMP,
         "approved_entries": approved,

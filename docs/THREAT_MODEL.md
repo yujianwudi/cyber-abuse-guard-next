@@ -9,7 +9,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 ## Frozen historical Round 12 threat-model body
@@ -167,10 +167,11 @@ Host/Router run is retained as local development evidence only and does not
 close an exact-candidate, protected, or independent boundary. Detailed legacy
 results remain in Git history; the
 legacy CPA-version-specific handoff files are not part of the active source
-tree. Current v7.2.124 source and pending-candidate status are recorded in the
+tree. Current v7.2.125 source and pending-candidate status are recorded in the
 root README, this threat model, `DESIGN.md`, and `LIMITATIONS.md`.
-`AUDIT_HANDOFF.md`, `reports/TEST_REPORT.md`, and
-`reports/RELEASE_EVIDENCE.md` retain historical v7.2.116 identities. Any missing final-commit Host,
+`reports/TEST_REPORT.md` and `reports/RELEASE_EVIDENCE.md` are active Round 13
+overlays with frozen historical sections; `AUDIT_HANDOFF.md` retains the
+historical v7.2.116 handoff identity. Any missing final-commit Host,
 GitHub CI, artifact, or proxy result is **NOT RUN** or **BLOCKED**, never an
 inferred PASS. Embedded ruleset `1.0.10` identifies YAML assets only and does
 not include the complete Go classifier/extractor policy. Repository-local

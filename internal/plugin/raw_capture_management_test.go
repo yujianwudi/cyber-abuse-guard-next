@@ -1231,33 +1231,7 @@ PRAGMA user_version=3;`); err != nil {
 		t.Fatal(err)
 	}
 
-	type artifactState struct {
-		data    []byte
-		mode    os.FileMode
-		size    int64
-		modTime time.Time
-	}
-	snapshot := func(path string) artifactState {
-		t.Helper()
-		info, err := os.Stat(path)
-		if err != nil {
-			t.Fatalf("stat candidate artifact %q: %v", path, err)
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read candidate artifact %q: %v", path, err)
-		}
-		return artifactState{data: data, mode: info.Mode(), size: info.Size(), modTime: info.ModTime()}
-	}
-	paths := []string{databasePath, databasePath + "-wal", databasePath + "-shm"}
-	before := make(map[string]artifactState, len(paths))
-	for _, path := range paths {
-		before[path] = snapshot(path)
-	}
-	directoryBefore, err := os.Stat(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
+	before := snapshotAuditLifecycleArtifacts(t, directory, databasePath)
 
 	p := New()
 	t.Cleanup(p.Shutdown)
@@ -1271,19 +1245,7 @@ PRAGMA user_version=3;`); err != nil {
 	if p.runtime.Load() != oldState || !strings.Contains(p.lastReconfigureErrorMessage(), "requires restart") {
 		t.Fatalf("existing WAL database hot candidate was published or lacked restart reason: stateChanged=%t error=%q", p.runtime.Load() != oldState, p.lastReconfigureErrorMessage())
 	}
-	for _, path := range paths {
-		after := snapshot(path)
-		if !reflect.DeepEqual(after, before[path]) {
-			t.Fatalf("rejected candidate changed artifact %q: before=%#v after=%#v", path, before[path], after)
-		}
-	}
-	directoryAfter, err := os.Stat(directory)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !directoryAfter.ModTime().Equal(directoryBefore.ModTime()) {
-		t.Fatalf("rejected candidate changed directory mtime: before=%s after=%s", directoryBefore.ModTime(), directoryAfter.ModTime())
-	}
+	assertAuditLifecycleArtifactsUnchanged(t, before, directory, databasePath)
 	var userVersion int
 	if err := legacy.QueryRow(`PRAGMA user_version`).Scan(&userVersion); err != nil {
 		t.Fatal(err)

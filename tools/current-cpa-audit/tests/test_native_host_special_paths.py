@@ -54,6 +54,27 @@ SECRET_OUTPUT = "REQUEST-CONTENT-MUST-NOT-ENTER-REPORT"
 
 
 def _run_git(repository: Path, *arguments: str) -> str:
+    environment = os.environ.copy()
+    for variable in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_NAMESPACE",
+    ):
+        environment.pop(variable, None)
+    environment.update(
+        {
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_OPTIONAL_LOCKS": "0",
+            "HTTP_PROXY": "",
+            "HTTPS_PROXY": "",
+            "ALL_PROXY": "",
+        }
+    )
     result = subprocess.run(
         ["git", "-C", str(repository), *arguments],
         stdin=subprocess.DEVNULL,
@@ -64,15 +85,7 @@ def _run_git(repository: Path, *arguments: str) -> str:
         errors="replace",
         timeout=30,
         check=False,
-        env={
-            **os.environ,
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_OPTIONAL_LOCKS": "0",
-            "HTTP_PROXY": "",
-            "HTTPS_PROXY": "",
-            "ALL_PROXY": "",
-        },
+        env=environment,
     )
     if result.returncode != 0:
         raise AssertionError(
@@ -287,6 +300,39 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
     def fixture(self) -> Iterator[Fixture]:
         with tempfile.TemporaryDirectory() as directory:
             yield Fixture(Path(directory))
+
+    def test_run_git_ignores_parent_repository_environment(self) -> None:
+        with self.fixture() as fixture:
+            decoy = (fixture.root / "decoy").resolve()
+            decoy.mkdir()
+            _run_git(decoy, "init")
+            _run_git(decoy, "config", "isolation.owner", "decoy")
+
+            parent_environment = {
+                "GIT_DIR": str(decoy / ".git"),
+                "GIT_WORK_TREE": str(decoy),
+                "GIT_INDEX_FILE": str(decoy / ".git" / "index"),
+                "GIT_COMMON_DIR": str(decoy / ".git"),
+                "GIT_OBJECT_DIRECTORY": str(decoy / ".git" / "objects"),
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(decoy / ".git" / "objects"),
+                "GIT_NAMESPACE": "parent-environment",
+            }
+            with mock.patch.dict(os.environ, parent_environment, clear=False):
+                actual_root = Path(
+                    _run_git(fixture.checkout, "rev-parse", "--show-toplevel")
+                ).resolve()
+                _run_git(
+                    fixture.checkout, "config", "isolation.owner", "fixture"
+                )
+
+            self.assertEqual(actual_root, fixture.checkout)
+            self.assertEqual(
+                _run_git(fixture.checkout, "config", "--get", "isolation.owner"),
+                "fixture",
+            )
+            self.assertEqual(
+                _run_git(decoy, "config", "--get", "isolation.owner"), "decoy"
+            )
 
     def test_pack_validate_schema_and_no_output_copy(self) -> None:
         with self.fixture() as fixture:

@@ -173,8 +173,8 @@ for digest in \
 done
 [[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
   fail "current CPA audit tool test count is invalid"
-[[ "$current_audit_tool_test_count" == 231 ]] || \
-  fail "current CPA audit harness must retain the reviewed 231-test closure"
+[[ "$current_audit_tool_test_count" == 244 ]] || \
+  fail "current CPA audit harness must retain the reviewed 244-test closure"
 [[ "$audit_cpa_module_sum" == "$round13_cpa_module_sum" ]] || \
   fail "current CPA audit harness module sum differs from the v7.2.125 authority"
 [[ "$audit_cpa_go_mod_sum" == "$round13_cpa_go_mod_sum" ]] || \
@@ -325,7 +325,7 @@ if [[
     docs/reports/ROUND9_EXECUTION_RECORD.md
   )
   current_policy_version='current_classifier_policy_version: classifier-policy-v18'
-  current_policy_sha='current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa'
+  current_policy_sha='current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82'
   for relative in "${current_classifier_prologue_documents[@]}"; do
     document="$doc_root/$relative"
     prologue="$(sed -n '1,15p' "$document")"
@@ -593,8 +593,8 @@ for relative, marker in (
     ),
 ):
     active, _ = split_once(relative, marker)
-    if len(re.findall(r"(?<![0-9])231/231 PASS(?![0-9])", active)) != 1:
-        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 231/231 PASS result")
+    if len(re.findall(r"(?<![0-9])244/244 PASS(?![0-9])", active)) != 1:
+        raise SystemExit(f"{relative}: active Round 13 overlay must contain exactly one 244/244 PASS result")
 
 
 relative = "docs/reports/RELEASE_EVIDENCE.md"

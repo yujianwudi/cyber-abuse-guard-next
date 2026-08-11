@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 Last updated: 2026-08-11 (Asia/Shanghai)
@@ -43,32 +43,35 @@ workload matrices fail closed. On a runner with at least 16 effective CPUs, all
 absolute gates still include c=16. This development runner remains explicitly
 non-equivalent to a production-capacity SLO.
 
-### Selected additional 2026-08-11 classifier-policy-v18 local source rerun
+### Selected 2026-08-11 classifier-policy-v18 local source rerun
 
-This final local rerun supersedes both the pre-boundary-collapse
-`0cce8613...6af8` result and the earlier v18 `a66eaa52...3e90` result as the
-selected current dirty-source evidence. It is
-bound to
+This is the only selected current dirty-source performance artifact; all
+earlier v18 runs are historical and unselected. The rerun is bound to
 `classifier-policy-v18` /
-`9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa`.
+`64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82`.
 On WSL Linux amd64 with Go 1.26.4, 20 visible CPUs, and `GOMAXPROCS=20`,
-  the selected `make round10-performance` run passed in 24.0 wall-clock seconds;
-  the measured Go test itself completed in 17.127 seconds. Its JSON SHA-256 is
-`3c86959ea1f132b322da03b1271c1b96aa17117de70ffc1f8c73cbdaf9ee62a2`.
+the selected `make round10-performance` run passed in 27.23 wall-clock seconds;
+the measured Go test itself completed in 21.516 seconds. Its JSON SHA-256 is
+`adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d`.
 The report records source HEAD
-`a672ab31eabed9ca32c90ad110a9f47b3ae407c6`, committed head tree
-`9aee6ced9cacf5ed899c658ed8d8ed422580cee8`, and
+`64348a4a51473fd1bed6361255def0ab46f8085f`, committed head tree
+`a52902b867e753b8d836b2bfcfdc0c2dcb106887`, and
 `measured_tree=NOT_PROVIDED_DIRTY_WORKTREE`.
 
 | Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
 |---|---:|---|
-| ordinary | worst p95 `2.303293 ms` at c=16 | p95 <= 10 ms: `PASS` |
-| five-repository surrogate activation | p95 `105.194822 ms` at c=16 | p95 <= 250 ms: `PASS` |
-| Codex-all surrogate long | p95 `45.001980 ms` at c=16 | p95 <= 600 ms: `PASS` |
-| public synthetic | p95/p99 `8.702025/9.020208 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
-| SQLite `Enqueue` + `Flush` | p95 `1.311953 ms` at c=16; sampled queue max `28/256` | failure/panic count 0: `PASS` |
+| ordinary | worst p95 `2.012662 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `108.288998 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `46.827635 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `8.728750/9.440184 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `2.549483 ms` at c=16; sampled queue max `30/256` | failure/panic count 0: `PASS` |
 
 All 2,304 bounded operations reported zero failures and zero recovered panics.
+The accompanying 4 KiB / 64-token proof-only benchmark reported exactly
+`64.00 classify_calls/op` in three independent one-iteration samples
+(`129.507384-130.874618 ms/op`). The shared fail-active ceiling is explicitly
+`128` classifications (`2 * 64`); the worst-case accepted fixture consumes 64
+and the checked regression rejects a one-call-short budget.
 The fixed-workload p99 regression baseline, native CPA Host/container overhead,
 paired throughput, 60-minute RSS lane, and second-machine performance evidence
 remain `NOT_PROVIDED`; this local source-only PASS is not a release or

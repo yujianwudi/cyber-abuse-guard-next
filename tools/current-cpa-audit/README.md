@@ -112,8 +112,8 @@ are the explicitly audited runtime, not corpus execution.
   per-source human-review pins. The checked-in file is approved for the exact
   five-repository source identities reviewed on 2026-08-10; source drift fails.
   Keysmith is pinned to current default-branch commit
-  `3a9d2008ead29a261e2644963a50202e747c7c8a` / tree
-  `973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`; its two selected reviewed blobs
+  `6910586a012308cb445f68620d9a990348aef06f` / tree
+  `feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`; its two selected reviewed blobs
   remain byte-identical to the preceding pin.
 - `audit_contract.py` — closed corpus, run-config, result, and machine-evidence
   validators. Unknown or missing fields fail.
@@ -754,9 +754,15 @@ relabeled as a sequential A/B run.
 
 For the large-payload lane, each RSS wall timestamp must agree with its
 monotonic marker within 5 ms and every sample must retain the cell's exact
-PID/start-time identity. Non-final gaps are at least 10 ms, no gap may exceed
-30 ms, and the request series must cover both boundaries with the sample count
-implied by that worst-case gap. The validator also requires
+PID/start-time identity. Non-final gaps are at least 10 ms. Across the baseline
+and request RSS series together, each cell may retain at most one gap above the
+30 ms deadline and no greater than the hard 60 ms limit; a second overrun
+(consecutive or otherwise) or any gap above 60 ms fails closed. The shared
+one-overrun budget does not relax edge coverage: the baseline must start within
+20 ms of the cell, finish no more than 30 ms before request start, and the
+request series must start within 20 ms of request start and finish within 30 ms
+of cell completion, with the sample count implied by the 30 ms deadline. The
+validator also requires
 `sum(success_latency_ms) / concurrency` and the maximum successful latency to
 fit inside the measured request interval. Sparse RSS, process replacement, or
 latency work that cannot fit in the claimed wall duration therefore fails
@@ -777,6 +783,13 @@ not a claim about a single process's `VmRSS`. Audit queue samples come only from
 CAG's management `audit.queue_depth` and `audit.queue_capacity`, never CPA's
 usage queue. Missing, delayed, degraded, or capacity-drifting samples abort the
 capture instead of being replaced with zero.
+
+The large-payload process-RSS lane keeps its fixed 20 ms cadence and 30 ms
+sample-gap deadline. Raw monotonic sample timestamps remain in the
+measurements, and the final per-arm/per-repetition comparison publishes both
+the maximum observed gap and the total overrun count across the combined
+baseline and request series. The single bounded scheduler tolerance per cell
+does not apply to or relax the one-hour warm-RSS lane.
 
 Normal resource and queue timestamps are strictly bounded by the cell's
 `elapsed_seconds`. The raw validator derives both cadence and count bounds from

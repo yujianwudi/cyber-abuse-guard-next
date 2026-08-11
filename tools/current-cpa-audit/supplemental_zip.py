@@ -302,6 +302,17 @@ def _find_eocd(raw: bytes) -> tuple[int, tuple[Any, ...]]:
     return candidates[0]
 
 
+def _has_preceding_record_signature(
+    raw: bytes, record_offset: int, record_size: int, signature: bytes
+) -> bool:
+    """Match a fixed-size record without allowing negative slice bounds."""
+
+    start = record_offset - record_size
+    if start < 0 or record_offset > len(raw) or record_size < len(signature):
+        return False
+    return raw[start : start + len(signature)] == signature
+
+
 def _decompress_selected(raw: bytes, entry: ParsedEntry, maximum: int) -> bytes:
     payload = raw[entry.data_offset : entry.data_end]
     if len(payload) != entry.compressed_bytes:
@@ -410,9 +421,12 @@ def _inspect_archive_bytes_impl(
     if raw[directory_offset : directory_offset + 4] != CENTRAL_SIGNATURE:
         fail("supplemental ZIP central directory offset is invalid")
     if (
-        raw[max(0, eocd_offset - 20) : eocd_offset - 16] == ZIP64_LOCATOR_SIGNATURE
-        or raw[max(0, directory_offset - 56) : directory_offset - 52]
-        == ZIP64_EOCD_SIGNATURE
+        _has_preceding_record_signature(
+            raw, eocd_offset, 20, ZIP64_LOCATOR_SIGNATURE
+        )
+        or _has_preceding_record_signature(
+            raw, directory_offset, 56, ZIP64_EOCD_SIGNATURE
+        )
     ):
         fail("supplemental ZIP contains ZIP64 control records")
 

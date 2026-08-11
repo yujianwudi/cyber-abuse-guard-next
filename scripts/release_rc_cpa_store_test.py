@@ -112,8 +112,34 @@ class CPAStoreReleaseTests(unittest.TestCase):
             root, _ = self.fixture(Path(temporary))
             verify_release(root)
             other = root / "other.zip"
-            create(root / SO_NAME, other)
+            with mock.patch.object(os, "fchmod", wraps=os.fchmod) as fchmod:
+                create(root / SO_NAME, other)
+            fchmod.assert_called_once()
+            self.assertEqual(fchmod.call_args.args[1], 0o644)
             self.assertEqual((root / RC_ZIP).read_bytes(), other.read_bytes())
+
+    def test_exclusive_create_race_preserves_competing_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / SO_NAME
+            output = root / RC_ZIP
+            source.write_bytes(b"audited-elf-payload\x00")
+            sentinel = b"competing-writer-owned-output"
+            original_open = os.open
+
+            def race_open(path: object, flags: int, mode: int = 0o777) -> int:
+                if Path(path) == output and flags & os.O_EXCL:
+                    with output.open("wb") as competitor:
+                        competitor.write(sentinel)
+                    raise FileExistsError("simulated exclusive-create race")
+                return original_open(path, flags, mode)
+
+            with (
+                mock.patch.object(os, "open", new=race_open),
+                self.assertRaises(FileExistsError),
+            ):
+                create(source, output)
+            self.assertEqual(output.read_bytes(), sentinel)
 
     def test_generated_package_is_accepted_by_pinned_cpa_install_archive(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

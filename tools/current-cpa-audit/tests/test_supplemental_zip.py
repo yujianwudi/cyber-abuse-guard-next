@@ -346,6 +346,23 @@ class SupplementalZipParserTests(unittest.TestCase):
             )
             self.assertIsNot(buffer, loader_inspection.selected_texts[entry_id])
 
+    def test_preceding_zip64_signature_rejects_short_offsets_without_negative_slices(
+        self,
+    ) -> None:
+        ambiguous = supplemental_zip.ZIP64_EOCD_SIGNATURE + b"x" * 48
+        self.assertEqual(ambiguous[max(0, 4 - 56) : 4 - 52], ambiguous[:4])
+        self.assertFalse(
+            supplemental_zip._has_preceding_record_signature(
+                ambiguous, 4, 56, supplemental_zip.ZIP64_EOCD_SIGNATURE
+            )
+        )
+        locator = supplemental_zip.ZIP64_LOCATOR_SIGNATURE + b"x" * 16
+        self.assertTrue(
+            supplemental_zip._has_preceding_record_signature(
+                locator, len(locator), 20, supplemental_zip.ZIP64_LOCATOR_SIGNATURE
+            )
+        )
+
     def test_rejects_missing_bad_or_conflicting_unicode_path_metadata(self) -> None:
         rejected = [
             SyntheticEntry("safe/name.md", raw_name=b"safe/name.md", utf8=False),
@@ -646,6 +663,59 @@ class SupplementalContractTests(unittest.TestCase):
             )
             self.assertFalse(output.exists())
             self.assertEqual(archive.read_bytes(), b"operator-owned archive sentinel")
+
+    def test_cleanup_failure_preserves_primary_acquisition_error_without_body(self) -> None:
+        primary_error = RuntimeError("primary acquisition failure")
+        request_body = "sensitive-request-body-token"
+        cleanup_error = OSError(f"cleanup rejected {request_body}")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "operator.zip"
+            archive.write_bytes(b"operator-owned archive sentinel")
+            output = root / "candidate"
+            with (
+                mock.patch(
+                    "acquire.create_supplemental_manifest",
+                    side_effect=primary_error,
+                ),
+                mock.patch(
+                    "acquire.remove_private_tree",
+                    side_effect=cleanup_error,
+                ),
+                self.assertRaises(RuntimeError) as raised,
+            ):
+                acquire.acquire_supplemental_zip(archive, POLICY_PATH, output)
+
+            self.assertIs(raised.exception, primary_error)
+            notes = getattr(raised.exception, "__notes__", ())
+            self.assertEqual(len(notes), 1)
+            self.assertIn("cleanup also failed", notes[0])
+            self.assertIn("acquisition remains failed closed", notes[0])
+            self.assertIn("OSError", notes[0])
+            self.assertNotIn(request_body, notes[0])
+
+    @unittest.skipUnless(os.name == "posix", "POSIX umask permission contract")
+    def test_supplemental_acquire_creates_private_intermediate_parents(self) -> None:
+        manifest, _policy, _policy_raw = valid_manifest()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "operator.zip"
+            archive.write_bytes(b"operator-owned archive sentinel")
+            private_parent = root / "new-parent"
+            nested_parent = private_parent / "nested"
+            output = nested_parent / "candidate"
+            previous_umask = os.umask(0)
+            try:
+                with mock.patch(
+                    "acquire.create_supplemental_manifest", return_value=manifest
+                ):
+                    acquire.acquire_supplemental_zip(archive, POLICY_PATH, output)
+                restored_umask = os.umask(0)
+            finally:
+                os.umask(previous_umask)
+            self.assertEqual(restored_umask, 0)
+            for path in (private_parent, nested_parent, output):
+                self.assertEqual(path.stat().st_mode & 0o077, 0)
 
     def test_cli_supplemental_arguments_are_all_or_none_and_mutually_exclusive(self) -> None:
         parsed = acquire.parse_args(

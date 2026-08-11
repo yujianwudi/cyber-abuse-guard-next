@@ -9,7 +9,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 Last updated: 2026-08-11 (Asia/Shanghai)
@@ -29,20 +29,20 @@ frozen to v7.2.125. No later-version compatibility or runtime evidence is
 inferred.
 
 The current five-repository source policy SHA-256 is
-`06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26`.
+`a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f`.
 It reviews Keysmith at commit
-`3a9d2008ead29a261e2644963a50202e747c7c8a` / tree
-`973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`. A fresh read-only GitHub
+`6910586a012308cb445f68620d9a990348aef06f` / tree
+`feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`. A fresh read-only GitHub
 acquisition validated 5 repositories, 11 selected text sources, and 19 semantic
 cases without executing third-party code, then removed the ephemeral text.
 
 | Evidence boundary | Current Round 13 status |
 |---|---|
-| Pinned CPA source/compile contract and audit-harness unit suite | `DIRTY_WORKTREE PASS / 231_OF_231 / NOT_FINAL_CANDIDATE` |
+| Pinned CPA source/compile contract and audit-harness unit suite | `DIRTY_WORKTREE PASS / 244_OF_244 / NOT_FINAL_CANDIDATE` |
 | no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `PASS / DIRTY_WORKTREE_NATIVE_HOST_PASS / FINAL_CANDIDATE_PENDING` |
 | Dirty-worktree Linux unit, race, full script matrix, and root-isolated CPA Host/Router matrix | `PASS / NO_DATA_RACE / NOT_FINAL_CANDIDATE`; Host functional evidence only, not Host latency/RSS |
 | Exact-candidate Linux native Host, required GitHub checks, race, and full matrix | `NOT_RUN / PENDING` |
-| Local in-process performance | `CLASSIFIER-POLICY-V18 DIRTY_WORKTREE SOURCE-ONLY PASS / JSON 3c86959e...e62a2`; ordinary p95 `2.303293 ms`; five-repository surrogate p95 `105.194822 ms`; CPA Host overhead, RSS, paired throughput, and production SLO remain `NOT_PROVIDED` |
+| Local in-process performance | `CLASSIFIER-POLICY-V18 DIRTY_WORKTREE SOURCE-ONLY PASS / JSON adaeab59...a80d`; ordinary c16 p95 `2.012662 ms`; five-repository surrogate p95 `108.288998 ms`; Codex-all p95 `46.827635 ms`; public p95/p99 `8.728750/9.440184 ms`; SQLite c16 p95 `2.549483 ms`, queue max `30/256`; 2,304 operations with zero failures/panics; CPA Host overhead, RSS, paired throughput, and production SLO remain `NOT_PROVIDED` |
 | Local development corpus | malicious recall `154/154`; benign audit hits `3/142`; local-only and not a second-machine false-positive result |
 | Local CodeRabbit | final v18 review iterations complete; 2 valid findings fixed; 3 stale findings disproved against current source; 0 open valid findings; pushed-head GitHub CodeRabbit remains pending |
 | Pre-merge and post-main second-machine executions | `NOT_RUN` |

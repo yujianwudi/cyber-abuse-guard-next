@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v18
-current_classifier_policy_sha256: 9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa
+current_classifier_policy_sha256: 64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82
 ```
 
 Source-tree status updated: 2026-08-11 (Asia/Shanghai)
@@ -45,7 +45,7 @@ Source-tree status updated: 2026-08-11 (Asia/Shanghai)
   concurrent WAL writer cannot change the rows released by that authorization.
 - Remove the long ASCII edge conversion from independent-lexeme matching with
   exact zero-allocation rune comparisons. Restore 12 retired Round 8 workflow
-  tests to unittest discovery so Safe Gate reports `217` tests / `90` explicit
+  tests to unittest discovery so Safe Gate reports `217` tests / `78` explicit
   skips instead of silently omitting them.
 - Make hot reconfiguration generation-safe. Subject state is prepared in an
   independent controller before candidate database work, failed reconfiguration
@@ -55,7 +55,7 @@ Source-tree status updated: 2026-08-11 (Asia/Shanghai)
   candidate is rejected before directory creation or SQLite migration and must
   instead use a controlled restart.
 - Advance the classifier contract to `classifier-policy-v18` /
-  `9f9541fe30a3b95aeb89fba0dc400fc8cdf89c4ad94880bc61bd4b1895036eaa`.
+  `64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82`.
   Bounded same-owner lexical reconstruction closes partial-word newline,
   streaming-chunk, and adjacent provider content-block splits such as
   `ste\nal` and `窃\n取`, while role, turn, scope, provenance, fragment-count,
@@ -66,28 +66,42 @@ Source-tree status updated: 2026-08-11 (Asia/Shanghai)
   by a leading line break now collapses to one hard boundary instead of charging
   duplicate normalization and directive-analysis capacity.
 - Refresh the live five-repository review policy to SHA-256
-  `06e46d7bd29aad44373739bfb15f862a021ff1e85e2a6ff267c3b09ca2789c26`.
-  Keysmith advances to commit `3a9d2008ead29a261e2644963a50202e747c7c8a` /
-  tree `973ce503bdb1131e3a642cbe2cc3acd2dd2bed94`; its two selected blobs remain
+  `a4ca2e9879981dfad54d3830f30282ba58ea3a70fd8bb4adb934bf82d562ec5f`.
+  Keysmith advances to commit `6910586a012308cb445f68620d9a990348aef06f` /
+  tree `feb5bccb7f811209a3cbcbae5adadb40a1e2ce49`; its two selected blobs remain
   byte-identical. A fresh read-only acquisition validates all five repositories,
   11 selected text sources, and 19 semantic cases without executing third-party
   code, then removes the ephemeral text.
 - Rebind the current CPA audit runner to bundle
-  `6e13fee858b442b33ec940c0f7ba4587a988001e9f27962df783573f386c821f`,
+  `6066fe6cd81005770113f3624982729301d45fa7dc416ae780c71bdaa656ac0d`,
   audit contract
-  `81bc02d8f2d1d9cc395e0b5085b75b7e49e37e13b25fd595de265a8e91adbd8e`,
+  `01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3`,
   run source
-  `21ff9303ed89877b5eff6653c44c3324edba731e9c03b2a735ec86d7839b05de`,
+  `808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb`,
   and machine schema
   `b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6`.
-  All 231 audit-tool tests pass on Linux; 19 platform/privilege-specific cases
-  are explicitly skipped.
+  All 244 audit-tool tests pass on Linux.
 - Keep the Host-performance workload denominator code-owned and comparable:
   the five-repository activation lane must contain exactly 16 requests across
   eight Chat and eight Responses bodies before any source text is read. Bind
   each Docker bind-mount backing identity to the exact inspect `Source` text
   while retaining a separate resolved-path digest, so equivalent trailing,
   repeated, or dot slashes cannot cause a false preflight rejection.
+- Select the 2026-08-11 classifier-policy-v18 source-only performance rerun as
+  the sole current dirty-worktree performance artifact. Its JSON SHA-256 is
+  `adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d`;
+  the run completed in 27.23 seconds wall / 21.516 seconds measured Go test,
+  with ordinary c16 p95 `2.012662 ms`, five-repository surrogate p95
+  `108.288998 ms`, Codex-all p95 `46.827635 ms`, public p95/p99
+  `8.728750/9.440184 ms`, SQLite c16 p95 `2.549483 ms`, queue max `30/256`,
+  and zero failures or recovered panics across 2,304 operations. It is not CPA
+  Host, RSS, paired-throughput, release, or production-SLO evidence.
+- Refresh the latest complete local development gates:
+  `make unit-test round6-vet` passed in 343.3 seconds wall (classifier
+  149.240 seconds; plugin 144.703 seconds), and `make race` passed in 1103.8
+  seconds wall (audit
+  54.982 seconds; plugin 616.824 seconds; classifier 436.656 seconds) with no
+  data race. These dirty-worktree results do not close final-candidate gates.
 - Make supplemental review approval unconditional, reject unknown archive
   summary keys, and best-effort zero the four mutable text buffers owned by the
   audit Harness before releasing them. This does not claim whole-process memory

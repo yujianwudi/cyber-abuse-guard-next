@@ -702,6 +702,113 @@ func TestRound13SafetyPolicyNegationReversalGovernors(t *testing.T) {
 	}
 }
 
+func TestRound13DefensiveRequestObjectClassificationBudget(t *testing.T) {
+	t.Parallel()
+	c := newDefaultClassifier(t)
+	policy, objectStart := round13WorstCaseDefensiveRequestObjectProof(t)
+	thresholds := DefaultThresholds()
+	policyConfig := DefaultPolicy()
+
+	budget := newDefensiveRequestObjectProofBudget()
+	if !c.nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+		policy, objectStart, ModeBalanced, thresholds, policyConfig, &budget,
+	) {
+		t.Fatal("full defensive request-object proof budget did not preserve the benign policy")
+	}
+	used := maxDefensiveRequestObjectProofClassifications - budget.remaining
+	if used != maxDefensiveRequestObjectProofTokens {
+		t.Fatalf(
+			"defensive proof classifications=%d, want one bounded call per object token (%d)",
+			used, maxDefensiveRequestObjectProofTokens,
+		)
+	}
+
+	exhausted := defensiveRequestObjectProofBudget{remaining: used - 1}
+	if c.nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+		policy, objectStart, ModeBalanced, thresholds, policyConfig, &exhausted,
+	) {
+		t.Fatal("exhausted defensive request-object proof budget granted suppression")
+	}
+	if exhausted.remaining != 0 {
+		t.Fatalf("exhausted defensive proof retained %d classifications", exhausted.remaining)
+	}
+	if c.nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+		policy, objectStart, ModeBalanced, thresholds, policyConfig, nil,
+	) {
+		t.Fatal("nil defensive request-object proof budget granted suppression")
+	}
+}
+
+func BenchmarkRound13DefensiveRequestObjectProofBudget4KB64Tokens(b *testing.B) {
+	c := newDefaultClassifier(b)
+	policy, objectStart := round13WorstCaseDefensiveRequestObjectProof(b)
+	thresholds := DefaultThresholds()
+	policyConfig := DefaultPolicy()
+	segments := []extract.Segment{{Role: extract.RoleSystem, Text: policy}}
+	assertRound13SafetyAllow(b, c.AnalyzeSegments(segments))
+
+	b.Run("proof-only", func(b *testing.B) {
+		b.ReportAllocs()
+		b.SetBytes(int64(len(policy)))
+		used := 0
+		for b.Loop() {
+			budget := newDefensiveRequestObjectProofBudget()
+			if !c.nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+				policy, objectStart, ModeBalanced, thresholds, policyConfig, &budget,
+			) {
+				b.Fatal("bounded defensive request-object proof failed")
+			}
+			used = maxDefensiveRequestObjectProofClassifications - budget.remaining
+		}
+		if used > maxDefensiveRequestObjectProofClassifications {
+			b.Fatalf(
+				"defensive proof classifications=%d, max=%d",
+				used, maxDefensiveRequestObjectProofClassifications,
+			)
+		}
+		b.ReportMetric(float64(used), "classify_calls/op")
+	})
+
+	b.Run("full-system-policy", func(b *testing.B) {
+		b.ReportAllocs()
+		b.SetBytes(int64(len(policy)))
+		for b.Loop() {
+			_ = c.AnalyzeSegments(segments)
+		}
+	})
+}
+
+func round13WorstCaseDefensiveRequestObjectProof(t testing.TB) (string, int) {
+	t.Helper()
+	objectTokens := []string{"deploy", "ransomware"}
+	for len(objectTokens) < maxDefensiveRequestObjectProofTokens-1 {
+		objectTokens = append(objectTokens, "we")
+	}
+	objectTokens = append(objectTokens, "x")
+	const prefix = "System safety policy: block requests to "
+	policy := prefix + strings.Join(objectTokens, " ")
+	if len(policy) > maxDefensiveRequestObjectProofBytes {
+		t.Fatalf("base defensive policy bytes=%d", len(policy))
+	}
+	objectTokens[len(objectTokens)-1] += strings.Repeat(
+		"x", maxDefensiveRequestObjectProofBytes-len(policy),
+	)
+	policy = prefix + strings.Join(objectTokens, " ")
+	if len(policy) != maxDefensiveRequestObjectProofBytes {
+		t.Fatalf(
+			"defensive policy bytes=%d, want %d",
+			len(policy), maxDefensiveRequestObjectProofBytes,
+		)
+	}
+	if got := len(strings.Fields(policy[len(prefix):])); got != maxDefensiveRequestObjectProofTokens {
+		t.Fatalf(
+			"defensive object tokens=%d, want %d",
+			got, maxDefensiveRequestObjectProofTokens,
+		)
+	}
+	return policy, len(prefix)
+}
+
 func round13ProfiledSystemBody(t testing.TB, policy string) []byte {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{

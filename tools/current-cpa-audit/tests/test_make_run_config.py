@@ -209,6 +209,7 @@ class MakeRunConfigTests(unittest.TestCase):
         provenance = candidate_identity(
             validated_manifest,
             manifest_raw,
+            cag_identity=identity,
             artifact_id="456789",
             artifact_name=CANDIDATE_ARTIFACT_NAME,
             artifact_digest="sha256:" + "a" * 64,
@@ -218,12 +219,33 @@ class MakeRunConfigTests(unittest.TestCase):
         self.assertEqual(
             provenance["so"], {"name": SO_NAME, "sha256": so_sha256}
         )
+        for field, drifted_value in (
+            ("commit", "3" * 40),
+            ("tree", "4" * 40),
+            ("source_version", "9.9.9"),
+            ("so_name", "lookalike.so"),
+            ("so_sha256", "5" * 64),
+        ):
+            drifted_cag_identity = copy.deepcopy(identity)
+            drifted_cag_identity[field] = drifted_value
+            with self.subTest(cag_identity_drift=field), self.assertRaisesRegex(
+                ContractError, "candidate identity"
+            ):
+                candidate_identity(
+                    validated_manifest,
+                    manifest_raw,
+                    cag_identity=drifted_cag_identity,
+                    artifact_id="456789",
+                    artifact_name=CANDIDATE_ARTIFACT_NAME,
+                    artifact_digest="sha256:" + "a" * 64,
+                )
         for label, artifact in {
             "id": {"artifact_id": "0"},
             "name": {"artifact_name": "lookalike-candidate"},
             "digest": {"artifact_digest": "a" * 64},
         }.items():
             arguments = {
+                "cag_identity": identity,
                 "artifact_id": "456789",
                 "artifact_name": CANDIDATE_ARTIFACT_NAME,
                 "artifact_digest": "sha256:" + "a" * 64,
@@ -244,6 +266,7 @@ class MakeRunConfigTests(unittest.TestCase):
             candidate_identity(
                 missing_so,
                 canonical_bytes(missing_so) + b"\n",
+                cag_identity=identity,
                 artifact_id="456789",
                 artifact_name=CANDIDATE_ARTIFACT_NAME,
                 artifact_digest="sha256:" + "a" * 64,

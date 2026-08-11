@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
+contract_test="$root/scripts/release-rc-contract-test.sh"
 release_script="$root/scripts/release-rc.sh"
 workflow="$root/.github/workflows/release-rc.yml"
 workflow_readme="$root/.github/workflows/README.md"
@@ -13,7 +14,7 @@ cpa_store_test="$root/scripts/release_rc_cpa_store_test.py"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
-for path in "$release_script" "$workflow" "$workflow_readme" "$portable" \
+for path in "$contract_test" "$release_script" "$workflow" "$workflow_readme" "$portable" \
   "$portable_schema" "$github_validator" "$cpa_store" "$cpa_store_test"; do
   [[ -f "$path" && ! -L "$path" ]] || {
     printf 'required RC release contract input is missing: %s\n' "$path" >&2
@@ -21,6 +22,7 @@ for path in "$release_script" "$workflow" "$workflow_readme" "$portable" \
   }
 done
 
+bash -n "$contract_test"
 bash -n "$root/scripts/release-common.sh"
 bash -n "$root/scripts/release-candidate-contract-test.sh"
 bash -n "$release_script"
@@ -312,8 +314,15 @@ for failure_mode in return exit; do
   mkdir -p "$case_root/dist" "$case_root/tmp"
   printf 'payload\n' >"$case_root/dist/payload.bin"
   printf 'checksums\n' >"$case_root/dist/audit-checksums.txt"
+  printf 'checksums\n' >"$case_root/dist/checksums.txt"
   printf '{}\n' >"$case_root/dist/report.json"
-  if TMPDIR="$case_root/tmp" bash -euo pipefail -c '
+  if [[ "$failure_mode" == return ]]; then
+    expected_status=42
+  else
+    expected_status=43
+  fi
+  set +e
+  TMPDIR="$case_root/tmp" bash -euo pipefail -c '
     source "$1"
     dist="$2/dist"
     candidate_input_assets=(payload.bin checksums.txt)
@@ -325,8 +334,12 @@ for failure_mode in return exit; do
       validate_portable_and_candidate() { exit 43; }
     fi
     validate_dist_candidate
-  ' _ "$work/validate-dist-candidate.sh" "$case_root" "$failure_mode"; then
-    printf 'release RC candidate validation fault unexpectedly passed: %s\n' "$failure_mode" >&2
+  ' _ "$work/validate-dist-candidate.sh" "$case_root" "$failure_mode"
+  actual_status=$?
+  set -e
+  if [[ "$actual_status" -ne "$expected_status" ]]; then
+    printf 'release RC candidate validation fault returned %s, expected %s: %s\n' \
+      "$actual_status" "$expected_status" "$failure_mode" >&2
     exit 1
   fi
   if find "$case_root/tmp" -mindepth 1 -print -quit | grep -q .; then

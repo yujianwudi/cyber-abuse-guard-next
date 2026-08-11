@@ -222,6 +222,17 @@ def write_exclusive(path: Path, raw: bytes, mode: int = 0o600) -> None:
     os.chmod(path, mode)
 
 
+def _mkdir_private_parents(path: Path) -> None:
+    """Create a private directory tree without exposing intermediate parents."""
+
+    previous_umask = os.umask(0o077)
+    try:
+        path.mkdir(parents=True, mode=0o700)
+    finally:
+        os.umask(previous_umask)
+    os.chmod(path, 0o700)
+
+
 def remove_private_tree(root: Path) -> int:
     """Remove only a newly-created acquisition tree without following links."""
 
@@ -839,8 +850,7 @@ def acquire_supplemental_zip(
 
     if output.exists() or output.is_symlink():
         fail("supplemental acquisition output must be a new path")
-    output.mkdir(parents=True, mode=0o700)
-    os.chmod(output, 0o700)
+    _mkdir_private_parents(output)
     try:
         policy, policy_raw = load_supplemental_policy(policy_path)
         manifest = create_supplemental_manifest(
@@ -857,12 +867,13 @@ def acquire_supplemental_zip(
             policy_sha256=sha256_bytes(policy_raw),
         )
         return manifest
-    except BaseException:
+    except BaseException as primary_error:
         try:
             remove_private_tree(output)
         except BaseException as cleanup_exc:
-            fail(
-                "supplemental acquisition cleanup failed closed: "
+            primary_error.add_note(
+                "supplemental acquisition cleanup also failed; "
+                "acquisition remains failed closed: "
                 f"{type(cleanup_exc).__name__}"
             )
         raise

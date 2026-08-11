@@ -114,13 +114,14 @@ class CleanupFailure(AuditFailure):
         super().__init__(f"cleanup failed closed; cleanup_error_id={self.cleanup_error_id}")
 
 
-def _zeroize_supplemental_texts(values: dict[str, bytearray]) -> None:
-    """Best-effort zero caller-owned supplemental buffers before release."""
+def _zeroize_supplemental_texts(values: dict[str, bytearray]) -> bool:
+    """Zero caller-owned buffers and report whether the cleanup was proven."""
 
-    for entry_id in tuple(values):
-        raw = values[entry_id]
+    buffers = tuple(values.values())
+    for raw in buffers:
         raw[:] = b"\x00" * len(raw)
     values.clear()
+    return not values and all(not any(raw) for raw in buffers)
 
 
 def now_iso() -> str:
@@ -1069,6 +1070,7 @@ class Harness:
         self.supplemental_cases: dict[str, dict[str, Any]] = {}
         self.supplemental_plan: list[Any] = []
         self.supplemental_texts: dict[str, bytearray] = {}
+        self.supplemental_texts_zeroized = False
         self.supplemental_archive_identity: tuple[int, int, int, int] | None = None
         self.supplemental_archive_preserved = False
         self.cleanup = CleanupTracker(
@@ -1117,6 +1119,10 @@ class Harness:
     @property
     def control_headers(self) -> dict[str, str]:
         return {"Authorization": "Bearer " + self.control_token}
+
+    @property
+    def supplemental_member_text_retained(self) -> bool:
+        return not self.supplemental_texts_zeroized
 
     @staticmethod
     def supplemental_archive_stat_identity(info: os.stat_result) -> tuple[int, int, int, int]:
@@ -2578,7 +2584,7 @@ class Harness:
             "supplemental_input_archive_preserved": self.supplemental_archive_preserved,
             "supplemental_member_text_files_created": 0,
             "supplemental_member_text_files_removed": 0,
-            "supplemental_member_text_retained": bool(self.supplemental_texts),
+            "supplemental_member_text_retained": self.supplemental_member_text_retained,
             "third_party_text_files_removed": self.cleanup.text_files_removed,
             "third_party_text_retained": self.cleanup.text_retained,
         }
@@ -2774,7 +2780,9 @@ class Harness:
                     cleanup_errors.append(f"corpus_fds:{type(cleanup_exc).__name__}")
                 finally:
                     self.bound_corpus = None
-            _zeroize_supplemental_texts(self.supplemental_texts)
+            self.supplemental_texts_zeroized = _zeroize_supplemental_texts(
+                self.supplemental_texts
+            )
             if cleanup_errors:
                 raise CleanupFailure(cleanup_errors)
         evidence = self.machine_evidence(started_at, business_before, business_after)

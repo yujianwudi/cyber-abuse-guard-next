@@ -129,7 +129,14 @@ func TestPublishedRCStoreArchive(t *testing.T) {
 	}
 	const version = "1.0.0-rc.1"
 	archiveName := officialArchiveName(t, version)
-	archiveData := readRequiredFile(t, filepath.Join(distDir, archiveName))
+	archivePath := filepath.Join(distDir, archiveName)
+	if _, errStat := os.Lstat(archivePath); errStat != nil {
+		if os.IsNotExist(errStat) {
+			t.Skip("RC Store archive is derived only in the admitted RC release lane")
+		}
+		t.Fatalf("stat RC Store archive %s: %v", archivePath, errStat)
+	}
+	archiveData := readRequiredFile(t, archivePath)
 	binaryData := readRequiredFile(t, filepath.Join(distDir, "cyber-abuse-guard-v1.0.0.so"))
 	checksumData := readRequiredFile(t, filepath.Join(distDir, "checksums.txt"))
 	checksums, errParse := pluginstore.ParseChecksums(checksumData)
