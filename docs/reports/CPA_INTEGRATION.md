@@ -20,15 +20,17 @@ was frozen. Round 13 intentionally remains pinned to v7.2.125; no v7.2.127
 source, compile, Host, or release result is claimed.
 
 The current five-repository review policy has SHA-256
-`516a5aac90676cb079466ed2bb795f2683d88f859d5e11d283d089cb2d17de87`.
+`24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7`.
 Keysmith is reviewed at commit
-`b2b87df296f96f3d4049cadd82fd61c9a6a34595` / tree
-`98cf7431b1d1a3d189930dd9929c12c756f032ea`; Codex-X is reviewed at commit
+`d7d53fb1ba2f754545c03d0e584adfc46d0a091b` / tree
+`4649daf381d3323231c3d8d6eac4c2cf6d7bc938`; Codex-X is reviewed at commit
 `826a142fc040920a5c23c3dafabbfc8d21655478` / tree
-`95e2638756c97b844179a905513d41ea2e8aea0e`. Their five selected blobs are
-byte-identical to the preceding review. A fresh acquisition validated 5
-repositories, 11 selected text sources, and 19 semantic cases without executing
-third-party code, then removed the ephemeral source text.
+`95e2638756c97b844179a905513d41ea2e8aea0e`. Keysmith's two selected blobs are
+byte-identical to the preceding review and the other four repository pins still
+match their current default-branch heads. A fresh full acquisition remains a
+gate: three bounded attempts stopped on GitHub transport resets/timeouts before
+corpus validation, retained no corpus text, executed no third-party code, and
+make no PASS claim.
 
 Current classifier-policy-v20 source contracts and upstream-targeted tests
 cover no-copy/in-place payload reuse, Antigravity large-payload guards,

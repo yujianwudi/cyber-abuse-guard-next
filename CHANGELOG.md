@@ -80,16 +80,19 @@ Source-tree status updated: 2026-08-12 (Asia/Shanghai)
   by a leading line break now collapses to one hard boundary instead of charging
   duplicate normalization and directive-analysis capacity.
 - Refresh the live five-repository review policy to SHA-256
-  `516a5aac90676cb079466ed2bb795f2683d88f859d5e11d283d089cb2d17de87`.
-  Keysmith advances to commit `b2b87df296f96f3d4049cadd82fd61c9a6a34595` /
-  tree `98cf7431b1d1a3d189930dd9929c12c756f032ea`; Codex-X advances to commit
+  `24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7`.
+  Keysmith advances to commit `d7d53fb1ba2f754545c03d0e584adfc46d0a091b` /
+  tree `4649daf381d3323231c3d8d6eac4c2cf6d7bc938`; Codex-X remains at commit
   `826a142fc040920a5c23c3dafabbfc8d21655478` / tree
-  `95e2638756c97b844179a905513d41ea2e8aea0e`. All five selected blobs remain
-  byte-identical, so the existing semantic labels and 19-case denominator are
-  unchanged. A fresh read-only acquisition validates all five repositories and
-  removes the ephemeral text without executing third-party code.
+  `95e2638756c97b844179a905513d41ea2e8aea0e`. Keysmith's two selected blobs
+  remain byte-identical and the other four repository pins still match their
+  current default-branch heads, so the existing semantic labels and 19-case
+  denominator are unchanged. A fresh full acquisition remains required: three
+  bounded attempts stopped on GitHub transport resets/timeouts before corpus
+  validation, retained no corpus text, executed no third-party code, and make no
+  PASS claim.
 - Rebind the current CPA audit runner to bundle
-  `84985080bef45c821d687d2e82bf89ffd42ad3de18d42a057bb29cf07902f0ea`,
+  `79bc39c04b28e752247e31696666dc60228d95a4cb681f5d8531dbdd082d31b9`,
   audit contract
   `01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3`,
   run source

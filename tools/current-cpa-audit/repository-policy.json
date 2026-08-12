@@ -7,7 +7,7 @@
   "max_blob_bytes": 2097152,
   "reviewer": {
     "identity": "Codex Round 13 exact-source review",
-    "reviewed_at": "2026-08-11T18:18:35.402Z",
+    "reviewed_at": "2026-08-12T02:04:47.780Z",
     "status": "approved"
   },
   "repositories": [
@@ -22,10 +22,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "dee05f309e305373d7c9ebb478c632a0c4b99c35",
-            "commit": "b2b87df296f96f3d4049cadd82fd61c9a6a34595",
+            "commit": "d7d53fb1ba2f754545c03d0e584adfc46d0a091b",
             "source_sha256": "2c2c9f0e008c492bfc9487170a7a08daedeb8b0625af1f85617ab2d1bd3f35c0",
             "text_sha256": "2c2c9f0e008c492bfc9487170a7a08daedeb8b0625af1f85617ab2d1bd3f35c0",
-            "tree": "98cf7431b1d1a3d189930dd9929c12c756f032ea"
+            "tree": "4649daf381d3323231c3d8d6eac4c2cf6d7bc938"
           },
           "semantic_cases": [
             {
@@ -64,10 +64,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "6b0f4c1a080ac5da73ab8fdaa94facca66f296a7",
-            "commit": "b2b87df296f96f3d4049cadd82fd61c9a6a34595",
+            "commit": "d7d53fb1ba2f754545c03d0e584adfc46d0a091b",
             "source_sha256": "d2f05fdb5f91da5cb7be31f5dd723e9d7e6a3f2168ef5de17c9f7d4260a78a36",
             "text_sha256": "d2f05fdb5f91da5cb7be31f5dd723e9d7e6a3f2168ef5de17c9f7d4260a78a36",
-            "tree": "98cf7431b1d1a3d189930dd9929c12c756f032ea"
+            "tree": "4649daf381d3323231c3d8d6eac4c2cf6d7bc938"
           },
           "semantic_cases": [
             {

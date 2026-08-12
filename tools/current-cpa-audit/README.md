@@ -110,10 +110,10 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-11; source drift fails.
+  five-repository source identities reviewed on 2026-08-12; source drift fails.
   Keysmith is pinned to current default-branch commit
-  `b2b87df296f96f3d4049cadd82fd61c9a6a34595` / tree
-  `98cf7431b1d1a3d189930dd9929c12c756f032ea`; its two selected reviewed blobs
+  `d7d53fb1ba2f754545c03d0e584adfc46d0a091b` / tree
+  `4649daf381d3323231c3d8d6eac4c2cf6d7bc938`; its two selected reviewed blobs
   remain byte-identical to the preceding pin. Codex-X is pinned to commit
   `826a142fc040920a5c23c3dafabbfc8d21655478` / tree
   `95e2638756c97b844179a905513d41ea2e8aea0e`; its three selected reviewed blobs

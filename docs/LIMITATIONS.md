@@ -29,15 +29,17 @@ frozen to v7.2.125. No later-version compatibility or runtime evidence is
 inferred.
 
 The current five-repository source policy SHA-256 is
-`516a5aac90676cb079466ed2bb795f2683d88f859d5e11d283d089cb2d17de87`.
+`24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7`.
 It reviews Keysmith at commit
-`b2b87df296f96f3d4049cadd82fd61c9a6a34595` / tree
-`98cf7431b1d1a3d189930dd9929c12c756f032ea` and Codex-X at commit
+`d7d53fb1ba2f754545c03d0e584adfc46d0a091b` / tree
+`4649daf381d3323231c3d8d6eac4c2cf6d7bc938` and Codex-X at commit
 `826a142fc040920a5c23c3dafabbfc8d21655478` / tree
-`95e2638756c97b844179a905513d41ea2e8aea0e`. Their five selected blobs are
-byte-identical to the preceding review. A fresh read-only GitHub acquisition
-validated 5 repositories, 11 selected text sources, and 19 semantic cases
-without executing third-party code, then removed the ephemeral text.
+`95e2638756c97b844179a905513d41ea2e8aea0e`. Keysmith's two selected blobs are
+byte-identical to the preceding review and the other four repository pins still
+match their current default-branch heads. A fresh full GitHub acquisition is
+still required: three bounded attempts stopped on transport resets/timeouts
+before corpus validation, retained no corpus text, executed no third-party
+code, and do not provide a PASS result.
 
 | Evidence boundary | Current Round 13 status |
 |---|---|
