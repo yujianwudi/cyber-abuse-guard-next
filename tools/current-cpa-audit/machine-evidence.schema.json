@@ -329,7 +329,7 @@
         "manifest_sha256": {"$ref": "#/$defs/sha256"},
         "member_text_files_created": {"const": 0},
         "policy_path": {"const": "supplemental-zip-policy.json"},
-        "policy_sha256": {"const": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb"},
+        "policy_sha256": {"const": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a"},
         "selected_entry_count": {"const": 4},
         "third_party_code_executions": {"const": 0},
         "unique_reviewed_cases": {"const": 7}
@@ -378,11 +378,11 @@
         "transport_error_executions"
       ],
       "properties": {
-        "allow_executions": {"type": "integer", "minimum": 180, "maximum": 600},
+        "allow_executions": {"type": "integer", "minimum": 156, "maximum": 520},
         "block_incomplete_inspection_executions": {"const": 0},
-        "block_malicious_text_executions": {"type": "integer", "minimum": 72, "maximum": 240},
+        "block_malicious_text_executions": {"type": "integer", "minimum": 96, "maximum": 320},
         "code_executions": {"const": 0},
-        "malicious_case_count": {"const": 3},
+        "malicious_case_count": {"const": 4},
         "passed_executions": {"type": "integer", "minimum": 252, "maximum": 840},
         "third_party_code_executions": {"const": 0},
         "total_executions": {"type": "integer", "minimum": 252, "maximum": 840},

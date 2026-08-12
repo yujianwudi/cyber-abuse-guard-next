@@ -396,13 +396,15 @@ def _event(
     ordinal: int,
     malicious: bool,
     prefix: str = "event",
+    winning_category: str = "credential_theft",
+    winning_rule_id: str = "CRED-001",
 ) -> dict[str, Any] | None:
     if expected != "allow":
         if expected != "block_malicious_text":
             raise AssertionError(f"fixture only models malicious blocks, not {expected}")
         return {
             "action": "block",
-            "category": "credential_theft",
+            "category": winning_category,
             "coverage": "complete",
             "decision": "block_malicious_text",
             "decision_kind": "block_malicious_text",
@@ -411,11 +413,12 @@ def _event(
             "incomplete_reason": None,
             "mode": mode,
             "request_hash": request_hash,
+            "winning_rule_id": winning_rule_id,
         }
     if mode == "audit" and malicious:
         return {
             "action": "audit",
-            "category": "credential_theft",
+            "category": winning_category,
             "coverage": "complete",
             "decision": "audit_malicious_text",
             "decision_kind": "audit_eligible_malicious_text",
@@ -424,6 +427,7 @@ def _event(
             "incomplete_reason": None,
             "mode": mode,
             "request_hash": request_hash,
+            "winning_rule_id": winning_rule_id,
         }
     return None
 
@@ -554,6 +558,8 @@ def evidence_files(directory: Path) -> tuple[dict[str, Any], dict[str, Any], Pat
                 ordinal,
                 case["label"] == "malicious_active",
                 "supplemental-event",
+                case["expected_winning_category"] or "credential_theft",
+                case["expected_winning_rule_id"] or "CRED-001",
             ),
             "cold_start": entry.cold_start,
             "error_contract": (

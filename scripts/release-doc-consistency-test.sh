@@ -623,9 +623,9 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/$name"
   cp -a "$work/round13-pass" "$fixture"
-  sed -i '0,/244\/244 PASS/s//223\/223 PASS/' "$fixture/$relative"
+  sed -i '0,/248\/248 PASS/s//223\/223 PASS/' "$fixture/$relative"
   round13_must_fail "$name" "$fixture" \
-    "$relative: active Round 13 overlay must contain exactly one 244/244 PASS result"
+    "$relative: active Round 13 overlay must contain exactly one 248/248 PASS result"
 done
 
 for mutation in \

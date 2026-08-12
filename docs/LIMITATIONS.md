@@ -12,7 +12,7 @@ current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
-Last updated: 2026-08-11 (Asia/Shanghai)
+Last updated: 2026-08-12 (Asia/Shanghai)
 
 ## Current Round 13 evidence boundary
 
@@ -43,13 +43,13 @@ code, and do not provide a PASS result.
 
 | Evidence boundary | Current Round 13 status |
 |---|---|
-| Pinned CPA source/compile contract and audit-harness unit suite | `DIRTY_WORKTREE PASS / 244_OF_244 / NOT_FINAL_CANDIDATE` |
-| no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `PASS / DIRTY_WORKTREE_NATIVE_HOST_PASS / FINAL_CANDIDATE_PENDING` |
-| Dirty-worktree Linux unit, race, full script matrix, and root-isolated CPA Host/Router matrix | `PASS / NO_DATA_RACE / NOT_FINAL_CANDIDATE`; Host functional evidence only, not Host latency/RSS |
+| Pinned CPA source/compile contract and audit-harness unit suite | `DIRTY_WORKTREE PASS / 248_OF_248 / COMPLETE LOCAL LINUX GATES PASS / NOT_FINAL_CANDIDATE` |
+| no-copy, `response.failed`, Codex `Originator`, and Claude replay source/test coverage | `SOURCE PASS / PRE_V20 DIRTY-WORKTREE NATIVE HOST SUPERSEDED / EXACT CANDIDATE HOST PENDING` |
+| Dirty-worktree Linux unit, race, full script matrix, and root-isolated CPA Host/Router matrix | `SOURCE MATRIX PASS / NO_DATA_RACE / PRE_V20 HOST SUPERSEDED / NOT_FINAL_CANDIDATE`; historical Host functional evidence only, not current Host latency/RSS |
 | Exact-candidate Linux native Host, required GitHub checks, race, and full matrix | `NOT_RUN / PENDING` |
-| Local in-process performance | `CLASSIFIER-POLICY-V18 DIRTY_WORKTREE SOURCE-ONLY PASS / JSON adaeab59...a80d`; ordinary c16 p95 `2.012662 ms`; five-repository surrogate p95 `108.288998 ms`; Codex-all p95 `46.827635 ms`; public p95/p99 `8.728750/9.440184 ms`; SQLite c16 p95 `2.549483 ms`, queue max `30/256`; 2,304 operations with zero failures/panics; CPA Host overhead, RSS, paired throughput, and production SLO remain `NOT_PROVIDED` |
+| Local in-process performance | `CLASSIFIER-POLICY-V20 DIRTY_WORKTREE SOURCE-ONLY PASS / JSON d22f70da...f81f8c`; ordinary c16 p95 `2.221072 ms`; five-repository surrogate p95 `107.383314 ms`; Codex-all p95 `47.629570 ms`; public p95/p99 `8.709887/9.522366 ms`; SQLite c16 p95 `1.115742 ms`, queue max `28/256`; 2,304 operations with zero failures/panics; CPA Host overhead, RSS, paired throughput, and production SLO remain `NOT_PROVIDED` |
 | Local development corpus | malicious recall `154/154`; benign audit hits `3/142`; local-only and not a second-machine false-positive result |
-| Local CodeRabbit | final v18 review iterations complete; 2 valid findings fixed; 3 stale findings disproved against current source; 0 open valid findings; pushed-head GitHub CodeRabbit remains pending |
+| Review | current targeted internal authorization/winner-contract reviews found no P0-P2 issue; pushed-head GitHub CodeRabbit remains pending |
 | Pre-merge and post-main second-machine executions | `NOT_RUN` |
 | Protected Host and independent attestation | `NOT_PROVIDED` |
 | Post-main release admission | `NOT_RUN` |

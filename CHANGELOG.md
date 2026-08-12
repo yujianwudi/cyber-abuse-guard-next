@@ -9,6 +9,18 @@ Source-tree status updated: 2026-08-12 (Asia/Shanghai)
 
 ## Unreleased - v1.0.0-rc.1
 
+- Correct the supplemental Codex archive oracle without changing the production
+  classifier policy. Target authorization/ownership and model-control
+  authorization are now independent reviewed axes: the owned, authorized CTF
+  target still has no grant to install a concealed model-control takeover, so
+  Audit records it and Balanced/Strict must block it with the exact
+  `defense_evasion / META-OVERRIDE-001` winner before any upstream side effect.
+  Supplemental policy/manifest/result and transport-result contracts advance to
+  v2; the portable second-machine report retains expected and actual winner
+  pairs. The separate 7-case/252-execution denominator is now four malicious
+  and three non-malicious cases. All 248 audit-tool tests pass on Linux; the
+  complete dirty-worktree Linux source gates pass; clean final-candidate GitHub,
+  native Host, and second-machine gates remain non-transferable and pending.
 - Advance the classifier contract to `classifier-policy-v20` /
   `888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd`.
   A terminal install/activate sentence can recover the previously missed
@@ -92,35 +104,35 @@ Source-tree status updated: 2026-08-12 (Asia/Shanghai)
   validation, retained no corpus text, executed no third-party code, and make no
   PASS claim.
 - Rebind the current CPA audit runner to bundle
-  `79bc39c04b28e752247e31696666dc60228d95a4cb681f5d8531dbdd082d31b9`,
+  `34b11d4089ef4d26635fa78252f2a9f84c00dbbc0d702af8cf96e2e550d19c4e`,
   audit contract
-  `01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3`,
+  `f39870ebf951d5721647225b5ef8873b467c7db166a17ce30fb04054dae0939f`,
   run source
-  `808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb`,
+  `c4c071a8ba739dc3e1e0eeeefeb6793e63701b81cdc833503770258fd5ec0fcd`,
   and machine schema
-  `b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6`.
-  All 244 audit-tool tests pass on Linux.
+  `4f601dbf39d61a2700ca4b734804a85b287fd47a3f6a8de68db4b668d8a8a963`.
+  All 248 audit-tool tests pass on Linux.
 - Keep the Host-performance workload denominator code-owned and comparable:
   the five-repository activation lane must contain exactly 16 requests across
   eight Chat and eight Responses bodies before any source text is read. Bind
   each Docker bind-mount backing identity to the exact inspect `Source` text
   while retaining a separate resolved-path digest, so equivalent trailing,
   repeated, or dot slashes cannot cause a false preflight rejection.
-- Select the 2026-08-11 classifier-policy-v18 source-only performance rerun as
+- Select the 2026-08-12 classifier-policy-v20 source-only performance rerun as
   the sole current dirty-worktree performance artifact. Its JSON SHA-256 is
-  `adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d`;
-  the run completed in 27.23 seconds wall / 21.516 seconds measured Go test,
-  with ordinary c16 p95 `2.012662 ms`, five-repository surrogate p95
-  `108.288998 ms`, Codex-all p95 `46.827635 ms`, public p95/p99
-  `8.728750/9.440184 ms`, SQLite c16 p95 `2.549483 ms`, queue max `30/256`,
+  `d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c`,
+  with ordinary c16 p95 `2.221072 ms`, five-repository surrogate p95
+  `107.383314 ms`, Codex-all p95 `47.629570 ms`, public p95/p99
+  `8.709887/9.522366 ms`, SQLite c16 p95 `1.115742 ms`, queue max `28/256`,
   and zero failures or recovered panics across 2,304 operations. It is not CPA
   Host, RSS, paired-throughput, release, or production-SLO evidence.
-- Refresh the latest complete local development gates:
-  `make unit-test round6-vet` passed in 343.3 seconds wall (classifier
-  149.240 seconds; plugin 144.703 seconds), and `make race` passed in 1103.8
-  seconds wall (audit
-  54.982 seconds; plugin 616.824 seconds; classifier 436.656 seconds) with no
-  data race. These dirty-worktree results do not close final-candidate gates.
+- Refresh the latest complete dirty-worktree local development gates: CPA audit
+  248/248, Safe Gate 219 tests/78 skips, RC suites 7+12+25, full Go unit/vet,
+  race with no data race, fuzz, Round 6 script/benchmark, Round 10 performance,
+  exact CPA v7.2.125 remote contracts, `govulncheck` with zero vulnerabilities,
+  and the 381.5-second document mutation suite all pass. These results leave
+  `PR_REQUIRED_CHECKS_NOT_RUN / PREMERGE_DIAGNOSTIC_NOT_RUN / NO_MERGE /
+  NO_RELEASE` and do not close final-candidate gates.
 - Make supplemental review approval unconditional, reject unknown archive
   summary keys, and best-effort zero the four mutable text buffers owned by the
   audit Harness before releasing them. This does not claim whole-process memory

@@ -156,7 +156,7 @@ def run_config() -> tuple[dict[str, Any], bytes]:
             "archive_bytes": 5830796,
             "archive_sha256": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
             "manifest_sha256": "c" * 64,
-            "policy_sha256": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb",
+            "policy_sha256": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a",
             "selected_entry_count": 4,
             "unique_reviewed_cases": 7,
         },

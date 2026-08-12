@@ -11,19 +11,20 @@ active_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
 active_platform: linux-amd64
 active_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 active_source_policy_sha256: 24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7
-active_audit_runner_bundle_sha256: 79bc39c04b28e752247e31696666dc60228d95a4cb681f5d8531dbdd082d31b9
-active_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
-active_audit_run_source_sha256: 808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb
-active_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
-active_audit_tool_tests: PASS / LINUX / 244_OF_244
+active_audit_runner_bundle_sha256: 34b11d4089ef4d26635fa78252f2a9f84c00dbbc0d702af8cf96e2e550d19c4e
+active_audit_contract_sha256: f39870ebf951d5721647225b5ef8873b467c7db166a17ce30fb04054dae0939f
+active_audit_run_source_sha256: c4c071a8ba739dc3e1e0eeeefeb6793e63701b81cdc833503770258fd5ec0fcd
+active_audit_machine_schema_sha256: 4f601dbf39d61a2700ca4b734804a85b287fd47a3f6a8de68db4b668d8a8a963
+active_audit_tool_tests: PASS / LINUX / 248_OF_248
 active_live_five_repository_acquisition: IDENTITY_REVIEW_PASS / LIVE_ACQUISITION_RERUN_REQUIRED / NO_PASS_CLAIM / THIRD_PARTY_CODE_EXECUTIONS_0
-active_local_source_matrix: DIRTY_WORKTREE_V20_LOCAL_LINUX_PASS / UNIT_VET_RACE_FUZZ_SCRIPT_DOC_MUTATION / CPA_AUDIT_244_OF_244 / NOT_FINAL_CANDIDATE
+active_local_source_matrix: DIRTY_WORKTREE_V20_FULL_LOCAL_LINUX_GATES_PASS / CPA_AUDIT_248_OF_248 / SAFE_GATE_219_TESTS_78_SKIPS / RC_7_PLUS_12_PLUS_25_PASS / GO_UNIT_VET_RACE_FUZZ / ROUND6_SCRIPT_BENCHMARK / ROUND10_PERFORMANCE / CPA_V7.2.125_REMOTE_CONTRACTS / GOVULNCHECK_0 / DOC_MUTATION_PASS_381.5S / NOT_FINAL_CANDIDATE
 active_local_development_corpus: MALICIOUS_RECALL_154_OF_154 / BENIGN_HITS_3_OF_142 / LOCAL_ONLY_NOT_SECOND_MACHINE_FP
-active_local_round10_performance: PRE_V20_V18_DIRTY_SOURCE_ONLY_PASS_SUPERSEDED / V20_RERUN_PENDING / NOT_HOST_PERFORMANCE_OR_RSS
+active_local_round10_performance: V20_DIRTY_SOURCE_ONLY_PASS / JSON_D22F70DA...F81F8C / ORDINARY_C16_P95_2.221072MS / FIVE_REPOSITORY_P95_107.383314MS / CODEX_ALL_P95_47.629570MS / PUBLIC_P95_P99_8.709887_9.522366MS / SQLITE_P95_1.115742MS / QUEUE_28_OF_256 / 2304_OPS_ZERO_FAILURE_PANIC / NOT_HOST_PERFORMANCE_OR_RSS / NOT_EXACT_CANDIDATE
 active_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / SO_5693F2FB...F8393B / STORE_1CBF59E1...65EB23 / V20_NOT_RUN / V20_RERUN_REQUIRED / NOT_FINAL_CANDIDATE / NOT_HOST_PERFORMANCE
-active_local_coderabbit: PRE_V20_LOCAL_REVIEW_SUPERSEDED / V20_INTERNAL_FINAL_REVIEW_CLEAN / GITHUB_PENDING
-active_pr_required_checks: NOT_RUN
-active_premerge_second_machine: NOT_RUN
+active_exact_candidate_artifacts_reproducibility: NOT_BUILT / NOT_RUN / PENDING
+active_local_coderabbit: PRE_SUPPLEMENTAL_ORACLE_FIX_REVIEW_SUPERSEDED / CURRENT_TARGETED_INTERNAL_REVIEW_CLEAN / GITHUB_CODERABBIT_PENDING
+active_pr_required_checks: PR_REQUIRED_CHECKS_NOT_RUN
+active_premerge_second_machine: PREMERGE_DIAGNOSTIC_NOT_RUN
 active_postmain_required_checks: NOT_RUN
 active_postmain_release_admission: NOT_RUN
 active_release_type: prerelease
@@ -34,7 +35,7 @@ active_second_machine_admission_contract: FIXED_DRAFT_RELEASE_ASSET / DOWNLOADED
 active_rc_binary_contract: REUSE_CYBER_ABUSE_GUARD_V1.0.0.SO_BYTES / NO_RECOMPILE / NO_STANDALONE_RC_RENAME
 active_cpa_store_rc_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / ROOT_CYBER_ABUSE_GUARD.SO / PAYLOAD_BYTE_EQUAL
 active_cpa_store_checksum_contract: checksums.txt / EXACT_STANDALONE_AND_TWO_STORE_ZIPS
-active_tag_and_release: NOT_CREATED
+active_tag_and_release: NOT_CREATED / NO_MERGE / NO_RELEASE
 active_stable_production_approval: NOT_PROVIDED
 ```
 
@@ -50,12 +51,13 @@ stopped at the passwordless-sudo bind-mount preflight before Host execution.
 GitHub's current upstream latest is `v7.2.127`; the active release contract
 remains deliberately frozen to the exact v7.2.125 identity above.
 
-The selected v18 in-process performance report has SHA-256
-`adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d`:
-ordinary p95 is `2.012662 ms`, five-repository surrogate p95 is
-`108.288998 ms`, Codex-all surrogate p95 is `46.827635 ms`, public p95/p99
-is `8.728750/9.440184 ms`, SQLite c16 p95 is `2.549483 ms`, and all 2,304
-operations completed without a reported failure or recovered panic. This is
+The current v20 in-process performance report has SHA-256
+`d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c`:
+ordinary p95 is `2.221072 ms`, five-repository surrogate p95 is
+`107.383314 ms`, Codex-all surrogate p95 is `47.629570 ms`, public p95/p99
+is `8.709887/9.522366 ms`, SQLite c16 p95 is `1.115742 ms`, sampled queue
+maximum is `28/256`, and all 2,304 operations completed without a reported
+failure or recovered panic. This is
 source-only evidence, not CPA Host latency, RSS, paired throughput, or a
 production SLO. The final remote-enabled compatibility matrix verified the
 exact v7.2.125 tag and commit; two earlier low-speed failures are superseded.

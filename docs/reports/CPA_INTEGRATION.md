@@ -40,7 +40,7 @@ only native Host run covered those features plus batch/stream restoration,
 single-lifecycle counters, upstream bad-request clearing, persistent-audit
 readiness, startup privacy, hot reconfigure, request lifecycle, and the 6 MiB /
 8 MiB no-copy functional path, but it loaded classifier-policy-v17 bytes and is
-superseded; the v18 native Host lane remains `NOT_RUN`.
+superseded; the current v20 exact-candidate native Host lane remains `NOT_RUN`.
 
 The ordinary-user invocation stopped before the Host process because the
 isolated bind-mount helper requires passwordless sudo. A separate WSL root run
@@ -53,22 +53,23 @@ integration-test` in 179.790 seconds: the top-level Host test and all 15 Router
 from a Store ZIP with SHA-256
 `1cbf59e1fb6c77f2cc7bc2debc0bad20d509f4db3fa9a4ccbbb5f8af2665eb23`.
 Those bytes and results are
-`PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / V18_RERUN_REQUIRED /
-NOT_FINAL_CANDIDATE`; the current v18 and exact-clean native Host and release
+`PRE_V20_DIRTY_WORKTREE_PASS_SUPERSEDED / V20_RERUN_REQUIRED /
+NOT_FINAL_CANDIDATE`; the current v20 exact-clean native Host and release
 lanes remain open. The no-copy result is a superseded Host functional
 assertion, not an RSS/allocation or Host-performance result. See [Round 13
 status](../ROUND13_STATUS.md).
 
 ## Round 13 executed contract gates
 
-The following commands passed on 2026-08-10 for this working tree:
+The following commands passed on or were rerun through 2026-08-12 for this
+working tree:
 
 - `bash scripts/release-doc-consistency.sh` — `PASS`;
 - `bash scripts/release-rc-contract-test.sh` — `PASS`;
 - `bash scripts/release-candidate-contract-test.sh` — `PASS`;
 - `make workflow-lint` — `PASS`;
 - `bash scripts/check-production-health-test.sh` — `PASS`;
-- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `244/244 PASS` on Linux;
+- `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` — `248/248 PASS` on Linux;
 - `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` — `PASS`.
 
 The `make workflow-lint` row records the earlier dirty-tree run. After the v17
@@ -77,19 +78,19 @@ proxy timed out; the fixed local Actionlint v1.7.12 binary independently passed
 all four active workflows and has SHA-256
 `c872d6db8c6bf83a8eaa704fc93999f027d55dffbc63b8a6abdccb47df5f4cd4`.
 
-The current v18 working tree passed the exact Go 1.26.4 complete local
-unit/race/vet/fuzz/corpus/script matrix with no data race and a fresh
-five-repository acquisition of 11 reviewed text sources / 19 semantic cases
-without third-party execution. The root-isolated CPA v7.2.125 Host/Router
+The current v20 working tree passed the exact Go 1.26.4 complete local
+unit/race/vet/fuzz/corpus/script matrix with no data race. The current-policy
+fresh five-repository acquisition remains `RERUN_REQUIRED / NO_PASS_CLAIM`;
+no third-party code was executed. The root-isolated CPA v7.2.125 Host/Router
 integration in 179.790 seconds belongs only to the superseded v17 bytes above.
 These are dirty development evidence rather than final-candidate evidence. The local
 development-benign corpus retained 3/142 audit hits; that is not a Tencent Cloud
 #2 false-positive result and is not evidence of zero production false positives.
 
-The official Git tag recheck failed closed twice because the local Git transport
-fell below its 30-second low-speed threshold. This is recorded as
-`NETWORK_FAILED / NOT_CODE_FAILURE`, not as a compatibility PASS. The exact
-GitHub checks remain mandatory.
+Two earlier official Git tag rechecks failed closed because the local transport
+fell below its low-speed threshold; they are superseded by a successful exact
+v7.2.125 remote tag/commit and source/API/ABI/RPC/Host/Store contract rerun. The
+exact pushed-head GitHub checks remain mandatory.
 
 These local gates do not close exact-commit GitHub checks, exact-candidate
 native Host, second-machine, Host performance/RSS, independent-attestation,

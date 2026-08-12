@@ -57,6 +57,7 @@ from second_machine_release_admission import (  # noqa: E402
     _performance_gate,
     build_report,
     derive_semantic_summary,
+    derive_supplemental_semantics,
     derive_supplemental_summary,
     derive_summary,
     local_tool_identities,
@@ -83,6 +84,7 @@ COMMIT = "1" * 40
 TREE = "2" * 40
 SO_SHA = "3" * 64
 MANIFEST_SHA = "4" * 64
+_MISSING = object()
 
 
 def passing_metric(metric: str) -> float:
@@ -130,10 +132,10 @@ def valid_report() -> dict[str, object]:
     supplemental_outcomes = []
     for case_id in EXPECTED_SUPPLEMENTAL_CASE_IDS:
         suffix = case_id.rsplit(":", 1)[1]
-        malicious = suffix == "activated"
+        malicious = suffix in {"activated", "authorized-ctf"}
         label = {
             "activated": "malicious_active",
-            "authorized-ctf": "authorized_security",
+            "authorized-ctf": "malicious_active",
             "defensive": "defensive_context",
         }[suffix]
         for mode in MODES:
@@ -145,9 +147,29 @@ def valid_report() -> dict[str, object]:
             supplemental_outcomes.append(
                 {
                     "actual_action": actual,
+                    "actual_winning_category": (
+                        "defense_evasion"
+                        if suffix == "authorized-ctf"
+                        else "credential_theft"
+                        if malicious
+                        else None
+                    ),
+                    "actual_winning_rule_id": (
+                        "META-OVERRIDE-001"
+                        if suffix == "authorized-ctf"
+                        else "CRED-001"
+                        if malicious
+                        else None
+                    ),
                     "all_executions_passed": True,
                     "execution_count": 12,
                     "expected_action": actual,
+                    "expected_winning_category": (
+                        "defense_evasion" if suffix == "authorized-ctf" else None
+                    ),
+                    "expected_winning_rule_id": (
+                        "META-OVERRIDE-001" if suffix == "authorized-ctf" else None
+                    ),
                     "false_positive": False,
                     "label": label,
                     "malicious": malicious,
@@ -479,6 +501,28 @@ class PortableAdmissionTests(unittest.TestCase):
                 report["supplemental_archive"]["total_executions"],
                 EXPECTED_SUPPLEMENTAL_EXECUTIONS,
             )
+            authorized = [
+                item
+                for item in report["supplemental_archive"]["outcomes"]
+                if item["supplemental_case_id"]
+                == "supplemental-zip:ctf-sandbox:authorized-ctf"
+            ]
+            self.assertEqual({item["mode"] for item in authorized}, set(MODES))
+            for item in authorized:
+                self.assertEqual(
+                    (
+                        item["expected_winning_category"],
+                        item["expected_winning_rule_id"],
+                        item["actual_winning_category"],
+                        item["actual_winning_rule_id"],
+                    ),
+                    (
+                        "defense_evasion",
+                        "META-OVERRIDE-001",
+                        "defense_evasion",
+                        "META-OVERRIDE-001",
+                    ),
+                )
 
             missing_arm = machine["run"]["cold_start_count"]
             incomplete_results_raw = b"".join(
@@ -846,6 +890,76 @@ class PortableAdmissionTests(unittest.TestCase):
         self.assert_rejected(lambda report: mutate_case(report, malicious_id, "balanced", "malicious_detected", False))
         self.assert_rejected(lambda report: mutate_case(report, audit_id, "audit", "actual_action", "block_malicious_text"))
 
+    def test_rejects_supplemental_winner_omission_or_drift(self) -> None:
+        authorized_id = "supplemental-zip:ctf-sandbox:authorized-ctf"
+        activated_id = next(
+            case_id
+            for case_id in EXPECTED_SUPPLEMENTAL_CASE_IDS
+            if case_id.endswith(":activated")
+        )
+
+        def mutate_case(report, case_id, mode, key, value) -> None:  # type: ignore[no-untyped-def]
+            row = next(
+                item
+                for item in report["supplemental_archive"]["outcomes"]
+                if item["supplemental_case_id"] == case_id and item["mode"] == mode
+            )
+            if value is _MISSING:
+                row.pop(key)
+            else:
+                row[key] = value
+
+        for field in (
+            "expected_winning_category",
+            "expected_winning_rule_id",
+            "actual_winning_category",
+            "actual_winning_rule_id",
+        ):
+            with self.subTest(field=field, mutation="missing"):
+                self.assert_rejected(
+                    lambda report, field=field: mutate_case(
+                        report, authorized_id, "audit", field, _MISSING
+                    )
+                )
+        mutations = (
+            (authorized_id, "audit", "expected_winning_category", None),
+            (authorized_id, "balanced", "expected_winning_rule_id", "CRED-001"),
+            (authorized_id, "strict", "actual_winning_category", "credential_theft"),
+            (authorized_id, "audit", "actual_winning_rule_id", None),
+            (activated_id, "balanced", "expected_winning_category", "credential_theft"),
+            (activated_id, "strict", "actual_winning_rule_id", None),
+        )
+        for case_id, mode, field, value in mutations:
+            with self.subTest(case_id=case_id, mode=mode, field=field):
+                self.assert_rejected(
+                    lambda report, case_id=case_id, mode=mode, field=field, value=value: mutate_case(
+                        report, case_id, mode, field, value
+                    )
+                )
+
+    def test_supplemental_projection_rejects_inconsistent_cell_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _manifest, machine, _results = evidence_files(root)
+            supplemental_manifest, _policy, _policy_raw = supplemental_manifest_fixture()
+            results_path = root / machine["supplemental_zip_results"]["results_path"]
+            rows = [json.loads(line) for line in results_path.read_bytes().splitlines()]
+            target = next(
+                row
+                for row in rows
+                if row["supplemental_case_id"].endswith(":activated")
+                and row["mode"] == "balanced"
+            )
+            target["audit_event"]["category"] = "defense_evasion"
+            target["audit_event"]["winning_rule_id"] = "META-OVERRIDE-001"
+            raw = b"".join(canonical_bytes(row) + b"\n" for row in rows)
+            with self.assertRaisesRegex(AdmissionError, "inconsistent winning rules"):
+                derive_supplemental_semantics(
+                    supplemental_manifest,
+                    raw,
+                    tuple(range(1, machine["run"]["cold_start_count"] + 1)),
+                )
+
     def test_rejects_native_report_log_tool_candidate_test_and_status_drift(self) -> None:
         self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("report_sha256", "9" * 64))  # type: ignore[union-attr]
         self.assert_rejected(lambda report: report["native_host_special_paths"].__setitem__("go_test_log_sha256", "9" * 64))  # type: ignore[union-attr]
@@ -952,6 +1066,18 @@ class PortableAdmissionTests(unittest.TestCase):
         Draft202012Validator.check_schema(schema)
         errors = list(Draft202012Validator(schema).iter_errors(valid_report()))
         self.assertEqual(errors, [], "\n".join(error.message for error in errors))
+
+        half_pair = valid_report()
+        half_pair["supplemental_archive"]["outcomes"][0][
+            "actual_winning_rule_id"
+        ] = None
+        self.assertTrue(list(Draft202012Validator(schema).iter_errors(half_pair)))
+
+        empty_winner = valid_report()
+        empty_winner["supplemental_archive"]["outcomes"][0][
+            "actual_winning_category"
+        ] = ""
+        self.assertTrue(list(Draft202012Validator(schema).iter_errors(empty_winner)))
 
         def assert_closed(value: object, path: str = "$") -> None:
             if isinstance(value, dict):

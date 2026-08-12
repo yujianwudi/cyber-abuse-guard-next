@@ -414,7 +414,7 @@
           "minItems": 21,
           "type": "array"
         },
-        "policy_sha256": { "const": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb" },
+        "policy_sha256": { "const": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a" },
         "results_sha256": { "$ref": "#/$defs/sha256" },
         "side_effect_violations": { "const": 0 },
         "status": { "const": "SUPPLEMENTAL_ARCHIVE_PASS" },
@@ -432,13 +432,51 @@
     },
     "supplemental_outcome": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "expected_winning_category": { "type": "null" },
+                "expected_winning_rule_id": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "expected_winning_category": { "maxLength": 128, "minLength": 1, "type": "string" },
+                "expected_winning_rule_id": { "maxLength": 128, "minLength": 1, "type": "string" }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "actual_winning_category": { "type": "null" },
+                "actual_winning_rule_id": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "actual_winning_category": { "maxLength": 128, "minLength": 1, "type": "string" },
+                "actual_winning_rule_id": { "maxLength": 128, "minLength": 1, "type": "string" }
+              }
+            }
+          ]
+        }
+      ],
       "properties": {
         "actual_action": { "enum": ["allow", "block_malicious_text"] },
+        "actual_winning_category": { "type": ["string", "null"] },
+        "actual_winning_rule_id": { "type": ["string", "null"] },
         "all_executions_passed": { "const": true },
         "execution_count": { "maximum": 40, "minimum": 12, "type": "integer" },
         "expected_action": { "enum": ["allow", "block_malicious_text"] },
+        "expected_winning_category": { "type": ["string", "null"] },
+        "expected_winning_rule_id": { "type": ["string", "null"] },
         "false_positive": { "const": false },
-        "label": { "enum": ["authorized_security", "defensive_context", "malicious_active"] },
+        "label": { "enum": ["defensive_context", "malicious_active"] },
         "malicious": { "type": "boolean" },
         "malicious_detected": { "type": "boolean" },
         "mode": { "enum": ["audit", "balanced", "strict"] },
@@ -455,17 +493,17 @@
           ]
         }
       },
-      "required": ["actual_action", "all_executions_passed", "execution_count", "expected_action", "false_positive", "label", "malicious", "malicious_detected", "mode", "side_effect_violations", "supplemental_case_id"],
+      "required": ["actual_action", "actual_winning_category", "actual_winning_rule_id", "all_executions_passed", "execution_count", "expected_action", "expected_winning_category", "expected_winning_rule_id", "false_positive", "label", "malicious", "malicious_detected", "mode", "side_effect_violations", "supplemental_case_id"],
       "type": "object"
     },
     "supplemental_summary": {
       "additionalProperties": false,
       "properties": {
         "all_supplemental_contracts_passed": { "const": true },
-        "false_positive_denominator": { "const": 4 },
+        "false_positive_denominator": { "const": 3 },
         "false_positives": { "const": 0 },
-        "malicious_detected": { "const": 3 },
-        "malicious_recall_denominator": { "const": 3 },
+        "malicious_detected": { "const": 4 },
+        "malicious_recall_denominator": { "const": 4 },
         "malicious_recall_percent": { "const": 100.0 },
         "mode": { "enum": ["audit", "balanced", "strict"] },
         "side_effect_violations": { "const": 0 },

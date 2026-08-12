@@ -734,16 +734,23 @@ def _reviewed_cases(
         entry = approved[policy_entry["entry_id"]]
         for ground_truth in policy_entry["semantic_cases"]:
             case = {
-                "authorization": ground_truth["authorization"],
                 "current_action": ground_truth["current_action"],
                 "expected_action_by_mode": ground_truth["expected_action_by_mode"],
+                "expected_winning_category": ground_truth[
+                    "expected_winning_category"
+                ],
+                "expected_winning_rule_id": ground_truth[
+                    "expected_winning_rule_id"
+                ],
                 "id": (
                     f"supplemental-zip:{entry['entry_id']}:"
                     f"{ground_truth['id_suffix']}"
                 ),
                 "label": ground_truth["label"],
                 "label_reason": ground_truth["label_reason"],
-                "ownership": ground_truth["ownership"],
+                "model_control_authorization": ground_truth[
+                    "model_control_authorization"
+                ],
                 "reviewer": {
                     "identity": reviewer["identity"],
                     "review_sha256": None,
@@ -758,6 +765,8 @@ def _reviewed_cases(
                     "path": entry["path"],
                     "text_bytes": entry["text_bytes"],
                 },
+                "target_authorization": ground_truth["target_authorization"],
+                "target_ownership": ground_truth["target_ownership"],
                 "template": {
                     "id": ground_truth["template_id"],
                     "sha256": TEMPLATE_SHA256[ground_truth["template_id"]],

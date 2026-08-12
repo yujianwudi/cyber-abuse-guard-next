@@ -557,7 +557,11 @@ class SupplementalContractTests(unittest.TestCase):
         self.assertEqual(EXPECTED_SEMANTIC_CASE_COUNT, 19)
         self.assertEqual(len(FIXED_REPOSITORIES), 5)
         expected = {
-            "authorized-ctf": ("allow", "allow", "allow"),
+            "authorized-ctf": (
+                "allow",
+                "block_malicious_text",
+                "block_malicious_text",
+            ),
             "defensive": ("allow", "allow", "allow"),
             "activated": (
                 "allow",
@@ -572,6 +576,62 @@ class SupplementalContractTests(unittest.TestCase):
                     (actions["audit"], actions["balanced"], actions["strict"]),
                     expected[case["id_suffix"]],
                 )
+        authorized_ctf = next(
+            case
+            for entry in policy["entries"]
+            for case in entry["semantic_cases"]
+            if case["id_suffix"] == "authorized-ctf"
+        )
+        self.assertEqual(authorized_ctf["target_authorization"], "authorized")
+        self.assertEqual(authorized_ctf["target_ownership"], "owner")
+        self.assertEqual(
+            authorized_ctf["model_control_authorization"], "not_granted"
+        )
+        self.assertEqual(
+            (
+                authorized_ctf["expected_winning_category"],
+                authorized_ctf["expected_winning_rule_id"],
+            ),
+            ("defense_evasion", "META-OVERRIDE-001"),
+        )
+
+    def test_authorized_ctf_requires_independent_model_control_authorization(self) -> None:
+        policy, _ = reviewed_policy()
+        ctf_case = next(
+            case
+            for entry in policy["entries"]
+            for case in entry["semantic_cases"]
+            if case["id_suffix"] == "authorized-ctf"
+        )
+        mutations = {
+            "missing control authorization": lambda case: case.pop(
+                "model_control_authorization"
+            ),
+            "granted control authorization": lambda case: case.__setitem__(
+                "model_control_authorization", "granted"
+            ),
+            "allow oracle": lambda case: case.__setitem__(
+                "expected_action_by_mode",
+                {"audit": "allow", "balanced": "allow", "strict": "allow"},
+            ),
+            "wrong winner": lambda case: case.__setitem__(
+                "expected_winning_rule_id", "CRED-001"
+            ),
+            "fake third party": lambda case: case.__setitem__(
+                "target_ownership", "third_party"
+            ),
+        }
+        for label, mutate in mutations.items():
+            candidate = copy.deepcopy(policy)
+            candidate_case = next(
+                case
+                for entry in candidate["entries"]
+                for case in entry["semantic_cases"]
+                if case["id_suffix"] == "authorized-ctf"
+            )
+            mutate(candidate_case)
+            with self.subTest(label=label), self.assertRaises(ContractError):
+                validate_supplemental_policy(candidate)
 
     def test_manifest_and_independent_plan_are_closed(self) -> None:
         manifest, policy, policy_raw = valid_manifest()

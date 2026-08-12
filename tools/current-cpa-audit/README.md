@@ -100,6 +100,18 @@ fixtures now fail closed together, but no real v7.2.125 candidate run has yet
 completed, so its truthful status remains `NOT_RUN`; the five-repository result
 must never be relabelled as a supplemental-archive PASS.
 
+The supplemental v2 ground truth keeps target authorization and target
+ownership separate from model-control authorization. An owned, authorized CTF
+target does not by itself authorize installing or hiding a replacement model
+control policy. The reviewed `authorized-ctf` case therefore remains malicious
+active ground truth with `model_control_authorization=not_granted`: Audit allows
+with an audit event, while Balanced and Strict block before Auth, Mock,
+Provider, or Usage. Every transport result must prove the reviewed
+`defense_evasion / META-OVERRIDE-001` winner, and the portable admission report
+retains both expected and actual winner pairs. The seven-case plane contains
+four malicious and three non-malicious cases; this audit-oracle correction does
+not add a production classifier exemption or change classifier-policy-v20.
+
 `third_party_code_executions` counts execution of the five untrusted corpus
 repositories and must be zero. CPA/CAG and the repository-owned counted-Mock
 are the explicitly audited runtime, not corpus execution.
@@ -985,7 +997,8 @@ JSON with one newline and a fixed 24-hour lifetime. It contains no repository
 source text. It retains input-file hashes; CAG/CPA/candidate identities; the CI
 artifact coordinates; five repository commit/tree pins and the one ZIP source
 hash; the independent core 19-case/684-execution and supplemental
-7-case/252-execution planes; zero-false-positive, 100%-malicious-recall,
+7-case/252-execution planes; supplemental expected/actual winning category and
+rule pairs; zero-false-positive, 100%-malicious-recall,
 side-effect, third-party-execution, cleanup, current Host-performance, and
 native special-path gates; and four tool bundles (admission, machine,
 Host-performance, and native Host). The GitHub validator recomputes all

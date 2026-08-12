@@ -5,7 +5,7 @@ current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 ```
 
-Last updated: 2026-08-11 (Asia/Shanghai)
+Last updated: 2026-08-12 (Asia/Shanghai)
 
 ## Round 10 bounded Linux concurrency runner
 
@@ -43,28 +43,25 @@ workload matrices fail closed. On a runner with at least 16 effective CPUs, all
 absolute gates still include c=16. This development runner remains explicitly
 non-equivalent to a production-capacity SLO.
 
-### Selected 2026-08-11 classifier-policy-v18 local source rerun
+### Selected 2026-08-12 classifier-policy-v20 local source rerun
 
 This is the only selected current dirty-source performance artifact; all
 earlier v18 runs are historical and unselected. The rerun is bound to
-`classifier-policy-v18` /
-`64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82`.
-On WSL Linux amd64 with Go 1.26.4, 20 visible CPUs, and `GOMAXPROCS=20`,
-the selected `make round10-performance` run passed in 27.23 wall-clock seconds;
-the measured Go test itself completed in 21.516 seconds. Its JSON SHA-256 is
-`adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d`.
-The report records source HEAD
-`64348a4a51473fd1bed6361255def0ab46f8085f`, committed head tree
-`a52902b867e753b8d836b2bfcfdc0c2dcb106887`, and
-`measured_tree=NOT_PROVIDED_DIRTY_WORKTREE`.
+`classifier-policy-v20` /
+`888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd`.
+On WSL Linux amd64 with Go 1.26.4 and 20 visible CPUs, the selected
+`make round10-performance` run passed. Its transient JSON SHA-256 was
+`d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c`;
+the temporary report was deleted after recording these metrics. The measured
+tree remains `NOT_PROVIDED_DIRTY_WORKTREE`.
 
 | Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
 |---|---:|---|
-| ordinary | worst p95 `2.012662 ms` at c=16 | p95 <= 10 ms: `PASS` |
-| five-repository surrogate activation | p95 `108.288998 ms` at c=16 | p95 <= 250 ms: `PASS` |
-| Codex-all surrogate long | p95 `46.827635 ms` at c=16 | p95 <= 600 ms: `PASS` |
-| public synthetic | p95/p99 `8.728750/9.440184 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
-| SQLite `Enqueue` + `Flush` | p95 `2.549483 ms` at c=16; sampled queue max `30/256` | failure/panic count 0: `PASS` |
+| ordinary | worst p95 `2.221072 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `107.383314 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `47.629570 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `8.709887/9.522366 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `1.115742 ms` at c=16; sampled queue max `28/256` | failure/panic count 0: `PASS` |
 
 All 2,304 bounded operations reported zero failures and zero recovered panics.
 The accompanying 4 KiB / 64-token proof-only benchmark reported exactly

@@ -6,25 +6,25 @@
 round13_source_version: 1.0.0
 round13_rc_tag: v1.0.0-rc.1
 round13_cpa: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
-round13_local_source_evidence_base_head: b6cac4bddfef8a725244146a06380ee14d79d33c
+round13_local_source_evidence_base_head: 204d2a9e0afd03b5725b12f208d88dbf5a320de8
 round13_local_source_evidence_head_tree: DIRTY_WORKTREE_NOT_COMMITTED
 round13_local_source_evidence_worktree: DIRTY_WORKTREE / NOT_FINAL_CANDIDATE
 round13_platform: linux-amd64
 round13_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
 round13_source_policy_sha256: 24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7
-round13_audit_runner_bundle_sha256: 79bc39c04b28e752247e31696666dc60228d95a4cb681f5d8531dbdd082d31b9
-round13_audit_contract_sha256: 01d3697515855410a0038512a8af1a4b94d6a23759558a5cd718274af54b82f3
-round13_audit_run_source_sha256: 808f16a68e802d1bc7d42896c6f727c6f74c9d42ae2b695c33297c5896bed8cb
-round13_audit_machine_schema_sha256: b192b8e13512d75e34421e0503304ef745ac43833220e31d8ade94d476b24fb6
-round13_audit_tool_tests: PASS / LINUX / 244_OF_244
+round13_audit_runner_bundle_sha256: 34b11d4089ef4d26635fa78252f2a9f84c00dbbc0d702af8cf96e2e550d19c4e
+round13_audit_contract_sha256: f39870ebf951d5721647225b5ef8873b467c7db166a17ce30fb04054dae0939f
+round13_audit_run_source_sha256: c4c071a8ba739dc3e1e0eeeefeb6793e63701b81cdc833503770258fd5ec0fcd
+round13_audit_machine_schema_sha256: 4f601dbf39d61a2700ca4b734804a85b287fd47a3f6a8de68db4b668d8a8a963
+round13_audit_tool_tests: PASS / LINUX / 248_OF_248
 round13_keysmith_reviewed_head_tree: d7d53fb1ba2f754545c03d0e584adfc46d0a091b / 4649daf381d3323231c3d8d6eac4c2cf6d7bc938
 round13_codexx_reviewed_head_tree: 826a142fc040920a5c23c3dafabbfc8d21655478 / 95e2638756c97b844179a905513d41ea2e8aea0e
 round13_live_five_repository_acquisition: IDENTITY_REVIEW_PASS / LIVE_ACQUISITION_RERUN_REQUIRED / NO_PASS_CLAIM / THIRD_PARTY_CODE_EXECUTIONS_0
-round13_local_source_matrix: V20_LOCAL_UNIT_VET_RACE_FUZZ_SCRIPT_DOC_MUTATION_PASS / DIRTY_WORKTREE_NOT_FINAL_CANDIDATE
-round13_local_native_host: PRE_V20_DIRTY_WORKTREE_PASS_SUPERSEDED / V20_NOT_RUN / NOT_FINAL_CANDIDATE
-round13_exact_head_github_checks: NOT_RUN
-round13_second_machine: NOT_RUN
-round13_release: NOT_CREATED
+round13_local_source_matrix: V20_FULL_LOCAL_LINUX_GATES_PASS / CPA_AUDIT_248_OF_248 / SAFE_GATE_219_TESTS_78_SKIPS / RC_7_PLUS_12_PLUS_25_PASS / GO_UNIT_VET_RACE_FUZZ / ROUND6_SCRIPT_BENCHMARK / ROUND10_PERFORMANCE / CPA_V7.2.125_REMOTE_CONTRACTS / GOVULNCHECK_0 / DOC_MUTATION_PASS_381.5S / DIRTY_WORKTREE_NOT_FINAL_CANDIDATE
+round13_local_native_host: PRE_V20_DIRTY_WORKTREE_PASS_SUPERSEDED / V20_EXACT_CANDIDATE_NATIVE_HOST_NOT_RUN / NOT_FINAL_CANDIDATE
+round13_exact_head_github_checks: PR_REQUIRED_CHECKS_NOT_RUN / CI_PENDING
+round13_second_machine: PREMERGE_DIAGNOSTIC_NOT_RUN / POSTMAIN_NOT_RUN
+round13_release: NOT_CREATED / NO_MERGE / NO_RELEASE
 ```
 
 The v20 terminal-META classifier matrix, plugin audit-event route, full unit,
@@ -37,32 +37,34 @@ merge, and release gates remain separate:
 |---|---|
 | v20 terminal META carrier and plugin regressions | `PASS / LINUX / BATCH+STREAM / AUDIT+BALANCED+STRICT`; context-bait, authorization/ownership relations, word-boundary negation, migration-label, proof-budget, cross-field cancellation, and logical-field risk identity boundaries covered |
 | `bash scripts/release-doc-consistency.sh` | `PASS / 3.4s` |
-| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 462.5s` against the final v20 evidence tree |
+| `bash scripts/release-doc-consistency-test.sh` | `PASS / COMPLETE MUTATION SUITE / 381.5s` against the current supplemental-oracle evidence tree |
 | `bash scripts/release-rc-contract-test.sh` | `PASS` |
 | `bash scripts/release-candidate-contract-test.sh` | `PASS` |
+| RC contract suites | `PASS / 7 + 12 + 25 tests` |
 | exact Go 1.26.4 format and module verification | `PASS / 4.027s combined` |
-| `make unit-test round6-vet` | `PASS / 448.2s wall`; classifier `201.701s`, plugin `173.369s` |
-| `make race` | `PASS / 1334.3s wall / NO DATA RACE`; audit `58.492s`, plugin `699.094s`, classifier `585.814s` |
+| complete Go unit plus vet | `PASS / 368.5s wall`; plugin `145.214s`, classifier `170.516s` |
+| `make race` | `PASS / 1214.2s wall / NO DATA RACE`; plugin `619.909s`, classifier `537.014s` |
 | `make fuzz-smoke` and `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go make round9-fuzz ROUND9_FUZZTIME=5s` | `PASS / 10.6s seed smoke / 43.2s three bounded fuzz targets` |
 | fuzz/corpus matrix | `6/6 PASS / malicious recall 154/154 / local development-benign hits 3/142`; the 3/142 result is not a second-machine false-positive result |
 | pinned `actionlint v1.7.12` over all four active workflows | `PASS / canonical go run command / Go 1.26.4`; a verified read-only local Go module proxy cache was used after the public proxy timed out |
 | `make round6-benchmark` | `PASS / 197.079s` |
-| selected additional `make round10-performance` evidence | `CLASSIFIER-POLICY-V18 DIRTY SOURCE-ONLY PASS / 2026-08-11 / 27.23s wall / 21.516s measured Go test / JSON SHA-256 adaeab59cfaa0323f78b98feb4765b358faf9a913dfa622fb7fe1bf8d472a80d / ordinary c16 p95 2.012662 ms / five-repository surrogate p95 108.288998 ms / Codex-all surrogate p95 46.827635 ms / public p95/p99 8.728750/9.440184 ms / SQLite c16 p95 2.549483 ms / queue max 30/256 / 2,304 operations / failures+panics 0` |
+| selected additional `make round10-performance` evidence | `CLASSIFIER-POLICY-V20 DIRTY SOURCE-ONLY PASS / 2026-08-12 / JSON SHA-256 d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c / ordinary c16 p95 2.221072 ms / five-repository surrogate p95 107.383314 ms / Codex-all surrogate p95 47.629570 ms / public p95/p99 8.709887/9.522366 ms / SQLite c16 p95 1.115742 ms / queue max 28/256 / 2,304 operations / failures+panics 0 / not CPA Host or RSS evidence` |
 | `bash scripts/check-production-health-test.sh` | `PASS` |
-| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `244/244 PASS / LINUX / 55.416s` |
+| `python3 -B -m unittest discover -s tools/current-cpa-audit/tests -p 'test_*.py'` | `248/248 PASS / LINUX / 51.665s / 2026-08-12`; includes independent target/model-control authorization, exact supplemental winner, portable winner evidence, and side-effect mutation contracts |
 | `go test ./... -run '^TestLatestCPANoCopyAndResponsesFailureContract$' -count=1` in `integration/cpalatestcontract` | `PASS` |
-| `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go GOPROXY=file:///home/yujian/go/pkg/mod/cache/download make round6-script-test` | `PASS / 190.6s / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 244 CPA tests / Safe Gate 219 tests and 78 skips / Store / production health`; the exact actionlint module came from the verified local file proxy after the public proxy timed out; the complete release-doc mutation suite separately passed in 462.5s |
-| post-upload digest admission regression rerun | `PASS / 2026-08-11 / current-CPA audit 244 tests and 20 skips / Safe Gate 218 tests and 78 skips / RC contract / actionlint`; fixes the observed run `31461730894` failure where pinned `upload-artifact` emitted bare lowercase SHA-256 while the coordinate step required the canonical `sha256:` prefix; no Host or release PASS is inferred |
-| `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make integration-test` as WSL root | `PRE_V18 PASS SUPERSEDED / CLASSIFIER-POLICY-V17 / 179.790s / native CPA v7.2.125 Host plus all 15 Router scenarios / SO 5693f2fb...f8393b / Store ZIP 1cbf59e1...65eb23 / V18 NATIVE HOST NOT RUN / DIRTY DEVELOPMENT BYTES / NOT FINAL CANDIDATE` |
-| fresh five-repository acquisition and validation | `PASS / policy a4ca2e98...ec5f / 5 repositories / 11 sources / 19 semantic cases / no third-party execution / ephemeral text cleaned` |
+| `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go GOPROXY=file:///home/yujian/go/pkg/mod/cache/download make round6-script-test` | `PASS / fixed actionlint 1.7.12 / secret scan / ShellCheck 0.10.0 / 248 CPA tests / Safe Gate 219 tests and 78 skips / Store / production health`; the complete release-doc mutation suite separately passed in 381.5s |
+| post-upload digest admission regression rerun | `HISTORICAL PRE-SUPPLEMENTAL PASS / 2026-08-11 / CPA audit 244 tests and 20 skips / Safe Gate 218 tests and 78 skips / SUPERSEDED BY CURRENT 248/219 RERUN`; fixes the observed run `31461730894` failure where pinned `upload-artifact` emitted bare lowercase SHA-256 while the coordinate step required the canonical `sha256:` prefix; no Host or release PASS is inferred |
+| `GO=/home/yujian/.local/toolchains/go1.26.4/bin/go ALLOW_DIRTY_BUILD=1 make integration-test` as WSL root | `PRE_V20 PASS SUPERSEDED / CLASSIFIER-POLICY-V17 / 179.790s / native CPA v7.2.125 Host plus all 15 Router scenarios / SO 5693f2fb...f8393b / Store ZIP 1cbf59e1...65eb23 / V20 NATIVE HOST NOT RUN / DIRTY DEVELOPMENT BYTES / NOT FINAL CANDIDATE` |
+| fresh five-repository acquisition and validation | `PRE_CURRENT_POLICY PASS SUPERSEDED / CURRENT POLICY 24c27f34...977fb7 LIVE_ACQUISITION_RERUN_REQUIRED / NO_PASS_CLAIM / THIRD_PARTY_CODE_EXECUTIONS_0` |
 | `CPA_COMPAT_VERIFY_REMOTE=1 CPA_COMPAT_REQUIRE_LATEST=0 make cpa-latest-compat` | `PASS / 121.740s / exact v7.2.125 remote tag+commit / pinned source, compile, ABI, Host, Store, request logging, and schema-2 lifecycle contracts / latest check intentionally skipped for the pinned target` |
-| local CodeRabbit CLI 0.7.2 | `PASS / findings 0 / cumulative 31 valid findings fixed / 14 stale, false, or conditional findings disproved against current source`; the final docs-only rerun reviewed all six changed evidence documents with zero findings; pushed-head GitHub CodeRabbit remains pending |
+| internal targeted review | `CLEAN / authorization semantics and portable winner contracts independently reviewed / no P0-P2 finding`; pushed-head GitHub CodeRabbit remains pending |
+| `govulncheck v1.6.0` under fixed Go 1.26.4 | `PASS / 0 vulnerabilities`; an earlier default-Go 1.26.0 result is superseded |
 
 Round 13 coverage status is deliberately split. The v20 local source gates pass,
 while the no-copy, `response.failed`, Codex `Originator`, and Claude replay
 contracts still have only pre-v20 native Host execution:
-`PRE_V18_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17 /
-V18_NOT_RUN / FINAL_CANDIDATE_PENDING`. The Claude assertions ran inside that
+`PRE_V20_DIRTY_WORKTREE_NATIVE_HOST_PASS_SUPERSEDED / CLASSIFIER_POLICY_V17 /
+V20_NATIVE_HOST_NOT_RUN / FINAL_CANDIDATE_PENDING`. The Claude assertions ran inside that
 root-isolated pre-v18 matrix against the v17-bound SO; they do not transfer to
 classifier-policy-v20 or to the final candidate. The v20 local source results
 listed above do not claim the still-pending native Host or second-machine matrix.

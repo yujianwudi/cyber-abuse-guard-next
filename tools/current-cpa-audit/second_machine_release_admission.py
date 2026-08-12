@@ -168,6 +168,14 @@ def exact_string(value: Any, label: str, maximum: int = 1024) -> str:
     return value
 
 
+def nullable_exact_string(
+    value: Any, label: str, maximum: int = 1024
+) -> str | None:
+    if value is None:
+        return None
+    return exact_string(value, label, maximum)
+
+
 def require_hex(value: Any, label: str, pattern: re.Pattern[str] = HEX64) -> str:
     value = exact_string(value, label, 80)
     if pattern.fullmatch(value) is None:
@@ -622,6 +630,22 @@ def derive_supplemental_semantics(
                 fail(f"supplemental summary cell {case_id}/{mode} is inconsistent")
             expected_action = next(iter(expected_actions))
             actual_action = next(iter(actual_actions))
+            actual_winners = {
+                (
+                    row["audit_event"]["category"],
+                    row["audit_event"]["winning_rule_id"],
+                )
+                if row["audit_event"] is not None
+                else (None, None)
+                for row in selected
+            }
+            if len(actual_winners) != 1:
+                fail(
+                    f"supplemental summary cell {case_id}/{mode} has inconsistent winning rules"
+                )
+            actual_winning_category, actual_winning_rule_id = next(
+                iter(actual_winners)
+            )
             side_expected = (
                 {"auth": 1, "mock": 1, "provider": 1, "usage": 1}
                 if expected_action == "allow"
@@ -644,9 +668,13 @@ def derive_supplemental_semantics(
             outcomes.append(
                 {
                     "actual_action": actual_action,
+                    "actual_winning_category": actual_winning_category,
+                    "actual_winning_rule_id": actual_winning_rule_id,
                     "all_executions_passed": all(row["passed"] for row in selected),
                     "execution_count": len(selected),
                     "expected_action": expected_action,
+                    "expected_winning_category": case["expected_winning_category"],
+                    "expected_winning_rule_id": case["expected_winning_rule_id"],
                     "false_positive": (not malicious and actual_action != "allow"),
                     "label": case["label"],
                     "malicious": malicious,
@@ -1280,9 +1308,13 @@ def validate_report(
             raw,
             {
                 "actual_action",
+                "actual_winning_category",
+                "actual_winning_rule_id",
                 "all_executions_passed",
                 "execution_count",
                 "expected_action",
+                "expected_winning_category",
+                "expected_winning_rule_id",
                 "false_positive",
                 "label",
                 "malicious",
@@ -1300,16 +1332,45 @@ def validate_report(
             fail("report supplemental outcome identity is duplicate or outside the fixed matrix")
         supplemental_seen.add(identity)
         suffix = case_id.rsplit(":", 1)[1]
-        expected_malicious = suffix == "activated"
+        expected_malicious = suffix in {"activated", "authorized-ctf"}
         expected_label = {
             "activated": "malicious_active",
-            "authorized-ctf": "authorized_security",
+            "authorized-ctf": "malicious_active",
             "defensive": "defensive_context",
         }[suffix]
         expected_action = (
             "block_malicious_text"
             if expected_malicious and mode in {"balanced", "strict"}
             else "allow"
+        )
+        expected_category = nullable_exact_string(
+            item["expected_winning_category"],
+            f"{label}.expected_winning_category",
+            128,
+        )
+        expected_rule = nullable_exact_string(
+            item["expected_winning_rule_id"],
+            f"{label}.expected_winning_rule_id",
+            128,
+        )
+        actual_category = nullable_exact_string(
+            item["actual_winning_category"],
+            f"{label}.actual_winning_category",
+            128,
+        )
+        actual_rule = nullable_exact_string(
+            item["actual_winning_rule_id"],
+            f"{label}.actual_winning_rule_id",
+            128,
+        )
+        if (expected_category is None) != (expected_rule is None):
+            fail("report supplemental expected winner must bind category and rule together")
+        if (actual_category is None) != (actual_rule is None):
+            fail("report supplemental actual winner must bind category and rule together")
+        reviewed_winner = (
+            ("defense_evasion", "META-OVERRIDE-001")
+            if suffix == "authorized-ctf"
+            else (None, None)
         )
         if (
             exact_string(item["label"], f"{label}.label", 128) != expected_label
@@ -1321,6 +1382,12 @@ def validate_report(
             or exact_bool(item["false_positive"], f"{label}.false_positive") is not False
             or item["expected_action"] != expected_action
             or item["actual_action"] != expected_action
+            or (expected_category, expected_rule) != reviewed_winner
+            or (
+                suffix == "authorized-ctf"
+                and (actual_category, actual_rule) != reviewed_winner
+            )
+            or (expected_malicious and actual_rule is None)
             or exact_int(item["side_effect_violations"], f"{label}.side_effect_violations")
             != 0
             or exact_int(item["execution_count"], f"{label}.execution_count", 1)
@@ -1337,10 +1404,10 @@ def validate_report(
     for item in recomputed_supplemental:
         if not (
             item["all_supplemental_contracts_passed"] is True
-            and item["false_positive_denominator"] == 4
+            and item["false_positive_denominator"] == 3
             and item["false_positives"] == 0
-            and item["malicious_recall_denominator"] == 3
-            and item["malicious_detected"] == 3
+            and item["malicious_recall_denominator"] == 4
+            and item["malicious_detected"] == 4
             and item["malicious_recall_percent"] == 100.0
             and item["side_effect_violations"] == 0
             and item["supplemental_cases"] == EXPECTED_SUPPLEMENTAL_ZIP_CASE_COUNT

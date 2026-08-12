@@ -8,7 +8,15 @@ negative tests、固定分母和 Safe Gate pins 全部落地后，可标记为
 在精确候选执行成功前必须保持 `NOT_RUN / NO_PASS_CLAIM`。本任务书后文若仅写
 `NOT_RUN`，均指 runtime audit，不否定已经闭合的源码合同。
 
-状态：**已批准实施 / 验收未完成 / 禁止提前合并或发布**
+Supplemental ground truth 必须把目标授权/所有权与模型控制授权分为独立轴。
+“自有且已授权的 CTF 目标”不等于“获准安装、隐藏或替换模型控制策略”。因此
+`authorized-ctf` 固定为 `model_control_authorization=not_granted`，Audit 仅记录，
+Balanced/Strict 必须由 `defense_evasion / META-OVERRIDE-001` 命中并在 Auth、Mock、
+Provider、Usage 前拦截；portable owner-run report 必须保留 expected/actual winner。
+不得把自然语言、客户端 Header、普通 Metadata、API key 或 after-auth 阶段误当成
+可信的逐请求模型控制授权。本修正只闭合审计 oracle，不创建生产白名单。
+
+状态：**DIRTY-WORKTREE LOCAL LINUX GATES PASS / PR_REQUIRED_CHECKS_NOT_RUN / PREMERGE_DIAGNOSTIC_NOT_RUN / 验收未完成 / NO_MERGE / NO_RELEASE**
 工作分支：`agent/cpa-v7.2.125-v1-rc1`
 合并目标：`main`
 平台范围：**仅 Linux amd64**
@@ -199,9 +207,10 @@ third_party_code_executions = 0
 `23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c`。
 该 ZIP 必须经显式 `--supplemental-archive` 输入；source hash、case count、
 误报分母、恶意召回分母、结果和清理状态均须单独报告，不能混入五仓召回
-分母。该参数不能因 draft code 出现就视为准入；在 parser/schema/validator/
-negative tests/pins 一起正式落地并完成真实运行前，只能标记 `NOT_RUN`，不得
-声称 PASS。
+分母。parser/schema/validator/negative tests/pins 源码合同已经由 Linux CPA
+audit 248/248 与 Safe Gate 219/78 验证并可标记 `IMPLEMENTED / CLOSED`；真实
+exact-candidate 二号机 supplemental runtime audit 仍必须保持
+`NOT_RUN / NO_PASS_CLAIM`。
 
 ### R13-06：性能与资源（P1）
 
@@ -295,7 +304,9 @@ artifact version: 1.0.0-rc.1
 
 顺序：
 
-1. 定向单测和完整 Linux unit/race/vet/fuzz/script/corpus/compat/reproducibility；
+1. 定向单测和完整 dirty-worktree Linux unit/race/vet/fuzz/script/corpus/compat、
+   benchmark、performance 与 vulnerability gate；exact-candidate artifact 和
+   reproducibility 属于后续 PR/CI 阶段，不能由本地 dirty-worktree PASS 代替；
 2. 完成实现后运行本地 CodeRabbit `--base main`，修复有效 critical/major/minor 并复审到 0 issues；
 3. 创建签名候选提交和 PR；
 4. 等待 PR head 的五个 required contexts 全绿：`quality-and-artifacts`、
@@ -312,10 +323,10 @@ artifact version: 1.0.0-rc.1
    `pack`，禁止 staging/tag/release；
 7. 独立提供的 Codex 全破 ZIP 必须通过显式 `--supplemental-archive` 输入，
    其 source hash、case count、误报分母、恶意召回分母、结果和清理状态必须
-   与固定五仓 11-source/19-case 分母分开。在参数及闭合 schema/validator/
-   negative tests/pins 正式落地并完成真实运行前，当前状态只能是 `NOT_RUN`，
-   不得把五仓或内建单 ZIP 结果重标为该 supplemental archive 的 PASS；本轮
-   若把该独立 ZIP 列为准入输入，则在上述代码与实跑闭环前合并/发布继续阻断；
+   与固定五仓 11-source/19-case 分母分开。源码合同已闭合；真实 runtime 当前
+   状态只能是 `NOT_RUN / NO_PASS_CLAIM`，不得把五仓或内建单 ZIP 结果重标为
+   supplemental runtime PASS；本轮若把该独立 ZIP 列为准入输入，则在真实
+   exact-candidate 实跑闭环前合并/发布继续阻断；
 8. 只有 PR required checks、pre-merge 完整诊断、所有适用 supplemental gate、
    CodeRabbit/P0/P1 和 PR 对话均闭合时，才允许 PR 作者通过 GitHub squash
    merge；不得使用 merge commit、rebase、管理员绕过或 force push；
@@ -362,7 +373,8 @@ artifact version: 1.0.0-rc.1
 
 ## 9. 最终状态定义
 
-- `ENGINEERING PASS`：精确候选的 Linux 与五项 GitHub required checks 成功。
+- `ENGINEERING PASS`：精确候选 Linux source/native Host、candidate artifacts、
+  reproducibility 与五项 GitHub required checks 全部成功。
 - `PREMERGE DIAGNOSTIC PASS`：PR synthetic merge artifact 的完整二号机诊断
   成功；仅授权 squash merge，不是 release admission，禁止 `pack`。
 - `POSTMAIN SECOND-MACHINE OWNER RELEASE ADMISSION PASS`：精确 protected-main

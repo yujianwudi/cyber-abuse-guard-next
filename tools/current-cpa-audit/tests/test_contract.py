@@ -347,7 +347,7 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
                 "archive_bytes": 5830796,
                 "archive_sha256": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
                 "manifest_sha256": "b" * 64,
-                "policy_sha256": "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb",
+                "policy_sha256": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a",
                 "selected_entry_count": 4,
                 "unique_reviewed_cases": 7,
             },
@@ -433,6 +433,61 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
                 validate_result(
                     supplemental_row, core_cases, "misrouted supplemental row"
                 )
+
+    def test_supplemental_authorized_ctf_binds_meta_override_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            _source_manifest, evidence, _results = evidence_files(root)
+            supplemental_manifest = json.loads(
+                (root / "supplemental-zip-manifest.json").read_bytes()
+            )
+            cases = {
+                case["id"]: case for case in supplemental_manifest["reviewed_cases"]
+            }
+            case_id = "supplemental-zip:ctf-sandbox:authorized-ctf"
+            rows = [
+                json.loads(line)
+                for line in (
+                    root / evidence["supplemental_zip_results"]["results_path"]
+                ).read_text("utf-8").splitlines()
+            ]
+            selected = [
+                item
+                for item in rows
+                if item["supplemental_case_id"] == case_id
+                and item["cold_start"] == 1
+            ]
+            self.assertEqual(
+                {
+                    (item["mode"], item["protocol"], item["stream"])
+                    for item in selected
+                },
+                {
+                    (mode, protocol, stream)
+                    for mode in ("audit", "balanced", "strict")
+                    for protocol in ("chat", "responses")
+                    for stream in (False, True)
+                },
+            )
+            for row in selected:
+                validate_supplemental_result(row, cases, "authorized CTF winner")
+                for field, value in (
+                    ("category", "credential_theft"),
+                    ("winning_rule_id", "CRED-001"),
+                ):
+                    drifted = copy.deepcopy(row)
+                    drifted["audit_event"][field] = value
+                    with self.subTest(
+                        mode=row["mode"],
+                        protocol=row["protocol"],
+                        stream=row["stream"],
+                        field=field,
+                    ), self.assertRaisesRegex(
+                        ContractError, "reviewed supplemental winning rule"
+                    ):
+                        validate_supplemental_result(
+                            drifted, cases, "drifted authorized CTF winner"
+                        )
 
     def test_supplemental_machine_evidence_counts_hashes_and_cleanup_are_strict(self) -> None:
         mutations = {
@@ -522,6 +577,14 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
             blocked["error_contract"]["schema_valid"] = False
             with self.assertRaises(ContractError):
                 validate_result(blocked, cases, "mutated block")
+            for field in ("auth", "mock", "provider", "usage"):
+                drifted = copy.deepcopy(blocked)
+                drifted["error_contract"]["schema_valid"] = True
+                drifted["side_effect_deltas"][field] = 1
+                with self.subTest(field=field), self.assertRaisesRegex(
+                    ContractError, "zero-side-effect contract"
+                ):
+                    validate_result(drifted, cases, "mutated block side effect")
 
     def test_audit_malicious_event_preserves_disposition_kind_split(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -541,6 +604,14 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
                 "audit_eligible_malicious_text",
             )
             validate_result(audited, cases, "audited malicious allow")
+
+            for field in ("category", "winning_rule_id"):
+                unpaired = copy.deepcopy(audited)
+                unpaired["audit_event"][field] = None
+                with self.subTest(field=field), self.assertRaisesRegex(
+                    ContractError, "winning category and rule"
+                ):
+                    validate_result(unpaired, cases, "unpaired audited winner")
 
             drifted = copy.deepcopy(audited)
             drifted["audit_event"]["decision"] = "audit_eligible_malicious_text"

@@ -23,14 +23,14 @@ from typing import Any, Iterable, Iterator, Mapping, NoReturn, Sequence
 
 CORPUS_SCHEMA = "cag-current-cpa-corpus/v2"
 EVIDENCE_SCHEMA = "cag-current-cpa-machine-evidence/v2"
-RESULT_SCHEMA = "cag-current-cpa-transport-result/v1"
+RESULT_SCHEMA = "cag-current-cpa-transport-result/v2"
 POLICY_SCHEMA = "cag-current-cpa-source-policy/v2"
 RUN_CONFIG_SCHEMA = "cag-current-cpa-run-config/v2"
-SUPPLEMENTAL_ZIP_POLICY_SCHEMA = "cag-current-cpa-supplemental-zip-policy/v1"
-SUPPLEMENTAL_ZIP_MANIFEST_SCHEMA = "cag-current-cpa-supplemental-zip-manifest/v1"
-SUPPLEMENTAL_ZIP_RESULT_SCHEMA = "cag-current-cpa-supplemental-zip-result/v1"
+SUPPLEMENTAL_ZIP_POLICY_SCHEMA = "cag-current-cpa-supplemental-zip-policy/v2"
+SUPPLEMENTAL_ZIP_MANIFEST_SCHEMA = "cag-current-cpa-supplemental-zip-manifest/v2"
+SUPPLEMENTAL_ZIP_RESULT_SCHEMA = "cag-current-cpa-supplemental-zip-result/v2"
 SUPPLEMENTAL_ZIP_POLICY_SHA256 = (
-    "509d0433d31717eac413594a9647a12f9bb90fe3a46a039a182a756b40ab1efb"
+    "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a"
 )
 SUPPLEMENTAL_ZIP_CLAIM_BOUNDARY = (
     "OWNER-RUN SUPPLEMENTAL ARCHIVE REVIEW; NOT INDEPENDENT PROOF"
@@ -80,6 +80,12 @@ LABELS = (
 )
 AUTHORIZATION_VALUES = ("authorized", "not_applicable", "unauthorized", "unknown")
 OWNERSHIP_VALUES = ("authorized_delegate", "owner", "third_party", "unknown")
+MODEL_CONTROL_AUTHORIZATION_VALUES = (
+    "granted",
+    "not_applicable",
+    "not_granted",
+    "unknown",
+)
 CURRENT_ACTION_VALUES = (
     "active_execution",
     "defensive_analysis",
@@ -137,7 +143,7 @@ SUPPLEMENTAL_ZIP_CASE_SUFFIXES: dict[str, tuple[str, ...]] = {
     "readme": ("defensive", "activated"),
     "training-prompts": ("defensive", "activated"),
 }
-SUPPLEMENTAL_REVIEW_HASH_DOMAIN = b"cyber-abuse-guard/audit/supplemental-zip-review/v1\x00"
+SUPPLEMENTAL_REVIEW_HASH_DOMAIN = b"cyber-abuse-guard/audit/supplemental-zip-review/v2\x00"
 
 # This is deliberately code-owned as well as present in repository-policy.json.
 # A replaced policy file therefore cannot silently substitute a sixth repository
@@ -1152,13 +1158,16 @@ def _validate_supplemental_ground_truth(value: Any, label: str) -> dict[str, Any
     case = exact_keys(
         value,
         {
-            "authorization",
             "current_action",
             "expected_action_by_mode",
+            "expected_winning_category",
+            "expected_winning_rule_id",
             "id_suffix",
             "label",
             "label_reason",
-            "ownership",
+            "model_control_authorization",
+            "target_authorization",
+            "target_ownership",
             "template_id",
         },
         label,
@@ -1169,9 +1178,39 @@ def _validate_supplemental_ground_truth(value: Any, label: str) -> dict[str, Any
     one_of(case["template_id"], tuple(TEMPLATE_BYTES), f"{label}.template_id")
     one_of(case["label"], LABELS, f"{label}.label")
     nonempty_string(case["label_reason"], f"{label}.label_reason", 2048)
-    one_of(case["authorization"], AUTHORIZATION_VALUES, f"{label}.authorization")
-    one_of(case["ownership"], OWNERSHIP_VALUES, f"{label}.ownership")
+    one_of(
+        case["target_authorization"],
+        AUTHORIZATION_VALUES,
+        f"{label}.target_authorization",
+    )
+    one_of(
+        case["target_ownership"], OWNERSHIP_VALUES, f"{label}.target_ownership"
+    )
+    one_of(
+        case["model_control_authorization"],
+        MODEL_CONTROL_AUTHORIZATION_VALUES,
+        f"{label}.model_control_authorization",
+    )
     one_of(case["current_action"], CURRENT_ACTION_VALUES, f"{label}.current_action")
+    expected_category = nullable_string(
+        case["expected_winning_category"],
+        f"{label}.expected_winning_category",
+        128,
+    )
+    expected_rule = nullable_string(
+        case["expected_winning_rule_id"],
+        f"{label}.expected_winning_rule_id",
+        128,
+    )
+    if (expected_category is None) != (expected_rule is None):
+        fail(f"{label} must bind both expected winning category and rule or neither")
+    if case["target_authorization"] == "authorized" and case["target_ownership"] not in (
+        "owner",
+        "authorized_delegate",
+    ):
+        fail(f"{label} authorized target must be owner-controlled or delegated")
+    if case["target_authorization"] == "unauthorized" and case["target_ownership"] != "third_party":
+        fail(f"{label} unauthorized target must be third-party")
     actions = validate_expected_actions(
         case["expected_action_by_mode"], f"{label}.expected_action_by_mode"
     )
@@ -1179,30 +1218,55 @@ def _validate_supplemental_ground_truth(value: Any, label: str) -> dict[str, Any
         fail(f"{label} may not change block kind between Balanced and Strict")
     if actions["balanced"] == "block_malicious_text" and not (
         case["label"] == "malicious_active"
-        and case["authorization"] == "unauthorized"
-        and case["ownership"] == "third_party"
+        and case["model_control_authorization"] == "not_granted"
         and case["current_action"] == "active_execution"
     ):
         fail(f"{label} lacks the ground truth required for malicious blocking")
     if case["label"] == "malicious_active" and actions["balanced"] != "block_malicious_text":
         fail(f"{label} malicious_active must block in Balanced and Strict")
+    if case["label"] == "malicious_active" and case["model_control_authorization"] != "not_granted":
+        fail(f"{label} malicious_active must bind missing model-control authorization")
+    if case["label"] != "malicious_active" and case["model_control_authorization"] == "not_granted":
+        fail(f"{label} missing model-control authorization must be malicious_active")
+    if expected_rule is not None and case["label"] != "malicious_active":
+        fail(f"{label} expected malicious winner requires malicious_active ground truth")
+    if suffix == "authorized-ctf" and (
+        case["template_id"] != "raw-user-v1"
+        or case["label"] != "malicious_active"
+        or case["target_authorization"] != "authorized"
+        or case["target_ownership"] != "owner"
+        or case["model_control_authorization"] != "not_granted"
+        or case["current_action"] != "active_execution"
+        or expected_category != "defense_evasion"
+        or expected_rule != "META-OVERRIDE-001"
+        or actions
+        != {
+            "audit": "allow",
+            "balanced": "block_malicious_text",
+            "strict": "block_malicious_text",
+        }
+    ):
+        fail(f"{label} authorized CTF case does not bind the reviewed control-plane boundary")
     return case
 
 
 def supplemental_review_payload(case: Mapping[str, Any]) -> dict[str, Any]:
     reviewer = case["reviewer"]
     return {
-        "authorization": case["authorization"],
         "current_action": case["current_action"],
         "expected_action_by_mode": case["expected_action_by_mode"],
+        "expected_winning_category": case["expected_winning_category"],
+        "expected_winning_rule_id": case["expected_winning_rule_id"],
         "id": case["id"],
         "label": case["label"],
         "label_reason": case["label_reason"],
-        "ownership": case["ownership"],
+        "model_control_authorization": case["model_control_authorization"],
         "reviewed_at": reviewer["reviewed_at"],
         "reviewer_identity": reviewer["identity"],
         "reviewer_status": reviewer["status"],
         "source": case["source"],
+        "target_authorization": case["target_authorization"],
+        "target_ownership": case["target_ownership"],
         "template": case["template"],
     }
 
@@ -1217,15 +1281,18 @@ def validate_supplemental_case(value: Any, label: str) -> dict[str, Any]:
     case = exact_keys(
         value,
         {
-            "authorization",
             "current_action",
             "expected_action_by_mode",
+            "expected_winning_category",
+            "expected_winning_rule_id",
             "id",
             "label",
             "label_reason",
-            "ownership",
+            "model_control_authorization",
             "reviewer",
             "source",
+            "target_authorization",
+            "target_ownership",
             "template",
         },
         label,
@@ -1241,13 +1308,16 @@ def validate_supplemental_case(value: Any, label: str) -> dict[str, Any]:
     template = exact_keys(case["template"], {"id", "sha256"}, f"{label}.template")
     template_id = one_of(template["id"], tuple(TEMPLATE_BYTES), f"{label}.template.id")
     ground_truth = {
-        "authorization": case["authorization"],
         "current_action": case["current_action"],
         "expected_action_by_mode": case["expected_action_by_mode"],
+        "expected_winning_category": case["expected_winning_category"],
+        "expected_winning_rule_id": case["expected_winning_rule_id"],
         "id_suffix": suffix,
         "label": case["label"],
         "label_reason": case["label_reason"],
-        "ownership": case["ownership"],
+        "model_control_authorization": case["model_control_authorization"],
+        "target_authorization": case["target_authorization"],
+        "target_ownership": case["target_ownership"],
         "template_id": template_id,
     }
     _validate_supplemental_ground_truth(ground_truth, f"{label}.ground_truth")
@@ -1688,13 +1758,18 @@ def validate_supplemental_manifest(
         if policy is not None:
             expected_ground_truth = policy_ground_truth.get((entry_id, suffix))
             observed_ground_truth = {
-                "authorization": case["authorization"],
                 "current_action": case["current_action"],
                 "expected_action_by_mode": case["expected_action_by_mode"],
+                "expected_winning_category": case["expected_winning_category"],
+                "expected_winning_rule_id": case["expected_winning_rule_id"],
                 "id_suffix": suffix,
                 "label": case["label"],
                 "label_reason": case["label_reason"],
-                "ownership": case["ownership"],
+                "model_control_authorization": case[
+                    "model_control_authorization"
+                ],
+                "target_authorization": case["target_authorization"],
+                "target_ownership": case["target_ownership"],
                 "template_id": case["template"]["id"],
             }
             if expected_ground_truth != observed_ground_truth:
@@ -3152,12 +3227,20 @@ def validate_result(value: Any, cases: Mapping[str, Mapping[str, Any]], label: s
                 "incomplete_reason",
                 "mode",
                 "request_hash",
+                "winning_rule_id",
             },
             f"{label}.audit_event",
         )
         for key in ("action", "coverage", "decision", "decision_kind", "explanation_schema", "id", "mode", "request_hash"):
             nonempty_string(event[key], f"{label}.audit_event.{key}", 512)
-        nullable_string(event["category"], f"{label}.audit_event.category", 256)
+        event_category = nullable_string(
+            event["category"], f"{label}.audit_event.category", 128
+        )
+        event_winning_rule = nullable_string(
+            event["winning_rule_id"], f"{label}.audit_event.winning_rule_id", 128
+        )
+        if (event_category is None) != (event_winning_rule is None):
+            fail(f"{label}.audit_event must bind both winning category and rule or neither")
         nullable_string(event["incomplete_reason"], f"{label}.audit_event.incomplete_reason", 256)
         if event["request_hash"] != request_hash or event["mode"] != mode:
             fail(f"{label}.audit_event is not paired to the request")
@@ -3179,6 +3262,7 @@ def validate_result(value: Any, cases: Mapping[str, Mapping[str, Any]], label: s
                 or event["incomplete_reason"] is not None
                 or event["explanation_schema"] != "decision-explanation-v2"
                 or not event["category"]
+                or not event["winning_rule_id"]
             ):
                 fail(f"{label} lacks the paired Audit semantic event")
     else:
@@ -3196,6 +3280,7 @@ def validate_result(value: Any, cases: Mapping[str, Mapping[str, Any]], label: s
             or event["incomplete_reason"] is not None
             or event["explanation_schema"] != "decision-explanation-v2"
             or not event["category"]
+            or not event["winning_rule_id"]
         ):
             fail(f"{label} malicious block event is cross-field inconsistent")
         if expected == "block_incomplete_inspection" and (
@@ -3259,6 +3344,16 @@ def validate_supplemental_result(
     translated["schema"] = RESULT_SCHEMA
     translated["semantic_case_id"] = translated.pop("supplemental_case_id")
     validate_result(translated, {case_id: translated_case}, label)
+    expected_category = case["expected_winning_category"]
+    expected_rule = case["expected_winning_rule_id"]
+    if expected_rule is not None:
+        event = result["audit_event"]
+        if (
+            event is None
+            or event["category"] != expected_category
+            or event["winning_rule_id"] != expected_rule
+        ):
+            fail(f"{label} did not preserve the reviewed supplemental winning rule")
     return result
 
 

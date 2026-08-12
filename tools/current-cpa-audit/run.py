@@ -2070,6 +2070,12 @@ class Harness:
     def event_summary(event: Mapping[str, Any] | None) -> dict[str, Any] | None:
         if event is None:
             return None
+        explanation = event.get("decision_explanation")
+        winning_rule_id = (
+            explanation.get("winning_rule_id")
+            if isinstance(explanation, dict)
+            else None
+        )
         return {
             "action": event.get("action"),
             "category": event.get("category") or None,
@@ -2081,6 +2087,7 @@ class Harness:
             "incomplete_reason": event.get("incomplete_reason") or None,
             "mode": event.get("mode"),
             "request_hash": event.get("request_hash"),
+            "winning_rule_id": winning_rule_id or None,
         }
 
     def open_results(self) -> None:
