@@ -339,6 +339,63 @@ func TestControllerReconfigurePreservesAndSafelyShrinksState(t *testing.T) {
 	}
 }
 
+func TestControllerCloneReconfiguredIsIndependentAndFailureAtomic(t *testing.T) {
+	t.Parallel()
+
+	clock := &testClock{now: time.Date(2026, 8, 9, 0, 0, 0, 0, time.UTC)}
+	controller := newCapacityController(t, clock, 4)
+	manual := riskHash("clone-manual")
+	manualTwo := riskHash("clone-manual-two")
+	oldest := riskHash("clone-oldest")
+	newest := riskHash("clone-newest")
+	_ = controller.Evaluate(manual, 100)
+	_ = controller.Evaluate(manual, 100)
+	_ = controller.Evaluate(manualTwo, 100)
+	_ = controller.Evaluate(manualTwo, 100)
+	_ = controller.EvaluateRequest(oldest, riskRequestHash("clone-oldest-request"), 35)
+	clock.Add(time.Second)
+	_ = controller.EvaluateRequest(newest, riskRequestHash("clone-newest-request"), 35)
+
+	clone, err := controller.CloneReconfigured(capacityConfig(clock, 3))
+	if err != nil {
+		t.Fatalf("CloneReconfigured(shrink): %v", err)
+	}
+	if clone == controller {
+		t.Fatal("CloneReconfigured returned the active controller")
+	}
+	if got := controller.Stats(); got.MaxSubjects != 4 || got.Subjects != 4 || got.Evicted != 0 {
+		t.Fatalf("preparing clone mutated active controller: %#v", got)
+	}
+	if got := clone.Stats(); got.MaxSubjects != 3 || got.Subjects != 3 || got.ManualBlocked != 2 || got.Evicted != 1 {
+		t.Fatalf("prepared clone Stats() = %#v", got)
+	}
+	if _, ok := clone.Snapshot(oldest); ok {
+		t.Fatal("prepared clone retained the oldest evictable subject")
+	}
+	if state, ok := clone.Snapshot(manual); !ok || !state.ManualBlocked {
+		t.Fatalf("prepared clone lost manual block: state=%#v ok=%v", state, ok)
+	}
+	if duplicate := clone.EvaluateRequest(newest, riskRequestHash("clone-newest-request"), 35); !duplicate.Duplicate {
+		t.Fatalf("prepared clone lost request idempotency receipt: %#v", duplicate)
+	}
+	if activeState, ok := controller.Snapshot(newest); !ok || activeState.HitCount != 1 {
+		t.Fatalf("using prepared clone mutated active receipt state: state=%#v ok=%v", activeState, ok)
+	}
+
+	invalid := capacityConfig(clock, 4)
+	invalid.CooldownScore = 0
+	if rejected, err := controller.CloneReconfigured(invalid); err == nil || rejected != nil {
+		t.Fatalf("CloneReconfigured accepted invalid capacity: clone=%p err=%v", rejected, err)
+	}
+	tooSmall := capacityConfig(clock, 1)
+	if rejected, err := controller.CloneReconfigured(tooSmall); err == nil || rejected != nil {
+		t.Fatalf("CloneReconfigured accepted capacity below protected blocks: clone=%p err=%v", rejected, err)
+	}
+	if got := controller.Stats(); got.MaxSubjects != 4 || got.Subjects != 4 || got.ManualBlocked != 2 || got.Evicted != 0 {
+		t.Fatalf("rejected clone mutated active controller: %#v", got)
+	}
+}
+
 func TestControllerConcurrentUniqueCapacityAndReconfigure(t *testing.T) {
 	t.Parallel()
 

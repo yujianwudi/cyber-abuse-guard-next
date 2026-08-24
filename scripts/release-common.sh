@@ -109,8 +109,8 @@ release_init() {
 
   RELEASE_SOURCE_VERSION="$(sed -nE 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' \
     "$RELEASE_ROOT/internal/buildinfo/buildinfo.go" | head -n 1)"
-  [[ "$RELEASE_SOURCE_VERSION" =~ ^[0-9]+\.[0-9]+$ ]] || \
-    release_die "cannot read the exact two-component source version from internal/buildinfo/buildinfo.go"
+  [[ "$RELEASE_SOURCE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || \
+    release_die "cannot read the exact three-component semantic source version from internal/buildinfo/buildinfo.go"
 
   RELEASE_RULESET_VERSION="$(sed -nE 's/^[[:space:]]*version:[[:space:]]*"([^"]+)".*/\1/p' \
     "$RELEASE_ROOT/rules/manifest.yaml" | head -n 1)"

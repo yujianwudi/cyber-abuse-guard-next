@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
@@ -26,19 +27,41 @@ import (
 // state. No request text, raw header, credential, model name, trace ID, or
 // completion error is retained.
 type requestLifecycleCache struct {
-	active pendingCache
+	mu         sync.Mutex
+	generation uint64
+	active     pendingCache
 }
 
 func newRequestLifecycleCache(limit int, ttl time.Duration) requestLifecycleCache {
 	return requestLifecycleCache{active: newPendingCache(limit, ttl)}
 }
 
-func (cache *requestLifecycleCache) begin(requestID, fingerprint string) {
+func (cache *requestLifecycleCache) generationToken() uint64 {
+	if cache == nil {
+		return 0
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.generation
+}
+
+// begin records a classification only when no successful runtime swap has
+// occurred since the caller captured generation. Classification releases the
+// runtime read lock before this small cache update, so the generation check is
+// the fail-closed barrier that prevents an old-policy callback from refilling a
+// cache which reconfigure has already cleared.
+func (cache *requestLifecycleCache) begin(requestID, fingerprint string, generation uint64) bool {
 	requestID = strings.TrimSpace(requestID)
 	if cache == nil || requestID == "" || fingerprint == "" {
-		return
+		return false
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if generation != cache.generation {
+		return false
 	}
 	cache.active.put(requestID, fingerprint)
+	return true
 }
 
 func (cache *requestLifecycleCache) contains(requestID string) bool {
@@ -46,13 +69,20 @@ func (cache *requestLifecycleCache) contains(requestID string) bool {
 	if cache == nil || requestID == "" {
 		return false
 	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
 	_, ok := cache.active.get(requestID)
 	return ok
 }
 
-func (cache *requestLifecycleCache) matches(requestID, fingerprint string) bool {
+func (cache *requestLifecycleCache) matches(requestID, fingerprint string, generation uint64) bool {
 	requestID = strings.TrimSpace(requestID)
 	if cache == nil || requestID == "" || fingerprint == "" {
+		return false
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	if generation != cache.generation {
 		return false
 	}
 	entry, ok := cache.active.get(requestID)
@@ -61,13 +91,22 @@ func (cache *requestLifecycleCache) matches(requestID, fingerprint string) bool 
 
 func (cache *requestLifecycleCache) complete(requestID string) bool {
 	requestID = strings.TrimSpace(requestID)
-	return cache != nil && requestID != "" && cache.active.remove(requestID)
+	if cache == nil || requestID == "" {
+		return false
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	return cache.active.remove(requestID)
 }
 
 func (cache *requestLifecycleCache) clear() {
-	if cache != nil {
-		cache.active.clear()
+	if cache == nil {
+		return
 	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	cache.generation++
+	cache.active.clear()
 }
 
 func requestInterceptorMethod(method string) bool {
@@ -173,18 +212,33 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 	}
 	fingerprint := p.requestSecurityFingerprint(requestID, request)
 
-	if !beforeAuth && p.requestLifecycle.matches(requestID, fingerprint) {
-		// CPA v7.2.116 passes the same RequestID to before-auth and after-auth.
-		// Classification already ran on this exact security-relevant request
-		// representation, so the second callback performs only the bounded input
-		// fingerprint and pass-through instead of a duplicate classification,
-		// audit, or subject-risk event. If a Host mutates the body, headers, source
-		// format, or stream flag, the fingerprint changes and after-auth is
-		// classified again.
-		return okEnvelope(pluginapi.RequestInterceptResponse{}), 0
+	var lifecycleGeneration uint64
+	if !beforeAuth {
+		// A cache hit is a complete inspection callback, not a free-standing map
+		// lookup. Keep it inside the runtime read-side barrier so successful
+		// reconfiguration cannot swap policy and return while an old-generation
+		// after-auth fast path is still deciding to allow. The global lock order is
+		// opMu -> requestLifecycle.mu, matching the exclusive clear path.
+		p.opMu.RLock()
+		lifecycleGeneration = p.requestLifecycle.generationToken()
+		if p.requestLifecycle.matches(requestID, fingerprint, lifecycleGeneration) {
+			response := okEnvelope(pluginapi.RequestInterceptResponse{})
+			p.opMu.RUnlock()
+			// CPA v7.2.137 passes the same RequestID to before-auth and after-auth.
+			// Classification already ran on this exact security-relevant request
+			// representation, so the second callback performs only the bounded input
+			// fingerprint and pass-through instead of a duplicate classification,
+			// audit, or subject-risk event. If a Host mutates the body, headers, source
+			// format, or stream flag, the fingerprint changes and after-auth is
+			// classified again.
+			return response, 0
+		}
+		p.opMu.RUnlock()
+	} else {
+		lifecycleGeneration = p.requestLifecycle.generationToken()
 	}
 
-	// CPA v7.2.116 invokes the after-auth interceptor before request
+	// CPA v7.2.137 invokes the after-auth interceptor before request
 	// translation. ToFormat names the future upstream representation, while
 	// Body is still encoded in the original SourceFormat. This matters on the
 	// defensive cache-miss path (for example after TTL/capacity eviction): using
@@ -209,8 +263,10 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 	// Record only after a successful classification path. A recovered panic or
 	// fail-open operational failure must not make a later after-auth invocation
 	// look checked; after-auth remains a bounded retry opportunity in that case.
+	// The captured generation also prevents this callback from refilling a cache
+	// after a concurrent successful reconfiguration cleared the old policy.
 	if !result.failureRecorded {
-		p.requestLifecycle.begin(requestID, fingerprint)
+		p.requestLifecycle.begin(requestID, fingerprint, lifecycleGeneration)
 	}
 	return p.requestInterceptResponseFromModelRoute(
 		result.response,
@@ -316,10 +372,12 @@ func blockingRequestInterceptResponse(category string) pluginapi.RequestIntercep
 func (p *Plugin) handleRequestComplete(raw []byte) []byte {
 	var completion pluginapi.RequestCompletion
 	if err := json.Unmarshal(raw, &completion); err != nil {
+		p.counters.requestLifecycleErrors.Add(1)
 		return errorEnvelope("invalid_request", "invalid request completion", 0, "")
 	}
 	requestID := strings.TrimSpace(completion.RequestID)
 	if requestID == "" {
+		p.counters.requestLifecycleErrors.Add(1)
 		return errorEnvelope("invalid_request", "request completion ID is required", 0, "")
 	}
 	// Duplicate or late terminal events are intentionally idempotent. The Host

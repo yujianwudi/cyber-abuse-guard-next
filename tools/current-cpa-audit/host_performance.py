@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build and validate fail-closed RT12-06 CPA Host A/B performance evidence.
+"""Build and validate fail-closed RT13-06 CPA Host A/B performance evidence.
 
 This module deliberately does not invent measurements.  Its Linux ``collect``
 entry point drives the two inspected Host arms and writes a closed raw capture;
@@ -12,24 +12,37 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import http.client
+import ipaddress
+import io
 import json
 import math
 import os
 import platform
 import random
 import re
+import socket
 import stat
 import statistics
 import sys
+import tarfile
 import tempfile
 import threading
 import time
 from pathlib import Path
 from typing import Any, Mapping, NoReturn, Sequence
+from urllib.parse import urlsplit
 
 from audit_contract import (
+    AUDIT_SCHEMA_VERSION,
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
+    CANDIDATE_MANIFEST_SCHEMA,
+    CANDIDATE_MANIFEST_STATUS,
     CLAIM_BOUNDARY,
     ContractError,
+    validate_candidate_identity,
+    validate_candidate_manifest as validate_candidate_manifest_contract,
     canonical_bytes,
     exact_bool,
     exact_int,
@@ -42,7 +55,6 @@ from audit_contract import (
     require_hex,
     require_safe_relative,
     sha256_bytes,
-    timestamp_value,
     validate_run_config,
 )
 
@@ -51,14 +63,36 @@ CONFIG_SCHEMA = "cag-current-cpa-host-performance-config/v1"
 MEASUREMENTS_SCHEMA = "cag-current-cpa-host-performance-measurements/v1"
 EVIDENCE_SCHEMA = "cag-current-cpa-host-performance-evidence/v1"
 WORKLOAD_SCHEMA = "cag-current-cpa-host-performance-workloads/v1"
-CANDIDATE_SCHEMA = "cyber-abuse-guard.audit-candidate-manifest.v1"
-CANDIDATE_STATUS = "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE"
+CANDIDATE_SCHEMA = CANDIDATE_MANIFEST_SCHEMA
+CANDIDATE_STATUS = CANDIDATE_MANIFEST_STATUS
 
 ARMS = ("cpa_only", "cpa_cag")
 CONCURRENCIES = (1, 4, 8, 16)
 ABSOLUTE_WORKLOADS = ("ordinary", "five_repository_activation", "public")
 FIXED_WORKLOAD = "fixed_workload"
-ALL_WORKLOADS = (FIXED_WORKLOAD, *ABSOLUTE_WORKLOADS)
+LARGE_PAYLOAD_WORKLOAD = "large_payload"
+ALL_WORKLOADS = (FIXED_WORKLOAD, *ABSOLUTE_WORKLOADS, LARGE_PAYLOAD_WORKLOAD)
+
+LARGE_PAYLOAD_BYTES = 4 * 1024 * 1024
+LARGE_PAYLOAD_REQUESTS = 16
+LARGE_PAYLOAD_CONCURRENCY = 4
+LARGE_PAYLOAD_BASELINE_SAMPLES = 5
+LARGE_PAYLOAD_RSS_SAMPLE_INTERVAL_MS = 20
+LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS = 30
+LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS = 60
+LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT = 1
+LARGE_PAYLOAD_SAMPLE_WALL_TOLERANCE_MS = 5.0
+LARGE_PAYLOAD_MAX_ELAPSED_SECONDS = 300.0
+LARGE_PAYLOAD_MEASUREMENT_BOUNDARY = (
+    "HOST_PROCESS_RSS_FULL_PAYLOAD_EQUIVALENT; NOT ALLOCATION OR COPY COUNT"
+)
+MOUNT_IDENTITY_BOUNDARY = (
+    "HASHED DOCKER BIND SOURCE/BACKING IDENTITY; "
+    "DIRECTORY CONTENTS NOT RECURSIVELY HASHED"
+)
+MOUNT_PROJECTION_BOUNDARY = (
+    "REDACTED BIND SOURCE/BACKING PROJECTION; NO PLAINTEXT HOST PATHS"
+)
 
 MIN_PAIRED_REPETITIONS = 3
 MAX_PAIRED_REPETITIONS = 10
@@ -77,30 +111,49 @@ MEASUREMENT_HOST_CPU_LIMIT_PERCENT = 95.0
 TIMESTAMP_TOLERANCE_SECONDS = 5.0
 MAX_WARM_DRAIN_SECONDS = 125.0
 SAMPLER_TIMING_PREFLIGHT_SAMPLES = 3
+DOCKER_STATS_API_VERSION = "v1.44"
+DOCKER_STATS_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+DOCKER_STATS_SOCKET = Path("/var/run/docker.sock")
+QUEUE_STATUS_PATH = "/v0/management/plugins/cyber-abuse-guard/status"
+QUEUE_STATUS_MAX_RESPONSE_BYTES = 256 * 1024
+QUEUE_STATUS_USER_AGENT = "cag-current-cpa-host-performance-queue/1"
 MOCK_COUNTER_KEYS = ("auth", "mock", "provider")
+ARM_SPECIFIC_CONFIG_DESTINATIONS = frozenset({"/cag/config", "/cag/config.yaml"})
+CAG_PLUGIN_DESTINATION = "/cag/plugins"
+PLUGIN_ARCHIVE_MAX_BYTES = 64 * 1024 * 1024
+PLUGIN_ARCHIVE_MAX_MEMBERS = 8
+CRITICAL_MOUNT_FLAGS = frozenset(
+    {"async", "atime", "dev", "diratime", "dirsync", "exec", "lazytime", "noatime", "nodev", "nodiratime", "noexec", "nosuid", "relatime", "ro", "rw", "strictatime", "suid", "sync"}
+)
 
 EXPECTED_STATUS_BY_WORKLOAD: dict[str, dict[str, int]] = {
     "fixed_workload": {"cpa_only": 200, "cpa_cag": 200},
     "ordinary": {"cpa_only": 200, "cpa_cag": 200},
     "five_repository_activation": {"cpa_only": 200, "cpa_cag": 403},
     "public": {"cpa_only": 200, "cpa_cag": 200},
+    "large_payload": {"cpa_only": 200, "cpa_cag": 200},
 }
 
 THRESHOLDS: dict[str, tuple[str, float]] = {
-    "ordinary_p95_ms": ("<=", 10.0),
+    "ordinary_plugin_overhead_p95_ms": ("<=", 10.0),
     "five_repository_activation_p95_ms": ("<=", 250.0),
-    "public_p95_ms": ("<=", 150.0),
-    "public_p99_ms": ("<=", 300.0),
+    "public_adversarial_p95_ms": ("<=", 150.0),
+    "public_adversarial_p99_ms": ("<=", 300.0),
     "fixed_workload_p99_regression_percent": ("<=", 10.0),
     "host_throughput_vs_cpa_only": (">=", 0.90),
     "audit_queue_peak_ratio": ("<", 0.80),
     "warm_rss_growth_60m_mib": ("<=", 64.0),
-    "unexpected_http_or_infra_errors": ("=", 0.0),
+    "large_payload_full_copy_regression": ("=", 0.0),
     "restart_oom_panic": ("=", 0.0),
+    "unexpected_http_or_infrastructure_errors": ("=", 0.0),
 }
 
 SAFE_ARTIFACT = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}")
 SAFE_PAIR = re.compile(r"[a-z0-9][a-z0-9_.-]{2,127}")
+HOST_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:"
+    r"[0-9]{2}:[0-9]{2}\.[0-9]{3}Z"
+)
 TOOL_DIR = Path(__file__).resolve().parent
 TOOL_IDENTITY_SOURCE_KEYS = (
     "acquire_sha256",
@@ -109,6 +162,7 @@ TOOL_IDENTITY_SOURCE_KEYS = (
     "host_performance_source_sha256",
     "run_sha256",
     "validator_sha256",
+    "workload_generator_sha256",
 )
 TOOL_IDENTITY_KEYS = (*TOOL_IDENTITY_SOURCE_KEYS, "bundle_sha256")
 
@@ -116,9 +170,223 @@ TOOL_IDENTITY_KEYS = (*TOOL_IDENTITY_SOURCE_KEYS, "bundle_sha256")
 class PerformanceError(ContractError):
     """A Host performance input or cross-file binding failed closed."""
 
+    def __init__(
+        self, message: str, *, sampler_error_ids: Sequence[str] = ()
+    ) -> None:
+        super().__init__(message)
+        self.sampler_error_ids = tuple(sampler_error_ids)
+
 
 def fail(message: str) -> NoReturn:
     raise PerformanceError(message)
+
+
+def _queue_depth_capacity(status: Any) -> tuple[int, int]:
+    audit = status.get("audit") if isinstance(status, dict) else None
+    if not isinstance(audit, dict):
+        fail("CAG audit status is unavailable during queue sampling")
+    depth = audit.get("queue_depth")
+    capacity = audit.get("queue_capacity")
+    if (
+        audit.get("healthy") is not True
+        or audit.get("degraded") is not False
+        or type(depth) is not int
+        or type(capacity) is not int
+        or capacity < 1
+        or depth < 0
+        or depth > capacity
+    ):
+        fail("CAG audit queue sample is invalid")
+    return depth, capacity
+
+
+def _reject_nonfinite_json(value: str) -> NoReturn:
+    fail(f"Host performance queue poll response contains {value!r}")
+
+
+class _QueueStatusPoller:
+    """One private persistent management connection for one measured cell."""
+
+    def __init__(
+        self,
+        base: str,
+        headers: Mapping[str, str],
+        timeout_seconds: float,
+        *,
+        connection_factory: Any = http.client.HTTPConnection,
+    ) -> None:
+        parts = urlsplit(base)
+        if (
+            parts.scheme != "http"
+            or parts.hostname is None
+            or parts.username
+            or parts.password
+            or parts.path
+            or parts.query
+            or parts.fragment
+        ):
+            fail("Host performance queue poll target is invalid")
+        try:
+            address = ipaddress.ip_address(parts.hostname)
+            port = parts.port or 80
+        except ValueError:
+            fail("Host performance queue poll target must be an IP literal")
+        private_networks = (
+            ipaddress.ip_network("10.0.0.0/8"),
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+        )
+        if address.version != 4 or not any(
+            address in network for network in private_networks
+        ):
+            fail("Host performance queue poll target is outside the private bridge")
+        if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
+            fail("Host performance queue poll timeout is invalid")
+
+        request_headers = {
+            "Accept": "application/json",
+            "Connection": "keep-alive",
+            "User-Agent": QUEUE_STATUS_USER_AGENT,
+        }
+        forbidden = {"connection", "content-length", "host", "transfer-encoding"}
+        for key, value in headers.items():
+            if (
+                not isinstance(key, str)
+                or not key
+                or key.lower() in forbidden
+                or not isinstance(value, str)
+            ):
+                fail("Host performance queue poll headers are invalid")
+            request_headers[key] = value
+        self._headers = request_headers
+        self._connection = connection_factory(
+            address.compressed,
+            port,
+            timeout=timeout_seconds,
+        )
+        self._closed = False
+
+    def snapshot(self) -> tuple[int, int]:
+        if self._closed:
+            fail("Host performance queue poll connection is closed")
+        self._connection.request("GET", QUEUE_STATUS_PATH, headers=self._headers)
+        response = self._connection.getresponse()
+        raw = response.read(QUEUE_STATUS_MAX_RESPONSE_BYTES + 1)
+        if len(raw) > QUEUE_STATUS_MAX_RESPONSE_BYTES:
+            fail("Host performance queue poll response exceeds the byte limit")
+        if int(response.status) != 200:
+            fail(
+                "Host performance queue poll returned a non-200 status; "
+                f"body_sha256={sha256_bytes(raw)}"
+            )
+        if response.will_close:
+            fail("Host performance queue poll did not retain its private connection")
+        try:
+            status = json.loads(
+                raw.decode("utf-8", "strict"),
+                parse_constant=_reject_nonfinite_json,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            fail("Host performance queue poll response is not strict JSON")
+        return _queue_depth_capacity(status)
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._connection.close()
+
+
+def _plugin_archive_path(raw_name: str) -> str:
+    if not raw_name or "\x00" in raw_name or "\\" in raw_name or raw_name.startswith("/"):
+        fail("Host performance plugin archive contains an unsafe path")
+    name = raw_name
+    while name.startswith("./"):
+        name = name[2:]
+    name = name.rstrip("/")
+    if name in ("", "."):
+        return ""
+    parts = name.split("/")
+    if any(part in ("", ".", "..") for part in parts):
+        fail("Host performance plugin archive contains an unsafe path")
+    return "/".join(parts)
+
+
+def _validate_plugin_archive(
+    raw: bytes,
+    *,
+    artifact_name: str | None,
+    expected_sha256: str | None,
+    maximum_bytes: int = PLUGIN_ARCHIVE_MAX_BYTES,
+) -> str | None:
+    """Validate Docker's plugin tar in memory without extracting any member."""
+
+    if not isinstance(raw, bytes) or len(raw) > maximum_bytes:
+        fail("Host performance plugin archive exceeds its byte limit")
+    if len(raw) < 1024 or len(raw) % 512 != 0:
+        fail("Host performance plugin archive is not a canonical tar stream")
+    try:
+        with tarfile.open(fileobj=io.BytesIO(raw), mode="r:") as archive:
+            members = archive.getmembers()
+            if len(members) > PLUGIN_ARCHIVE_MAX_MEMBERS:
+                fail("Host performance plugin archive contains too many members")
+            seen: set[str] = set()
+            files: dict[str, bytes] = {}
+            end_offset = 0
+            for member in members:
+                path = _plugin_archive_path(member.name)
+                if path in seen:
+                    fail("Host performance plugin archive contains a duplicate path")
+                seen.add(path)
+                if member.isdir():
+                    if member.size != 0:
+                        fail("Host performance plugin archive directory has data")
+                elif member.isreg():
+                    stream = archive.extractfile(member)
+                    if stream is None:
+                        fail("Host performance plugin archive member is unreadable")
+                    value = stream.read(member.size + 1)
+                    if len(value) != member.size:
+                        fail("Host performance plugin archive member size drifted")
+                    files[path] = value
+                else:
+                    fail("Host performance plugin archive contains a forbidden member type")
+                padded_size = ((member.size + 511) // 512) * 512
+                end_offset = max(end_offset, member.offset_data + padded_size)
+    except (tarfile.TarError, OSError, UnicodeError):
+        fail("Host performance plugin archive is not a canonical tar stream")
+
+    if end_offset + 1024 > len(raw) or any(raw[end_offset:]):
+        fail("Host performance plugin archive has a non-canonical terminator")
+
+    if artifact_name is None:
+        if files or seen - {""}:
+            fail("CPA-only performance arm contains plugin bytes or entries")
+        return None
+
+    if SAFE_ARTIFACT.fullmatch(artifact_name) is None or expected_sha256 is None:
+        fail("Host performance candidate plugin identity is invalid")
+    expected_path = f"linux/amd64/{artifact_name}"
+    allowed_paths = {"", "linux", "linux/amd64", expected_path}
+    if seen - allowed_paths or set(files) != {expected_path}:
+        fail("CPA+CAG plugin archive is not the exact one-SO set")
+    observed = sha256_bytes(files[expected_path])
+    if observed != expected_sha256:
+        fail("CPA+CAG performance arm loaded the wrong SO bytes")
+    return observed
+
+
+def _fail_large_payload_rss_sampler(errors: Sequence[str]) -> NoReturn:
+    raise PerformanceError(
+        "Host performance large-payload RSS sampler failed",
+        sampler_error_ids=errors,
+    )
+
+
+def _fail_cell_sampler(errors: Sequence[str]) -> NoReturn:
+    raise PerformanceError(
+        "Host performance cell sampler failed",
+        sampler_error_ids=errors,
+    )
 
 
 def finite_number(
@@ -149,8 +417,8 @@ def _timestamp_order(
     *,
     elapsed_seconds: float | None = None,
 ) -> None:
-    start = timestamp_value(started, f"{label}.started_at")
-    end = timestamp_value(completed, f"{label}.completed_at")
+    start = _host_timestamp_value(started, f"{label}.started_at")
+    end = _host_timestamp_value(completed, f"{label}.completed_at")
     if end < start:
         fail(f"{label} completion precedes its start")
     if elapsed_seconds is not None:
@@ -160,6 +428,18 @@ def _timestamp_order(
             or wall_seconds > elapsed_seconds + TIMESTAMP_TOLERANCE_SECONDS
         ):
             fail(f"{label} wall-clock interval does not match elapsed_seconds")
+
+
+def _host_timestamp_value(value: Any, label: str) -> Any:
+    text = nonempty_string(value, label, 64)
+    if HOST_TIMESTAMP.fullmatch(text) is None:
+        fail(f"{label} must use exactly three fractional UTC digits and Z")
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        fail(f"{label} is not a valid Host timestamp")
 
 
 def _redacted_cpa_config(value: Any, *, path: tuple[str, ...] = ()) -> Any:
@@ -221,7 +501,84 @@ def _redacted_environment(value: Any) -> list[str]:
     return sorted(result)
 
 
-def _docker_comparable_projection(info: Mapping[str, Any]) -> dict[str, Any]:
+def _docker_mount_projections(
+    info: Mapping[str, Any],
+    mountinfo_raw: str | None = None,
+    *,
+    backing_identities: Mapping[str, Mapping[str, Any]] | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None]:
+    raw_mounts = info.get("Mounts") or []
+    if not isinstance(raw_mounts, list):
+        fail("Host performance Docker inspect mounts are invalid")
+    common: list[dict[str, Any]] = []
+    arm_config: list[dict[str, Any]] = []
+    plugin: dict[str, Any] | None = None
+    destinations: set[str] = set()
+    observed_sources: set[str] = set()
+    for raw in raw_mounts:
+        if not isinstance(raw, dict):
+            fail("Host performance Docker inspect mount is invalid")
+        destination = str(raw.get("Destination", ""))
+        source = str(raw.get("Source", ""))
+        mount_type = str(raw.get("Type", ""))
+        if (
+            not destination.startswith("/")
+            or destination in destinations
+            or mount_type != "bind"
+            or not source.startswith("/")
+        ):
+            fail(
+                "Host performance bind mount has a missing/duplicate destination, "
+                "missing Source, or non-bind type"
+            )
+        destinations.add(destination)
+        observed_sources.add(source)
+        if backing_identities is not None:
+            if source not in backing_identities:
+                fail("Host performance bind Source lacks a supplied backing identity")
+            backing = dict(backing_identities[source])
+        else:
+            if mountinfo_raw is None:
+                fail("Host performance bind Source lacks /proc/self/mountinfo evidence")
+            backing = _mount_backing_identity(source, mountinfo_raw)
+        source_sha256 = sha256_bytes(source.encode("utf-8"))
+        if backing.get("source_path_sha256") != source_sha256:
+            fail("Host performance bind Source/backing identity does not match")
+        record = {
+            "backing": backing,
+            "destination": destination,
+            "driver": str(raw.get("Driver", "")),
+            "mode": str(raw.get("Mode", "")),
+            "propagation": str(raw.get("Propagation", "")),
+            "read_only": raw.get("RW") is False,
+            "source_path_sha256": source_sha256,
+            "type": mount_type,
+        }
+        if destination == CAG_PLUGIN_DESTINATION:
+            if plugin is not None:
+                fail("Host performance CAG plugin bind is duplicated")
+            plugin = record
+        elif (
+            destination in ARM_SPECIFIC_CONFIG_DESTINATIONS
+            or record["read_only"] is False
+        ):
+            arm_config.append(record)
+        else:
+            common.append(record)
+    if backing_identities is not None and set(backing_identities) != observed_sources:
+        fail("Host performance supplied backing identities contain an unknown Source")
+    sort_key = lambda item: (item["destination"], item["type"], item["mode"])
+    common.sort(key=sort_key)
+    arm_config.sort(key=sort_key)
+    return common, arm_config, plugin
+
+
+def _docker_comparable_projection(
+    info: Mapping[str, Any],
+    mountinfo_raw: str | None = None,
+    *,
+    backing_identities: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Project observed Docker state that must be equal across A/B arms."""
 
     config_raw = info.get("Config") or {}
@@ -251,37 +608,79 @@ def _docker_comparable_projection(info: Mapping[str, Any]) -> dict[str, Any]:
         for key, value in host_raw.items()
         if key not in {"Binds", "Mounts"}
     }
-    mounts: list[dict[str, Any]] = []
-    for raw in info.get("Mounts") or []:
-        if not isinstance(raw, dict):
-            fail("Host performance Docker inspect mount is invalid")
-        destination = str(raw.get("Destination", ""))
-        if destination == "/cag/plugins":
-            continue
-        mounts.append(
-            {
-                "destination": destination,
-                "driver": str(raw.get("Driver", "")),
-                "mode": str(raw.get("Mode", "")),
-                "propagation": str(raw.get("Propagation", "")),
-                "read_only": raw.get("RW") is False,
-                "type": str(raw.get("Type", "")),
-            }
-        )
-    mounts.sort(
-        key=lambda item: (
-            item["destination"],
-            item["type"],
-            item["mode"],
-        )
+    common_mounts, arm_config_mounts, _ = _docker_mount_projections(
+        info,
+        mountinfo_raw,
+        backing_identities=backing_identities,
     )
     return {
         "args": info.get("Args") or [],
+        "arm_specific_mount_contract": {
+            "cag_plugin": "absent:cpa_only;present-read-only:cpa_cag",
+            "config_runtime_destinations": [
+                item["destination"] for item in arm_config_mounts
+            ],
+        },
         "config": config,
         "host_config": host,
-        "mounts": mounts,
+        "mounts": common_mounts,
         "path": str(info.get("Path", "")),
         "platform": str(info.get("Platform", "")),
+    }
+
+
+def _docker_arm_specific_mount_projection(
+    info: Mapping[str, Any],
+    arm: str,
+    mountinfo_raw: str | None = None,
+    *,
+    backing_identities: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    arm = one_of(arm, ARMS, "Host performance Docker arm")
+    _, config_mounts, plugin = _docker_mount_projections(
+        info,
+        mountinfo_raw,
+        backing_identities=backing_identities,
+    )
+    if arm == "cpa_only" and plugin is not None:
+        fail("CPA-only Host performance arm has a CAG plugin bind")
+    if arm == "cpa_cag" and (
+        plugin is None or plugin["read_only"] is not True
+    ):
+        fail("CPA+CAG Host performance arm lacks one read-only CAG plugin bind")
+    return {
+        "arm": arm,
+        "cag_plugin_mount": plugin,
+        "config_runtime_mounts": config_mounts,
+    }
+
+
+def _docker_mount_identity_projection(
+    info: Mapping[str, Any],
+    arm: str,
+    mountinfo_raw: str | None = None,
+    *,
+    backing_identities: Mapping[str, Mapping[str, Any]] | None = None,
+) -> dict[str, Any]:
+    common, config_runtime, plugin = _docker_mount_projections(
+        info,
+        mountinfo_raw,
+        backing_identities=backing_identities,
+    )
+    arm_specific = _docker_arm_specific_mount_projection(
+        info,
+        arm,
+        mountinfo_raw,
+        backing_identities=backing_identities,
+    )
+    return {
+        "arm": arm,
+        "cag_plugin_mount": plugin,
+        "common_mounts": common,
+        "config_runtime_mounts": config_runtime,
+        "projection_boundary": MOUNT_PROJECTION_BOUNDARY,
+        "arm_specific_sha256": sha256_bytes(canonical_bytes(arm_specific)),
+        "common_sha256": sha256_bytes(canonical_bytes(common)),
     }
 
 
@@ -293,9 +692,30 @@ def _mountinfo_path(value: str) -> str:
     )
 
 
-def _mount_backing_identity(path: Path, mountinfo_raw: str) -> dict[str, Any]:
+def _mount_backing_identity(source: str, mountinfo_raw: str) -> dict[str, Any]:
+    path = Path(source)
+    try:
+        original = path.lstat()
+    except (FileNotFoundError, OSError) as exc:
+        fail(f"Host performance bind Source is unavailable: {type(exc).__name__}")
+    if stat.S_ISLNK(original.st_mode):
+        fail("Host performance bind Source must not be a symlink")
     resolved = path.resolve(strict=True)
     info = resolved.stat()
+    if resolved != path or (original.st_dev, original.st_ino) != (
+        info.st_dev,
+        info.st_ino,
+    ):
+        fail("Host performance bind Source must be an already-resolved stable path")
+    kind = (
+        "directory"
+        if stat.S_ISDIR(info.st_mode)
+        else "file"
+        if stat.S_ISREG(info.st_mode)
+        else "other"
+    )
+    if kind == "other":
+        fail("Host performance bind Source must be a regular file or directory")
     matches: list[tuple[int, dict[str, Any]]] = []
     for raw_line in mountinfo_raw.splitlines():
         fields = raw_line.split()
@@ -315,22 +735,275 @@ def _mount_backing_identity(path: Path, mountinfo_raw: str) -> dict[str, Any]:
                 {
                     "device": fields[2],
                     "filesystem_type": fields[separator + 1],
-                    "kind": (
-                        "directory"
-                        if stat.S_ISDIR(info.st_mode)
-                        else "file"
-                        if stat.S_ISREG(info.st_mode)
-                        else "other"
+                    "kind": kind,
+                    "mount_flags": sorted(
+                        set(fields[5].split(",")) & CRITICAL_MOUNT_FLAGS
                     ),
-                    "mount_options": sorted(fields[5].split(",")),
+                    "mount_options_sha256": sha256_bytes(
+                        canonical_bytes(sorted(fields[5].split(",")))
+                    ),
+                    "mount_root_sha256": sha256_bytes(
+                        _mountinfo_path(fields[3]).encode("utf-8")
+                    ),
+                    "mount_source_sha256": sha256_bytes(
+                        _mountinfo_path(fields[separator + 2]).encode("utf-8")
+                    ),
                     "st_dev": int(info.st_dev),
-                    "super_options": sorted(fields[separator + 3].split(",")),
+                    "super_flags": sorted(
+                        set(fields[separator + 3].split(","))
+                        & CRITICAL_MOUNT_FLAGS
+                    ),
+                    "super_options_sha256": sha256_bytes(
+                        canonical_bytes(
+                            sorted(fields[separator + 3].split(","))
+                        )
+                    ),
                 },
             )
         )
     if not matches:
         fail("Host performance bind source has no /proc/self/mountinfo identity")
-    return max(matches, key=lambda item: item[0])[1]
+    mount_identity = max(matches, key=lambda item: item[0])[1]
+    content_sha256 = (
+        sha256_bytes(
+            read_regular_bytes(
+                resolved,
+                "Host performance bind Source file",
+                512 * 1024 * 1024,
+            )
+        )
+        if kind == "file"
+        else None
+    )
+    final_info = resolved.stat()
+    if (
+        final_info.st_dev,
+        final_info.st_ino,
+        final_info.st_mode,
+        final_info.st_size,
+    ) != (info.st_dev, info.st_ino, info.st_mode, info.st_size):
+        fail("Host performance bind Source identity changed during projection")
+    identity = {
+        **mount_identity,
+        "content_sha256": content_sha256,
+        "resolved_source_sha256": sha256_bytes(str(resolved).encode("utf-8")),
+        "source_path_sha256": sha256_bytes(source.encode("utf-8")),
+        "st_ino": int(info.st_ino),
+        "st_mode": int(stat.S_IMODE(info.st_mode)),
+        "st_nlink": int(info.st_nlink),
+        "st_size": int(info.st_size),
+    }
+    identity["identity_sha256"] = sha256_bytes(canonical_bytes(identity))
+    return identity
+
+
+def _validate_mount_backing_identity(value: Any, label: str) -> dict[str, Any]:
+    backing = exact_keys(
+        value,
+        {
+            "content_sha256",
+            "device",
+            "filesystem_type",
+            "identity_sha256",
+            "kind",
+            "mount_flags",
+            "mount_options_sha256",
+            "mount_root_sha256",
+            "mount_source_sha256",
+            "resolved_source_sha256",
+            "source_path_sha256",
+            "st_dev",
+            "st_ino",
+            "st_mode",
+            "st_nlink",
+            "st_size",
+            "super_flags",
+            "super_options_sha256",
+        },
+        label,
+    )
+    if re.fullmatch(r"[0-9]+:[0-9]+", nonempty_string(backing["device"], f"{label}.device", 64)) is None:
+        fail(f"{label}.device is invalid")
+    nonempty_string(backing["filesystem_type"], f"{label}.filesystem_type", 128)
+    kind = one_of(backing["kind"], ("directory", "file"), f"{label}.kind")
+    for name in ("mount_flags", "super_flags"):
+        flags = exact_list(backing[name], f"{label}.{name}")
+        if (
+            any(item not in CRITICAL_MOUNT_FLAGS for item in flags)
+            or flags != sorted(set(flags))
+        ):
+            fail(f"{label}.{name} is not the closed critical option set")
+    for name in (
+        "mount_options_sha256",
+        "mount_root_sha256",
+        "mount_source_sha256",
+        "resolved_source_sha256",
+        "source_path_sha256",
+        "super_options_sha256",
+    ):
+        require_hex(backing[name], f"{label}.{name}")
+    if kind == "file":
+        require_hex(backing["content_sha256"], f"{label}.content_sha256")
+    elif backing["content_sha256"] is not None:
+        fail(f"{label}.content_sha256 must be null for a directory backing")
+    exact_int(backing["st_dev"], f"{label}.st_dev")
+    exact_int(backing["st_ino"], f"{label}.st_ino", 1)
+    mode = exact_int(backing["st_mode"], f"{label}.st_mode")
+    if mode > 0o7777:
+        fail(f"{label}.st_mode is invalid")
+    exact_int(backing["st_nlink"], f"{label}.st_nlink", 1)
+    exact_int(backing["st_size"], f"{label}.st_size")
+    identity = require_hex(backing["identity_sha256"], f"{label}.identity_sha256")
+    source = {key: item for key, item in backing.items() if key != "identity_sha256"}
+    if identity != sha256_bytes(canonical_bytes(source)):
+        fail(f"{label}.identity_sha256 does not bind the backing fields")
+    return backing
+
+
+def _validate_mount_record(value: Any, label: str) -> dict[str, Any]:
+    record = exact_keys(
+        value,
+        {
+            "backing",
+            "destination",
+            "driver",
+            "mode",
+            "propagation",
+            "read_only",
+            "source_path_sha256",
+            "type",
+        },
+        label,
+    )
+    destination = nonempty_string(record["destination"], f"{label}.destination", 512)
+    if not destination.startswith("/") or "\n" in destination or "\r" in destination:
+        fail(f"{label}.destination is invalid")
+    for name in ("driver", "mode", "propagation"):
+        if not isinstance(record[name], str) or len(record[name]) > 128:
+            fail(f"{label}.{name} is invalid")
+    if record["type"] != "bind":
+        fail(f"{label}.type must be bind")
+    exact_bool(record["read_only"], f"{label}.read_only")
+    source_sha = require_hex(record["source_path_sha256"], f"{label}.source_path_sha256")
+    backing = _validate_mount_backing_identity(record["backing"], f"{label}.backing")
+    if source_sha != backing["source_path_sha256"]:
+        fail(f"{label} Source hash does not bind its backing identity")
+    return record
+
+
+def _validate_mount_identity_projection(
+    value: Any, arm: str, label: str
+) -> dict[str, Any]:
+    projection = exact_keys(
+        value,
+        {
+            "arm",
+            "arm_specific_sha256",
+            "cag_plugin_mount",
+            "common_mounts",
+            "common_sha256",
+            "config_runtime_mounts",
+            "projection_boundary",
+        },
+        label,
+    )
+    if projection["arm"] != arm or projection["projection_boundary"] != MOUNT_PROJECTION_BOUNDARY:
+        fail(f"{label} arm or redaction boundary drifted")
+
+    def validate_records(name: str) -> list[dict[str, Any]]:
+        rows = exact_list(projection[name], f"{label}.{name}")
+        for index, row in enumerate(rows):
+            _validate_mount_record(row, f"{label}.{name}[{index}]")
+        destinations = [row["destination"] for row in rows]
+        if destinations != sorted(destinations) or len(destinations) != len(set(destinations)):
+            fail(f"{label}.{name} is not sorted with unique destinations")
+        return rows
+
+    common = validate_records("common_mounts")
+    config_runtime = validate_records("config_runtime_mounts")
+    for row in common:
+        if (
+            row["read_only"] is not True
+            or row["destination"] in ARM_SPECIFIC_CONFIG_DESTINATIONS
+            or row["destination"] == CAG_PLUGIN_DESTINATION
+        ):
+            fail(f"{label}.common_mounts contains an arm-specific mount")
+    for row in config_runtime:
+        if (
+            row["read_only"] is True
+            and row["destination"] not in ARM_SPECIFIC_CONFIG_DESTINATIONS
+        ):
+            fail(f"{label}.config_runtime_mounts contains an ordinary bind")
+    plugin = projection["cag_plugin_mount"]
+    if plugin is not None:
+        plugin = _validate_mount_record(plugin, f"{label}.cag_plugin_mount")
+        if plugin["destination"] != CAG_PLUGIN_DESTINATION or plugin["read_only"] is not True:
+            fail(f"{label}.cag_plugin_mount contract drifted")
+    if arm == "cpa_only" and plugin is not None:
+        fail(f"{label} CPA-only arm has a plugin bind")
+    if arm == "cpa_cag" and plugin is None:
+        fail(f"{label} CPA+CAG arm lacks its plugin bind")
+    common_sha = require_hex(projection["common_sha256"], f"{label}.common_sha256")
+    if common_sha != sha256_bytes(canonical_bytes(common)):
+        fail(f"{label}.common_sha256 does not bind common_mounts")
+    arm_specific = {
+        "arm": arm,
+        "cag_plugin_mount": plugin,
+        "config_runtime_mounts": config_runtime,
+    }
+    arm_sha = require_hex(
+        projection["arm_specific_sha256"], f"{label}.arm_specific_sha256"
+    )
+    if arm_sha != sha256_bytes(canonical_bytes(arm_specific)):
+        fail(f"{label}.arm_specific_sha256 does not bind its projection")
+    return projection
+
+
+def _mount_backing_equivalence(record: Mapping[str, Any]) -> dict[str, Any]:
+    backing = record["backing"]
+    return {
+        "destination": record["destination"],
+        "driver": record["driver"],
+        "mode": record["mode"],
+        "propagation": record["propagation"],
+        "read_only": record["read_only"],
+        "type": record["type"],
+        "backing": {
+            key: backing[key]
+            for key in (
+                "device",
+                "filesystem_type",
+                "kind",
+                "mount_flags",
+                "mount_options_sha256",
+                "mount_root_sha256",
+                "mount_source_sha256",
+                "st_dev",
+                "super_flags",
+                "super_options_sha256",
+            )
+        },
+    }
+
+
+def _validate_arm_specific_backing_equivalence(
+    baseline: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> None:
+    baseline_rows = {
+        row["destination"]: row for row in baseline["config_runtime_mounts"]
+    }
+    candidate_rows = {
+        row["destination"]: row for row in candidate["config_runtime_mounts"]
+    }
+    if set(baseline_rows) != set(candidate_rows):
+        fail("Host performance arm-specific config/runtime mount shape differs")
+    for destination in sorted(baseline_rows):
+        if _mount_backing_equivalence(
+            baseline_rows[destination]
+        ) != _mount_backing_equivalence(candidate_rows[destination]):
+            fail(
+                "Host performance arm-specific config/runtime mount backing differs"
+            )
 
 
 def validate_tool_identities(value: Any, label: str) -> dict[str, str]:
@@ -353,6 +1026,7 @@ def tool_identities() -> dict[str, str]:
         "host_performance_source_sha256": TOOL_DIR / "host_performance.py",
         "run_sha256": TOOL_DIR / "run.py",
         "validator_sha256": TOOL_DIR / "validate.py",
+        "workload_generator_sha256": TOOL_DIR / "host_performance_workloads.py",
     }
     identities = {
         key: sha256_bytes(read_regular_bytes(path, key, 4 * 1024 * 1024))
@@ -375,104 +1049,18 @@ def require_current_tool_identities(
 def validate_candidate_manifest(
     value: Any, cag_identity: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Validate the exact eight-file CI candidate seal and selected SO identity."""
+    """Use the shared run-config candidate contract; no second schema lives here."""
 
-    manifest = exact_keys(
-        value,
-        {
-            "artifacts",
-            "commit",
-            "dirty",
-            "event",
-            "run_attempt",
-            "run_id",
-            "schema",
-            "status",
-            "tree",
-            "version",
-        },
-        "candidate manifest",
-    )
-    if manifest["schema"] != CANDIDATE_SCHEMA or manifest["status"] != CANDIDATE_STATUS:
-        fail("candidate manifest schema or diagnostic status is invalid")
-    if exact_bool(manifest["dirty"], "candidate manifest.dirty"):
-        fail("candidate manifest is dirty")
-    commit = require_hex(manifest["commit"], "candidate manifest.commit", re.compile(r"[0-9a-f]{40}"))
-    tree = require_hex(manifest["tree"], "candidate manifest.tree", re.compile(r"[0-9a-f]{40}"))
-    if commit != cag_identity["commit"] or tree != cag_identity["tree"]:
-        fail("candidate manifest commit/tree drifted from the run config")
-    nonempty_string(manifest["event"], "candidate manifest.event", 64)
-    candidate_run_id = nonempty_string(manifest["run_id"], "candidate manifest.run_id", 32)
-    candidate_attempt = nonempty_string(
-        manifest["run_attempt"], "candidate manifest.run_attempt", 20
-    )
-    if not candidate_run_id.isdigit() or candidate_run_id.startswith("0"):
-        fail("candidate manifest.run_id must be a positive decimal GitHub run ID")
-    if not candidate_attempt.isdigit() or candidate_attempt.startswith("0"):
-        fail("candidate manifest.run_attempt must be a positive decimal value")
-    version = nonempty_string(manifest["version"], "candidate manifest.version", 64)
-    if re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[-+][0-9A-Za-z.-]+)?", version) is None:
-        fail("candidate manifest.version is invalid")
-    artifacts = exact_list(manifest["artifacts"], "candidate manifest.artifacts", 8)
-    if len(artifacts) != 8:
-        fail("candidate manifest must seal exactly eight base artifacts")
-    names: set[str] = set()
-    selected: dict[str, Any] | None = None
-    expected_so_name = f"cyber-abuse-guard-v{version}.so"
-    for index, raw in enumerate(artifacts):
-        label = f"candidate manifest.artifacts[{index}]"
-        item = exact_keys(raw, {"bytes", "name", "sha256"}, label)
-        name = nonempty_string(item["name"], f"{label}.name", 256)
-        if SAFE_ARTIFACT.fullmatch(name) is None or name in names:
-            fail(f"{label}.name is unsafe or duplicated")
-        names.add(name)
-        exact_int(item["bytes"], f"{label}.bytes", 1)
-        require_hex(item["sha256"], f"{label}.sha256")
-        if name == expected_so_name:
-            selected = item
-    if selected is None or selected["sha256"] != cag_identity["so_sha256"]:
-        fail("candidate manifest does not bind the selected CAG SO")
-    expected_names = {
-        expected_so_name,
-        expected_so_name + ".sha256",
-        f"cyber-abuse-guard_{version}_linux_amd64.zip",
-        "build-metadata.json",
-        "checksums.txt",
-        "ruleset-manifest.json",
-        "ruleset.sha256",
-        "sbom.cdx.json",
-    }
-    if names != expected_names:
-        fail("candidate manifest base-artifact name set is not exact")
-    return manifest
-
-
-def candidate_identity(manifest: Mapping[str, Any], raw: bytes) -> dict[str, Any]:
-    version = str(manifest["version"])
-    artifact_name = f"cyber-abuse-guard-v{version}.so"
-    selected = next(item for item in manifest["artifacts"] if item["name"] == artifact_name)
-    return {
-        "artifact_name": artifact_name,
-        "artifact_sha256": selected["sha256"],
-        "commit": manifest["commit"],
-        "dirty": manifest["dirty"],
-        "manifest_sha256": sha256_bytes(raw),
-        "run_attempt": manifest["run_attempt"],
-        "run_id": manifest["run_id"],
-        "schema": manifest["schema"],
-        "status": manifest["status"],
-        "tree": manifest["tree"],
-        "version": manifest["version"],
-    }
+    return validate_candidate_manifest_contract(value, cag_identity)
 
 
 def validate_workload_manifest(value: Any) -> dict[str, Any]:
     manifest = exact_keys(value, {"schema", "workloads"}, "performance workload manifest")
     if manifest["schema"] != WORKLOAD_SCHEMA:
         fail("performance workload manifest schema is invalid")
-    workloads = exact_list(manifest["workloads"], "performance workload manifest.workloads", 4)
-    if len(workloads) != 4:
-        fail("performance workload manifest must contain exactly four workloads")
+    workloads = exact_list(manifest["workloads"], "performance workload manifest.workloads", 5)
+    if len(workloads) != 5:
+        fail("performance workload manifest must contain exactly five workloads")
     seen: dict[str, dict[str, Any]] = {}
     for index, raw in enumerate(workloads):
         label = f"performance workload manifest.workloads[{index}]"
@@ -489,9 +1077,25 @@ def validate_workload_manifest(value: Any) -> dict[str, Any]:
             request_label = f"{label}.requests[{request_index}]"
             request = exact_keys(
                 request_raw,
-                {"body_path", "body_sha256", "endpoint", "expected_status_by_arm"},
+                {
+                    "body_bytes",
+                    "body_path",
+                    "body_sha256",
+                    "endpoint",
+                    "expected_status_by_arm",
+                },
                 request_label,
             )
+            body_bytes = exact_int(
+                request["body_bytes"], f"{request_label}.body_bytes", 1
+            )
+            if workload == LARGE_PAYLOAD_WORKLOAD:
+                if request_count != 1 or body_bytes != LARGE_PAYLOAD_BYTES:
+                    fail(
+                        "large_payload must bind exactly one fixed-size wire body"
+                    )
+            elif body_bytes >= LARGE_PAYLOAD_BYTES:
+                fail(f"{request_label}.body_bytes is reserved for large_payload")
             body_path = require_safe_relative(request["body_path"], f"{request_label}.body_path")
             if body_path in seen_paths:
                 fail(f"{request_label}.body_path is duplicated")
@@ -528,7 +1132,7 @@ def _validate_thresholds(value: Any, label: str) -> dict[str, Any]:
     for metric, (_, expected) in THRESHOLDS.items():
         observed = finite_number(thresholds[metric], f"{label}.{metric}")
         if observed != expected:
-            fail(f"{label}.{metric} cannot loosen the RT12-06 threshold")
+            fail(f"{label}.{metric} cannot loosen the RT13-06 threshold")
     return thresholds
 
 
@@ -557,13 +1161,18 @@ def build_config(
         "candidate_manifest_sha256": sha256_bytes(candidate_raw),
         "identities": {
             "cag": dict(run_config["identities"]["cag"]),
-            "candidate": candidate_identity(candidate_manifest, candidate_raw),
+            "candidate": dict(run_config["identities"]["candidate"]),
             "cpa": dict(run_config["identities"]["cpa"]),
             "mock": dict(run_config["identities"]["mock"]),
         },
         "plan": {
             "arms": list(ARMS),
             "concurrencies": list(CONCURRENCIES),
+            "large_payload_baseline_samples": LARGE_PAYLOAD_BASELINE_SAMPLES,
+            "large_payload_bytes": LARGE_PAYLOAD_BYTES,
+            "large_payload_concurrency": LARGE_PAYLOAD_CONCURRENCY,
+            "large_payload_request_count": LARGE_PAYLOAD_REQUESTS,
+            "large_payload_rss_sample_interval_ms": LARGE_PAYLOAD_RSS_SAMPLE_INTERVAL_MS,
             "measurement_seconds": measurement_seconds,
             "min_success_samples_per_cell": min_success_samples_per_cell,
             "paired_repetitions": paired_repetitions,
@@ -644,14 +1253,28 @@ def validate_config(
         fail("host performance config CPA identity drifted from the run config")
     if expected_identities["mock"] != run_config["identities"]["mock"]:
         fail("host performance config Mock identity drifted from the run config")
-    if expected_identities["candidate"] != candidate_identity(candidate_manifest, candidate_raw):
-        fail("host performance config candidate identity drifted")
+    validate_candidate_identity(
+        expected_identities["candidate"],
+        expected_identities["cag"],
+        "host performance config.identities.candidate",
+    )
+    if expected_identities["candidate"] != run_config["identities"]["candidate"]:
+        fail("host performance config candidate identity drifted from the run config")
+    if expected_identities["candidate"]["manifest_sha256"] != sha256_bytes(
+        candidate_raw
+    ):
+        fail("host performance config candidate manifest SHA drifted")
 
     plan = exact_keys(
         config["plan"],
         {
             "arms",
             "concurrencies",
+            "large_payload_baseline_samples",
+            "large_payload_bytes",
+            "large_payload_concurrency",
+            "large_payload_request_count",
+            "large_payload_rss_sample_interval_ms",
             "measurement_seconds",
             "min_success_samples_per_cell",
             "paired_repetitions",
@@ -667,6 +1290,15 @@ def validate_config(
     )
     if plan["arms"] != list(ARMS) or plan["concurrencies"] != list(CONCURRENCIES):
         fail("host performance config does not require the exact CPA-only/CPA+CAG c=1/4/8/16 matrix")
+    for field, expected in (
+        ("large_payload_baseline_samples", LARGE_PAYLOAD_BASELINE_SAMPLES),
+        ("large_payload_bytes", LARGE_PAYLOAD_BYTES),
+        ("large_payload_concurrency", LARGE_PAYLOAD_CONCURRENCY),
+        ("large_payload_request_count", LARGE_PAYLOAD_REQUESTS),
+        ("large_payload_rss_sample_interval_ms", LARGE_PAYLOAD_RSS_SAMPLE_INTERVAL_MS),
+    ):
+        if exact_int(plan[field], f"host performance config.plan.{field}", 1) != expected:
+            fail(f"host performance config.plan.{field} drifted")
     exact_int(plan["seed"], "host performance config.plan.seed", 0)
     repetitions = exact_int(plan["paired_repetitions"], "host performance config.plan.paired_repetitions", MIN_PAIRED_REPETITIONS)
     if repetitions > MAX_PAIRED_REPETITIONS:
@@ -692,7 +1324,20 @@ def validate_config(
 
 
 def paired_order(seed: int, concurrency: int, repetition: int) -> tuple[str, str]:
-    rng = random.Random(f"cag-rt12-host-ab:{seed}:{concurrency}:{repetition}")
+    rng = random.Random(f"cag-rt13-host-ab:{seed}:{concurrency}:{repetition}")
+    arms = list(ARMS)
+    rng.shuffle(arms)
+    return arms[0], arms[1]
+
+
+def workload_paired_order(
+    seed: int, workload: str, concurrency: int, repetition: int
+) -> tuple[str, str]:
+    if workload not in (*ABSOLUTE_WORKLOADS, LARGE_PAYLOAD_WORKLOAD):
+        fail("Host performance paired workload is invalid")
+    rng = random.Random(
+        f"cag-rt13-host-workload-ab:{seed}:{workload}:{concurrency}:{repetition}"
+    )
     arms = list(ARMS)
     rng.shuffle(arms)
     return arms[0], arms[1]
@@ -788,13 +1433,17 @@ def _validate_runtime(
             "cpa_oom_killed",
             "cpa_restart_count",
             "cpuset_cpus",
+            "docker_arm_specific_mount_sha256",
+            "docker_common_mount_sha256",
             "docker_comparable_sha256",
+            "docker_mount_projection_sha256",
             "loaded_cag_so_sha256",
             "mock_container_id",
             "mock_image_id",
             "mock_oom_killed",
             "mock_restart_count",
             "mock_source_sha256",
+            "mount_identity_projection",
             "nano_cpus",
             "panic_mentions",
             "plugin_count",
@@ -812,7 +1461,26 @@ def _validate_runtime(
         container_security["mock"], f"{label}.container_security.mock"
     )
     require_hex(runtime["cpa_base_config_sha256"], f"{label}.cpa_base_config_sha256")
+    require_hex(
+        runtime["docker_arm_specific_mount_sha256"],
+        f"{label}.docker_arm_specific_mount_sha256",
+    )
+    require_hex(runtime["docker_common_mount_sha256"], f"{label}.docker_common_mount_sha256")
     require_hex(runtime["docker_comparable_sha256"], f"{label}.docker_comparable_sha256")
+    projection = _validate_mount_identity_projection(
+        runtime["mount_identity_projection"], arm, f"{label}.mount_identity_projection"
+    )
+    if (
+        runtime["docker_common_mount_sha256"] != projection["common_sha256"]
+        or runtime["docker_arm_specific_mount_sha256"]
+        != projection["arm_specific_sha256"]
+        or require_hex(
+            runtime["docker_mount_projection_sha256"],
+            f"{label}.docker_mount_projection_sha256",
+        )
+        != sha256_bytes(canonical_bytes(projection))
+    ):
+        fail(f"{label} mount projection hashes do not bind the closed projection")
     require_hex(runtime["cpa_binary_sha256"], f"{label}.cpa_binary_sha256")
     require_hex(runtime["cpa_image_id"], f"{label}.cpa_image_id", re.compile(r"sha256:[0-9a-f]{64}"))
     require_hex(runtime["mock_image_id"], f"{label}.mock_image_id", re.compile(r"sha256:[0-9a-f]{64}"))
@@ -1087,7 +1755,7 @@ def _validate_cell(
     workload = one_of(cell["workload"], ALL_WORKLOADS, f"{label}.workload")
     if phase == "paired_ab" and workload != FIXED_WORKLOAD:
         fail(f"{label} paired A/B cell must use fixed_workload")
-    if phase == "absolute" and (arm != "cpa_cag" or workload not in ABSOLUTE_WORKLOADS):
+    if phase == "absolute" and workload not in ABSOLUTE_WORKLOADS:
         fail(f"{label} absolute cell arm/workload is invalid")
     concurrency = one_of(cell["concurrency"], CONCURRENCIES, f"{label}.concurrency")
     repetition = exact_int(cell["repetition"], f"{label}.repetition", 1)
@@ -1204,6 +1872,338 @@ def _validate_cell(
     return cell, summary
 
 
+def _validate_large_payload_cell(
+    value: Any,
+    label: str,
+    *,
+    config: Mapping[str, Any],
+    workload_map: Mapping[str, Mapping[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    cell = exact_keys(
+        value,
+        {
+            "arm",
+            "completed_at",
+            "completed_requests",
+            "concurrency",
+            "elapsed_seconds",
+            "infrastructure_errors",
+            "latency_samples_ms",
+            "mock_counters",
+            "order_index",
+            "pair_id",
+            "payload_body_sha256",
+            "payload_size_bytes",
+            "planned_requests",
+            "process_identity",
+            "repetition",
+            "request_started_elapsed_ms",
+            "request_set_sha256",
+            "rss_baseline_samples",
+            "rss_samples",
+            "runtime",
+            "started_at",
+            "successful_samples",
+            "unexpected_http_errors",
+            "warmup_seconds",
+            "workload",
+        },
+        label,
+    )
+    arm = one_of(cell["arm"], ARMS, f"{label}.arm")
+    if cell["workload"] != LARGE_PAYLOAD_WORKLOAD:
+        fail(f"{label}.workload must be large_payload")
+    concurrency = exact_int(cell["concurrency"], f"{label}.concurrency", 1)
+    if concurrency != config["plan"]["large_payload_concurrency"]:
+        fail(f"{label}.concurrency drifted from the fixed large-payload plan")
+    repetition = exact_int(cell["repetition"], f"{label}.repetition", 1)
+    if repetition > config["plan"]["paired_repetitions"]:
+        fail(f"{label}.repetition exceeds the plan")
+    pair_id = nonempty_string(cell["pair_id"], f"{label}.pair_id", 128)
+    if pair_id != f"large-payload-r{repetition}":
+        fail(f"{label}.pair_id is invalid")
+    order_index = exact_int(cell["order_index"], f"{label}.order_index")
+    if order_index > 1:
+        fail(f"{label}.order_index must be zero or one")
+    if exact_int(cell["warmup_seconds"], f"{label}.warmup_seconds") != config["plan"]["warmup_seconds"]:
+        fail(f"{label}.warmup_seconds drifted from the plan")
+    payload_size = exact_int(cell["payload_size_bytes"], f"{label}.payload_size_bytes", 1)
+    if payload_size != config["plan"]["large_payload_bytes"]:
+        fail(f"{label}.payload_size_bytes drifted from the fixed plan")
+    contract = workload_map[LARGE_PAYLOAD_WORKLOAD]
+    request_contract = contract["requests"][0]
+    if require_hex(cell["payload_body_sha256"], f"{label}.payload_body_sha256") != request_contract["body_sha256"]:
+        fail(f"{label}.payload_body_sha256 drifted from the workload manifest")
+    if require_hex(cell["request_set_sha256"], f"{label}.request_set_sha256") != contract["request_set_sha256"]:
+        fail(f"{label}.request_set_sha256 drifted from the workload manifest")
+
+    elapsed = finite_number(cell["elapsed_seconds"], f"{label}.elapsed_seconds", minimum=0.000001)
+    if elapsed > LARGE_PAYLOAD_MAX_ELAPSED_SECONDS:
+        fail(f"{label}.elapsed_seconds exceeds the fixed large-payload bound")
+    _timestamp_order(
+        cell["started_at"],
+        cell["completed_at"],
+        label,
+        elapsed_seconds=elapsed,
+    )
+    cell_started = _host_timestamp_value(cell["started_at"], f"{label}.started_at")
+    cell_completed = _host_timestamp_value(
+        cell["completed_at"], f"{label}.completed_at"
+    )
+    planned = exact_int(cell["planned_requests"], f"{label}.planned_requests", 1)
+    if planned != config["plan"]["large_payload_request_count"]:
+        fail(f"{label}.planned_requests drifted from the fixed plan")
+    completed = exact_int(cell["completed_requests"], f"{label}.completed_requests")
+    successful = exact_int(cell["successful_samples"], f"{label}.successful_samples")
+    if completed > planned or successful > completed:
+        fail(f"{label} request counts are inconsistent")
+    latencies_raw = exact_list(
+        cell["latency_samples_ms"], f"{label}.latency_samples_ms", successful
+    )
+    if len(latencies_raw) != successful:
+        fail(f"{label} successful sample count does not match raw latencies")
+    latencies = [
+        finite_number(item, f"{label}.latency_samples_ms[{index}]", minimum=0.0)
+        for index, item in enumerate(latencies_raw)
+    ]
+    request_started_elapsed_ms = finite_number(
+        cell["request_started_elapsed_ms"],
+        f"{label}.request_started_elapsed_ms",
+        minimum=0.0,
+    )
+    if request_started_elapsed_ms >= elapsed * 1000.0:
+        fail(f"{label}.request_started_elapsed_ms is outside the cell")
+    request_duration_ms = elapsed * 1000.0 - request_started_elapsed_ms
+    minimum_work_ms = sum(latencies) / concurrency
+    if (
+        minimum_work_ms > request_duration_ms + 1.0
+        or (latencies and max(latencies) > request_duration_ms + 1.0)
+    ):
+        fail(f"{label} latency work cannot fit inside the request interval")
+    unexpected = exact_int(
+        cell["unexpected_http_errors"], f"{label}.unexpected_http_errors"
+    )
+    infrastructure = exact_list(
+        cell["infrastructure_errors"], f"{label}.infrastructure_errors"
+    )
+    for index, item in enumerate(infrastructure):
+        nonempty_string(item, f"{label}.infrastructure_errors[{index}]", 256)
+    if completed - successful > unexpected:
+        fail(f"{label} completed/successful request gap exceeds HTTP errors")
+    if planned - completed > len(infrastructure):
+        fail(f"{label} planned/completed request gap exceeds infrastructure errors")
+    _, mock_delta = _validate_mock_counters(
+        cell["mock_counters"],
+        f"{label}.mock_counters",
+        expected_status=EXPECTED_STATUS_BY_WORKLOAD[LARGE_PAYLOAD_WORKLOAD][arm],
+        successful_samples=successful,
+    )
+
+    process_identity_raw = exact_keys(
+        cell["process_identity"],
+        {"pid", "start_time_ticks"},
+        f"{label}.process_identity",
+    )
+    process_identity = {
+        "pid": exact_int(
+            process_identity_raw["pid"], f"{label}.process_identity.pid", 1
+        ),
+        "start_time_ticks": exact_int(
+            process_identity_raw["start_time_ticks"],
+            f"{label}.process_identity.start_time_ticks",
+            1,
+        ),
+    }
+
+    def validate_rss_series(
+        value: Any,
+        series_label: str,
+        *,
+        minimum_items: int,
+        maximum_items: int,
+        terminal_final: bool,
+        sample_gap_overrun_limit: int = 0,
+    ) -> tuple[list[dict[str, Any]], list[float], int, float]:
+        rows = exact_list(value, series_label, minimum_items)
+        if not minimum_items <= len(rows) <= maximum_items:
+            fail(f"{series_label} count violates the fixed 20 ms cadence")
+        rss_values: list[float] = []
+        previous_marker = -1.0
+        previous_observed = None
+        sample_gap_overruns = 0
+        max_sample_gap_ms = 0.0
+        for index, raw_row in enumerate(rows):
+            row_label = f"{series_label}[{index}]"
+            row = exact_keys(
+                raw_row,
+                {
+                    "elapsed_ms",
+                    "final_sample",
+                    "observed_at",
+                    "pid",
+                    "process_start_time_ticks",
+                    "rss_mib",
+                },
+                row_label,
+            )
+            marker = finite_number(
+                row["elapsed_ms"], f"{row_label}.elapsed_ms", minimum=0.0
+            )
+            final_sample = exact_bool(
+                row["final_sample"], f"{row_label}.final_sample"
+            )
+            observed = _host_timestamp_value(
+                row["observed_at"], f"{row_label}.observed_at"
+            )
+            if (
+                exact_int(row["pid"], f"{row_label}.pid", 1)
+                != process_identity["pid"]
+                or exact_int(
+                    row["process_start_time_ticks"],
+                    f"{row_label}.process_start_time_ticks",
+                    1,
+                )
+                != process_identity["start_time_ticks"]
+            ):
+                fail(f"{row_label} process identity drifted")
+            if marker > elapsed * 1000.0 + 1.0:
+                fail(f"{row_label}.elapsed_ms exceeds the measured interval")
+            if marker <= previous_marker:
+                fail(f"{series_label} is not strictly monotonic")
+            if previous_marker >= 0:
+                gap = marker - previous_marker
+                max_sample_gap_ms = max(max_sample_gap_ms, gap)
+                if gap > LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS:
+                    fail(f"{series_label} exceeds the hard observation gap limit")
+                if gap > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS:
+                    sample_gap_overruns += 1
+                    if sample_gap_overruns > sample_gap_overrun_limit:
+                        fail(
+                            f"{series_label} observation gaps exceed the bounded tolerance"
+                        )
+                if (
+                    not final_sample
+                    and gap
+                    < config["plan"]["large_payload_rss_sample_interval_ms"] / 2.0
+                ):
+                    fail(f"{series_label} violates the minimum cadence")
+            expected_final = terminal_final and index == len(rows) - 1
+            if final_sample != expected_final:
+                fail(f"{series_label} terminal final-sample contract drifted")
+            if observed < cell_started or observed > cell_completed:
+                fail(f"{row_label}.observed_at is outside the cell")
+            observed_offset_ms = (observed - cell_started).total_seconds() * 1000.0
+            if (
+                abs(observed_offset_ms - marker)
+                > LARGE_PAYLOAD_SAMPLE_WALL_TOLERANCE_MS
+            ):
+                fail(f"{row_label} wall timestamp does not bind elapsed_ms")
+            if previous_observed is not None and observed < previous_observed:
+                fail(f"{series_label}.observed_at moved backwards")
+            previous_observed = observed
+            previous_marker = marker
+            rss_values.append(
+                finite_number(row["rss_mib"], f"{row_label}.rss_mib", minimum=0.0)
+            )
+        return rows, rss_values, sample_gap_overruns, max_sample_gap_ms
+
+    (
+        baseline_rows,
+        baseline,
+        baseline_sample_gap_overruns,
+        baseline_max_sample_gap_ms,
+    ) = validate_rss_series(
+        cell["rss_baseline_samples"],
+        f"{label}.rss_baseline_samples",
+        minimum_items=config["plan"]["large_payload_baseline_samples"],
+        maximum_items=config["plan"]["large_payload_baseline_samples"],
+        terminal_final=False,
+        sample_gap_overrun_limit=LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT,
+    )
+    if (
+        baseline_rows[0]["elapsed_ms"]
+        > config["plan"]["large_payload_rss_sample_interval_ms"]
+        or baseline_rows[-1]["elapsed_ms"] > request_started_elapsed_ms
+        or request_started_elapsed_ms - baseline_rows[-1]["elapsed_ms"]
+        > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS
+    ):
+        fail(f"{label}.rss_baseline_samples does not cover the baseline interval")
+
+    minimum_request_samples = max(
+        2,
+        math.floor(request_duration_ms / LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS)
+        + 1,
+    )
+    maximum_request_samples = (
+        math.floor(
+            request_duration_ms
+            / (config["plan"]["large_payload_rss_sample_interval_ms"] / 2.0)
+        )
+        + 2
+    )
+    (
+        rows,
+        rss,
+        request_sample_gap_overruns,
+        request_max_sample_gap_ms,
+    ) = validate_rss_series(
+        cell["rss_samples"],
+        f"{label}.rss_samples",
+        minimum_items=minimum_request_samples,
+        maximum_items=maximum_request_samples,
+        terminal_final=True,
+        sample_gap_overrun_limit=(
+            LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+            - baseline_sample_gap_overruns
+        ),
+    )
+    if (
+        rows[0]["elapsed_ms"] < request_started_elapsed_ms
+        or rows[0]["elapsed_ms"] - request_started_elapsed_ms
+        > config["plan"]["large_payload_rss_sample_interval_ms"]
+        or rows[-1]["elapsed_ms"]
+        < elapsed * 1000.0 - LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS
+    ):
+        fail(f"{label}.rss_samples does not cover the request interval")
+
+    runtime = _validate_runtime(cell["runtime"], f"{label}.runtime", arm, config["identities"])
+    baseline_median = float(statistics.median(baseline))
+    peak = max(rss)
+    return cell, {
+        "arm": arm,
+        "baseline_rss_median_mib": baseline_median,
+        "completed_requests": completed,
+        "elapsed_seconds": elapsed,
+        "infrastructure_error_count": len(infrastructure),
+        "latencies": latencies,
+        "mock_auth_delta": mock_delta["auth"],
+        "mock_mock_delta": mock_delta["mock"],
+        "mock_provider_delta": mock_delta["provider"],
+        "order_index": order_index,
+        "pair_id": pair_id,
+        "peak_rss_mib": peak,
+        "repetition": repetition,
+        "restart_oom_panic": (
+            runtime["cpa_restart_count"]
+            + runtime["mock_restart_count"]
+            + runtime["panic_mentions"]
+            + (1 if runtime["cpa_oom_killed"] else 0)
+            + (1 if runtime["mock_oom_killed"] else 0)
+        ),
+        "rss_max_sample_gap_ms": max(
+            baseline_max_sample_gap_ms, request_max_sample_gap_ms
+        ),
+        "rss_sample_gap_overrun_count": (
+            baseline_sample_gap_overruns + request_sample_gap_overruns
+        ),
+        "rss_growth_peak_mib": max(0.0, peak - baseline_median),
+        "successful_samples": successful,
+        "throughput_rps": successful / elapsed,
+        "unexpected_http_errors": unexpected,
+        "workload": LARGE_PAYLOAD_WORKLOAD,
+    }
+
+
 def _validate_host(value: Any) -> dict[str, Any]:
     host = exact_keys(
         value,
@@ -1240,6 +2240,7 @@ def validate_measurements(
             "completed_at",
             "config_sha256",
             "host",
+            "large_payload_cells",
             "paired_cells",
             "run_config_sha256",
             "schema",
@@ -1286,6 +2287,12 @@ def validate_measurements(
     container_ids: dict[str, set[str]] = {arm: set() for arm in ARMS}
     mock_container_ids: set[str] = set()
     runtime_hashes: dict[str, set[str]] = {arm: set() for arm in ARMS}
+    arm_specific_mount_hashes: dict[str, set[str]] = {arm: set() for arm in ARMS}
+    common_mount_hashes: set[str] = set()
+    mount_projection_hashes: dict[str, set[str]] = {arm: set() for arm in ARMS}
+    mount_projections: dict[str, dict[bytes, dict[str, Any]]] = {
+        arm: {} for arm in ARMS
+    }
     base_config_hashes: set[str] = set()
     docker_comparable_hashes: set[str] = set()
     audit_queue_capacities: set[int] = set()
@@ -1305,6 +2312,15 @@ def validate_measurements(
         security_observations["mock"].add(
             (bool(mock["no_new_privileges"]), int(mock["pids_limit"]))
         )
+
+    def record_mount_projection(arm: str, runtime: Mapping[str, Any]) -> None:
+        projection = runtime["mount_identity_projection"]
+        raw_projection = canonical_bytes(projection)
+        common_mount_hashes.add(runtime["docker_common_mount_sha256"])
+        mount_projection_hashes[arm].add(
+            runtime["docker_mount_projection_sha256"]
+        )
+        mount_projections[arm][raw_projection] = projection
     expected_paired_sequence = [
         (concurrency, repetition, arm, order_index)
         for concurrency in CONCURRENCIES
@@ -1342,9 +2358,13 @@ def validate_measurements(
         container_ids[summary["arm"]].add(runtime["cpa_container_id"])
         mock_container_ids.add(runtime["mock_container_id"])
         runtime_hashes[summary["arm"]].add(runtime["runtime_config_sha256"])
+        arm_specific_mount_hashes[summary["arm"]].add(
+            runtime["docker_arm_specific_mount_sha256"]
+        )
         base_config_hashes.add(runtime["cpa_base_config_sha256"])
         docker_comparable_hashes.add(runtime["docker_comparable_sha256"])
         record_security(summary["arm"], runtime)
+        record_mount_projection(summary["arm"], runtime)
         if summary["queue_capacity"] is not None:
             audit_queue_capacities.add(int(summary["queue_capacity"]))
         summaries.append(summary)
@@ -1377,15 +2397,22 @@ def validate_measurements(
                 )
 
     absolute_raw = exact_list(measurements["absolute_cells"], "host performance measurements.absolute_cells")
-    expected_absolute_count = len(ABSOLUTE_WORKLOADS) * len(CONCURRENCIES) * repetitions
+    expected_absolute_count = (
+        len(ARMS) * len(ABSOLUTE_WORKLOADS) * len(CONCURRENCIES) * repetitions
+    )
     if len(absolute_raw) != expected_absolute_count:
         fail("host performance measurements absolute workload matrix is incomplete")
-    absolute_seen: set[tuple[str, int, int]] = set()
+    absolute_seen: dict[tuple[str, int, int, str], dict[str, Any]] = {}
     expected_absolute_sequence = [
-        (workload, concurrency, repetition)
+        (workload, concurrency, repetition, arm, order_index)
         for workload in ABSOLUTE_WORKLOADS
         for concurrency in CONCURRENCIES
         for repetition in range(1, repetitions + 1)
+        for order_index, arm in enumerate(
+            workload_paired_order(
+                config["plan"]["seed"], workload, concurrency, repetition
+            )
+        )
     ]
     for index, raw_cell in enumerate(absolute_raw):
         cell, summary = _validate_cell(
@@ -1396,34 +2423,141 @@ def validate_measurements(
             workload_map=workload_map,
             logical_cpu_count=host["logical_cpu_count"],
         )
-        key = (summary["workload"], summary["concurrency"], summary["repetition"])
+        key = (
+            summary["workload"],
+            summary["concurrency"],
+            summary["repetition"],
+            summary["arm"],
+        )
         if key in absolute_seen:
             fail("host performance measurements contain a duplicate absolute cell")
         expected_id = f"{summary['workload']}-c{summary['concurrency']}-r{summary['repetition']}"
-        if summary["pair_id"] != expected_id or summary["order_index"] != 0:
+        expected_order = workload_paired_order(
+            config["plan"]["seed"],
+            summary["workload"],
+            summary["concurrency"],
+            summary["repetition"],
+        )
+        if (
+            summary["pair_id"] != expected_id
+            or expected_order[summary["order_index"]] != summary["arm"]
+        ):
             fail("host performance absolute cell identity is invalid")
-        if key != expected_absolute_sequence[index]:
+        if (*key, summary["order_index"]) != expected_absolute_sequence[index]:
             fail("host performance absolute cells are not in the exact execution sequence")
-        absolute_seen.add(key)
+        absolute_seen[key] = summary
         runtime = cell["runtime"]
         resource_contracts.add((runtime["nano_cpus"], runtime["cpa_memory_bytes"], runtime["cpuset_cpus"], runtime["mock_image_id"]))
         container_ids[summary["arm"]].add(runtime["cpa_container_id"])
         mock_container_ids.add(runtime["mock_container_id"])
         runtime_hashes[summary["arm"]].add(runtime["runtime_config_sha256"])
+        arm_specific_mount_hashes[summary["arm"]].add(
+            runtime["docker_arm_specific_mount_sha256"]
+        )
         base_config_hashes.add(runtime["cpa_base_config_sha256"])
         docker_comparable_hashes.add(runtime["docker_comparable_sha256"])
         record_security(summary["arm"], runtime)
+        record_mount_projection(summary["arm"], runtime)
         if summary["queue_capacity"] is not None:
             audit_queue_capacities.add(int(summary["queue_capacity"]))
         summaries.append(summary)
     expected_absolute = {
-        (workload, concurrency, repetition)
+        (workload, concurrency, repetition, arm)
         for workload in ABSOLUTE_WORKLOADS
         for concurrency in CONCURRENCIES
         for repetition in range(1, repetitions + 1)
+        for arm in ARMS
     }
-    if absolute_seen != expected_absolute:
+    if set(absolute_seen) != expected_absolute:
         fail("host performance absolute workload matrix has missing or unexpected cells")
+    for workload in ABSOLUTE_WORKLOADS:
+        for concurrency in CONCURRENCIES:
+            for repetition in range(1, repetitions + 1):
+                baseline_summary = absolute_seen[
+                    (workload, concurrency, repetition, "cpa_only")
+                ]
+                candidate_summary = absolute_seen[
+                    (workload, concurrency, repetition, "cpa_cag")
+                ]
+                if (
+                    abs(
+                        float(candidate_summary["elapsed_seconds"])
+                        - float(baseline_summary["elapsed_seconds"])
+                    )
+                    > MAX_PAIRED_WINDOW_DELTA_SECONDS
+                ):
+                    fail(
+                        "host performance absolute A/B elapsed windows are not comparable"
+                    )
+
+    large_raw = exact_list(
+        measurements["large_payload_cells"],
+        "host performance measurements.large_payload_cells",
+    )
+    if len(large_raw) != len(ARMS) * repetitions:
+        fail("host performance large-payload A/B matrix is incomplete")
+    large_summaries: list[dict[str, Any]] = []
+    large_seen: dict[tuple[int, str], dict[str, Any]] = {}
+    expected_large_sequence = [
+        (repetition, arm, order_index)
+        for repetition in range(1, repetitions + 1)
+        for order_index, arm in enumerate(
+            workload_paired_order(
+                config["plan"]["seed"],
+                LARGE_PAYLOAD_WORKLOAD,
+                LARGE_PAYLOAD_CONCURRENCY,
+                repetition,
+            )
+        )
+    ]
+    for index, raw_cell in enumerate(large_raw):
+        cell, summary = _validate_large_payload_cell(
+            raw_cell,
+            f"host performance measurements.large_payload_cells[{index}]",
+            config=config,
+            workload_map=workload_map,
+        )
+        key = (summary["repetition"], summary["arm"])
+        if key in large_seen:
+            fail("host performance measurements contain a duplicate large-payload cell")
+        expected_order = workload_paired_order(
+            config["plan"]["seed"],
+            LARGE_PAYLOAD_WORKLOAD,
+            LARGE_PAYLOAD_CONCURRENCY,
+            summary["repetition"],
+        )
+        if expected_order[summary["order_index"]] != summary["arm"]:
+            fail("host performance large-payload paired order drifted")
+        if (*key, summary["order_index"]) != expected_large_sequence[index]:
+            fail("host performance large-payload cells are not in the exact execution sequence")
+        large_seen[key] = summary
+        runtime = cell["runtime"]
+        resource_contracts.add(
+            (
+                runtime["nano_cpus"],
+                runtime["cpa_memory_bytes"],
+                runtime["cpuset_cpus"],
+                runtime["mock_image_id"],
+            )
+        )
+        container_ids[summary["arm"]].add(runtime["cpa_container_id"])
+        mock_container_ids.add(runtime["mock_container_id"])
+        runtime_hashes[summary["arm"]].add(runtime["runtime_config_sha256"])
+        arm_specific_mount_hashes[summary["arm"]].add(
+            runtime["docker_arm_specific_mount_sha256"]
+        )
+        base_config_hashes.add(runtime["cpa_base_config_sha256"])
+        docker_comparable_hashes.add(runtime["docker_comparable_sha256"])
+        record_security(summary["arm"], runtime)
+        record_mount_projection(summary["arm"], runtime)
+        large_summaries.append(summary)
+    expected_large = {
+        (repetition, arm)
+        for repetition in range(1, repetitions + 1)
+        for arm in ARMS
+    }
+    if set(large_seen) != expected_large:
+        fail("host performance large-payload A/B matrix has missing or unexpected cells")
     if any(len(container_ids[arm]) != 1 for arm in ARMS):
         fail("Host performance cells did not retain one fixed container per A/B arm")
     if container_ids["cpa_only"] == container_ids["cpa_cag"]:
@@ -1432,6 +2566,25 @@ def validate_measurements(
         fail("Host performance runtime configuration changed within an A/B arm")
     if runtime_hashes["cpa_only"] == runtime_hashes["cpa_cag"]:
         fail("CPA-only and CPA+CAG runtime configuration identities are indistinguishable")
+    if any(len(arm_specific_mount_hashes[arm]) != 1 for arm in ARMS):
+        fail("Host performance arm-specific mount identity changed within an A/B arm")
+    if arm_specific_mount_hashes["cpa_only"] == arm_specific_mount_hashes["cpa_cag"]:
+        fail("CPA-only and CPA+CAG arm-specific mount identities are indistinguishable")
+    if len(common_mount_hashes) != 1:
+        fail("CPA-only and CPA+CAG common mount projections differ")
+    if any(
+        len(mount_projection_hashes[arm]) != 1
+        or len(mount_projections[arm]) != 1
+        for arm in ARMS
+    ):
+        fail("Host performance mount projection changed within an A/B arm")
+    stable_mount_projections = {
+        arm: next(iter(mount_projections[arm].values())) for arm in ARMS
+    }
+    _validate_arm_specific_backing_equivalence(
+        stable_mount_projections["cpa_only"],
+        stable_mount_projections["cpa_cag"],
+    )
     if len(base_config_hashes) != 1:
         fail("CPA-only and CPA+CAG non-plugin runtime configuration drifted")
     if len(docker_comparable_hashes) != 1:
@@ -1463,6 +2616,11 @@ def validate_measurements(
         fail("warm RSS lane drifted from the Host A/B CPU/memory/cpuset/Mock contract")
     if warm_runtime["runtime_config_sha256"] not in runtime_hashes["cpa_cag"]:
         fail("warm RSS lane runtime configuration drifted from CPA+CAG")
+    if (
+        warm_runtime["docker_arm_specific_mount_sha256"]
+        not in arm_specific_mount_hashes["cpa_cag"]
+    ):
+        fail("warm RSS lane arm-specific mount identity drifted from CPA+CAG")
     if warm_runtime["cpa_base_config_sha256"] not in base_config_hashes:
         fail("warm RSS lane non-plugin CPA configuration drifted")
     if warm_runtime["docker_comparable_sha256"] not in docker_comparable_hashes:
@@ -1470,6 +2628,14 @@ def validate_measurements(
     if warm_runtime["mock_container_id"] not in mock_container_ids:
         fail("warm RSS lane did not retain the fixed counted-Mock container")
     record_security("cpa_cag", warm_runtime)
+    record_mount_projection("cpa_cag", warm_runtime)
+    if len(common_mount_hashes) != 1:
+        fail("warm RSS lane common mount projection drifted from Host A/B")
+    if (
+        len(mount_projection_hashes["cpa_cag"]) != 1
+        or len(mount_projections["cpa_cag"]) != 1
+    ):
+        fail("warm RSS lane mount projection drifted from CPA+CAG")
     if any(len(values) != 1 for values in security_observations.values()):
         fail("Host performance container security observations changed during acquisition")
     if security_observations["cpa_only"] != security_observations["cpa_cag"]:
@@ -1481,10 +2647,10 @@ def validate_measurements(
             "no_new_privileges": no_new_privileges,
             "pids_limit": pids_limit,
         }
-    measurement_started = timestamp_value(
+    measurement_started = _host_timestamp_value(
         measurements["started_at"], "host performance measurements.started_at"
     )
-    measurement_completed = timestamp_value(
+    measurement_completed = _host_timestamp_value(
         measurements["completed_at"], "host performance measurements.completed_at"
     )
     chronological_cells = (
@@ -1496,12 +2662,16 @@ def validate_measurements(
             (f"absolute_cells[{index}]", item)
             for index, item in enumerate(absolute_raw)
         ),
+        *(
+            (f"large_payload_cells[{index}]", item)
+            for index, item in enumerate(large_raw)
+        ),
         ("warm_rss", warm),
     )
     previous_completed = None
     for index, (label, raw_cell) in enumerate(chronological_cells):
-        started = timestamp_value(raw_cell["started_at"], f"{label}.started_at")
-        completed = timestamp_value(raw_cell["completed_at"], f"{label}.completed_at")
+        started = _host_timestamp_value(raw_cell["started_at"], f"{label}.started_at")
+        completed = _host_timestamp_value(raw_cell["completed_at"], f"{label}.completed_at")
         if started < measurement_started or completed > measurement_completed:
             fail(f"{label} timestamps fall outside the Host measurement interval")
         if previous_completed is None:
@@ -1559,6 +2729,25 @@ def validate_measurements(
     return measurements, summaries, baseline, {
         "container_security": container_security,
         "host": host,
+        "large_payload_summaries": large_summaries,
+        "mount_identity": {
+            "boundary": MOUNT_IDENTITY_BOUNDARY,
+            "common_mount_projection": stable_mount_projections["cpa_only"][
+                "common_mounts"
+            ],
+            "common_mount_projection_sha256": next(iter(common_mount_hashes)),
+            "common_docker_projection_sha256": next(
+                iter(docker_comparable_hashes)
+            ),
+            "cpa_cag_mount_projection": stable_mount_projections["cpa_cag"],
+            "cpa_cag_arm_specific_mount_sha256": next(
+                iter(arm_specific_mount_hashes["cpa_cag"])
+            ),
+            "cpa_only_mount_projection": stable_mount_projections["cpa_only"],
+            "cpa_only_arm_specific_mount_sha256": next(
+                iter(arm_specific_mount_hashes["cpa_only"])
+            ),
+        },
         "warm": warm,
     }
 
@@ -1855,10 +3044,21 @@ def build_evidence(
     for concurrency in CONCURRENCIES:
         baseline_cell = lookup[("paired_ab", "cpa_only", FIXED_WORKLOAD, concurrency)]
         candidate_cell = lookup[("paired_ab", "cpa_cag", FIXED_WORKLOAD, concurrency)]
+        ordinary_baseline = lookup[("absolute", "cpa_only", "ordinary", concurrency)]
+        ordinary_candidate = lookup[("absolute", "cpa_cag", "ordinary", concurrency)]
         if baseline_cell["throughput_rps"] <= 0 or baseline_cell["latency_p99_ms"] <= 0:
             fail("CPA-only baseline throughput and p99 must be positive")
         throughput_ratio = candidate_cell["throughput_rps"] / baseline_cell["throughput_rps"]
         regression = ((candidate_cell["latency_p99_ms"] / baseline_cell["latency_p99_ms"]) - 1.0) * 100.0
+        # Absolute cells run in seeded A/B windows and therefore do not provide
+        # one-to-one temporal request samples.  Using candidate P95 minus
+        # baseline P50 (rather than P95 minus P95) is the deliberately
+        # conservative, recomputable fallback for ordinary plugin overhead.
+        ordinary_overhead = max(
+            0.0,
+            float(ordinary_candidate["latency_p95_ms"])
+            - float(ordinary_baseline["latency_p50_ms"]),
+        )
         comparisons.append(
             {
                 "concurrency": concurrency,
@@ -1868,29 +3068,99 @@ def build_evidence(
                 "cpa_only_throughput_rps": baseline_cell["throughput_rps"],
                 "fixed_workload_p99_regression_percent": regression,
                 "host_throughput_vs_cpa_only": throughput_ratio,
+                "ordinary_cpa_cag_p95_ms": ordinary_candidate["latency_p95_ms"],
+                "ordinary_cpa_only_p50_ms": ordinary_baseline["latency_p50_ms"],
+                "ordinary_plugin_overhead_p95_ms": ordinary_overhead,
+            }
+        )
+    large_rows = {
+        (item["repetition"], item["arm"]): item
+        for item in extra["large_payload_summaries"]
+    }
+    large_payload_comparisons: list[dict[str, Any]] = []
+    for repetition in range(1, config["plan"]["paired_repetitions"] + 1):
+        baseline_large = large_rows[(repetition, "cpa_only")]
+        candidate_large = large_rows[(repetition, "cpa_cag")]
+        excess_growth = max(
+            0.0,
+            float(candidate_large["rss_growth_peak_mib"])
+            - float(baseline_large["rss_growth_peak_mib"]),
+        )
+        full_payload_equivalent = int(
+            excess_growth
+            >= config["plan"]["large_payload_bytes"] / (1024.0 * 1024.0)
+        )
+        large_payload_comparisons.append(
+            {
+                "cpa_cag_baseline_rss_mib": candidate_large[
+                    "baseline_rss_median_mib"
+                ],
+                "cpa_cag_peak_rss_growth_mib": candidate_large[
+                    "rss_growth_peak_mib"
+                ],
+                "cpa_cag_peak_rss_mib": candidate_large["peak_rss_mib"],
+                "cpa_cag_rss_max_sample_gap_ms": candidate_large[
+                    "rss_max_sample_gap_ms"
+                ],
+                "cpa_cag_rss_sample_gap_overrun_count": candidate_large[
+                    "rss_sample_gap_overrun_count"
+                ],
+                "cpa_cag_throughput_rps": candidate_large["throughput_rps"],
+                "cpa_only_baseline_rss_mib": baseline_large[
+                    "baseline_rss_median_mib"
+                ],
+                "cpa_only_peak_rss_growth_mib": baseline_large[
+                    "rss_growth_peak_mib"
+                ],
+                "cpa_only_peak_rss_mib": baseline_large["peak_rss_mib"],
+                "cpa_only_rss_max_sample_gap_ms": baseline_large[
+                    "rss_max_sample_gap_ms"
+                ],
+                "cpa_only_rss_sample_gap_overrun_count": baseline_large[
+                    "rss_sample_gap_overrun_count"
+                ],
+                "cpa_only_throughput_rps": baseline_large["throughput_rps"],
+                "excess_peak_rss_growth_mib": excess_growth,
+                "full_payload_equivalent_regression": full_payload_equivalent,
+                "pair_id": baseline_large["pair_id"],
+                "repetition": repetition,
             }
         )
     warm_summary = next(item for item in summaries if item["phase"] == "warm_rss")
-    candidate_queue_ratios = [row["audit_queue_peak_ratio"] for row in matrix if row["arm"] == "cpa_cag"]
-    unexpected = sum(int(item["unexpected_http_errors"]) + int(item["infrastructure_error_count"]) for item in summaries)
-    runtime_failures = sum(int(item["restart_oom_panic"]) for item in summaries)
+    candidate_queue_ratios = [
+        float(row["audit_queue_peak_ratio"])
+        for row in matrix
+        if row["arm"] == "cpa_cag"
+        and row["audit_queue_peak_ratio"] is not None
+    ]
+    if not candidate_queue_ratios:
+        fail("CPA+CAG audit queue peak ratio is unavailable")
+    correctness_summaries = (*summaries, *extra["large_payload_summaries"])
+    unexpected = sum(int(item["unexpected_http_errors"]) + int(item["infrastructure_error_count"]) for item in correctness_summaries)
+    runtime_failures = sum(int(item["restart_oom_panic"]) for item in correctness_summaries)
     metrics = {
-        "audit_queue_peak_ratio": max(float(value) for value in candidate_queue_ratios if value is not None),
+        "audit_queue_peak_ratio": max(candidate_queue_ratios),
         "five_repository_activation_p95_ms": max(lookup[("absolute", "cpa_cag", "five_repository_activation", c)]["latency_p95_ms"] for c in CONCURRENCIES),
         "fixed_workload_p99_regression_percent": max(item["fixed_workload_p99_regression_percent"] for item in comparisons),
         "host_throughput_vs_cpa_only": min(item["host_throughput_vs_cpa_only"] for item in comparisons),
-        "ordinary_p95_ms": max(lookup[("absolute", "cpa_cag", "ordinary", c)]["latency_p95_ms"] for c in CONCURRENCIES),
-        "public_p95_ms": max(lookup[("absolute", "cpa_cag", "public", c)]["latency_p95_ms"] for c in CONCURRENCIES),
-        "public_p99_ms": max(lookup[("absolute", "cpa_cag", "public", c)]["latency_p99_ms"] for c in CONCURRENCIES),
+        "large_payload_full_copy_regression": sum(
+            item["full_payload_equivalent_regression"]
+            for item in large_payload_comparisons
+        ),
+        "ordinary_plugin_overhead_p95_ms": max(
+            item["ordinary_plugin_overhead_p95_ms"] for item in comparisons
+        ),
+        "public_adversarial_p95_ms": max(lookup[("absolute", "cpa_cag", "public", c)]["latency_p95_ms"] for c in CONCURRENCIES),
+        "public_adversarial_p99_ms": max(lookup[("absolute", "cpa_cag", "public", c)]["latency_p99_ms"] for c in CONCURRENCIES),
         "restart_oom_panic": runtime_failures,
-        "unexpected_http_or_infra_errors": unexpected,
+        "unexpected_http_or_infrastructure_errors": unexpected,
         "warm_rss_growth_60m_mib": warm_summary["rss_last_window_median_mib"] - warm_summary["rss_first_window_median_mib"],
     }
     gates = {metric: _metric_gate(metric, float(metrics[metric])) for metric in THRESHOLDS}
     thresholds_pass = all(item["status"] == "PASS" for item in gates.values())
     status = "PASS" if thresholds_pass else "FAIL"
     correctness_failed = (
-        metrics["unexpected_http_or_infra_errors"] != 0
+        metrics["unexpected_http_or_infrastructure_errors"] != 0
         or metrics["restart_oom_panic"] != 0
     )
     if not baseline["eligible"] and not correctness_failed and thresholds_pass:
@@ -1913,6 +3183,7 @@ def build_evidence(
             "run_config_sha256": config["run_config_sha256"],
             "run_sha256": tools["run_sha256"],
             "validator_sha256": tools["validator_sha256"],
+            "workload_generator_sha256": tools["workload_generator_sha256"],
             "workload_manifest_sha256": config["workload_manifest_sha256"],
         },
         "baseline_eligibility": dict(baseline),
@@ -1932,11 +3203,13 @@ def build_evidence(
                 for key in (
                     "binary_path",
                     "binary_sha256",
+                    "c_abi",
                     "commit",
                     "image_id",
                     "official_asset_name",
                     "official_asset_sha256",
                     "repo_digest",
+                    "rpc_schema",
                     "tag",
                 )
             },
@@ -1953,8 +3226,33 @@ def build_evidence(
                 for key in ("contract", "image_id", "repo_digest", "source_sha256")
             },
         },
+        "large_payload_resident_memory": {
+            "baseline_samples_per_arm": config["plan"][
+                "large_payload_baseline_samples"
+            ],
+            "comparisons": large_payload_comparisons,
+            "concurrency": config["plan"]["large_payload_concurrency"],
+            "full_payload_equivalent_regression_count": metrics[
+                "large_payload_full_copy_regression"
+            ],
+            "measurement_boundary": LARGE_PAYLOAD_MEASUREMENT_BOUNDARY,
+            "payload_size_bytes": config["plan"]["large_payload_bytes"],
+            "request_count_per_arm": config["plan"][
+                "large_payload_request_count"
+            ],
+            "rss_sample_interval_ms": config["plan"][
+                "large_payload_rss_sample_interval_ms"
+            ],
+            "rss_sample_gap_deadline_ms": LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS,
+            "rss_sample_gap_hard_limit_ms": LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS,
+            "rss_sample_gap_overrun_limit_per_cell": (
+                LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+            ),
+            "rss_source": "/proc/<container-init-pid>/status:VmRSS",
+        },
         "matrix": matrix,
         "metrics": metrics,
+        "mount_identity": dict(extra["mount_identity"]),
         "plan": dict(config["plan"]),
         "schema": EVIDENCE_SCHEMA,
         "started_at": measurements["started_at"],
@@ -2013,26 +3311,86 @@ def validate_evidence_bundle(
     return evidence
 
 
-def _parse_size_mib(value: str) -> float:
-    match = re.fullmatch(r"\s*([0-9]+(?:\.[0-9]+)?)\s*([KMGT]?i?B)\s*", value)
-    if match is None:
-        fail("docker stats returned an unknown memory unit")
-    number = float(match.group(1))
-    unit = match.group(2)
-    factors = {
-        "B": 1 / (1024 * 1024),
-        "KB": 1000 / (1024 * 1024),
-        "KiB": 1 / 1024,
-        "MB": 1_000_000 / (1024 * 1024),
-        "MiB": 1.0,
-        "GB": 1_000_000_000 / (1024 * 1024),
-        "GiB": 1024.0,
-        "TB": 1_000_000_000_000 / (1024 * 1024),
-        "TiB": 1024.0 * 1024.0,
-    }
-    if unit not in factors:
-        fail("docker stats returned an unsupported memory unit")
-    return number * factors[unit]
+class _DockerUnixHTTPConnection(http.client.HTTPConnection):
+    """One bounded Docker Engine request over the operator-approved Unix socket."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__("docker", timeout=2.0)
+        self._path = path
+
+    def connect(self) -> None:
+        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.settimeout(self.timeout)
+        try:
+            connection.connect(os.fspath(self._path))
+        except BaseException:
+            connection.close()
+            raise
+        self.sock = connection
+
+
+def _docker_engine_stats_projection(
+    value: Any,
+    *,
+    expected_id: str,
+    expected_name: str,
+    logical_cpu_count: int,
+) -> tuple[int, int, int, float]:
+    if not isinstance(value, dict):
+        fail("Docker Engine stats returned an invalid object")
+    if value.get("id") != expected_id or value.get("name") != "/" + expected_name:
+        fail("Docker Engine stats returned the wrong container identity")
+    cpu_stats = value.get("cpu_stats")
+    memory_stats = value.get("memory_stats")
+    if not isinstance(cpu_stats, dict) or not isinstance(memory_stats, dict):
+        fail("Docker Engine stats omitted CPU or memory counters")
+    cpu_usage = cpu_stats.get("cpu_usage")
+    if not isinstance(cpu_usage, dict):
+        fail("Docker Engine stats omitted container CPU usage")
+    total_usage = cpu_usage.get("total_usage")
+    system_usage = cpu_stats.get("system_cpu_usage")
+    online_cpus = cpu_stats.get("online_cpus")
+    if type(online_cpus) is not int:
+        per_cpu = cpu_usage.get("percpu_usage")
+        online_cpus = len(per_cpu) if isinstance(per_cpu, list) else 0
+    if (
+        type(total_usage) is not int
+        or total_usage < 0
+        or type(system_usage) is not int
+        or system_usage < 0
+        or type(online_cpus) is not int
+        or online_cpus < 1
+        or online_cpus > logical_cpu_count
+    ):
+        fail("Docker Engine stats CPU counters are invalid")
+    usage = memory_stats.get("usage")
+    memory_detail = memory_stats.get("stats")
+    if type(usage) is not int or usage < 0 or not isinstance(memory_detail, dict):
+        fail("Docker Engine stats memory counters are invalid")
+    inactive_file = memory_detail.get(
+        "inactive_file", memory_detail.get("total_inactive_file", 0)
+    )
+    if (
+        type(inactive_file) is not int
+        or inactive_file < 0
+        or inactive_file > usage
+    ):
+        fail("Docker Engine stats inactive-file counter is invalid")
+    working_set_mib = (usage - inactive_file) / (1024.0 * 1024.0)
+    return total_usage, system_usage, online_cpus, working_set_mib
+
+
+def _docker_engine_cpu_percent(
+    previous: tuple[int, int], current: tuple[int, int, int, float]
+) -> float:
+    cpu_delta = current[0] - previous[0]
+    system_delta = current[1] - previous[1]
+    if cpu_delta < 0 or system_delta <= 0:
+        fail("Docker Engine stats CPU counters moved backwards or did not advance")
+    result = cpu_delta * current[2] * 100.0 / system_delta
+    if not math.isfinite(result) or result < 0:
+        fail("Docker Engine stats CPU percentage is invalid")
+    return result
 
 
 def _proc_cpu_values(raw: str) -> tuple[int, int, int]:
@@ -2049,6 +3407,28 @@ def _proc_cpu_values(raw: str) -> tuple[int, int, int]:
     idle = values[3] + (values[4] if len(values) > 4 else 0)
     steal = values[7] if len(values) > 7 else 0
     return total, idle, steal
+
+
+def _proc_status_rss_mib(raw: str) -> float:
+    matches = re.findall(r"(?m)^VmRSS:\s+([0-9]+)\s+kB\s*$", raw)
+    if len(matches) != 1:
+        fail("container init process status does not expose one VmRSS value")
+    return int(matches[0]) / 1024.0
+
+
+def _proc_start_time_ticks(raw: str) -> int:
+    close = raw.rfind(")")
+    fields = raw[close + 1 :].split() if close >= 0 else []
+    # fields[0] is state (field 3); process starttime is field 22.
+    if len(fields) < 20:
+        fail("container init process stat does not expose starttime")
+    try:
+        result = int(fields[19])
+    except ValueError:
+        fail("container init process stat starttime is invalid")
+    if result <= 0:
+        fail("container init process stat starttime must be positive")
+    return result
 
 
 def _cpu_delta(previous: tuple[int, int, int], current: tuple[int, int, int]) -> tuple[float, float]:
@@ -2145,7 +3525,7 @@ def _require_runtime_secret(value: Any, label: str) -> str:
 
 
 class LinuxHostCollector:
-    """Acquire raw RT12-06 measurements from three pre-created isolated containers.
+    """Acquire raw RT13-06 measurements from three pre-created isolated containers.
 
     Container creation remains an operator-controlled Host setup step.  This
     collector refuses arbitrary target names: they are derived from run_id and
@@ -2220,9 +3600,79 @@ class LinuxHostCollector:
         self.observed_binary_sha256: dict[str, str] = {}
         self.observed_base_config_sha256: dict[str, str] = {}
         self.observed_docker_comparable_sha256: dict[str, str] = {}
+        self.observed_docker_arm_specific_mount_sha256: dict[str, str] = {}
+        self.observed_docker_common_mount_sha256: dict[str, str] = {}
+        self.observed_docker_mount_projection_sha256: dict[str, str] = {}
+        self.observed_mount_identity_projection: dict[str, dict[str, Any]] = {}
+        self.mountinfo_raw = ""
         self.observed_cag_so_sha256 = ""
         self.observed_mock_source_sha256 = ""
+        self._docker_stats_previous: dict[str, tuple[int, int]] = {}
+        self._docker_stats_socket_identity = self._require_docker_stats_socket()
         self._verify_environment()
+
+    @staticmethod
+    def _require_docker_stats_socket() -> tuple[int, int, int, int, int]:
+        try:
+            info = os.lstat(DOCKER_STATS_SOCKET)
+        except OSError:
+            fail("Docker Engine stats socket is unavailable")
+        mode = stat.S_IMODE(info.st_mode)
+        if (
+            not stat.S_ISSOCK(info.st_mode)
+            or info.st_nlink != 1
+            or info.st_uid != 0
+            or mode & 0o007
+            or mode & 0o060 != 0o060
+            or not os.access(DOCKER_STATS_SOCKET, os.R_OK | os.W_OK)
+        ):
+            fail(
+                "Docker Engine stats socket must be a root-owned, private, "
+                "runner-accessible Unix socket"
+            )
+        return (info.st_dev, info.st_ino, info.st_uid, info.st_gid, mode)
+
+    def _verify_docker_stats_socket(self) -> None:
+        if self._require_docker_stats_socket() != self._docker_stats_socket_identity:
+            fail("Docker Engine stats socket identity drifted during acquisition")
+
+    def _docker_engine_stats(
+        self, expected_name: str, expected_id: str
+    ) -> tuple[int, int, int, float]:
+        self._verify_docker_stats_socket()
+        connection = _DockerUnixHTTPConnection(DOCKER_STATS_SOCKET)
+        try:
+            connection.request(
+                "GET",
+                f"/{DOCKER_STATS_API_VERSION}/containers/{expected_id}/stats"
+                "?stream=false&one-shot=true",
+                headers={"Accept": "application/json", "Connection": "close"},
+            )
+            response = connection.getresponse()
+            raw = response.read(DOCKER_STATS_MAX_RESPONSE_BYTES + 1)
+            status = response.status
+            content_type = response.getheader("Content-Type", "").split(";", 1)[0]
+        except (OSError, TimeoutError, http.client.HTTPException):
+            fail("Docker Engine one-shot stats request failed")
+        finally:
+            connection.close()
+        self._verify_docker_stats_socket()
+        if (
+            status != 200
+            or content_type != "application/json"
+            or len(raw) > DOCKER_STATS_MAX_RESPONSE_BYTES
+        ):
+            fail("Docker Engine one-shot stats response is invalid")
+        try:
+            value = json.loads(raw.decode("utf-8", "strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            fail("Docker Engine one-shot stats response is not valid JSON")
+        return _docker_engine_stats_projection(
+            value,
+            expected_id=expected_id,
+            expected_name=expected_name,
+            logical_cpu_count=self.logical_cpu_count,
+        )
 
     def _load_workloads(self, root: Path) -> dict[str, list[dict[str, Any]]]:
         if root.is_symlink():
@@ -2252,6 +3702,8 @@ class LinuxHostCollector:
                 body = load_json_bytes(raw, "Host performance workload body", 16 * 1024 * 1024)
                 if not isinstance(body, dict) or raw != canonical_bytes(body) + b"\n":
                     fail("Host performance workload body must be a canonical JSON object")
+                if len(raw) - 1 != contract["body_bytes"]:
+                    fail("Host performance workload wire-body size drifted")
                 requests.append({"body": raw[:-1], **contract})
             result[workload["id"]] = requests
         return result
@@ -2317,6 +3769,15 @@ class LinuxHostCollector:
         }
 
     def _verify_environment(self) -> None:
+        mountinfo = read_regular_bytes(
+            Path("/proc/self/mountinfo"),
+            "Host performance mountinfo",
+            16 * 1024 * 1024,
+        )
+        try:
+            self.mountinfo_raw = mountinfo.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            fail("Host performance mountinfo is not UTF-8")
         self.audit_run.image_identity(self.docker, self.config["identities"]["cpa"], "cpa")
         self.audit_run.image_identity(self.docker, self.config["identities"]["mock"], "mock")
         expected_roles = {
@@ -2339,13 +3800,37 @@ class LinuxHostCollector:
             self.container_contracts[arm] = contract
             resource_contracts.add(canonical_bytes(contract))
             self.observed_docker_comparable_sha256[arm] = sha256_bytes(
-                canonical_bytes(_docker_comparable_projection(info))
+                canonical_bytes(
+                    _docker_comparable_projection(info, self.mountinfo_raw)
+                )
+            )
+            mount_projection = _docker_mount_identity_projection(
+                info, arm, self.mountinfo_raw
+            )
+            _validate_mount_identity_projection(
+                mount_projection, arm, f"Host performance {arm} mount projection"
+            )
+            self.observed_mount_identity_projection[arm] = mount_projection
+            self.observed_docker_arm_specific_mount_sha256[arm] = mount_projection[
+                "arm_specific_sha256"
+            ]
+            self.observed_docker_common_mount_sha256[arm] = mount_projection[
+                "common_sha256"
+            ]
+            self.observed_docker_mount_projection_sha256[arm] = sha256_bytes(
+                canonical_bytes(mount_projection)
             )
             self.container_infos[arm] = info
         if len(resource_contracts) != 1:
             fail("CPA-only and CPA+CAG resource limits differ")
         if len(set(self.observed_docker_comparable_sha256.values())) != 1:
             fail("CPA-only and CPA+CAG Docker performance configuration differs")
+        if len(set(self.observed_docker_common_mount_sha256.values())) != 1:
+            fail("CPA-only and CPA+CAG common bind projections differ")
+        _validate_arm_specific_backing_equivalence(
+            self.observed_mount_identity_projection["cpa_only"],
+            self.observed_mount_identity_projection["cpa_cag"],
+        )
         mock = self.docker.inspect("container", self.names["mock"])
         mock_labels = (mock.get("Config") or {}).get("Labels") or {}
         if (
@@ -2561,7 +4046,7 @@ class LinuxHostCollector:
             or not isinstance(audit, dict)
             or audit.get("healthy") is not True
             or audit.get("degraded") is not False
-            or audit.get("schema_version") != 6
+            or audit.get("schema_version") != AUDIT_SCHEMA_VERSION
             or audit.get("persistence_verified") is not True
             or type(audit.get("queue_depth")) is not int
             or type(audit.get("queue_capacity")) is not int
@@ -2571,128 +4056,213 @@ class LinuxHostCollector:
         return True, 1
 
     def _verify_plugin_bytes(self) -> None:
-        artifact_name = self.config["identities"]["candidate"]["artifact_name"]
-        with tempfile.TemporaryDirectory(prefix="cag-host-perf-so-") as directory:
-            root = Path(directory)
-            baseline_root = root / "baseline-plugins"
-            baseline = self.docker.run(
-                ["cp", f"{self.names['cpa_only']}:/cag/plugins", str(baseline_root)],
-                timeout=60,
-                check=False,
+        artifact_name = self.config["identities"]["candidate"]["so"]["name"]
+        baseline = self.docker.run_binary(
+            ["cp", f"{self.names['cpa_only']}:/cag/plugins/.", "-"],
+            timeout=60,
+            check=False,
+            max_stdout_bytes=PLUGIN_ARCHIVE_MAX_BYTES,
+        )
+        if baseline.returncode == 0:
+            _validate_plugin_archive(
+                baseline.stdout,
+                artifact_name=None,
+                expected_sha256=None,
             )
-            if baseline.returncode == 0:
-                baseline_entries = list(baseline_root.rglob("*"))
-                if any(path.is_file() or path.is_symlink() for path in baseline_entries):
-                    fail("CPA-only performance arm contains plugin bytes")
-            else:
-                diagnostic = (baseline.stdout + baseline.stderr).lower()
-                if "no such" not in diagnostic and "could not find" not in diagnostic:
-                    fail("CPA-only plugin directory could not be verified")
-            candidate_root = root / "candidate-plugins"
-            self.docker.run(
-                ["cp", f"{self.names['cpa_cag']}:/cag/plugins", str(candidate_root)],
-                timeout=60,
-            )
-            entries = list(candidate_root.rglob("*"))
-            if any(path.is_symlink() for path in entries):
-                fail("CPA+CAG plugin directory contains a symlink")
-            files = [path for path in entries if path.is_file()]
-            expected = candidate_root / "linux" / "amd64" / artifact_name
-            if files != [expected]:
-                fail("CPA+CAG plugin directory is not the exact one-SO set")
-            observed = sha256_bytes(
-                read_regular_bytes(expected, "loaded CAG SO", 512 * 1024 * 1024)
-            )
-            if observed != self.config["identities"]["cag"]["so_sha256"]:
-                fail("CPA+CAG performance arm loaded the wrong SO bytes")
-            self.observed_cag_so_sha256 = observed
+        else:
+            diagnostic = (baseline.stdout + baseline.stderr).decode(
+                "utf-8", errors="replace"
+            ).lower()
+            if not any(
+                marker in diagnostic
+                for marker in ("no such", "could not find", "not found")
+            ):
+                fail("CPA-only plugin directory could not be verified")
+
+        candidate = self.docker.run_binary(
+            ["cp", f"{self.names['cpa_cag']}:/cag/plugins/.", "-"],
+            timeout=60,
+            check=False,
+            max_stdout_bytes=PLUGIN_ARCHIVE_MAX_BYTES,
+        )
+        if candidate.returncode != 0:
+            fail("CPA+CAG plugin archive could not be read")
+        observed = _validate_plugin_archive(
+            candidate.stdout,
+            artifact_name=artifact_name,
+            expected_sha256=self.config["identities"]["cag"]["so_sha256"],
+        )
+        if observed is None:  # pragma: no cover - candidate identity requires one SO
+            fail("CPA+CAG plugin archive did not contain the candidate SO")
+        self.observed_cag_so_sha256 = observed
 
     def _queue_snapshot(self) -> tuple[int, int]:
         status, _, _ = self.audit_run.http_json(
             self.urls["cpa_cag"],
             "GET",
-            "/v0/management/plugins/cyber-abuse-guard/status",
+            QUEUE_STATUS_PATH,
             headers=self.management_headers,
         )
-        audit = status.get("audit") if isinstance(status, dict) else None
-        if not isinstance(audit, dict):
-            fail("CAG audit status is unavailable during queue sampling")
-        depth = audit.get("queue_depth")
-        capacity = audit.get("queue_capacity")
-        if (
-            audit.get("healthy") is not True
-            or audit.get("degraded") is not False
-            or type(depth) is not int
-            or type(capacity) is not int
-            or capacity < 1
-            or depth < 0
-            or depth > capacity
-        ):
-            fail("CAG audit queue sample is invalid")
-        return depth, capacity
+        return _queue_depth_capacity(status)
+
+    def _queue_poller(self) -> _QueueStatusPoller:
+        interval = self.config["plan"]["queue_sample_interval_ms"] / 1000.0
+        return _QueueStatusPoller(
+            self.urls["cpa_cag"],
+            self.management_headers,
+            interval,
+        )
+
+    def _drain_audit_queue(self, arm: str) -> None:
+        if arm == "cpa_only":
+            return
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
+            depth, _ = self._queue_snapshot()
+            if depth == 0:
+                return
+            time.sleep(0.05)
+        fail("Host performance CAG audit queue did not drain before RSS baseline")
 
     def _verify_sampler_timing(self) -> None:
         resource_limit = self.config["plan"]["resource_sample_interval_ms"] / 1000.0
         queue_limit = self.config["plan"]["queue_sample_interval_ms"] / 1000.0
-        for _ in range(SAMPLER_TIMING_PREFLIGHT_SAMPLES):
-            started = time.monotonic()
-            self._docker_stats("cpa_cag")
-            if time.monotonic() - started >= resource_limit:
-                fail("Host performance docker stats cannot sustain the fixed sample interval")
-            started = time.monotonic()
-            self._queue_snapshot()
-            if time.monotonic() - started >= queue_limit:
-                fail("Host performance queue polling cannot sustain the fixed sample interval")
+        self._reset_docker_stats_baseline()
+        poller = self._queue_poller()
+        try:
+            for _ in range(SAMPLER_TIMING_PREFLIGHT_SAMPLES):
+                started = time.monotonic()
+                self._docker_stats("cpa_cag")
+                if time.monotonic() - started >= resource_limit:
+                    fail(
+                        "Host performance Docker Engine stats cannot sustain the fixed sample interval"
+                    )
+                started = time.monotonic()
+                poller.snapshot()
+                if time.monotonic() - started >= queue_limit:
+                    fail("Host performance queue polling cannot sustain the fixed sample interval")
+        finally:
+            poller.close()
+        self._reset_docker_stats_baseline()
+
+    def _reset_docker_stats_baseline(self) -> None:
+        self._docker_stats_previous.clear()
 
     def _docker_stats(self, arm: str) -> tuple[float, float, float, float]:
-        target_names = [self.names["cpa_only"], self.names["cpa_cag"], self.names["mock"]]
-        result = self.docker.run(
-            ["stats", "--no-stream", "--format", "{{json .}}", *target_names],
-            timeout=30,
-        )
-        rows: dict[str, tuple[float, float]] = {}
+        target_names = [
+            self.names["cpa_only"],
+            self.names["cpa_cag"],
+            self.names["mock"],
+        ]
         expected_ids = {
             self.names["cpa_only"]: str(self.container_infos["cpa_only"].get("Id", "")),
             self.names["cpa_cag"]: str(self.container_infos["cpa_cag"].get("Id", "")),
             self.names["mock"]: str(self.mock_info.get("Id", "")),
         }
-        for raw_line in result.stdout.splitlines():
-            if not raw_line.strip():
-                continue
-            try:
-                value = json.loads(raw_line)
-            except json.JSONDecodeError:
-                fail("docker stats returned invalid JSON")
-            if not isinstance(value, dict):
-                fail("docker stats returned an invalid object")
-            stats_name = str(value.get("Name", ""))
-            stats_id = str(value.get("ID", ""))
-            expected_id = expected_ids.get(stats_name, "")
-            if (
-                stats_name in rows
-                or not expected_id
-                or not stats_id
-                or not expected_id.startswith(stats_id)
-            ):
-                fail("docker stats returned the wrong container identity")
-            cpu_text = str(value.get("CPUPerc", ""))
-            memory_text = str(value.get("MemUsage", "")).split("/", 1)[0]
-            if not cpu_text.endswith("%"):
-                fail("docker stats CPU percentage is invalid")
-            try:
-                cpu = float(cpu_text[:-1].strip())
-            except ValueError:
-                fail("docker stats CPU percentage is invalid")
-            if not math.isfinite(cpu) or cpu < 0:
-                fail("docker stats CPU percentage is invalid")
-            rows[stats_name] = (cpu, _parse_size_mib(memory_text))
-        if set(rows) != set(target_names):
-            fail("docker stats did not return the exact three-container target set")
+        if set(expected_ids) != set(target_names) or any(
+            re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in expected_ids.values()
+        ):
+            fail("Docker Engine stats target identity set is invalid")
+
+        current = {
+            name: self._docker_engine_stats(name, expected_ids[name])
+            for name in target_names
+        }
+        if set(self._docker_stats_previous) != set(target_names):
+            self._docker_stats_previous = {
+                name: (value[0], value[1]) for name, value in current.items()
+            }
+            time.sleep(0.02)
+            current = {
+                name: self._docker_engine_stats(name, expected_ids[name])
+                for name in target_names
+            }
+        rows = {
+            name: (
+                _docker_engine_cpu_percent(
+                    self._docker_stats_previous[name], current[name]
+                ),
+                current[name][3],
+            )
+            for name in target_names
+        }
+        self._docker_stats_previous = {
+            name: (value[0], value[1]) for name, value in current.items()
+        }
         active_cpu, active_rss = rows[self.names[arm]]
         inactive_arm = "cpa_cag" if arm == "cpa_only" else "cpa_only"
         mock_cpu = rows[self.names["mock"]][0]
         inactive_cpu = rows[self.names[inactive_arm]][0]
         return active_cpu, active_rss, mock_cpu, inactive_cpu
+
+    @staticmethod
+    def _read_process_start_time_ticks(pid: int) -> int:
+        raw = read_regular_bytes(
+            Path(f"/proc/{pid}/stat"),
+            "Host performance container init process stat",
+            1024 * 1024,
+        )
+        try:
+            text = raw.decode("ascii", "strict")
+        except UnicodeDecodeError:
+            fail("Host performance container init process stat is not ASCII")
+        return _proc_start_time_ticks(text)
+
+    def _process_identity(self, arm: str) -> dict[str, int]:
+        info = self.docker.inspect("container", self.names[arm])
+        state = info.get("State") or {}
+        pid = state.get("Pid")
+        if (
+            info.get("Id") != self.container_infos[arm].get("Id")
+            or state.get("Running") is not True
+            or type(pid) is not int
+            or pid <= 0
+        ):
+            fail(f"Host performance {arm} process identity is unavailable")
+        return {
+            "pid": pid,
+            "start_time_ticks": self._read_process_start_time_ticks(pid),
+        }
+
+    def _process_rss_mib(
+        self,
+        arm: str,
+        *,
+        process_identity: Mapping[str, int] | None = None,
+    ) -> float:
+        if process_identity is None:
+            process_identity = self._process_identity(arm)
+        pid = int(process_identity["pid"])
+        raw = read_regular_bytes(
+            Path(f"/proc/{pid}/status"),
+            f"Host performance {arm} process status",
+            1024 * 1024,
+        )
+        try:
+            text = raw.decode("ascii", "strict")
+        except UnicodeDecodeError:
+            fail(f"Host performance {arm} process status is not ASCII")
+        return _proc_status_rss_mib(text)
+
+    def _rss_observation(
+        self,
+        arm: str,
+        process_identity: Mapping[str, int],
+        started: float,
+        *,
+        final_sample: bool,
+    ) -> dict[str, Any]:
+        return {
+            "elapsed_ms": max(0.0, time.monotonic() - started) * 1000.0,
+            "final_sample": final_sample,
+            "observed_at": _now_iso(),
+            "pid": int(process_identity["pid"]),
+            "process_start_time_ticks": int(process_identity["start_time_ticks"]),
+            "rss_mib": self._process_rss_mib(
+                arm, process_identity=process_identity
+            ),
+        }
 
     def _verify_mock_runtime(self) -> tuple[dict[str, Any], dict[str, Any]]:
         info = self.docker.inspect("container", self.names["mock"])
@@ -2740,7 +4310,7 @@ class LinuxHostCollector:
 
     def _verify_arm_configuration(
         self, arm: str
-    ) -> tuple[dict[str, Any], str, dict[str, Any]]:
+    ) -> tuple[dict[str, Any], str, dict[str, Any], dict[str, Any]]:
         info = self.docker.inspect("container", self.names[arm])
         if info.get("Id") != self.container_infos[arm].get("Id"):
             fail(f"Host performance {arm} container identity changed")
@@ -2749,21 +4319,49 @@ class LinuxHostCollector:
         )
         if contract != self.container_contracts.get(arm):
             fail(f"Host performance {arm} resource/security contract changed")
+        current_mountinfo = getattr(self, "mountinfo_raw", None)
+        if info.get("Mounts"):
+            mountinfo = read_regular_bytes(
+                Path("/proc/self/mountinfo"),
+                "Host performance current mountinfo",
+                16 * 1024 * 1024,
+            )
+            try:
+                current_mountinfo = mountinfo.decode("utf-8", "strict")
+            except UnicodeDecodeError:
+                fail("Host performance current mountinfo is not UTF-8")
         observed_docker_comparable = sha256_bytes(
-            canonical_bytes(_docker_comparable_projection(info))
+            canonical_bytes(
+                _docker_comparable_projection(
+                    info, current_mountinfo
+                )
+            )
         )
         if (
             observed_docker_comparable
             != self.observed_docker_comparable_sha256[arm]
         ):
             fail(f"Host performance {arm} Docker performance configuration changed")
+        observed_mount_projection = _docker_mount_identity_projection(
+            info, arm, current_mountinfo
+        )
+        _validate_mount_identity_projection(
+            observed_mount_projection,
+            arm,
+            f"Host performance current {arm} mount projection",
+        )
+        if (
+            canonical_bytes(observed_mount_projection)
+            != canonical_bytes(self.observed_mount_identity_projection[arm])
+        ):
+            fail(f"Host performance {arm} mount identity projection changed")
         observed_base_config = self._verify_cpa_config(arm)
         if observed_base_config != self.observed_base_config_sha256[arm]:
             fail(f"Host performance {arm} non-plugin CPA configuration changed")
-        return info, observed_docker_comparable, contract
+        return info, observed_docker_comparable, contract, observed_mount_projection
 
     def _runtime(self, arm: str) -> dict[str, Any]:
-        info, observed_docker_comparable, cpa_contract = (
+        info, observed_docker_comparable, cpa_contract, mount_projection = (
             self._verify_arm_configuration(arm)
         )
         host = info.get("HostConfig") or {}
@@ -2785,6 +4383,9 @@ class LinuxHostCollector:
             "command": (info.get("Config") or {}).get("Cmd") or [],
             "cpuset_cpus": str(host.get("CpusetCpus") or ""),
             "docker_comparable_sha256": observed_docker_comparable,
+            "docker_arm_specific_mount_sha256": self.observed_docker_arm_specific_mount_sha256[arm],
+            "docker_common_mount_sha256": self.observed_docker_common_mount_sha256[arm],
+            "docker_mount_projection_sha256": self.observed_docker_mount_projection_sha256[arm],
             "image_id": str(info.get("Image") or ""),
             "memory": int(host.get("Memory") or 0),
             "mounts": sorted(
@@ -2804,6 +4405,7 @@ class LinuxHostCollector:
             "mock_container_id": str(mock_info.get("Id") or ""),
             "mock_image_id": str(mock_info.get("Image") or ""),
             "mock_source_sha256": self.observed_mock_source_sha256,
+            "mount_identity_projection": mount_projection,
             "selected_cag_so_sha256": (
                 self.observed_cag_so_sha256 if loaded else None
             ),
@@ -2824,12 +4426,16 @@ class LinuxHostCollector:
             "cpa_restart_count": int(info.get("RestartCount") or 0),
             "cpuset_cpus": str(host.get("CpusetCpus") or ""),
             "docker_comparable_sha256": observed_docker_comparable,
+            "docker_arm_specific_mount_sha256": self.observed_docker_arm_specific_mount_sha256[arm],
+            "docker_common_mount_sha256": self.observed_docker_common_mount_sha256[arm],
+            "docker_mount_projection_sha256": self.observed_docker_mount_projection_sha256[arm],
             "loaded_cag_so_sha256": self.observed_cag_so_sha256 if loaded else None,
             "mock_container_id": str(mock_info.get("Id") or ""),
             "mock_image_id": str(mock_info.get("Image") or ""),
             "mock_oom_killed": mock_state.get("OOMKilled") is True,
             "mock_restart_count": int(mock_info.get("RestartCount") or 0),
             "mock_source_sha256": self.observed_mock_source_sha256,
+            "mount_identity_projection": mount_projection,
             "nano_cpus": int(host.get("NanoCpus") or 0),
             "panic_mentions": len(re.findall(r"(?i)\bpanic\b", log_text)),
             "plugin_count": count,
@@ -2967,11 +4573,13 @@ class LinuxHostCollector:
     ) -> None:
         interval = self.config["plan"]["queue_sample_interval_ms"] / 1000.0
         next_sample = started
-        while not stop.is_set():
-            now = time.monotonic()
-            if now >= next_sample:
-                try:
-                    depth, capacity = self._queue_snapshot()
+        poller: _QueueStatusPoller | None = None
+        try:
+            poller = self._queue_poller()
+            while not stop.is_set():
+                now = time.monotonic()
+                if now >= next_sample:
+                    depth, capacity = poller.snapshot()
                     elapsed = max(0.0, time.monotonic() - started) * 1000.0
                     queues.append(
                         {
@@ -2981,16 +4589,22 @@ class LinuxHostCollector:
                             "final_sample": False,
                         }
                     )
-                except Exception as exc:
-                    errors.append("queue_sample:" + type(exc).__name__)
-                    stop.set()
-                    return
-                next_sample += interval
-                if time.monotonic() >= next_sample:
-                    errors.append("queue_sample:MissedDeadline")
-                    stop.set()
-                    return
-            stop.wait(max(0.001, min(0.01, next_sample - time.monotonic())))
+                    next_sample += interval
+                    if time.monotonic() >= next_sample:
+                        raise TimeoutError("queue sample missed its fixed deadline")
+                stop.wait(max(0.001, min(0.01, next_sample - time.monotonic())))
+        except Exception as exc:
+            error_name = (
+                "MissedDeadline"
+                if isinstance(exc, TimeoutError)
+                and str(exc) == "queue sample missed its fixed deadline"
+                else type(exc).__name__
+            )
+            errors.append("queue_sample:" + error_name)
+            stop.set()
+        finally:
+            if poller is not None:
+                poller.close()
 
     def _append_final_samples(
         self,
@@ -3100,6 +4714,7 @@ class LinuxHostCollector:
         warmup_unexpected, warmup_infra = self._warmup(arm, requests, concurrency)
         self._reset_mock()
         mock_before = self._mock_snapshot()
+        self._reset_docker_stats_baseline()
         started_at = _now_iso()
         started = time.monotonic()
         resources: list[dict[str, Any]] = []
@@ -3146,7 +4761,7 @@ class LinuxHostCollector:
             with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
                 while time.monotonic() - started < target_seconds:
                     if sampler_errors:
-                        fail("Host performance cell sampler failed")
+                        _fail_cell_sampler(sampler_errors)
                     batch = self._drive_batch(executor, arm, requests, concurrency, offset)
                     attempts += len(batch)
                     offset += len(batch)
@@ -3225,6 +4840,223 @@ class LinuxHostCollector:
             "workload": workload,
         }
 
+    def _large_payload_rss_loop(
+        self,
+        arm: str,
+        process_identity: Mapping[str, int],
+        cell_started: float,
+        request_started: float,
+        stop: threading.Event,
+        rows: list[dict[str, Any]],
+        initial_sample_gap_overruns: int,
+        errors: list[str],
+    ) -> None:
+        interval = self.config["plan"]["large_payload_rss_sample_interval_ms"] / 1000.0
+        next_sample = request_started + interval
+        sample_gap_overruns = initial_sample_gap_overruns
+        while not stop.is_set():
+            now = time.monotonic()
+            if now >= next_sample:
+                try:
+                    observation = self._rss_observation(
+                        arm,
+                        process_identity,
+                        cell_started,
+                        final_sample=False,
+                    )
+                    if rows:
+                        gap = observation["elapsed_ms"] - rows[-1]["elapsed_ms"]
+                        if gap > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS:
+                            sample_gap_overruns += 1
+                            if (
+                                gap > LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS
+                                or sample_gap_overruns
+                                > LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+                            ):
+                                errors.append("large_payload_rss:MissedDeadline")
+                                stop.set()
+                                return
+                    rows.append(observation)
+                except Exception as exc:
+                    errors.append("large_payload_rss:" + type(exc).__name__)
+                    stop.set()
+                    return
+                next_sample += interval
+                next_sample = max(next_sample, time.monotonic() + interval / 2.0)
+            # Event.wait() follows a coarse condition-variable timer on some
+            # hosts and can turn a nominal 5 ms wait into a deadline overrun.
+            # Bounded sleep keeps the monotonic cadence tight; the shared
+            # counter carries any baseline overrun into the request sampler and
+            # still permits only one <=60 ms scheduler gap per cell.
+            time.sleep(max(0.001, min(0.005, next_sample - time.monotonic())))
+
+    def _measure_large_payload_cell(
+        self, arm: str, repetition: int, order_index: int
+    ) -> dict[str, Any]:
+        concurrency = self.config["plan"]["large_payload_concurrency"]
+        request_count = self.config["plan"]["large_payload_request_count"]
+        large_requests = self.workloads[LARGE_PAYLOAD_WORKLOAD]
+        self._verify_arm_configuration(arm)
+        warmup_unexpected, warmup_infra = self._warmup(
+            arm, self.workloads[FIXED_WORKLOAD], concurrency
+        )
+        self._drain_audit_queue(arm)
+        self._reset_mock()
+        mock_before = self._mock_snapshot()
+        process_identity = self._process_identity(arm)
+        started_at = _now_iso()
+        started = time.monotonic()
+        baseline: list[dict[str, Any]] = []
+        baseline_sample_gap_overruns = 0
+        sampler_errors: list[str] = []
+        for index in range(self.config["plan"]["large_payload_baseline_samples"]):
+            observation = self._rss_observation(
+                arm,
+                process_identity,
+                started,
+                final_sample=False,
+            )
+            if baseline:
+                gap = observation["elapsed_ms"] - baseline[-1]["elapsed_ms"]
+                if gap > LARGE_PAYLOAD_SAMPLE_GAP_DEADLINE_MS:
+                    baseline_sample_gap_overruns += 1
+                    if (
+                        gap > LARGE_PAYLOAD_SAMPLE_GAP_HARD_LIMIT_MS
+                        or baseline_sample_gap_overruns
+                        > LARGE_PAYLOAD_SAMPLE_GAP_OVERRUN_LIMIT
+                    ):
+                        sampler_errors.append("large_payload_rss:MissedDeadline")
+                        _fail_large_payload_rss_sampler(sampler_errors)
+            baseline.append(observation)
+            if index + 1 < self.config["plan"]["large_payload_baseline_samples"]:
+                deadline = started + (
+                    (index + 1)
+                    * self.config["plan"]["large_payload_rss_sample_interval_ms"]
+                    / 1000.0
+                )
+                deadline = max(
+                    deadline,
+                    time.monotonic()
+                    + self.config["plan"]["large_payload_rss_sample_interval_ms"]
+                    / 2000.0,
+                )
+                time.sleep(max(0.0, deadline - time.monotonic()))
+
+        request_started = time.monotonic()
+        request_started_elapsed_ms = (request_started - started) * 1000.0
+        rss_rows: list[dict[str, Any]] = [
+            self._rss_observation(
+                arm,
+                process_identity,
+                started,
+                final_sample=False,
+            )
+        ]
+        stop = threading.Event()
+        sampler = threading.Thread(
+            target=self._large_payload_rss_loop,
+            args=(
+                arm,
+                process_identity,
+                started,
+                request_started,
+                stop,
+                rss_rows,
+                baseline_sample_gap_overruns,
+                sampler_errors,
+            ),
+            daemon=True,
+        )
+        sampler.start()
+        latencies: list[float] = []
+        unexpected = warmup_unexpected
+        infrastructure = list(warmup_infra)
+        completed = attempts = 0
+        try:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=concurrency
+            ) as executor:
+                for offset in range(0, request_count, concurrency):
+                    if sampler_errors:
+                        _fail_large_payload_rss_sampler(sampler_errors)
+                    batch = self._drive_batch(
+                        executor, arm, large_requests, concurrency, offset
+                    )
+                    attempts += len(batch)
+                    for success, wrong, latency, error in batch:
+                        if error is not None:
+                            infrastructure.append(error)
+                            continue
+                        completed += 1
+                        if wrong:
+                            unexpected += 1
+                        if success:
+                            latencies.append(latency)
+        finally:
+            stop.set()
+            sampler.join(timeout=30)
+        if sampler.is_alive() or sampler_errors:
+            _fail_large_payload_rss_sampler(sampler_errors)
+        final_observation = self._rss_observation(
+            arm,
+            process_identity,
+            started,
+            final_sample=True,
+        )
+        elapsed = time.monotonic() - started
+        completed_at = _now_iso()
+        if self._process_identity(arm) != process_identity:
+            fail("Host performance large-payload process identity changed")
+        if final_observation["elapsed_ms"] <= rss_rows[-1]["elapsed_ms"]:
+            final_observation["elapsed_ms"] = rss_rows[-1]["elapsed_ms"] + 0.001
+        rss_rows.append(final_observation)
+        if self._process_identity(arm) != process_identity:
+            fail("Host performance large-payload process identity changed after final RSS")
+        if elapsed > LARGE_PAYLOAD_MAX_ELAPSED_SECONDS:
+            fail("Host performance large-payload lane exceeded its fixed bound")
+        if attempts != request_count:
+            fail("Host performance large-payload request count drifted")
+        mock_after = self._mock_snapshot()
+        contract = next(
+            item
+            for item in self.workload_manifest["workloads"]
+            if item["id"] == LARGE_PAYLOAD_WORKLOAD
+        )
+        return {
+            "arm": arm,
+            "completed_at": completed_at,
+            "completed_requests": completed,
+            "concurrency": concurrency,
+            "elapsed_seconds": elapsed,
+            "infrastructure_errors": infrastructure,
+            "latency_samples_ms": latencies,
+            "mock_counters": {
+                "after": mock_after,
+                "before": mock_before,
+                "delta": {
+                    key: mock_after[key] - mock_before[key]
+                    for key in MOCK_COUNTER_KEYS
+                },
+            },
+            "order_index": order_index,
+            "pair_id": f"large-payload-r{repetition}",
+            "payload_body_sha256": contract["requests"][0]["body_sha256"],
+            "payload_size_bytes": self.config["plan"]["large_payload_bytes"],
+            "planned_requests": attempts,
+            "process_identity": dict(process_identity),
+            "repetition": repetition,
+            "request_started_elapsed_ms": request_started_elapsed_ms,
+            "request_set_sha256": contract["request_set_sha256"],
+            "rss_baseline_samples": baseline,
+            "rss_samples": rss_rows,
+            "runtime": self._runtime(arm),
+            "started_at": started_at,
+            "successful_samples": len(latencies),
+            "unexpected_http_errors": unexpected,
+            "warmup_seconds": self.config["plan"]["warmup_seconds"],
+            "workload": LARGE_PAYLOAD_WORKLOAD,
+        }
+
     def _measure_warm_rss(self) -> dict[str, Any]:
         arm = "cpa_cag"
         concurrency = 16
@@ -3235,6 +5067,7 @@ class LinuxHostCollector:
         )
         self._reset_mock()
         mock_before = self._mock_snapshot()
+        self._reset_docker_stats_baseline()
         started_at = _now_iso()
         started = time.monotonic()
         resources: list[dict[str, Any]] = []
@@ -3369,6 +5202,7 @@ class LinuxHostCollector:
         baseline = self._preflight()
         paired_cells: list[dict[str, Any]] = []
         absolute_cells: list[dict[str, Any]] = []
+        large_payload_cells: list[dict[str, Any]] = []
         repetitions = self.config["plan"]["paired_repetitions"]
         for concurrency in CONCURRENCIES:
             for repetition in range(1, repetitions + 1):
@@ -3388,16 +5222,36 @@ class LinuxHostCollector:
         for workload in ABSOLUTE_WORKLOADS:
             for concurrency in CONCURRENCIES:
                 for repetition in range(1, repetitions + 1):
-                    absolute_cells.append(
-                        self._measure_cell(
-                            "cpa_cag",
+                    for order_index, arm in enumerate(
+                        workload_paired_order(
+                            self.config["plan"]["seed"],
                             workload,
                             concurrency,
                             repetition,
-                            "absolute",
-                            0,
                         )
-                    )
+                    ):
+                        absolute_cells.append(
+                            self._measure_cell(
+                                arm,
+                                workload,
+                                concurrency,
+                                repetition,
+                                "absolute",
+                                order_index,
+                            )
+                        )
+        for repetition in range(1, repetitions + 1):
+            for order_index, arm in enumerate(
+                workload_paired_order(
+                    self.config["plan"]["seed"],
+                    LARGE_PAYLOAD_WORKLOAD,
+                    LARGE_PAYLOAD_CONCURRENCY,
+                    repetition,
+                )
+            ):
+                large_payload_cells.append(
+                    self._measure_large_payload_cell(arm, repetition, order_index)
+                )
         warm_rss = self._measure_warm_rss()
         completed_at = _now_iso()
         require_current_tool_identities(
@@ -3411,6 +5265,7 @@ class LinuxHostCollector:
             "completed_at": completed_at,
             "config_sha256": sha256_bytes(self.config_raw),
             "host": self._host_identity(),
+            "large_payload_cells": large_payload_cells,
             "paired_cells": paired_cells,
             "run_config_sha256": self.config["run_config_sha256"],
             "schema": MEASUREMENTS_SCHEMA,
@@ -3577,7 +5432,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"status": evidence["status"], "valid": evidence["status"] == "PASS"}, sort_keys=True))
         return 0 if evidence["status"] == "PASS" else 2
     except (ContractError, OSError) as exc:
-        print(f"HOST PERFORMANCE FAILED: {exc}", file=sys.stderr)
+        sampler_error_ids = tuple(getattr(exc, "sampler_error_ids", ()) or ())
+        sampler_diagnostic = ""
+        if sampler_error_ids and all(
+            isinstance(item, str)
+            and re.fullmatch(r"[a-z_]+:[A-Za-z][A-Za-z0-9_]*", item)
+            for item in sampler_error_ids
+        ):
+            sampler_diagnostic = "; sampler_error_ids=" + ",".join(
+                sampler_error_ids
+            )
+        print(
+            f"HOST PERFORMANCE FAILED: {exc}{sampler_diagnostic}",
+            file=sys.stderr,
+        )
         return 2
 
 

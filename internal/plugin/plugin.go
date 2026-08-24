@@ -1,4 +1,4 @@
-// Package plugin implements the CPA v7.2.116 schema-v2 RPC surface for the
+// Package plugin implements the CPA v7.2.137 schema-v3 RPC surface for the
 // cyber-abuse guard. The native C boundary in cmd/cyber-abuse-guard is kept
 // deliberately thin; policy state and lifecycle semantics live here so they
 // can be race-tested without loading a shared object.
@@ -58,8 +58,8 @@ var metadata = pluginapi.Metadata{
 		{Name: "hard_block_even_if_authorized", Type: pluginapi.ConfigFieldTypeObject, Description: "Categories whose operational abuse remains protected from authorization score reductions."},
 		{Name: "subject_control", Type: pluginapi.ConfigFieldTypeObject, Description: "Rolling subject-risk, cooldown, and manual-block settings."},
 		{Name: "audit", Type: pluginapi.ConfigFieldTypeObject, Description: "SQLite audit settings plus an explicit default-off, block-only, redacted and truncated operator request-preview capture."},
-		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.116."},
-		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v0.16 and rejected."},
+		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.137."},
+		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v1.0.0 and rejected."},
 	},
 }
 
@@ -81,14 +81,16 @@ type registration struct {
 }
 
 type registrationCapabilities struct {
-	ModelRouter           bool                         `json:"model_router"`
-	Executor              bool                         `json:"executor"`
-	ExecutorModelScope    pluginapi.ExecutorModelScope `json:"executor_model_scope"`
-	ExecutorInputFormats  []string                     `json:"executor_input_formats"`
-	ExecutorOutputFormats []string                     `json:"executor_output_formats"`
-	RequestInterceptor    bool                         `json:"request_interceptor"`
-	RequestLifecycle      bool                         `json:"request_lifecycle_plugin"`
-	ManagementAPI         bool                         `json:"management_api"`
+	ModelRouter            bool                         `json:"model_router"`
+	Executor               bool                         `json:"executor"`
+	ExecutorModelScope     pluginapi.ExecutorModelScope `json:"executor_model_scope"`
+	ExecutorInputFormats   []string                     `json:"executor_input_formats"`
+	ExecutorOutputFormats  []string                     `json:"executor_output_formats"`
+	RequestInterceptor     bool                         `json:"request_interceptor"`
+	RequestLifecycle       bool                         `json:"request_lifecycle_plugin"`
+	ResponseInterceptor    bool                         `json:"response_interceptor"`
+	StreamChunkInterceptor bool                         `json:"response_stream_interceptor"`
+	ManagementAPI          bool                         `json:"management_api"`
 }
 
 type rpcEnvelope struct {
@@ -118,32 +120,90 @@ type runtimeState struct {
 	// for every authenticated status read so readiness reflects current mount,
 	// identity, permission, writability, and capacity state rather than the
 	// startup snapshot.
-	auditStorageProbe func(auditStorageVerification) auditStorageVerification
-	subject           *subject.Controller
-	persistence       *subjectPersistenceRuntime
-	startedAt         time.Time
-	configuredAt      time.Time
+	auditStorageProbe                            func(auditStorageVerification) auditStorageVerification
+	auditStorageNeedsPostActivationCheck         bool
+	auditStorageActivationDiscardRequired        bool
+	subjectPersistenceNeedsPostActivationRestore bool
+	subject                                      *subject.Controller
+	persistence                                  *subjectPersistenceRuntime
+	startedAt                                    time.Time
+	configuredAt                                 time.Time
 }
 
-func (state *runtimeState) close() error {
+type preparedRuntimeRules struct {
+	set        *rules.RuleSet
+	classifier *classifier.Classifier
+}
+
+type auditActivationStage uint8
+
+const (
+	auditActivationBeforeSwap auditActivationStage = iota + 1
+	auditActivationAfterSwapBeforeOpen
+	auditActivationAfterPriorCloseBeforeOpen
+	auditActivationAfterOpenBeforeBind
+	auditActivationAfterMaintenanceBeforeFinalBind
+)
+
+type runtimeCloseOutcome struct {
+	durable          bool
+	sidecarsReleased bool
+	err              error
+}
+
+func (state *runtimeState) close() runtimeCloseOutcome {
 	if state == nil {
-		return nil
+		return runtimeCloseOutcome{durable: true}
 	}
+	// Capture recovery eligibility before the close transition starts. The final
+	// subject-persistence save below performs a live storage probe and may newly
+	// latch the gate; such a transition-time failure must not be mistaken for an
+	// already-visible degraded runtime that an explicit reconfigure may recover.
+	latchedBeforeClose := state.auditStorageGate != nil && state.auditStorageGate.latchedBeforeClose()
 	state.stopSubjectPersistence()
 	if state.audit == nil {
-		return nil
+		return runtimeCloseOutcome{durable: true}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	state.audit.SetErrorHandler(nil)
-	if state.auditStorageGate != nil && state.auditStorageGate.verification().blocksOperationalReadiness() {
-		return state.audit.DiscardContext(ctx)
+	if !state.audit.IsActive() ||
+		(state.auditStorageGate != nil && state.auditStorageGate.latchedBeforeClose()) {
+		// Discard is an intentional no-checkpoint boundary. Even when it returns
+		// nil, it is not durable. An explicit reconfigure may nevertheless recover
+		// from a gate that was already visibly latched before close; a failure first
+		// discovered by this close never receives that ownership-release grant.
+		err := state.audit.DiscardContext(ctx)
+		return runtimeCloseOutcome{sidecarsReleased: latchedBeforeClose && err == nil, err: err}
 	}
-	return state.audit.CloseContext(ctx)
+	// The caller has already removed this runtime behind opMu's exclusive
+	// admission boundary, and stopSubjectPersistence above has stopped its only
+	// asynchronous producer. Quiesce also closes the Store's own admission gate,
+	// drains every accepted item, and stops the worker/maintenance ticker without
+	// checkpointing or closing SQLite. Individual worker failures are fail-open
+	// and therefore are not returned by CloseContext.
+	if err := state.audit.QuiesceContext(ctx); err != nil {
+		discardErr := state.audit.DiscardContext(ctx)
+		return runtimeCloseOutcome{err: errors.Join(err, discardErr)}
+	}
+	if state.auditStorageGate != nil {
+		// readAccess bypasses the one-second write-hot-path cache. A worker may
+		// have first latched the gate while satisfying the quiesce drain above;
+		// in that case Discard must prevent the unsafe checkpoint that a normal
+		// CloseContext would otherwise attempt.
+		if err := state.auditStorageGate.readAccess(); err != nil {
+			discardErr := state.audit.DiscardContext(ctx)
+			return runtimeCloseOutcome{err: discardErr}
+		}
+	}
+	err := state.audit.CloseContext(ctx)
+	clean := err == nil && (state.auditStorageGate == nil || !state.auditStorageGate.latchedBeforeClose())
+	return runtimeCloseOutcome{durable: clean, sidecarsReleased: clean, err: err}
 }
 
-func (p *Plugin) closeRuntime(state *runtimeState) {
-	if err := state.close(); err != nil {
+func (p *Plugin) closeRuntime(state *runtimeState) runtimeCloseOutcome {
+	outcome := state.close()
+	if outcome.err != nil {
 		// SQLite diagnostics may contain operator-selected paths. Keep the Host
 		// log stable and content-free while ensuring checkpoint/close failures are
 		// not silently discarded.
@@ -152,6 +212,24 @@ func (p *Plugin) closeRuntime(state *runtimeState) {
 			"code":   "audit_storage_close_failed",
 		})
 	}
+	return outcome
+}
+
+// completePriorAuditStoreClose transfers exactly one sidecar lifecycle grant
+// to a same-path prepared candidate. A failed or timed-out prior close cannot
+// be rolled back after Swap, so the replacement is latched degraded and its
+// prepared SQLite handle is discarded during the activation failure path.
+func (state *runtimeState) completePriorAuditStoreClose(expected, sidecarsReleased bool, closeErr error) {
+	if !expected || state == nil || state.auditStorageGate == nil {
+		return
+	}
+	if sidecarsReleased && closeErr == nil {
+		state.auditStorageGate.authorizePriorStoreSidecarRelease()
+		return
+	}
+	state.auditStorage = state.auditStorageGate.latchPriorStoreCloseFailure()
+	state.auditStorageNeedsPostActivationCheck = false
+	state.auditStorageActivationDiscardRequired = true
 }
 
 // Plugin is safe for concurrent CPA callbacks. A validated runtime is built
@@ -166,12 +244,16 @@ type Plugin struct {
 	shutdown                 atomic.Bool
 	shutdownModelRoutePolicy atomic.Uint32
 
-	lastConfigError           atomic.Pointer[string]
-	lastReconfigureError      atomic.Pointer[string]
-	identifier                *subject.Identifier
-	identifierErr             error
-	loadRules                 func() (*rules.RuleSet, error)
-	auditStorageInspect       func(string, bool, bool, int64) auditStorageVerification
+	lastConfigError      atomic.Pointer[string]
+	lastReconfigureError atomic.Pointer[string]
+	identifier           *subject.Identifier
+	identifierErr        error
+	loadRules            func() (*rules.RuleSet, error)
+	auditStorageInspect  func(string, bool, bool, int64) auditStorageVerification
+	// auditActivationHook is nil in production. Tests use the explicit lifecycle
+	// boundaries to replace a directory/database deterministically instead of
+	// relying on scheduler timing around Swap and post-open identity binding.
+	auditActivationHook       func(auditActivationStage)
 	requestHasher             func([]byte) string
 	requestFingerprintKey     [32]byte
 	requestFingerprintEnabled bool
@@ -216,7 +298,7 @@ func New() *Plugin {
 	}
 }
 
-// Call dispatches one schema-v2 RPC method. Controlled protocol/policy errors
+// Call dispatches one schema-v3 RPC method. Controlled protocol/policy errors
 // use a valid error envelope with return code zero. A recovered panic uses a
 // non-zero ABI return code while still returning a parseable envelope.
 func (p *Plugin) Call(method string, request []byte) (response []byte, returnCode int) {
@@ -234,6 +316,7 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 	if method == "" {
 		return errorEnvelope("invalid_method", "method is required", 0, ""), 0
 	}
+	p.countRPCCallback(method)
 	if method == pluginabi.MethodPluginShutdown {
 		p.Shutdown()
 		return okEnvelope(struct{}{}), 0
@@ -287,7 +370,7 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 }
 
 // CallOversized handles an RPC that exceeded the boundary-copy budget without
-// parsing or copying its attacker-controlled payload. Schema-v2 request
+// parsing or copying its attacker-controlled payload. Schema-v3 request
 // interception can terminate directly, so this content-incomplete condition is
 // returned as a successful mode-specific response: strict terminates while
 // balanced/audit/observe/off preserve the configured incomplete policy.
@@ -299,6 +382,10 @@ func (p *Plugin) CallOversized(method string) (response []byte, returnCode int) 
 	}()
 	if p == nil {
 		return errorEnvelope("plugin_unavailable", "plugin is unavailable", 0, ""), 0
+	}
+	p.countRPCCallback(method)
+	if method == pluginabi.MethodRequestComplete {
+		p.counters.requestLifecycleErrors.Add(1)
 	}
 	if p.shutdown.Load() {
 		if method == pluginabi.MethodModelRoute {
@@ -345,7 +432,7 @@ func (p *Plugin) callOversizedExecutor() ([]byte, int) {
 	return errorEnvelope("request_too_large", "plugin executor RPC exceeds the size limit", 413, "rpc_body_limit"), 0
 }
 
-// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v2
+// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v3
 // request-interceptor callbacks. CPA continues after an RPC error, so an
 // enforcing runtime must return a successful local block response. The
 // recovered value is never logged because it can contain attacker-controlled
@@ -355,6 +442,9 @@ func (p *Plugin) recoverCallbackPanic(method string) ([]byte, int) {
 		return errorEnvelope("panic_recovered", "plugin callback failed safely", 0, ""), 1
 	}
 	p.counters.panicsRecovered.Add(1)
+	if method == pluginabi.MethodRequestComplete {
+		p.counters.requestLifecycleErrors.Add(1)
+	}
 	if method == pluginabi.MethodModelRoute {
 		return p.modelRouteFailureWithPolicy(
 			"panic_recovered",
@@ -374,6 +464,32 @@ func (p *Plugin) recoverCallbackPanic(method string) ([]byte, int) {
 		"code":   "panic_recovered",
 	})
 	return errorEnvelope("panic_recovered", "plugin callback failed safely", 0, ""), 1
+}
+
+// countRPCCallback records only one of the fixed schema-v3 callback surfaces.
+// It deliberately does not retain request IDs, model names, routes, headers,
+// payload sizes, or any caller-controlled label. The counters are used by the
+// isolated Host admission harness to prove both protected-path invocation and
+// the absence of CAG callbacks on CPA's separate realtime route family.
+func (p *Plugin) countRPCCallback(method string) {
+	if p == nil {
+		return
+	}
+	switch method {
+	case pluginabi.MethodRequestInterceptBefore:
+		p.counters.requestInterceptorBeforeCalls.Add(1)
+	case pluginabi.MethodRequestInterceptAfter:
+		p.counters.requestInterceptorAfterCalls.Add(1)
+	case pluginabi.MethodRequestComplete:
+		p.counters.requestLifecycleCompletions.Add(1)
+	case pluginabi.MethodModelRoute:
+		p.counters.modelRouterCalls.Add(1)
+	case pluginabi.MethodExecutorExecute,
+		pluginabi.MethodExecutorExecuteStream,
+		pluginabi.MethodExecutorCountTokens,
+		pluginabi.MethodExecutorHTTPRequest:
+		p.counters.executorCalls.Add(1)
+	}
 }
 
 // RecoverNativeCallbackPanic is the fail-safe used by the cgo export boundary
@@ -597,13 +713,106 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	if request.SchemaVersion < pluginabi.SchemaVersion {
 		if reconfigure && p.runtime.Load() != nil {
 			p.rejectReconfigure(fmt.Errorf("unsupported schema version %d", request.SchemaVersion), "unsupported_schema")
+			// CPA applies a reconfigure response as the replacement registration.
+			// Returning an error here makes the Host drop this plugin from its
+			// active snapshot (fail-open). Keep the last known-good registration
+			// active while recording the rejected request for operators.
 			return okEnvelope(currentRegistration())
 		}
 		return errorEnvelope("unsupported_schema", fmt.Sprintf("unsupported schema version %d", request.SchemaVersion), 0, "")
 	}
 
-	state, err := p.buildRuntime(request.ConfigYAML, reconfigure && p.runtime.Load() != nil)
+	currentBeforeBuild := p.runtime.Load()
+	var preparedSubject *subject.Controller
+	var candidateConfig config.Config
+	var preparedRules *preparedRuntimeRules
+	prepareAuditCandidate := false
+	deferAuditCandidateMutation := false
+	opLocked := false
+	if reconfigure && currentBeforeBuild != nil {
+		// Freeze request callbacks before copying subject state. Preparing the
+		// independent controller is the last rejection point that depends on the
+		// active in-memory state, and it deliberately precedes opening or migrating
+		// any candidate audit database.
+		var errParse error
+		candidateConfig, errParse = config.Parse(request.ConfigYAML)
+		if errParse != nil {
+			p.setLastConfigError(errParse)
+			p.rejectReconfigure(errParse, "invalid_config")
+			return okEnvelope(currentRegistration())
+		}
+		if errParse = validateRuntimeConfig(candidateConfig); errParse != nil {
+			p.setLastConfigError(errParse)
+			p.rejectReconfigure(errParse, "invalid_config")
+			return okEnvelope(currentRegistration())
+		}
+		// Loading and compiling the immutable rule set can be relatively slow and
+		// does not depend on active request or subject state. Prepare it before the
+		// exclusive operation barrier so ordinary callbacks keep using the current
+		// runtime until the state-dependent clone and atomic swap begin.
+		var prepareErr error
+		preparedRules, prepareErr = p.prepareRuntimeRules()
+		if prepareErr != nil {
+			p.setLastConfigError(prepareErr)
+			p.rejectReconfigure(prepareErr, "invalid_config")
+			return okEnvelope(currentRegistration())
+		}
+		p.opMu.Lock()
+		opLocked = true
+		if p.shutdown.Load() {
+			p.opMu.Unlock()
+			return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, "")
+		}
+		currentBeforeBuild = p.runtime.Load()
+		if currentBeforeBuild != nil {
+			if errParse = preflightAuditDataDirReconfigure(currentBeforeBuild.config, candidateConfig); errParse != nil {
+				p.opMu.Unlock()
+				p.rejectReconfigure(errParse, "audit_data_dir_restart_required")
+				return okEnvelope(currentRegistration())
+			}
+		}
+		prepareAuditCandidate = currentBeforeBuild != nil && currentBeforeBuild.audit.IsActive() &&
+			currentBeforeBuild.config.Audit.Enabled && candidateConfig.Audit.Enabled
+		deferAuditCandidateMutation = candidateConfig.Audit.Enabled
+		if currentBeforeBuild != nil && currentBeforeBuild.subject != nil &&
+			currentBeforeBuild.config.SubjectControl.Enabled && candidateConfig.SubjectControl.Enabled {
+			preparedSubject, errParse = currentBeforeBuild.subject.CloneReconfigured(subjectRuntimeConfig(candidateConfig))
+			if errParse != nil {
+				p.opMu.Unlock()
+				p.setLastConfigError(errParse)
+				p.setLastReconfigureError(errParse)
+				p.log("warn", "cyber-abuse-guard rejected a reconfiguration that could not preserve subject state", map[string]any{
+					"plugin": ID,
+					"code":   "subject_state_migration_rejected",
+				})
+				return okEnvelope(currentRegistration())
+			}
+		}
+		if currentBeforeBuild != nil {
+			if errParse = preflightAuditRecoveryReconfigure(currentBeforeBuild, candidateConfig); errParse != nil {
+				p.opMu.Unlock()
+				p.rejectReconfigure(errParse, "audit_storage_restart_required")
+				return okEnvelope(currentRegistration())
+			}
+		}
+	}
+
+	var state *runtimeState
+	var err error
+	if preparedRules != nil {
+		state, err = p.buildRuntimeWithRules(
+			request.ConfigYAML,
+			deferAuditCandidateMutation,
+			prepareAuditCandidate,
+			preparedRules,
+		)
+	} else {
+		state, err = p.buildRuntime(request.ConfigYAML, deferAuditCandidateMutation, prepareAuditCandidate)
+	}
 	if err != nil {
+		if opLocked {
+			p.opMu.Unlock()
+		}
 		p.setLastConfigError(err)
 		if reconfigure && p.runtime.Load() != nil {
 			p.rejectReconfigure(err, "invalid_config")
@@ -612,7 +821,9 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		return errorEnvelope("invalid_config", err.Error(), 0, "")
 	}
 
-	p.opMu.Lock()
+	if !opLocked {
+		p.opMu.Lock()
+	}
 	if p.shutdown.Load() {
 		p.opMu.Unlock()
 		p.closeRuntime(state)
@@ -622,28 +833,17 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 	if reconfigure && current != nil {
 		state.startedAt = current.startedAt
 	}
-	if reconfigure && current != nil && current.subject != nil && current.config.SubjectControl.Enabled && state.config.SubjectControl.Enabled {
-		if err := current.subject.Reconfigure(subjectRuntimeConfig(state.config)); err != nil {
-			p.opMu.Unlock()
-			p.closeRuntime(state)
-			p.setLastConfigError(err)
-			p.setLastReconfigureError(err)
-			p.log("warn", "cyber-abuse-guard rejected a reconfiguration that could not preserve subject state", map[string]any{
-				"plugin": ID,
-				"code":   "subject_state_migration_rejected",
-			})
-			return okEnvelope(currentRegistration())
-		}
-		state.subject = current.subject
+	if preparedSubject != nil {
+		state.subject = preparedSubject
 	}
-	if reconfigure && current != nil &&
+	if reconfigure && current != nil && current.config.Audit.Enabled && current.config.Audit.RawCapture.Enabled &&
 		(!state.config.Audit.Enabled || !state.config.Audit.RawCapture.Enabled) {
 		// p.opMu is exclusive here, every old inspection/management callback has
 		// finished, and all other runtime migrations have succeeded. Purge and
 		// WAL truncation therefore form the final hard privacy gate before Swap.
 		// If the gate cannot complete, retain the previous runtime instead of
 		// publishing a disabled configuration that merely hides sensitive rows.
-		samePath := current.audit != nil && state.audit != nil &&
+		samePath := current.audit.IsActive() && state.audit != nil &&
 			sameAuditStoragePath(current.auditStorage.DatabasePath, state.auditStorage.DatabasePath)
 		if samePath {
 			// The replacement Store cannot flush work admitted by the current
@@ -665,38 +865,110 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 				return okEnvelope(currentRegistration())
 			}
 		}
-		stores := []*audit.Store{state.audit}
-		// When both runtimes address the same SQLite path, the freshly verified
-		// Store is the only purge authority needed. The old Store may be latched
-		// after a storage fault and must not be reopened merely to recover; opMu
-		// already excludes old callbacks and its gate blocks queued writes.
-		if current.audit != nil && !samePath {
+		stores := make([]*audit.Store, 0, 2)
+		if samePath {
+			// Use the queue owner as the same-path purge authority. Flush above
+			// established its writer boundary, and a compensated post-delete
+			// failure is then reflected on the Store that remains active.
 			stores = append(stores, current.audit)
+		} else {
+			if state.audit != nil && state.audit.IsActive() {
+				stores = append(stores, state.audit)
+			}
+			if current.audit.IsActive() {
+				stores = append(stores, current.audit)
+			}
+		}
+		if len(stores) == 0 {
+			p.opMu.Unlock()
+			p.closeRuntime(state)
+			p.rejectReconfigure(
+				errors.New("disabling raw capture or audit without an active purge Store requires restart so retained sensitive previews cannot be hidden"),
+				"audit_storage_restart_required",
+			)
+			return okEnvelope(currentRegistration())
 		}
 		for _, store := range stores {
-			if store == nil {
-				continue
-			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_, purgeErr := store.PurgeRawCaptures(ctx)
 			cancel()
 			if purgeErr != nil {
 				p.opMu.Unlock()
 				p.closeRuntime(state)
-				p.rejectReconfigure(purgeErr, "raw_capture_purge_failed")
+				code := "raw_capture_purge_failed"
+				if errors.Is(purgeErr, audit.ErrRawCapturePurgeUnrecovered) {
+					code = "raw_capture_purge_unrecovered"
+				}
+				p.rejectReconfigure(purgeErr, code)
 				return okEnvelope(currentRegistration())
 			}
 		}
 	}
+	if p.auditActivationHook != nil && state.audit != nil {
+		p.auditActivationHook(auditActivationBeforeSwap)
+	}
 	previous := p.runtime.Swap(state)
+	if p.auditActivationHook != nil && state.audit != nil {
+		p.auditActivationHook(auditActivationAfterSwapBeforeOpen)
+	}
 	p.pending.clear()
+	p.requestLifecycle.clear()
 	p.startupPrivacyChallenges.clear()
 	p.setLastConfigError(nil)
 	p.setLastReconfigureError(nil)
+	priorClose := p.closeRuntime(previous)
+	if p.auditActivationHook != nil && state.audit != nil {
+		p.auditActivationHook(auditActivationAfterPriorCloseBeforeOpen)
+	}
+	state.completePriorAuditStoreClose(prepareAuditCandidate, priorClose.sidecarsReleased, priorClose.err)
+	if previous != nil && previous.audit != nil && !priorClose.sidecarsReleased {
+		// Close diagnostics can contain an operator-selected SQLite path. Preserve
+		// the concrete error only in the Store's internal status/log boundary and
+		// expose a stable content-free lifecycle error through management JSON.
+		message := "prior audit Store became unverified during runtime close"
+		if priorClose.err != nil {
+			message = "prior audit Store close or checkpoint failed before runtime activation"
+		}
+		p.setLastReconfigureError(errors.New(message))
+	}
+	var activationErr error
+	if state.audit != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		activationErr = state.audit.Activate(ctx)
+		cancel()
+		if activationErr != nil {
+			p.log("error", "cyber-abuse-guard activated a runtime with degraded audit maintenance", map[string]any{
+				"plugin": ID,
+				"code":   "audit_activation_degraded",
+			})
+			if state.auditStorageActivationDiscardRequired {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				discardErr := state.audit.DiscardContext(ctx)
+				cancel()
+				if discardErr != nil {
+					p.log("error", "cyber-abuse-guard failed to discard a rejected audit activation", map[string]any{
+						"plugin": ID,
+						"code":   "audit_activation_discard_failed",
+					})
+				}
+			}
+			// Activation gates update and latch their own storage state before
+			// returning an error. A failed Store is never retried in place.
+			state.auditStorageNeedsPostActivationCheck = false
+		}
+	}
+	if activationErr != nil {
+		state.blockSubjectPersistenceForStorage()
+		state.subjectPersistenceNeedsPostActivationRestore = false
+	} else if state.subjectPersistenceNeedsPostActivationRestore {
+		state.subjectPersistenceNeedsPostActivationRestore = false
+		state.restoreSubjectPersistence(p)
+	}
+	if activationErr == nil {
+		state.startSubjectPersistence(p)
+	}
 	p.opMu.Unlock()
 	p.reportABICapabilityLimits()
-	p.closeRuntime(previous)
-	state.startSubjectPersistence(p)
 	return okEnvelope(currentRegistration())
 }
 
@@ -704,7 +976,7 @@ func (p *Plugin) reportABICapabilityLimits() {
 	if !p.abiLimitLogged.CompareAndSwap(false, true) {
 		return
 	}
-	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.116 plugin ABI", map[string]any{
+	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.137 plugin ABI", map[string]any{
 		"plugin": ID,
 		"code":   "cpa_abi_conflict_detection_unavailable",
 		"request_interceptor_enumeration_supported": false,
@@ -745,20 +1017,7 @@ func (p *Plugin) log(level, message string, fields map[string]any) {
 	logger(level, message, fields)
 }
 
-func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*runtimeState, error) {
-	cfg, err := config.Parse(rawConfig)
-	if err != nil {
-		return nil, err
-	}
-	if cfg.Classifier.Enabled {
-		return nil, fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
-	}
-	if cfg.TrustedProxy.Enabled {
-		return nil, fmt.Errorf("trusted_proxy.enabled is not supported because CPA v7.2.116 request interception does not provide a verified direct peer address")
-	}
-	if cfg.Audit.LogOriginalText {
-		return nil, fmt.Errorf("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
-	}
+func (p *Plugin) prepareRuntimeRules() (*preparedRuntimeRules, error) {
 	loader := p.loadRules
 	if loader == nil {
 		loader = rules.LoadDefault
@@ -770,6 +1029,45 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 	compiled, err := classifier.New(set)
 	if err != nil {
 		return nil, fmt.Errorf("compile rules: %w", err)
+	}
+	return &preparedRuntimeRules{set: set, classifier: compiled}, nil
+}
+
+func validateRuntimeConfig(cfg config.Config) error {
+	if cfg.Classifier.Enabled {
+		return fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
+	}
+	if cfg.TrustedProxy.Enabled {
+		return errors.New("trusted_proxy.enabled is not supported because CPA v7.2.137 request interception does not provide a verified direct peer address")
+	}
+	if cfg.Audit.LogOriginalText {
+		return errors.New("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
+	}
+	return nil
+}
+
+func (p *Plugin) buildRuntime(rawConfig []byte, deferAuditCandidateMutation, prepareAuditCandidate bool) (*runtimeState, error) {
+	return p.buildRuntimeWithRules(rawConfig, deferAuditCandidateMutation, prepareAuditCandidate, nil)
+}
+
+func (p *Plugin) buildRuntimeWithRules(
+	rawConfig []byte,
+	deferAuditCandidateMutation bool,
+	prepareAuditCandidate bool,
+	preparedRules *preparedRuntimeRules,
+) (*runtimeState, error) {
+	cfg, err := config.Parse(rawConfig)
+	if err != nil {
+		return nil, err
+	}
+	if err = validateRuntimeConfig(cfg); err != nil {
+		return nil, err
+	}
+	if preparedRules == nil {
+		preparedRules, err = p.prepareRuntimeRules()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if cfg.SubjectControl.Enabled && p.identifierErr != nil {
 		p.log("error", "cyber-abuse-guard subject identifier initialization failed", map[string]any{
@@ -793,8 +1091,8 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 	now := time.Now().UTC()
 	state := &runtimeState{
 		config:       cfg,
-		classifier:   compiled,
-		rulesVersion: set.Version,
+		classifier:   preparedRules.classifier,
+		rulesVersion: preparedRules.set.Version,
 		auditStorage: disabledAuditStorageVerification(),
 		subject:      controller,
 		startedAt:    now,
@@ -804,7 +1102,7 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		persistenceExpected := auditPersistenceExpected(cfg)
 		path := ""
 		var pathErr error
-		if persistenceExpected {
+		if persistenceExpected || deferAuditCandidateMutation {
 			// A required production volume is operator-owned infrastructure. Resolve
 			// its configured database location without creating a missing mount or
 			// directory; verification below must observe the volume as deployed.
@@ -822,13 +1120,7 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 			persistenceExpected,
 			int64(cfg.Audit.MaxDBMB)<<20,
 		)
-		if persistenceExpected {
-			state.auditStorageGate = newAuditStorageGate(state.auditStorage, int64(cfg.Audit.MaxDBMB)<<20, inspectStorage)
-		} else {
-			state.auditStorageProbe = func(baseline auditStorageVerification) auditStorageVerification {
-				return recheckAuditStorageWithInspector(baseline, int64(cfg.Audit.MaxDBMB)<<20, false, inspectStorage)
-			}
-		}
+		state.auditStorageGate = newAuditStorageGate(state.auditStorage, int64(cfg.Audit.MaxDBMB)<<20, inspectStorage)
 		if pathErr != nil {
 			p.log("error", "cyber-abuse-guard could not prepare its audit directory", map[string]any{
 				"plugin": ID,
@@ -851,6 +1143,9 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 				return nil, fmt.Errorf("inspect disabled raw-capture audit files: %w", inspectErr)
 			}
 		}
+		if deferAuditCandidateMutation && !prepareAuditCandidate && !cfg.Audit.RawCapture.Enabled && hadAuditArtifacts {
+			return nil, errors.New("hot reconfiguration cannot publish disabled raw capture over an unopened existing audit database; restart through the startup purge gate")
+		}
 		openPath := path
 		if storageOpenPrevented {
 			openPath = ""
@@ -867,21 +1162,51 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 			})
 		} else {
 			var storageAccessGate func() error
+			var storageActivationGate func() error
+			var storagePostOpenBind func() error
+			var storagePostMutationBind func() error
+			var storagePostMaintenanceBind func() error
+			var storageReadAccessGate func() error
 			if state.auditStorageGate != nil {
 				storageAccessGate = state.auditStorageGate.access
+				storageActivationGate = state.auditStorageGate.activationAccess
+				storageReadAccessGate = state.auditStorageGate.readAccess
+				storagePostOpenBind = func() error {
+					if deferAuditCandidateMutation && p.auditActivationHook != nil {
+						p.auditActivationHook(auditActivationAfterOpenBeforeBind)
+					}
+					fresh, bindErr := state.auditStorageGate.bindAfterOpen()
+					state.auditStorage = fresh
+					return bindErr
+				}
+				storagePostMutationBind = func() error {
+					fresh, bindErr := state.auditStorageGate.bindAfterOpen()
+					state.auditStorage = fresh
+					return bindErr
+				}
+				storagePostMaintenanceBind = func() error {
+					return p.bindActivatedAuditStorage(state)
+				}
 			}
 			store, openErr = audit.Open(audit.Config{
-				Path:                     openPath,
-				Retention:                time.Duration(cfg.Audit.RetentionDays) * 24 * time.Hour,
-				MaxBytes:                 int64(cfg.Audit.MaxDBMB) << 20,
-				QueueSize:                1024,
-				BusyTimeout:              2 * time.Second,
-				CleanupInterval:          time.Hour,
-				BackupBeforeMigration:    cfg.Audit.BackupBeforeMigration,
-				MaxMigrationBackups:      cfg.Audit.MaxMigrationBackups,
-				RequirePersistentStorage: persistenceExpected,
-				StorageAccessGate:        storageAccessGate,
-				SkipDisabledPurgeOnOpen:  skipDisabledPurgeOnOpen,
+				Path:                        openPath,
+				Retention:                   time.Duration(cfg.Audit.RetentionDays) * 24 * time.Hour,
+				MaxBytes:                    int64(cfg.Audit.MaxDBMB) << 20,
+				QueueSize:                   1024,
+				BusyTimeout:                 2 * time.Second,
+				CleanupInterval:             time.Hour,
+				BackupBeforeMigration:       cfg.Audit.BackupBeforeMigration,
+				MaxMigrationBackups:         cfg.Audit.MaxMigrationBackups,
+				RequirePersistentStorage:    persistenceExpected,
+				StorageAccessGate:           storageAccessGate,
+				StorageActivationGate:       storageActivationGate,
+				StoragePostOpenBind:         storagePostOpenBind,
+				StoragePostMutationBind:     storagePostMutationBind,
+				StoragePostMaintenanceBind:  storagePostMaintenanceBind,
+				StorageReadAccessGate:       storageReadAccessGate,
+				SkipDisabledPurgeOnOpen:     prepareAuditCandidate,
+				SkipAllStartupMutation:      deferAuditCandidateMutation,
+				AllowDeferredDatabaseCreate: deferAuditCandidateMutation,
 				RawCapture: audit.RawCaptureConfig{
 					Enabled:       cfg.Audit.RawCapture.Enabled,
 					OnlyBlocked:   cfg.Audit.RawCapture.OnlyBlocked,
@@ -897,6 +1222,22 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 				},
 			})
 		}
+		if errors.Is(openErr, audit.ErrStorageBlocked) {
+			if store != nil {
+				openErr = errors.Join(openErr, store.Discard())
+			}
+			// A non-deferred enabled-capture runtime retains the discarded Store
+			// solely as a terminal Status witness for the storage-blocked root cause.
+			if deferAuditCandidateMutation || !cfg.Audit.RawCapture.Enabled {
+				store = nil
+			}
+		}
+		if deferAuditCandidateMutation && openErr != nil {
+			if store != nil {
+				openErr = errors.Join(openErr, store.Discard())
+			}
+			return nil, fmt.Errorf("prepare current-schema audit candidate without startup mutation: %w", openErr)
+		}
 		if !cfg.Audit.RawCapture.Enabled && !storageOpenPrevented && openErr != nil &&
 			(hadAuditArtifacts || errors.Is(openErr, audit.ErrRawCapturePurge)) {
 			if store != nil {
@@ -908,33 +1249,8 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 		// failures, so enforcement remains available. A proven disabled-capture
 		// purge failure is the exception above: publishing that runtime would hide
 		// retained review text while claiming the feature was disabled.
-		if store != nil && openErr == nil {
-			// SQLite may create the DB/WAL/SHM set during Open. Recheck the
-			// pre-open directory and any pre-existing artifacts, allow only those
-			// expected creations, then retain the post-open identities for every
-			// subsequent management readiness probe.
-			preOpenStorage := state.auditStorage
-			state.auditStorage = recheckAuditStorageWithInspector(preOpenStorage, int64(cfg.Audit.MaxDBMB)<<20, true, inspectStorage)
-			if state.auditStorage.preventsDatabaseOpen() &&
-				(preOpenStorage.PersistenceVerified || preOpenStorage.PersistenceReason != state.auditStorage.PersistenceReason) {
-				p.log("error", "cyber-abuse-guard audit persistence changed while SQLite opened", map[string]any{
-					"plugin": ID,
-					"code":   "audit_persistence_identity_changed",
-					"reason": state.auditStorage.PersistenceReason,
-				})
-			}
-			if state.auditStorage.preventsDatabaseOpen() {
-				if state.auditStorageGate != nil {
-					state.auditStorageGate.latch(state.auditStorage)
-				}
-				// This Store has not been published and has accepted no caller work.
-				// Close it now so a post-open identity/permission/capacity failure
-				// cannot leave a writable handle reachable by the runtime.
-				openErr = errors.Join(openErr, store.Discard())
-				store = nil
-			} else if state.auditStorageGate != nil {
-				state.auditStorageGate.arm(state.auditStorage)
-			}
+		if store != nil && openErr == nil && !store.DatabaseAvailable() {
+			state.auditStorageNeedsPostActivationCheck = true
 		}
 		state.audit = store
 	}
@@ -947,11 +1263,51 @@ func (p *Plugin) buildRuntime(rawConfig []byte, skipDisabledPurgeOnOpen bool) (*
 			state.persistence.writesBlocked.Store(true)
 			state.persistence.setError(errors.New("subject persistence requires verified audit storage"))
 			p.logSubjectPersistenceError("subject_persistence_storage_unverified")
+		} else if deferAuditCandidateMutation && state.audit != nil && !state.audit.DatabaseAvailable() {
+			// A deferred-create candidate has no database to read until after it is
+			// published and activated. Treat that lifecycle boundary as pending,
+			// not as a permanent restore failure that would block all later saves.
+			state.subjectPersistenceNeedsPostActivationRestore = true
 		} else {
 			state.restoreSubjectPersistence(p)
 		}
 	}
 	return state, nil
+}
+
+func (p *Plugin) bindActivatedAuditStorage(state *runtimeState) error {
+	if state == nil || state.audit == nil || !state.auditStorageNeedsPostActivationCheck {
+		return nil
+	}
+	if p.auditActivationHook != nil {
+		p.auditActivationHook(auditActivationAfterMaintenanceBeforeFinalBind)
+	}
+	inspectStorage := inspectAuditStorage
+	if p.auditStorageInspect != nil {
+		inspectStorage = p.auditStorageInspect
+	}
+	state.auditStorage = recheckAuditStorageWithInspector(
+		state.auditStorage,
+		int64(state.config.Audit.MaxDBMB)<<20,
+		true,
+		inspectStorage,
+	)
+	state.auditStorageNeedsPostActivationCheck = false
+	if state.auditStorage.preventsDatabaseOpen() {
+		state.auditStorageActivationDiscardRequired = true
+		if state.auditStorageGate != nil {
+			state.auditStorageGate.latch(state.auditStorage)
+		}
+		p.log("error", "cyber-abuse-guard audit storage changed while deferred activation opened SQLite", map[string]any{
+			"plugin": ID,
+			"code":   "audit_activation_identity_changed",
+		})
+		return auditStorageAccessError(state.auditStorage)
+	}
+	if state.auditStorageGate != nil {
+		state.auditStorageGate.arm(state.auditStorage)
+	}
+	return nil
 }
 
 func auditDatabaseArtifactsPresent(path string) (bool, error) {
@@ -1004,13 +1360,66 @@ func auditDatabasePathLocation(dataDir string) (string, error) {
 	return filepath.Join(dataDir, "events.db"), nil
 }
 
+func preflightAuditDataDirReconfigure(current, candidate config.Config) error {
+	if !current.Audit.Enabled || !candidate.Audit.Enabled {
+		return nil
+	}
+	currentPath, err := auditDatabasePathLocation(current.Audit.DataDir)
+	if err != nil {
+		return fmt.Errorf("resolve current audit.data_dir before reconfigure: %w", err)
+	}
+	candidatePath, err := auditDatabasePathLocation(candidate.Audit.DataDir)
+	if err != nil {
+		return fmt.Errorf("resolve candidate audit.data_dir before reconfigure: %w", err)
+	}
+	if !sameAuditStoragePath(currentPath, candidatePath) {
+		return errors.New("audit.data_dir changes require a plugin restart so candidate SQLite migration cannot precede configuration commit")
+	}
+	return nil
+}
+
+// preflightAuditRecoveryReconfigure is intentionally pathname-only. When no
+// active Store owns an existing audit database, a hot candidate must not open
+// it merely to inspect schema/journal mode: a read-write Ping can create or
+// update WAL/SHM sidecars. Recovery of such a database therefore requires a
+// restart through the normal startup gate. An empty, already existing data
+// directory remains eligible for post-Swap creation.
+func preflightAuditRecoveryReconfigure(current *runtimeState, candidate config.Config) error {
+	if !candidate.Audit.Enabled || current == nil || current.audit.IsActive() {
+		return nil
+	}
+	path, err := auditDatabasePathLocation(candidate.Audit.DataDir)
+	if err != nil {
+		return fmt.Errorf("resolve audit database recovery path: %w", err)
+	}
+	directory := filepath.Dir(path)
+	info, err := os.Lstat(directory)
+	if errors.Is(err, os.ErrNotExist) {
+		return errors.New("hot audit enablement requires an existing data directory; restart to create it through the startup storage gate")
+	}
+	if err != nil {
+		return fmt.Errorf("inspect audit recovery directory: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return errors.New("hot audit enablement requires a real existing data directory")
+	}
+	present, err := auditDatabaseArtifactsPresent(path)
+	if err != nil {
+		return fmt.Errorf("inspect audit recovery artifacts: %w", err)
+	}
+	if present {
+		return errors.New("an existing audit DB/WAL/SHM without an active Store requires restart; hot recovery will not open or inspect it")
+	}
+	return nil
+}
+
 func currentRegistration() registration {
 	formats := []string{"openai", "openai-response", "interactions", "codex-alpha-search", "openai-image", "openai-video", "claude", "gemini"}
 	return registration{
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata:      currentMetadata(),
 		Capabilities: registrationCapabilities{
-			// CPA v7.2.116 does not invoke RequestInterceptor for Alpha Search.
+			// CPA v7.2.137 does not invoke RequestInterceptor for Alpha Search.
 			// ModelRouter is registered only as that narrow compatibility entry;
 			// ordinary Host callbacks are rejected in callModelRouteRequest above.
 			ModelRouter:           true,
@@ -1020,7 +1429,11 @@ func currentRegistration() registration {
 			ExecutorOutputFormats: append([]string(nil), formats...),
 			RequestInterceptor:    true,
 			RequestLifecycle:      true,
-			ManagementAPI:         true,
+			// CAG inspects requests and terminal lifecycle state only. It must not
+			// join CPA's successful response or stream-chunk rewrite chains.
+			ResponseInterceptor:    false,
+			StreamChunkInterceptor: false,
+			ManagementAPI:          true,
 		},
 	}
 }
@@ -1078,7 +1491,7 @@ func (p *Plugin) Shutdown() {
 		p.lifecycleMu.Unlock()
 		return
 	}
-	// Publish one terminal enforcement policy before shutdown. CPA v7.2.116
+	// Publish one terminal enforcement policy before shutdown. CPA v7.2.137
 	// continues after interceptor RPC errors, so late callbacks must receive a
 	// successful direct response. An enforcing runtime remains fail-closed;
 	// observe/audit/off remains an intentional pass-through.
@@ -1149,6 +1562,12 @@ type counters struct {
 	incompleteRPCBodyLimit           atomic.Uint64
 	incompleteClassifierProofBudget  atomic.Uint64
 	executorBlocks                   atomic.Uint64
+	requestInterceptorBeforeCalls    atomic.Uint64
+	requestInterceptorAfterCalls     atomic.Uint64
+	requestLifecycleCompletions      atomic.Uint64
+	requestLifecycleErrors           atomic.Uint64
+	modelRouterCalls                 atomic.Uint64
+	executorCalls                    atomic.Uint64
 	managementTests                  atomic.Uint64
 	routerErrors                     atomic.Uint64
 	panicsRecovered                  atomic.Uint64
@@ -1177,6 +1596,10 @@ type counters struct {
 	totalTextLimitExhausted          atomic.Uint64
 	windowBoundaryReconstructions    atomic.Uint64
 	verifiedHardBlockUnderIncomplete atomic.Uint64
+	csamTextDetections               atomic.Uint64
+	csamTextBlocks                   atomic.Uint64
+	csamTextAudits                   atomic.Uint64
+	csamTextIncomplete               atomic.Uint64
 	coverageIncompleteReasons        coverageIncompleteCounters
 	coverageDimensions               coverageDimensionCounters
 }
@@ -1209,6 +1632,12 @@ func (c *counters) snapshot() map[string]uint64 {
 		"incomplete_classifier_proof_budget":   c.incompleteClassifierProofBudget.Load(),
 		"rpc_body_limit":                       c.incompleteRPCBodyLimit.Load(),
 		"executor_blocks":                      c.executorBlocks.Load(),
+		"rpc_request_before_calls":             c.requestInterceptorBeforeCalls.Load(),
+		"rpc_request_after_calls":              c.requestInterceptorAfterCalls.Load(),
+		"rpc_request_complete_calls":           c.requestLifecycleCompletions.Load(),
+		"rpc_request_complete_errors":          c.requestLifecycleErrors.Load(),
+		"rpc_model_route_calls":                c.modelRouterCalls.Load(),
+		"rpc_executor_calls":                   c.executorCalls.Load(),
 		"management_tests":                     c.managementTests.Load(),
 		"router_errors":                        c.routerErrors.Load(),
 		"panics_recovered":                     c.panicsRecovered.Load(),
@@ -1237,6 +1666,10 @@ func (c *counters) snapshot() map[string]uint64 {
 		"total_text_limit_exhausted":           c.totalTextLimitExhausted.Load(),
 		"window_boundary_reconstructions":      c.windowBoundaryReconstructions.Load(),
 		"verified_hard_block_under_incomplete": c.verifiedHardBlockUnderIncomplete.Load(),
+		"csam_text_detections":                 c.csamTextDetections.Load(),
+		"csam_text_blocks":                     c.csamTextBlocks.Load(),
+		"csam_text_audits":                     c.csamTextAudits.Load(),
+		"csam_text_incomplete":                 c.csamTextIncomplete.Load(),
 	}
 	for name, value := range c.coverageIncompleteSnapshot() {
 		snapshot[name] = value

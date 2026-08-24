@@ -9,7 +9,6 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
-	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 )
 
 func TestParseFailureAdmittedBeforeShutdownRetainsFailClosedPolicy(t *testing.T) {
@@ -86,20 +85,13 @@ func TestRouterPanicRetainsAdmissionPolicyAcrossReconfigure(t *testing.T) {
 	t.Cleanup(p.Shutdown)
 	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
 
-	originalLoadRules := p.loadRules
-	buildEntered := make(chan struct{})
-	releaseBuild := make(chan struct{})
-	var buildOnce sync.Once
-	p.loadRules = func() (*rules.RuleSet, error) {
-		buildOnce.Do(func() {
-			close(buildEntered)
-			<-releaseBuild
-		})
-		return originalLoadRules()
-	}
-
 	failureReported := make(chan struct{})
 	releaseFailureReport := make(chan struct{})
+	var releaseFailureReportOnce sync.Once
+	releaseFailureReporting := func() {
+		releaseFailureReportOnce.Do(func() { close(releaseFailureReport) })
+	}
+	defer releaseFailureReporting()
 	var reportOnce sync.Once
 	p.SetLogger(func(level, message string, fields map[string]any) {
 		if fields["code"] != "panic_recovered" {
@@ -113,6 +105,11 @@ func TestRouterPanicRetainsAdmissionPolicyAcrossReconfigure(t *testing.T) {
 
 	panicEntered := make(chan struct{})
 	releasePanic := make(chan struct{})
+	var releasePanicOnce sync.Once
+	releaseRouterPanic := func() {
+		releasePanicOnce.Do(func() { close(releasePanic) })
+	}
+	defer releaseRouterPanic()
 	p.pending.mu.Lock()
 	p.pending.now = func() time.Time {
 		close(panicEntered)
@@ -127,24 +124,59 @@ func TestRouterPanicRetainsAdmissionPolicyAcrossReconfigure(t *testing.T) {
 		routeDone <- routeCallResult{raw: raw, code: code}
 	}()
 	waitForSignal(t, panicEntered, "router panic barrier")
+	// The panic hook runs inside route. Prove that the admitted callback still
+	// owns the operation read lock here; an implementation that releases the
+	// barrier before completing the old-runtime callback must fail this check.
+	if p.opMu.TryLock() {
+		p.opMu.Unlock()
+		t.Fatal("router reached its panic barrier without retaining the operation read lock")
+	}
 
-	reconfigureDone := make(chan struct{})
+	reconfigurePayload := lifecyclePayload(t, "mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+	reconfigureStarted := make(chan struct{})
+	reconfigureDone := make(chan routeCallResult, 1)
 	go func() {
-		p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t, "mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
-		close(reconfigureDone)
+		close(reconfigureStarted)
+		raw, code := p.Call(pluginabi.MethodPluginReconfigure, reconfigurePayload)
+		reconfigureDone <- routeCallResult{raw: raw, code: code}
 	}()
-	waitForSignal(t, buildEntered, "reconfigure build barrier")
-	close(releaseBuild)
-	close(releasePanic)
+	waitForSignal(t, reconfigureStarted, "reconfigure start")
+	// Go's RWMutex blocks new readers once a writer is pending. Because the
+	// paused route above demonstrably holds a read lock, TryRLock failing is an
+	// observable proof that reconfigure has reached opMu.Lock and is queued
+	// behind the old callback; the test must not require it to cross that lock.
+	waitForCondition(t, "reconfigure queued behind admitted route", func() bool {
+		if !p.opMu.TryRLock() {
+			return true
+		}
+		p.opMu.RUnlock()
+		return false
+	})
+	select {
+	case result := <-reconfigureDone:
+		t.Fatalf("reconfigure crossed a paused old-runtime route: code=%d envelope=%s", result.code, result.raw)
+	default:
+	}
+
+	releaseRouterPanic()
 	waitForSignal(t, failureReported, "router failure reporting barrier")
 	// The panic has unwound the operation lock, so the reconfiguration can now
 	// complete before the failure response is encoded. The response must still
 	// use the balanced policy captured at callback admission.
-	waitForSignal(t, reconfigureDone, "reconfigure completion")
+	var reconfigureResult routeCallResult
+	select {
+	case reconfigureResult = <-reconfigureDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for reconfigure completion")
+	}
+	if reconfigureResult.code != 0 {
+		t.Fatalf("reconfigure ABI code=%d envelope=%s", reconfigureResult.code, reconfigureResult.raw)
+	}
+	decodeOKResult(t, reconfigureResult.raw, &map[string]any{})
 	if state := p.runtime.Load(); state == nil || state.config.Mode != config.ModeAudit {
 		t.Fatalf("reconfiguration did not publish audit mode: %#v", state)
 	}
-	close(releaseFailureReport)
+	releaseFailureReporting()
 
 	result := waitForRouteResult(t, routeDone)
 	assertSuccessfulSelfRoute(t, result, "cyber_abuse_guard_router_panic")

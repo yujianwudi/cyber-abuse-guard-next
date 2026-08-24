@@ -85,8 +85,8 @@ if [[ -z "$max_glibc" || "$(printf '%s\n' "$max_glibc" '2.34' | sort -V | tail -
 fi
 
 go_version="$($go_bin env GOVERSION)"
-if [[ "$go_version" != go1.26.4 ]]; then
-  printf 'release verification requires Go go1.26.4, got %s\n' "$go_version" >&2
+if [[ "$go_version" != go1.26.6 ]]; then
+  printf 'release verification requires Go go1.26.6, got %s\n' "$go_version" >&2
   exit 1
 fi
 go_build_info="$($go_bin version -m "$so")"

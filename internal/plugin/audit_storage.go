@@ -50,21 +50,26 @@ type auditStorageObjectIdentity struct {
 // through Add, so wall-clock adjustments cannot extend this interval.
 const auditStorageMinimumReprobeInterval = time.Second
 
+const auditStorageGateUnarmedReason = "storage_gate_unarmed"
+
+const auditStoragePriorStoreCloseFailedReason = "prior_store_close_failed"
+
 // auditStorageGate binds every production storage access to the identity
 // captured after SQLite Open. The first failed live verification is permanent
 // for this runtime: a later probe cannot silently turn writes back on. An
 // explicit reconfigure/reopen constructs a new gate and is the only recovery
 // boundary.
 type auditStorageGate struct {
-	mu          sync.Mutex
-	baseline    auditStorageVerification
-	current     auditStorageVerification
-	maxBytes    int64
-	inspect     func(string, bool, bool, int64) auditStorageVerification
-	now         func() time.Time
-	nextProbeAt time.Time
-	armed       bool
-	latched     bool
+	mu                               sync.Mutex
+	baseline                         auditStorageVerification
+	current                          auditStorageVerification
+	maxBytes                         int64
+	inspect                          func(string, bool, bool, int64) auditStorageVerification
+	now                              func() time.Time
+	nextProbeAt                      time.Time
+	armed                            bool
+	latched                          bool
+	priorStoreSidecarsPendingRelease bool
 }
 
 func newAuditStorageGate(
@@ -72,13 +77,60 @@ func newAuditStorageGate(
 	maxBytes int64,
 	inspect func(string, bool, bool, int64) auditStorageVerification,
 ) *auditStorageGate {
-	return &auditStorageGate{
+	gate := &auditStorageGate{
 		baseline: baseline,
-		current:  baseline,
 		maxBytes: maxBytes,
 		inspect:  inspect,
 		now:      time.Now,
 	}
+	if baseline.preventsDatabaseOpen() {
+		gate.current = baseline
+		gate.armed = true
+		gate.latched = true
+		return gate
+	}
+	gate.current = baseline
+	gate.current.State = "unarmed"
+	gate.current.PersistenceVerified = false
+	gate.current.PersistenceReason = auditStorageGateUnarmedReason
+	return gate
+}
+
+// authorizePriorStoreSidecarRelease signs the single hot-reconfiguration
+// boundary where a successfully flushed/checkpointed/closed prior Store may
+// have removed its bound WAL/SHM objects. Candidate construction must never
+// call this method: the authorization exists only after CloseContext returns
+// nil. Directory, mount, database, and sidecar replacement identities remain
+// strict, and activationAccess consumes the authorization exactly once.
+func (gate *auditStorageGate) authorizePriorStoreSidecarRelease() {
+	if gate == nil {
+		return
+	}
+	gate.mu.Lock()
+	gate.priorStoreSidecarsPendingRelease = true
+	gate.mu.Unlock()
+}
+
+// latchPriorStoreCloseFailure prevents a prepared candidate from opening or
+// mutating SQLite after the prior Store failed its bounded durability boundary.
+// The candidate remains available as a degraded status witness, but it cannot
+// turn a close/checkpoint timeout into a fresh healthy baseline.
+func (gate *auditStorageGate) latchPriorStoreCloseFailure() auditStorageVerification {
+	if gate == nil {
+		return disabledAuditStorageVerification()
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	status := gate.baseline
+	status.State = "close_failed"
+	status.PersistenceVerified = false
+	status.PersistenceReason = auditStoragePriorStoreCloseFailedReason
+	gate.current = status
+	gate.nextProbeAt = time.Time{}
+	gate.armed = true
+	gate.latched = true
+	gate.priorStoreSidecarsPendingRelease = false
+	return status
 }
 
 func (gate *auditStorageGate) arm(baseline auditStorageVerification) {
@@ -90,7 +142,8 @@ func (gate *auditStorageGate) arm(baseline auditStorageVerification) {
 	gate.current = baseline
 	gate.nextProbeAt = time.Time{}
 	gate.armed = true
-	gate.latched = baseline.blocksOperationalReadiness()
+	gate.latched = baseline.preventsDatabaseOpen()
+	gate.priorStoreSidecarsPendingRelease = false
 	gate.mu.Unlock()
 }
 
@@ -103,6 +156,7 @@ func (gate *auditStorageGate) latch(status auditStorageVerification) {
 	gate.nextProbeAt = time.Time{}
 	gate.armed = true
 	gate.latched = true
+	gate.priorStoreSidecarsPendingRelease = false
 	gate.mu.Unlock()
 }
 
@@ -112,6 +166,28 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 	}
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
+	return gate.verificationLocked()
+}
+
+// latchedBeforeClose reports whether the runtime had already exposed a
+// permanent storage failure before a reconfiguration began closing it. That
+// distinction lets an explicit recovery reconfigure discard an already-failed
+// Store, while a failure discovered during this close cannot be laundered into
+// a healthy candidate.
+func (gate *auditStorageGate) latchedBeforeClose() bool {
+	if gate == nil {
+		return false
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	return gate.latched
+}
+
+// verificationLocked returns a live or cached verdict while the caller holds
+// gate.mu. Keeping the access decision under the same lock prevents a
+// concurrent arm or latch transition from pairing one status with another
+// gate state.
+func (gate *auditStorageGate) verificationLocked() auditStorageVerification {
 	if gate.latched || !gate.armed {
 		return gate.current
 	}
@@ -124,7 +200,7 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 	}
 	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, false, gate.inspect)
 	gate.current = fresh
-	if fresh.blocksOperationalReadiness() {
+	if fresh.preventsDatabaseOpen() {
 		gate.latched = true
 	} else {
 		// Start the minimum interval after the potentially slow live probe. This
@@ -135,10 +211,109 @@ func (gate *auditStorageGate) verification() auditStorageVerification {
 }
 
 func (gate *auditStorageGate) access() error {
-	status := gate.verification()
-	if !status.blocksOperationalReadiness() {
+	if gate == nil {
+		return errors.New("persistent audit storage gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	status := gate.verificationLocked()
+	blocked := !gate.armed || gate.latched || status.preventsDatabaseOpen()
+	if !blocked {
 		return nil
 	}
+	return auditStorageAccessError(status)
+}
+
+// activationAccess is deliberately independent from verification's one-second
+// write-hot-path cache. It is called only after runtime Swap and before SQLite
+// open/create, and it never arms the gate: the opened DB/WAL/SHM identity must
+// still be captured by bindAfterOpen.
+func (gate *auditStorageGate) activationAccess() error {
+	if gate == nil {
+		return errors.New("persistent audit storage activation gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.latched {
+		return auditStorageAccessError(gate.current)
+	}
+	fresh := recheckAuditStorageWithInspectorTransition(
+		gate.baseline,
+		gate.maxBytes,
+		false,
+		gate.priorStoreSidecarsPendingRelease,
+		gate.inspect,
+	)
+	gate.current = fresh
+	gate.nextProbeAt = time.Time{}
+	if fresh.preventsDatabaseOpen() {
+		gate.armed = true
+		gate.latched = true
+		gate.priorStoreSidecarsPendingRelease = false
+		return auditStorageAccessError(fresh)
+	}
+	if gate.priorStoreSidecarsPendingRelease {
+		// Normalize the baseline after the prior Store has closed but before the
+		// candidate opens SQLite. bindAfterOpen may then admit only absent-to-new
+		// sidecar creation; a present replacement is never treated as lifecycle.
+		gate.baseline = fresh
+		gate.priorStoreSidecarsPendingRelease = false
+	}
+	gate.armed = false
+	return nil
+}
+
+// bindAfterOpen captures the exact artifact identities produced by SQLite open
+// before migrations or cleanup execute. It also bypasses the cached probe and
+// is the sole transition from an unarmed candidate to an admission-capable
+// Store.
+func (gate *auditStorageGate) bindAfterOpen() (auditStorageVerification, error) {
+	if gate == nil {
+		return disabledAuditStorageVerification(), errors.New("persistent audit storage bind gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if gate.latched {
+		return gate.current, auditStorageAccessError(gate.current)
+	}
+	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, true, gate.inspect)
+	gate.current = fresh
+	gate.nextProbeAt = time.Time{}
+	if fresh.preventsDatabaseOpen() {
+		gate.armed = true
+		gate.latched = true
+		return fresh, auditStorageAccessError(fresh)
+	}
+	gate.baseline = fresh
+	gate.armed = true
+	gate.latched = false
+	gate.priorStoreSidecarsPendingRelease = false
+	return fresh, nil
+}
+
+// readAccess performs a fresh probe for every sensitive read. A successful
+// write-cache verdict is intentionally irrelevant; a failure permanently
+// latches this runtime until reconfigure/reopen.
+func (gate *auditStorageGate) readAccess() error {
+	if gate == nil {
+		return errors.New("persistent audit storage read gate is unavailable")
+	}
+	gate.mu.Lock()
+	defer gate.mu.Unlock()
+	if !gate.armed || gate.latched {
+		return auditStorageAccessError(gate.current)
+	}
+	fresh := recheckAuditStorageWithInspector(gate.baseline, gate.maxBytes, false, gate.inspect)
+	gate.current = fresh
+	if fresh.preventsDatabaseOpen() {
+		gate.latched = true
+		gate.nextProbeAt = time.Time{}
+		return auditStorageAccessError(fresh)
+	}
+	return nil
+}
+
+func auditStorageAccessError(status auditStorageVerification) error {
 	reason := status.PersistenceReason
 	if reason == "" {
 		reason = "unverified"
@@ -182,7 +357,7 @@ func (status auditStorageVerification) hasUnsafeDatabasePath() bool {
 		"unsafe_storage_owner", "unsafe_storage_permissions", "storage_open_failed",
 		"directory_identity_changed", "mount_identity_changed",
 		"database_identity_changed", "wal_identity_changed", "shm_identity_changed",
-		"filesystem_type_mismatch":
+		"filesystem_type_mismatch", auditStoragePriorStoreCloseFailedReason:
 		return true
 	case "path_not_absolute":
 		return status.PersistenceExpected
@@ -223,6 +398,22 @@ func recheckAuditStorageWithInspector(
 	allowNewArtifacts bool,
 	inspect func(string, bool, bool, int64) auditStorageVerification,
 ) auditStorageVerification {
+	return recheckAuditStorageWithInspectorTransition(
+		baseline,
+		maxBytes,
+		allowNewArtifacts,
+		false,
+		inspect,
+	)
+}
+
+func recheckAuditStorageWithInspectorTransition(
+	baseline auditStorageVerification,
+	maxBytes int64,
+	allowNewArtifacts bool,
+	allowPriorStoreSidecarRelease bool,
+	inspect func(string, bool, bool, int64) auditStorageVerification,
+) auditStorageVerification {
 	fresh := inspect(
 		baseline.DatabasePath,
 		baseline.PathSource == "explicit",
@@ -232,7 +423,12 @@ func recheckAuditStorageWithInspector(
 	if fresh.hasUnsafeDatabasePath() {
 		return fresh
 	}
-	if reason := changedAuditStorageIdentity(baseline.identity, fresh.identity, allowNewArtifacts); reason != "" {
+	if reason := changedAuditStorageIdentity(
+		baseline.identity,
+		fresh.identity,
+		allowNewArtifacts,
+		allowPriorStoreSidecarRelease,
+	); reason != "" {
 		fresh.State = "identity_changed"
 		fresh.PersistenceVerified = false
 		fresh.PersistenceReason = reason
@@ -240,7 +436,12 @@ func recheckAuditStorageWithInspector(
 	return fresh
 }
 
-func changedAuditStorageIdentity(baseline, fresh auditStorageIdentity, allowNewArtifacts bool) string {
+func changedAuditStorageIdentity(
+	baseline,
+	fresh auditStorageIdentity,
+	allowNewArtifacts bool,
+	allowPriorStoreSidecarRelease bool,
+) string {
 	if baseline.directory.present && !sameAuditStorageObject(baseline.directory, fresh.directory) {
 		return "directory_identity_changed"
 	}
@@ -248,15 +449,19 @@ func changedAuditStorageIdentity(baseline, fresh auditStorageIdentity, allowNewA
 		return "mount_identity_changed"
 	}
 	for _, candidate := range []struct {
-		name     string
-		baseline auditStorageObjectIdentity
-		fresh    auditStorageObjectIdentity
+		name              string
+		baseline          auditStorageObjectIdentity
+		fresh             auditStorageObjectIdentity
+		priorStoreSidecar bool
 	}{
 		{name: "database_identity_changed", baseline: baseline.database, fresh: fresh.database},
-		{name: "wal_identity_changed", baseline: baseline.wal, fresh: fresh.wal},
-		{name: "shm_identity_changed", baseline: baseline.shm, fresh: fresh.shm},
+		{name: "wal_identity_changed", baseline: baseline.wal, fresh: fresh.wal, priorStoreSidecar: true},
+		{name: "shm_identity_changed", baseline: baseline.shm, fresh: fresh.shm, priorStoreSidecar: true},
 	} {
 		if candidate.baseline.present {
+			if allowPriorStoreSidecarRelease && candidate.priorStoreSidecar && !candidate.fresh.present {
+				continue
+			}
 			if !sameAuditStorageObject(candidate.baseline, candidate.fresh) {
 				return candidate.name
 			}

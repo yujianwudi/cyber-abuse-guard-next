@@ -490,11 +490,13 @@ func sameSignalOccurrenceIdentity(left, right signalOccurrence) bool {
 func isHardCompactSeparator(text []rune, index int) bool {
 	r := text[index]
 	if r == compactHardBoundary {
-		// Preserve a tightly bounded reconstruction path for one-character
-		// tokens split across lines or provider content blocks (for example,
-		// s\nt\ne\na\nl). Ordinary multi-character clauses still reset here, so
-		// evidence cannot cross normal message or sentence boundaries.
-		return !singleRuneTokensAround(text, index)
+		// Preserve a tightly bounded reconstruction path for lexical fragments
+		// split across lines or provider content blocks (for example, ste\nal,
+		// 窃\n取, or s\nt\ne\na\nl). The normalizer only puts this marker inside
+		// one classifier input view; role/field/provenance grouping remains the
+		// caller's boundary. Fragment count, length, total runes, and script are
+		// bounded below so ordinary clauses still reset matcher state.
+		return !boundedLexicalFragmentsAround(text, index)
 	}
 	if unicode.IsSpace(r) || isCompactRune(r) || r == '_' {
 		return false
@@ -510,6 +512,158 @@ func isHardCompactSeparator(text []rune, index int) bool {
 	default:
 		return false
 	}
+}
+
+const (
+	maxCompactReconstructionFragments     = 8
+	maxCompactReconstructionFragmentRunes = 12
+	maxCompactReconstructionRunes         = 24
+	maxCompactReconstructionLongPairRunes = 10
+)
+
+type compactLexicalClass uint8
+
+const (
+	compactLexicalNone compactLexicalClass = iota
+	compactLexicalASCII
+	compactLexicalHan
+)
+
+// boundedLexicalFragmentsAround admits only an adjacent, homogeneous word
+// split. It deliberately excludes digits, mixed scripts, surrounding spaces,
+// and chains long enough to resemble separately authored clauses.
+func boundedLexicalFragmentsAround(text []rune, boundary int) bool {
+	if boundary <= 0 || boundary+1 >= len(text) ||
+		!isCompactRune(text[boundary-1]) || !isCompactRune(text[boundary+1]) {
+		return false
+	}
+
+	class := compactLexicalClassOf(text[boundary-1])
+	if class == compactLexicalNone || compactLexicalClassOf(text[boundary+1]) != class {
+		return false
+	}
+	leftLength, _, leftOK := compactFragmentBackward(text, boundary-1, class)
+	rightLength, _, rightOK := compactFragmentForward(text, boundary+1, class)
+	if !leftOK || !rightOK || !compactFragmentPairLengthsAllowed(leftLength, rightLength) {
+		return false
+	}
+	fragments := 0
+	total := 0
+	for start := boundary - 1; start >= 0; {
+		length, next, ok := compactFragmentBackward(text, start, class)
+		if !ok {
+			return false
+		}
+		if class == compactLexicalASCII && compactFragmentIsIndependentLexeme(text[next+1:start+1]) {
+			return false
+		}
+		fragments++
+		total += length
+		if fragments > maxCompactReconstructionFragments || total > maxCompactReconstructionRunes {
+			return false
+		}
+		if next < 0 || !isCompactReconstructionBoundary(text[next]) {
+			break
+		}
+		start = next - 1
+	}
+	for start := boundary + 1; start < len(text); {
+		length, next, ok := compactFragmentForward(text, start, class)
+		if !ok {
+			return false
+		}
+		if class == compactLexicalASCII && compactFragmentIsIndependentLexeme(text[start:next]) {
+			return false
+		}
+		fragments++
+		total += length
+		if fragments > maxCompactReconstructionFragments || total > maxCompactReconstructionRunes {
+			return false
+		}
+		if next >= len(text) || !isCompactReconstructionBoundary(text[next]) {
+			break
+		}
+		start = next + 1
+	}
+	return fragments >= 2
+}
+
+// compactFragmentIsIndependentLexeme rejects words that are valid standalone
+// clause or structured-metadata tokens. Joining a newline beside one of these
+// words can erase a real owner boundary (for example, "text\nCreate" around a
+// code fence or "family\nCreate" in an inert inventory) and let defensive
+// context leak into an independently actionable directive.
+func compactFragmentIsIndependentLexeme(fragment []rune) bool {
+	switch len(fragment) {
+	case 2:
+		return directiveRunesEqualString(fragment, "so")
+	case 3:
+		return directiveRunesEqualString(fragment, "and") ||
+			directiveRunesEqualString(fragment, "but") ||
+			directiveRunesEqualString(fragment, "now") ||
+			directiveRunesEqualString(fragment, "yet")
+	case 4:
+		return directiveRunesEqualString(fragment, "plus") ||
+			directiveRunesEqualString(fragment, "then") ||
+			directiveRunesEqualString(fragment, "text")
+	case 5:
+		return directiveRunesEqualString(fragment, "index")
+	case 6:
+		return directiveRunesEqualString(fragment, "create") ||
+			directiveRunesEqualString(fragment, "family")
+	case 8:
+		return directiveRunesEqualString(fragment, "moreover")
+	case 9:
+		return directiveRunesEqualString(fragment, "whereupon")
+	default:
+		return false
+	}
+}
+
+func compactFragmentPairLengthsAllowed(leftLength, rightLength int) bool {
+	// Keep the broad path limited to a short fragment on at least one side, but
+	// admit the exact 5+5 split used by ten-rune words such as exfiltrate. Larger
+	// pairs are much more likely to be independent line- or block-level words.
+	return leftLength <= 4 || rightLength <= 4 ||
+		leftLength+rightLength <= maxCompactReconstructionLongPairRunes
+}
+
+func isCompactReconstructionBoundary(r rune) bool {
+	return r == compactHardBoundary || r == compactJoinedBoundary
+}
+
+func compactFragmentBackward(text []rune, start int, class compactLexicalClass) (length, next int, ok bool) {
+	next = start
+	for next >= 0 && isCompactRune(text[next]) {
+		if compactLexicalClassOf(text[next]) != class || length == maxCompactReconstructionFragmentRunes {
+			return 0, 0, false
+		}
+		length++
+		next--
+	}
+	return length, next, length > 0
+}
+
+func compactFragmentForward(text []rune, start int, class compactLexicalClass) (length, next int, ok bool) {
+	next = start
+	for next < len(text) && isCompactRune(text[next]) {
+		if compactLexicalClassOf(text[next]) != class || length == maxCompactReconstructionFragmentRunes {
+			return 0, 0, false
+		}
+		length++
+		next++
+	}
+	return length, next, length > 0
+}
+
+func compactLexicalClassOf(r rune) compactLexicalClass {
+	if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' {
+		return compactLexicalASCII
+	}
+	if unicode.Is(unicode.Han, r) {
+		return compactLexicalHan
+	}
+	return compactLexicalNone
 }
 
 func singleRuneTokensAround(text []rune, index int) bool {

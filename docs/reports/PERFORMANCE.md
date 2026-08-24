@@ -1,16 +1,16 @@
-# Performance Report — Round 10 source status and historical development evidence
+# Performance Report — Round 13 source status and historical development evidence
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
-Last updated: 2026-08-08 (Asia/Shanghai)
+Last updated: 2026-08-12 (Asia/Shanghai)
 
 ## Round 10 bounded Linux concurrency runner
 
 `make round10-performance` is the dedicated Round 10 wall-clock lane. It
-refuses any platform other than Linux amd64 with Go 1.26.4 and runs separately
+refuses any platform other than Linux amd64 with Go 1.26.6 and runs separately
 from unit, race, and fuzz steps. The runner uses only repository-owned public
 synthetic fixtures: ordinary traffic, a 32 KiB five-profile surrogate with a
 historical-tool activation, a 64 KiB Codex-all long surrogate with a
@@ -42,6 +42,64 @@ runner-profile-bound overload baseline exists. Missing, duplicate, or unexpected
 workload matrices fail closed. On a runner with at least 16 effective CPUs, all
 absolute gates still include c=16. This development runner remains explicitly
 non-equivalent to a production-capacity SLO.
+
+### Selected 2026-08-12 classifier-policy-v20 local source rerun
+
+This is the only selected current dirty-source performance artifact; all
+earlier v18 runs are historical and unselected. The rerun is bound to
+`classifier-policy-v20` /
+`888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd`.
+On WSL Linux amd64 with Go 1.26.6 and 20 visible CPUs, the selected
+`make round10-performance` run passed. Its transient JSON SHA-256 was
+`d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c`;
+the temporary report was deleted after recording these metrics. The measured
+tree remains `NOT_PROVIDED_DIRTY_WORKTREE`.
+
+| Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
+|---|---:|---|
+| ordinary | worst p95 `2.221072 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `107.383314 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `47.629570 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `8.709887/9.522366 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `1.115742 ms` at c=16; sampled queue max `28/256` | failure/panic count 0: `PASS` |
+
+All 2,304 bounded operations reported zero failures and zero recovered panics.
+The accompanying 4 KiB / 64-token proof-only benchmark reported exactly
+`64.00 classify_calls/op` in three independent one-iteration samples
+(`129.507384-130.874618 ms/op`). The shared fail-active ceiling is explicitly
+`128` classifications (`2 * 64`); the worst-case accepted fixture consumes 64
+and the checked regression rejects a one-call-short budget.
+The fixed-workload p99 regression baseline, native CPA Host/container overhead,
+paired throughput, 60-minute RSS lane, and second-machine performance evidence
+remain `NOT_PROVIDED`; this local source-only PASS is not a release or
+production-capacity result.
+
+### Round 13 pre-mixed-script-fix classifier-policy-v16 local source result
+
+This retained pre-fix run is bound to `classifier-policy-v16` /
+`2ad85748dd208ae2fd2eacc1dfe9827fc5fd9448434419c713f32b7334b7ba38`.
+The 2026-08-10 isolated WSL Linux amd64 / Go 1.26.4 working-tree run
+completed `make round6-benchmark` in 195.895 seconds and the Round 10 gate in
+21.934 seconds. The 14,503-byte Round 10 JSON has SHA-256
+`98d2bab0f30ca64ece65e732b08974672ad3b33e39bbcc3e24541a68fbaa147a`.
+It records source commit `a672ab31eabed9ca32c90ad110a9f47b3ae407c6`, committed
+head tree `9aee6ced9cacf5ed899c658ed8d8ed422580cee8`, and deliberately marks
+`measured_tree=NOT_PROVIDED_DIRTY_WORKTREE`; it is source-development evidence,
+not an exact commit, CPA Host, container, Provider, or production result.
+
+| Repository-owned synthetic workload | Worst measured percentile | Absolute gate |
+|---|---:|---|
+| ordinary | worst p95 `3.253807 ms` at c=16 | p95 <= 10 ms: `PASS` |
+| five-repository surrogate activation | p95 `107.621719 ms` at c=16 | p95 <= 250 ms: `PASS` |
+| Codex-all surrogate long | p95 `48.027130 ms` at c=16 | p95 <= 600 ms: `PASS` |
+| public synthetic | p95/p99 `9.326911/9.775005 ms` at c=16 | p95 <= 150 ms and p99 <= 300 ms: `PASS` |
+| SQLite `Enqueue` + `Flush` | p95 `1.447351 ms` at c=16; sampled queue max `30/256` | failure/panic count 0: `PASS` |
+
+All 2,304 bounded operations reported zero failures and zero recovered panics. The
+fixed-workload p99 regression baseline, native CPA Host/container overhead,
+throughput ratio, 60-minute RSS lane, and second-machine evidence remain
+`NOT_PROVIDED`; this pre-v18 run provides no classifier-policy-v18, release, or
+production performance PASS.
 
 ### Frozen pre-v7.2.113 classifier-policy-v10 local source result
 

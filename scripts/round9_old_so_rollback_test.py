@@ -14,6 +14,7 @@ import unittest
 
 from round9_old_so_rollback import (
     GateError,
+    CURRENT_SCHEMA_VERSION,
     HISTORICAL_REPOSITORY,
     HISTORICAL_SOURCE_CAPSULE,
     HISTORICAL_SOURCE_CAPSULE_SHA256,
@@ -106,6 +107,9 @@ class RollbackSourceContractTests(unittest.TestCase):
 
         self.assertIn(HISTORICAL_REPOSITORY, documentation)
         self.assertIn(HISTORICAL_SOURCE_CAPSULE, documentation)
+        self.assertIn("current schema v7", documentation)
+        self.assertIn("--expected-version \"$current_schema_version\"", script)
+        self.assertIn(f"CURRENT_SCHEMA_VERSION = {CURRENT_SCHEMA_VERSION}", (root / "scripts" / "round9_old_so_rollback.py").read_text(encoding="utf-8"))
         self.assertIn("never fetches the predecessor repository", documentation)
         self.assertIn("A cold Go", documentation)
         self.assertIn("GOPROXY=off", documentation)

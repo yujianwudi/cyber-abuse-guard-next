@@ -22,6 +22,10 @@ historical_classifier_sha256='ea8c4dcfacacc6478f86fd2ca5de96d667ae98f2fc6ff0c83d
 historical_ruleset='1.0.9'
 historical_ruleset_sha256='a3de344d3f6dc8eea86d946a823996494d4d297c41efcc6346a6ef757f263a7d'
 fixed_migration_time='2026-07-24T00:00:00Z'
+# Keep the shell-side probe bound to the current audit schema. The Go fixture
+# independently checks audit.SchemaVersion, while the Python helper validates
+# this resulting identity and fails closed if either side drifts.
+current_schema_version='7'
 
 for command_name in tar sha256sum awk sort grep find file readelf stat install python3 "$go_bin"; do
   command -v "$command_name" >/dev/null 2>&1 || {
@@ -37,8 +41,8 @@ done
   echo 'Round 9 old-SO rollback gate requires GOOS=linux GOARCH=amd64' >&2
   exit 1
 }
-[[ "$($go_bin env GOVERSION)" == go1.26.4 ]] || {
-  printf 'Round 9 old-SO rollback gate requires Go go1.26.4, got %s\n' \
+[[ "$($go_bin env GOVERSION)" == go1.26.6 ]] || {
+  printf 'Round 9 old-SO rollback gate requires Go go1.26.6, got %s\n' \
     "$($go_bin env GOVERSION)" >&2
   exit 1
 }
@@ -172,12 +176,12 @@ python3 -B ./scripts/round9_old_so_rollback.py seed-v5 --database "$v5_database"
 GOWORK=off "$go_bin" -C "$root" run -tags=sqlite_omit_load_extension \
   ./cmd/round9-old-so-rollback-fixture \
   --sandbox-root "$work_dir" --database "$v5_database" --now "$fixed_migration_time" \
-  > "$work_dir/migration-v6.json"
-python3 -B ./scripts/round9_old_so_rollback.py inspect --database "$v5_database" --expected-version 6 \
-  --output "$work_dir/inspect-v6.json"
+  > "$work_dir/migration-current.json"
+python3 -B ./scripts/round9_old_so_rollback.py inspect --database "$v5_database" --expected-version "$current_schema_version" \
+  --output "$work_dir/inspect-current.json"
 for suffix in -wal -shm; do
   [[ ! -e "$v5_database$suffix" && ! -L "$v5_database$suffix" ]] || {
-    echo 'schema-v6 fixture retained a SQLite sidecar after the migration process exited' >&2
+    echo 'current-schema fixture retained a SQLite sidecar after the migration process exited' >&2
     exit 1
   }
 done
@@ -194,12 +198,12 @@ manifest="$backup.manifest.json"
 python3 -B ./scripts/round9_old_so_rollback.py verify-backup --backup "$backup" --manifest "$manifest" \
   --output "$work_dir/manifest.json"
 
-v6_probe_dir="$work_dir/v6-old-so-probe"
-mkdir -m 0700 "$v6_probe_dir"
-install -m 0600 "$v5_database" "$v6_probe_dir/events.db"
-python3 -B ./scripts/round9_old_so_rollback.py old-so --so "$historical_so" --data-dir "$v6_probe_dir" \
-  --expect reject-v6 --expected-version "$historical_version" \
-  --output "$work_dir/reject-v6.json"
+current_probe_dir="$work_dir/current-schema-old-so-probe"
+mkdir -m 0700 "$current_probe_dir"
+install -m 0600 "$v5_database" "$current_probe_dir/events.db"
+python3 -B ./scripts/round9_old_so_rollback.py old-so --so "$historical_so" --data-dir "$current_probe_dir" \
+  --expect reject-current --expected-version "$historical_version" \
+  --output "$work_dir/reject-current.json"
 
 restore_dir="$work_dir/restored-v5"
 mkdir -m 0700 "$restore_dir"
@@ -217,9 +221,9 @@ case "$report_path" in
 esac
 python3 -B ./scripts/round9_old_so_rollback.py report \
   --create-result "$work_dir/create-v5.json" \
-  --migration-result "$work_dir/migration-v6.json" \
+  --migration-result "$work_dir/migration-current.json" \
   --manifest-result "$work_dir/manifest.json" \
-  --rejection-result "$work_dir/reject-v6.json" \
+  --rejection-result "$work_dir/reject-current.json" \
   --restore-result "$work_dir/restore-v5.json" \
   --acceptance-result "$work_dir/accept-v5.json" \
   --repository "$historical_repository" \
@@ -231,7 +235,7 @@ python3 -B ./scripts/round9_old_so_rollback.py report \
   --classifier-sha256 "$historical_classifier_sha256" \
   --ruleset "$historical_ruleset" \
   --ruleset-sha256 "$historical_ruleset_sha256" \
-  --go-runtime go1.26.4 \
+  --go-runtime go1.26.6 \
   --source-capsule "$historical_source_capsule_relative" \
   --source-capsule-sha256 "$historical_source_capsule_sha256" \
   --source-file-count "$historical_source_file_count" \

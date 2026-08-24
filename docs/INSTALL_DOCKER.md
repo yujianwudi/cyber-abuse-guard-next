@@ -1,9 +1,40 @@
 # Docker Sandbox Installation, Staged Rollout, Rollback, and Cleanup
 
+> [!IMPORTANT]
+> For Round 14, substitute only an exact Linux amd64 candidate bound to CPA
+> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3.
+> The Round 12/13 commands and hashes retained below are historical; they must
+> not be used as current artifacts or PASS evidence. Production deployment
+> remains outside this candidate runbook.
+
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
+
+The official CPA archive identity is 21,072,175 bytes / SHA-256
+`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
+the contained binary SHA-256 is
+`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+Round 13 v7.2.125/schema 2 and every older PASS remain historical and
+non-transferable.
+
+> [!WARNING]
+> Every `/v1/realtime*` route currently bypasses CAG `RequestInterceptor`,
+> `ModelRouter`, and request lifecycle. It is **OUT_OF_SCOPE / UNPROTECTED /
+> CAG_NOT_VISIBLE**. This installation protects only registered callback paths
+> such as chat and Responses; do not advertise all-traffic coverage.
+
+## Round 14 active installation contract
+
+All current installation and validation work must use the exact Linux amd64
+candidate for CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1,
+and RPC schema 3. The frozen Round 12 procedure below is retained for audit
+history only; do not execute its v7.2.124/schema-2 commands against the active
+candidate. Current Host evidence must load the v7.2.137 candidate bytes, prove
+the schema-3 envelope, and keep `/v1/realtime*` explicitly outside CAG coverage.
+
+## Frozen historical Round 12 installation body
 
 ## Current source status
 
@@ -12,8 +43,11 @@ plugin release, production approval, or Balanced-mode admission is implied.
 Historical `v0.15` and `v0.16-rc.*` assets are immutable evidence only; do not
 reuse or relabel them as a build of the current source.
 
-Linux amd64 and CPA v7.2.116
-(`a88197f845c979132c8978ea223c6af05cc81536`) are the only compatibility target.
+The frozen Round 12 historical lane used Linux amd64 and CPA v7.2.124
+(`197f520426374e514218ed155933ac546c98d345`) as its compatibility target.
+C ABI 1 and RPC schema 2 were unchanged in that historical lane. The required upstream Linux amd64
+asset SHA-256 is
+`bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`.
 Runtime validation must use an isolated counted-Mock upstream with no real
 Provider or account pool. A sandbox PASS is engineering evidence only and does
 not replace independent source review or the external admission policy.
@@ -25,8 +59,8 @@ the candidate, and never include a capture database in CI or release assets.
 See [RELEASE_POLICY.md](RELEASE_POLICY.md) for the frozen release-policy
 snapshot. [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md) and
 [ROUND9_EXECUTION_RECORD.md](reports/ROUND9_EXECUTION_RECORD.md) are historical
-CPA v7.2.113 references, not the v7.2.116 execution protocol. Any v7.2.116 Host
-run must create a newly versioned evidence lane rather than rewriting those
+CPA v7.2.113 references, not the frozen v7.2.124 execution protocol. Any
+historical v7.2.124 Host run had to create a newly versioned evidence lane rather than rewriting those
 records. Later v0.15/Round 8 command sequences are also historical operations
 references unless a future release-specific document explicitly supersedes
 them.
@@ -53,7 +87,8 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
 
 ## Preconditions
 
-- Run the candidate bytes against CPA v7.2.116 built with `CGO_ENABLED=1`.
+- For the frozen historical procedure, run the candidate bytes against CPA
+  v7.2.124 built with `CGO_ENABLED=1`.
   Assets labelled `_no-plugin`
   cannot load native plugins. Source/compile compatibility does not substitute
   for loading the candidate `.so`. Earlier CPA checks are historical
@@ -71,6 +106,12 @@ identifies only YAML Cyber Abuse assets; it does not include the Go
   obsolete `antigravity-coding-filter` after verifying this plugin. Routers at
   the same priority run by plugin ID ascending, so also inspect same-priority
   IDs for a lexicographically earlier handler.
+- Exercise Multi-Agent v2 on `/v1/responses`. In the frozen historical lane CPA
+  v7.2.124 rewrites tool
+  definitions before `RequestInterceptor`, so the Host evidence must bind the
+  rewritten schema-2 envelope and prove tool-schema inertness, tool-call/result
+  provenance, and allow/block behavior. Historical v7.2.116 CI,
+  second-machine, and five-repository data do not satisfy this precondition.
 - Only one `cyber-abuse-guard` `.so` may exist in the active plugin directory.
   CPA ABI v1 cannot enumerate ordering or detect duplicate versions for the
   plugin itself.
@@ -337,11 +378,12 @@ plugins:
 
 `log_original_text: true` is always rejected. There is no debug override.
 
-For CPA v7.2.116, `request-log: false` by itself is not a raw-body logging
-boundary: an installed request-logging middleware still captures request bodies
-and can retain an HTTP error-only log, including a Guard block on a normal model
-route. `commercial-mode: true` is the startup control that prevents that
-middleware from being installed.
+Historical CPA v7.2.116 analysis established that `request-log: false` by itself
+was not a raw-body logging boundary: an installed request-logging middleware
+could still capture request bodies and retain an HTTP error-only log, including
+a Guard block on a normal model route. The frozen historical v7.2.124 lane conservatively
+retains `commercial-mode: true` as the startup control and must revalidate the
+middleware behavior rather than relabel the v7.2.116 result.
 `logging-to-file: false` keeps ordinary CPA application logs on stdout instead
 of rotating files. The operational cost is the loss of CPA's detailed
 request/error artifacts for incident diagnosis; use container stdout, plugin
@@ -372,13 +414,15 @@ are rejected unless `require_persistent_storage: true` is explicit and
 
 ## 6. Upgrade and database migration
 
-The current source uses audit schema v6. A supported schema v1-v5 database is
-migrated atomically to v6 only after a mandatory, exact mode-0400 SQLite Online
-Backup is created as `events.db.pre-v6-*.bak`. Its adjacent manifest binds the
+The current source uses audit schema v7. A supported schema v1-v6 database is
+migrated atomically to v7 only after a mandatory, exact mode-0400 SQLite Online
+Backup is created. A v6 source uses `events.db.pre-v7-*.bak`; v1-v5 sources
+retain the historical `events.db.pre-v6-*.bak` boundary. Its adjacent manifest binds the
 source/target schema versions, byte count, SHA-256, `quick_check: ok`, and
 `exact_snapshot: true`; only the newest configured number is retained. Crossing
-into v6 cannot be made backup-free by setting `backup_before_migration: false`,
-because an older binary must be paired with the exact pre-v6 database.
+into v7 cannot be made backup-free by setting `backup_before_migration: false`,
+because an older binary must be paired with the exact pre-v7 database (or the
+historical pre-v6 database when crossing the v5/v6 boundary).
 
 Before restart, make a cold operator backup while CPA is stopped. Treat the
 database and every present `-wal`/`-shm` sidecar as one consistency unit; never
@@ -408,8 +452,9 @@ been verified.
 
 Migration failure must not partially advance the schema, but it can leave audit
 degraded and must block promotion. Check status `audit.schema_version` and
-`audit_degraded`. Older binaries are not claimed to read schema v6; restore the
-matching exact pre-v6 database before loading an older binary.
+`audit_degraded`. Older binaries are not claimed to read schema v7; restore the
+matching exact pre-v7 database before loading an older binary (or the historical
+pre-v6 backup when rolling back across the v5/v6 boundary).
 
 ## 7. Restart and baseline checks
 
@@ -431,10 +476,10 @@ EXPECTED_MODE=observe \
 directory visible from the watchdog. For the admitted production contract, CPA
 must start with `WRITABLE_PATH` set to an absolute, dedicated directory and
 `CPA_LOG_DIR` must name the host-visible side of that exact
-`WRITABLE_PATH/logs` bind mount. Do not rely on CPA v7.2.116's relative `./logs`
-fallback: the request logger resolves a relative path against the configuration
-directory while the management inventory resolves it against the process
-working directory. Those roots can differ. No path component may be a symlink.
+`WRITABLE_PATH/logs` bind mount. Do not rely on the relative `./logs` fallback:
+historical v7.2.116 analysis found that the request logger and management
+inventory could resolve it against different roots, and the exact frozen
+historical v7.2.124 lane had to recheck that boundary. No path component may be a symlink.
 
 `CPA_DIRECT_BASE_URL` is also mandatory. It must be the loopback HTTP/1.1
 listener of this exact CPA process, not Nginx or another reverse proxy. The
@@ -453,7 +498,8 @@ active resource proof deliberately marks its challenge header hop-by-hop; a
 conforming intermediary removes that header, so a proxied path fails closed
 instead of being mistaken for direct evidence.
 
-CPA v7.2.116's plugin ABI cannot cryptographically identify the owning listener
+The frozen historical CPA v7.2.124's unchanged ABI 1 could not cryptographically identify the owning
+listener
 or detect a non-conforming same-host proxy that deliberately preserves the
 hop-by-hop challenge header while normalizing lowercase `get` to uppercase
 `GET`. Do not place such an intermediary on `CPA_DIRECT_BASE_URL`. The operator
@@ -508,10 +554,11 @@ and priority, build/ruleset identity, degradation, router/panic counters, and
 two built-in local probes. The malicious probe never enters a provider route,
 auth selector, usage queue, or upstream.
 
-The malicious built-in probe is a `/v0/management` 403. CPA v7.2.116 explicitly
-skips management paths in its request-logging middleware, so that 403 is not a
-startup proof. Immediately afterward the watchdog verifies the exact runtime
-headers for CPA `7.2.116` at commit `a88197f8` and uses the authenticated CAG
+The malicious built-in probe is a `/v0/management` 403. Historical CPA v7.2.116
+analysis found that management paths were skipped by request logging, so that
+old 403 is not a frozen v7.2.124 startup proof. Immediately afterward the
+historical watchdog had to verify the exact runtime headers for CPA `7.2.124` at commit `197f5204` and
+use the authenticated CAG
 management route on `CPA_BASE_URL` to issue two independent 256-bit challenges.
 The initial status, both built-in classifier probes, each challenge response,
 each ResourceRoute body, each confirmation, and the final status must carry one
@@ -525,9 +572,11 @@ request paths to one plugin process, subject to the listener-ownership and
 non-conforming-proxy boundary above.
 The complete request makes a stranded error-only logger produce an
 artifact; the intentionally incomplete request fails closed if the stranded
-middleware waits for the missing body. CPA 113 accepts the raw lowercase
+middleware waits for the missing body. Historical CPA v7.2.113 accepted the raw
+lowercase
 `get` resource method case-insensitively while its request logger skips only
-exact uppercase `GET`; source and Host contracts pin that behavior. Timeouts
+exact uppercase `GET`; the frozen historical v7.2.124 source and Host contracts had to recheck
+rather than inherit that behavior. Timeouts
 are reported only as inconclusive failures, never as proof that middleware was
 detected. Both requests are local, contain no user prompt or credential, and
 never enter `/v1`, an auth selector, usage accounting, a provider, or upstream.
@@ -560,10 +609,13 @@ Verify New API → CPA using an ordinary harmless request, confirm other plugins
 still behave normally, and compare the current CPA auth-file list with the saved
 inventory. Installation must not create, delete, or modify auth files.
 
-Any newly versioned CPA v7.2.116 Host matrix must cover OpenAI Chat, OpenAI Responses,
+Any newly versioned Host matrix in this frozen v7.2.124 section had to cover OpenAI Chat, OpenAI
+Responses,
 Claude, and Gemini allow/refusal paths, including streaming pre-SSE 403,
 Anthropic/Gemini token-count 403, and zero Auth Selector, Provider, Usage, and
-Mock Upstream counters for blocked requests. Ordinary CI does not execute that
+Mock Upstream counters for blocked requests. It must also cover the Multi-Agent
+v2 `/v1/responses` tool-definition rewrite before `RequestInterceptor`.
+Ordinary CI does not execute that
 harness. Earlier implementation-freeze Host results are historical only; all
 exact-candidate run and independent review remain `NOT RUN` before any
 release decision.
@@ -678,8 +730,9 @@ Do not delete the audit database or HMAC secret as part of the fastest rollback.
 
 Stop CPA, remove the exact currently deployed candidate from the active
 directory, restore exactly one previous `.so`, and restore its matching
-configuration. If that binary cannot read schema v6, it must be paired with the
-exact pre-v6 Online Backup named in its verified manifest:
+configuration. If that binary cannot read schema v7, it must be paired with the
+exact pre-v7 Online Backup named in its verified manifest (a rollback across
+the older v5/v6 boundary uses its pre-v6 backup):
 
 ```bash
 set -eu
@@ -713,11 +766,11 @@ cp -p -- \
   "rollback/cyber-abuse-guard/$PREVIOUS_CONFIG_ROLLBACK_FILE" \
   config.yaml
 
-# Only for a full schema rollback after verifying the pre-v6 manifest,
+# Only for a full schema rollback after verifying the pre-v7 manifest,
 # exact_snapshot=true, sqlite_quick_check=ok, and the backup SHA-256:
 # rm -f -- plugin-data/cyber-abuse-guard/events.db-wal \
 #   plugin-data/cyber-abuse-guard/events.db-shm
-# install -m 0600 rollback/cyber-abuse-guard/events.db.pre-v6-REPLACE.bak \
+# install -m 0600 rollback/cyber-abuse-guard/events.db.pre-v7-REPLACE.bak \
 #   plugin-data/cyber-abuse-guard/events.db
 
 test "$(find plugins/linux/amd64 -maxdepth 1 -type f \

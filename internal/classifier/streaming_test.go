@@ -68,6 +68,33 @@ func addRound6Field(t testing.TB, session *ScanSession, fieldID uint64, role ext
 	}
 }
 
+func TestProfiledNonUserSafetyWholeFieldClassificationChargesWindowBudget(t *testing.T) {
+	t.Parallel()
+	c := newDefaultClassifier(t)
+	session := newRound6ProfiledSession(t, c, ScanLimits{
+		WindowBytes: MinScanWindowBytes, MaxTotalBytes: 1 << 20, MaxChunks: 1,
+	})
+	err := session.AddSegment(extract.SegmentChunk{
+		Role: extract.RoleAssistant, Provenance: extract.ProvenanceContent,
+		UserAttribution:   extract.UserAttributionUntrusted,
+		ConversationIndex: 0, TurnIndex: 0, IsCurrentTurn: false,
+		ScopeID: 61_001, ContentKind: extract.ContentKindNaturalLanguageDirective,
+		FieldPathHash: "profiled-non-user-safety-budget", FieldID: 1,
+		Start: true, End: true,
+		Text: []byte("I cannot help carry out that request. I can only provide safe defensive guidance."),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := session.Finish()
+	if result.Coverage.State != CoverageBudgetExhausted ||
+		result.Coverage.Reason != CoverageReasonClassificationLimit ||
+		result.Coverage.Windows != 1 || !result.Truncated ||
+		result.FindingConfidence != FindingNone {
+		t.Fatalf("whole-field non-user safety budget result = %+v, want one charged window then exhaustion", result)
+	}
+}
+
 func TestRound6StreamingCrossWindowLiteralAndNFKC(t *testing.T) {
 	t.Parallel()
 	c := newDefaultClassifier(t)

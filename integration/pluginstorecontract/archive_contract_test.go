@@ -118,6 +118,38 @@ func TestPublishedStoreArchive(t *testing.T) {
 	assertInstallLifecycle(t, archiveData, binaryData, version)
 }
 
+func TestPublishedRCStoreArchive(t *testing.T) {
+	distDir := strings.TrimSpace(os.Getenv("DIST_DIR"))
+	if distDir == "" {
+		t.Skip("DIST_DIR is not set; RC artifact contract test is run by the packaging gate")
+	}
+	distDir, errAbs := filepath.Abs(distDir)
+	if errAbs != nil {
+		t.Fatalf("filepath.Abs(DIST_DIR) error = %v", errAbs)
+	}
+	const version = "1.0.0-rc.1"
+	archiveName := officialArchiveName(t, version)
+	archivePath := filepath.Join(distDir, archiveName)
+	if _, errStat := os.Lstat(archivePath); errStat != nil {
+		if os.IsNotExist(errStat) {
+			t.Skip("RC Store archive is derived only in the admitted RC release lane")
+		}
+		t.Fatalf("stat RC Store archive %s: %v", archivePath, errStat)
+	}
+	archiveData := readRequiredFile(t, archivePath)
+	binaryData := readRequiredFile(t, filepath.Join(distDir, "cyber-abuse-guard-v1.0.0.so"))
+	checksumData := readRequiredFile(t, filepath.Join(distDir, "checksums.txt"))
+	checksums, errParse := pluginstore.ParseChecksums(checksumData)
+	if errParse != nil {
+		t.Fatalf("ParseChecksums(checksums.txt) error = %v", errParse)
+	}
+	if errVerify := pluginstore.VerifyChecksum(archiveName, archiveData, checksums); errVerify != nil {
+		t.Fatalf("VerifyChecksum(%s) error = %v", archiveName, errVerify)
+	}
+	assertExactStoreArchive(t, archiveData, "cyber-abuse-guard.so", binaryData)
+	assertInstallLifecycle(t, archiveData, binaryData, version)
+}
+
 func assertInstallLifecycle(t *testing.T, archiveData, binaryData []byte, version string) {
 	t.Helper()
 

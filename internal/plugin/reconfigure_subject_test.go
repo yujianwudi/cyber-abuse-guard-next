@@ -3,12 +3,112 @@ package plugin
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/subject"
 )
+
+func TestReconfigureRulePreparationDoesNotBlockRequestCallbacks(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+
+	loaderEntered := make(chan struct{})
+	releaseLoader := make(chan struct{})
+	p.loadRules = func() (*rules.RuleSet, error) {
+		close(loaderEntered)
+		<-releaseLoader
+		return rules.LoadDefault()
+	}
+
+	type callResult struct {
+		raw  []byte
+		code int
+	}
+	reconfigureDone := make(chan callResult, 1)
+	go func() {
+		raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+			"mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+		reconfigureDone <- callResult{raw: raw, code: code}
+	}()
+
+	select {
+	case <-loaderEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconfigure did not enter the injected rule loader")
+	}
+
+	routeRequest := pluginapi.ModelRouteRequest{
+		SourceFormat:   "openai",
+		RequestedModel: "gpt-test",
+		Body:           []byte(benignRequestInterceptBody),
+	}
+	routePayload, err := json.Marshal(routeRequest)
+	if err != nil {
+		close(releaseLoader)
+		t.Fatal(err)
+	}
+	routeDone := make(chan callResult, 1)
+	go func() {
+		raw, code := p.Call(pluginabi.MethodModelRoute, routePayload)
+		routeDone <- callResult{raw: raw, code: code}
+	}()
+
+	var route callResult
+	select {
+	case route = <-routeDone:
+		close(releaseLoader)
+	case <-time.After(2 * time.Second):
+		close(releaseLoader)
+		<-reconfigureDone
+		t.Fatal("request callback waited for non-state-dependent rule preparation")
+	}
+	if route.code != 0 {
+		t.Fatalf("model.route code=%d envelope=%s", route.code, route.raw)
+	}
+
+	select {
+	case result := <-reconfigureDone:
+		if result.code != 0 {
+			t.Fatalf("plugin.reconfigure code=%d envelope=%s", result.code, result.raw)
+		}
+		decodeOKResult(t, result.raw, &map[string]any{})
+	case <-time.After(5 * time.Second):
+		t.Fatal("reconfigure did not finish after releasing the rule loader")
+	}
+}
+
+func TestRejectedRuntimeConfigDoesNotCompileCandidateRules(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+
+	loaderCalls := 0
+	p.loadRules = func() (*rules.RuleSet, error) {
+		loaderCalls++
+		return rules.LoadDefault()
+	}
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: audit\nclassifier:\n  enabled: true\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("plugin.reconfigure code=%d envelope=%s", code, raw)
+	}
+	decodeOKResult(t, raw, &map[string]any{})
+	if loaderCalls != 0 {
+		t.Fatalf("rejected runtime configuration compiled candidate rules %d times", loaderCalls)
+	}
+	if p.runtime.Load().config.Mode != config.ModeBalanced {
+		t.Fatalf("rejected runtime configuration replaced the active mode: %q", p.runtime.Load().config.Mode)
+	}
+}
 
 func TestReconfigurePreservesSubjectRiskState(t *testing.T) {
 	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
@@ -47,8 +147,8 @@ func TestReconfigurePreservesSubjectRiskState(t *testing.T) {
 	decodeOKResult(t, raw, &map[string]any{})
 
 	afterController := p.runtime.Load().subject
-	if afterController != beforeController {
-		t.Fatal("compatible reconfigure replaced the subject controller")
+	if afterController == beforeController {
+		t.Fatal("compatible reconfigure reused the active subject controller instead of publishing an independent prepared clone")
 	}
 	after, ok := afterController.Snapshot(subjectHash)
 	if !ok || after.HitCount != before.HitCount || after.Score <= 0 {
@@ -58,5 +158,89 @@ func TestReconfigurePreservesSubjectRiskState(t *testing.T) {
 	control, ok := status["subject_control"].(map[string]any)
 	if !ok || control["max_subjects"] != float64(64) || control["subjects"] != float64(1) {
 		t.Fatalf("subject-control status = %#v", status["subject_control"])
+	}
+	if oldStats := beforeController.Stats(); oldStats.MaxSubjects != 32 || oldStats.Subjects != 1 {
+		t.Fatalf("published reconfigure mutated the retired subject controller: %+v", oldStats)
+	}
+}
+
+func TestRejectedSubjectMigrationDoesNotTouchCandidateAuditStorage(t *testing.T) {
+	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: true\n  max_subjects: 100\n")
+
+	oldState := p.runtime.Load()
+	for index := 0; index < 2; index++ {
+		headers := http.Header{"Authorization": []string{"Bearer protected-candidate-storage-" + string(rune('a'+index))}}
+		subjectHash := p.identifier.FromHeaders(headers).Hash
+		for hit := 0; hit < 3; hit++ {
+			_ = oldState.subject.Evaluate(subjectHash, 100)
+		}
+		state, ok := oldState.subject.Snapshot(subjectHash)
+		if !ok || !state.ManualBlocked {
+			t.Fatalf("subject %d did not become a protected manual block: (%+v, %v)", index, state, ok)
+		}
+	}
+
+	candidateParent := t.TempDir()
+	candidateDataDir := filepath.Join(candidateParent, "must-not-be-created", "audit")
+	if _, err := os.Lstat(candidateDataDir); !os.IsNotExist(err) {
+		t.Fatalf("candidate audit directory unexpectedly exists before reconfigure: %v", err)
+	}
+
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+filepath.ToSlash(candidateDataDir)+"\"\n  require_persistent_storage: true\nsubject_control:\n  enabled: true\n  max_subjects: 1\n"))
+	if code != 0 {
+		t.Fatalf("rejected subject migration code=%d envelope=%s", code, raw)
+	}
+	if p.runtime.Load() != oldState {
+		t.Fatal("rejected subject migration published a candidate runtime")
+	}
+	if !strings.Contains(p.lastReconfigureErrorMessage(), "protected manual blocks") {
+		t.Fatalf("last reconfigure error=%q, want protected-manual-block rejection", p.lastReconfigureErrorMessage())
+	}
+	if _, err := os.Lstat(candidateDataDir); !os.IsNotExist(err) {
+		t.Fatalf("rejected subject migration touched candidate audit storage: %v", err)
+	}
+	entries, err := os.ReadDir(candidateParent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("rejected subject migration created candidate side effects: %v", entries)
+	}
+}
+
+func TestReconfigureRejectsAuditDataDirChangeBeforeCandidateSideEffects(t *testing.T) {
+	t.Setenv(subject.HMACKeyEnvironment, "0123456789abcdef0123456789abcdef")
+	p := New()
+	t.Cleanup(p.Shutdown)
+	activeDataDir := filepath.ToSlash(t.TempDir())
+	register(t, p, "mode: balanced\naudit:\n  enabled: true\n  data_dir: \""+activeDataDir+"\"\n  require_persistent_storage: true\nsubject_control:\n  enabled: true\n  max_subjects: 100\n")
+	oldState := p.runtime.Load()
+
+	candidateParent := t.TempDir()
+	candidateDataDir := filepath.Join(candidateParent, "must-not-be-created", "audit")
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: audit\naudit:\n  enabled: true\n  data_dir: \""+filepath.ToSlash(candidateDataDir)+"\"\n  require_persistent_storage: true\nsubject_control:\n  enabled: true\n  max_subjects: 100\n"))
+	if code != 0 {
+		t.Fatalf("audit data-dir reconfigure code=%d envelope=%s", code, raw)
+	}
+	if p.runtime.Load() != oldState {
+		t.Fatal("audit data-dir change published a candidate runtime")
+	}
+	if !strings.Contains(p.lastReconfigureErrorMessage(), "audit.data_dir changes require a plugin restart") {
+		t.Fatalf("last reconfigure error=%q, want restart-required rejection", p.lastReconfigureErrorMessage())
+	}
+	if _, err := os.Lstat(candidateDataDir); !os.IsNotExist(err) {
+		t.Fatalf("rejected audit data-dir change touched candidate storage: %v", err)
+	}
+	entries, err := os.ReadDir(candidateParent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("rejected audit data-dir change created candidate side effects: %v", entries)
 	}
 }

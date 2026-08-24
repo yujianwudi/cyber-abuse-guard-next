@@ -1071,7 +1071,7 @@ jq -e \
   '.schema_version == 4 and
    .version == $version and .source_version == $source_version and
    .commit == $commit and .tree == $tree and .dirty == false and
-   .go_version == "go1.26.4" and
+   .go_version == "go1.26.6" and
    .goos == "linux" and .goarch == "amd64" and .cgo_enabled == true and
    .cc_command == "gcc" and
    (.gcc_version | type == "string" and length > 0) and

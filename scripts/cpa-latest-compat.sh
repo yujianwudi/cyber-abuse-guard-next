@@ -3,7 +3,7 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 go_launcher="${GO:-go}"
-export GOTOOLCHAIN=go1.26.4
+export GOTOOLCHAIN=go1.26.6
 selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"
 if [[ "$selected_go_root" != /* || "$selected_go_root" == *$'\n'* || \
       ! -x "$selected_go_root/bin/go" ]]; then
@@ -14,8 +14,8 @@ go_bin="$selected_go_root/bin/go"
 export GOTOOLCHAIN=local
 export GOFLAGS=-mod=readonly
 selected_go_version="$("$go_bin" env GOVERSION)"
-[[ "$selected_go_version" == go1.26.4 ]] || {
-  printf 'CPA compatibility requires go1.26.4, selected %s\n' \
+[[ "$selected_go_version" == go1.26.6 ]] || {
+  printf 'CPA compatibility requires go1.26.6, selected %s\n' \
     "$selected_go_version" >&2
   exit 1
 }
@@ -76,9 +76,9 @@ fi
 set_profile_identity() {
   case "$1" in
     primary)
-      cpa_version='v7.2.116'
-      cpa_commit='a88197f845c979132c8978ea223c6af05cc81536'
-      cpa_module_sum='h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU='
+      cpa_version='v7.2.137'
+      cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'
+      cpa_module_sum='h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w='
       cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
       ;;
     *)
@@ -182,15 +182,15 @@ fi
 
 assert_checked_in_module_identity \
   "$root" root \
-  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
+  v7.2.137 h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/cpalatestcontract" cpalatestcontract \
-  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
+  v7.2.137 h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/pluginstorecontract" pluginstorecontract \
-  v7.2.116 h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU= \
+  v7.2.137 h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 verify_primary_latest=0
@@ -347,7 +347,8 @@ for profile in "${profiles[@]}"; do
       CPA_COMPAT_ORIGIN_FILE="$origin_metadata_file" \
       GOWORK=off "$go_bin" -C integration/cpalatestcontract test \
       "${contract_mod_flags[@]}" -mod=readonly -count=1 -v .
-    GOWORK=off "$go_bin" -C integration/pluginstorecontract test \
+    CPA_COMPAT_ORIGIN_FILE="$origin_metadata_file" \
+      GOWORK=off "$go_bin" -C integration/pluginstorecontract test \
       -mod=readonly -count=1 .
   )
 

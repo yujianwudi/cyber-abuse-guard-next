@@ -355,6 +355,95 @@ func TestExtractRequestToolSourceURIRemainsInspectable(t *testing.T) {
 	}
 }
 
+func TestExtractRequestToolMediaNamedScalarsRemainInspectable(t *testing.T) {
+	t.Parallel()
+	values := map[string]string{
+		"document":   "quarterly-report",
+		"attachment": "release-checklist",
+		"file":       "customer-summary",
+		"input_file": "local-template",
+		"image":      "brand-logo",
+	}
+	for key, value := range values {
+		key, value := key, value
+		t.Run(key, func(t *testing.T) {
+			t.Parallel()
+			for index, members := range []string{
+				strconv.Quote(key) + `:` + strconv.Quote(value) + `,"format":"markdown"`,
+				`"format":"markdown",` + strconv.Quote(key) + `:` + strconv.Quote(value),
+			} {
+				body := []byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"format_report","arguments":{` + members + `}}}]}]}`)
+				for _, variant := range extractRound5BatchAndStreamVariants(t, body) {
+					result := variant.result
+					if result.OpaqueMedia || len(result.OpaqueMediaKinds) != 0 {
+						t.Fatalf("%s permutation %d tool field %q became opaque: %#v", variant.name, index, key, result)
+					}
+					if !strings.Contains(strings.Join(result.Parts, "\n"), value) ||
+						variant.name != "batch" && !segmentsContain(result.Segments, value) {
+						t.Fatalf("%s permutation %d tool field %q was not inspectable: parts=%#v segments=%#v", variant.name, index, key, result.Parts, result.Segments)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestExtractRequestToolMediaNamedContainersRetainExplicitMediaSemantics(t *testing.T) {
+	t.Parallel()
+	for _, body := range [][]byte{
+		[]byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"inspect","arguments":{"document":{"type":"input_file","file_data":"JVBERi0xLjQ="}}}}]}]}`),
+		[]byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"inspect","arguments":{"document":{"file_data":"JVBERi0xLjQ=","mime_type":"application/pdf"}}}}]}]}`),
+		[]byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"inspect","arguments":{"file_data":"JVBERi0xLjQ="}}}]}]}`),
+		[]byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"inspect","arguments":{"document":{"source":{"url":"https://example.test/private.pdf"},"mime_type":"application/pdf"}}}}]}]}`),
+		[]byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"inspect","arguments":{"document":{"mime_type":"application/pdf","source":{"url":"https://example.test/private.pdf"}}}}}]}]}`),
+		[]byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"inspect","arguments":{"document":"data:application/pdf;base64,JVBERi0xLjQ="}}}]}]}`),
+	} {
+		for _, variant := range extractRound5BatchAndStreamVariants(t, body) {
+			result := variant.result
+			if !result.OpaqueMedia || !reflect.DeepEqual(result.OpaqueMediaKinds, []OpaqueMediaKind{OpaqueMediaDocument}) {
+				t.Fatalf("%s explicit tool media lost opaque disposition: %#v", variant.name, result)
+			}
+			if strings.Contains(strings.Join(result.Parts, "\n"), "JVBERi0xLjQ=") ||
+				segmentsContain(result.Segments, "JVBERi0xLjQ=") {
+				t.Fatalf("%s explicit tool media bytes became inspectable text: %#v", variant.name, result)
+			}
+		}
+	}
+}
+
+func TestExtractRequestNativeToolMediaNamedScalarShapesRemainInspectable(t *testing.T) {
+	t.Parallel()
+	const value = "quarterly-report"
+	openAI := []byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"format_report","arguments":"{\"document\":\"quarterly-report\",\"format\":\"markdown\"}"}}]}]}`)
+	for _, variant := range extractRound5BatchAndStreamVariants(t, openAI) {
+		assertRound5InspectableToolScalar(t, variant.name, variant.result, value)
+	}
+	bareURL := []byte(`{"messages":[{"role":"assistant","tool_calls":[{"function":{"name":"format_report","arguments":{"document":"https://example.test/business-record"}}}]}]}`)
+	for _, variant := range extractRound5BatchAndStreamVariants(t, bareURL) {
+		assertRound5InspectableToolScalar(t, variant.name, variant.result, "https://example.test/business-record")
+	}
+
+	for index, body := range [][]byte{
+		[]byte(`{"messages":[{"role":"assistant","content":[{"type":"tool_use","name":"format_report","input":{"document":"quarterly-report","format":"markdown"}}]}]}`),
+		[]byte(`{"messages":[{"role":"assistant","content":[{"input":{"format":"markdown","document":"quarterly-report"},"name":"format_report","type":"tool_use"}]}]}`),
+	} {
+		for _, variant := range extractRound5BatchAndStreamVariantsForProfile(t, body, SourceProfileClaude) {
+			assertRound5InspectableToolScalar(t, variant.name+"/claude-"+strconv.Itoa(index), variant.result, value)
+		}
+	}
+}
+
+func assertRound5InspectableToolScalar(t testing.TB, name string, result Result, value string) {
+	t.Helper()
+	if result.OpaqueMedia || len(result.OpaqueMediaKinds) != 0 {
+		t.Fatalf("%s tool scalar became opaque: %#v", name, result)
+	}
+	if !strings.Contains(strings.Join(result.Parts, "\n"), value) ||
+		name != "batch" && !strings.HasPrefix(name, "batch/") && !segmentsContain(result.Segments, value) {
+		t.Fatalf("%s tool scalar was not inspectable: parts=%#v segments=%#v", name, result.Parts, result.Segments)
+	}
+}
+
 func TestExtractRequestScalarCarrierDoesNotCrossSiblingOrToolBoundary(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -790,6 +879,44 @@ func extractRound5ScalarRequest(t testing.TB, body []byte, limits Limits) Result
 		t.Fatalf("result=%#v err=%v", result, err)
 	}
 	return result
+}
+
+func extractRound5BatchAndStreamVariants(t testing.TB, body []byte) []struct {
+	name   string
+	result Result
+} {
+	return extractRound5BatchAndStreamVariantsForProfile(t, body, SourceProfileOpenAI)
+}
+
+func extractRound5BatchAndStreamVariantsForProfile(t testing.TB, body []byte, source SourceProfile) []struct {
+	name   string
+	result Result
+} {
+	t.Helper()
+	limits, err := (Limits{}).normalized()
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := extractRequestJSON(body, limits, contextNone, false)
+	if !batch.IsComplete() {
+		t.Fatalf("batch result=%#v", batch)
+	}
+	profiled, err := ExtractProfiledRequest(
+		body,
+		round5JSONHeaders(),
+		RequestProfile{Source: source},
+		Limits{},
+	)
+	if err != nil || !profiled.IsComplete() {
+		t.Fatalf("profiled stream result=%#v err=%v", profiled, err)
+	}
+	return []struct {
+		name   string
+		result Result
+	}{
+		{name: "batch", result: batch},
+		{name: "profiled-stream", result: profiled},
+	}
 }
 
 func round5JSONHeaders() http.Header {

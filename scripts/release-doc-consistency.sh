@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PATH=/usr/bin:/bin
+export PATH
+readonly PATH
+
 root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 # shellcheck source=release-common.sh
 source "$root/scripts/release-common.sh"
-release_require_commands awk grep sed sha256sum sort tr wc python3
+release_require_commands awk grep sed sha256sum sort tr wc mktemp rm
 
 doc_root="${RELEASE_DOC_ROOT:-$root}"
 fixture_mode="${RELEASE_DOC_FIXTURE_MODE:-0}"
@@ -13,6 +17,9 @@ fail() {
   printf 'release document consistency error: %s\n' "$*" >&2
   exit 1
 }
+
+python3_bin=/usr/bin/python3
+[[ -x "$python3_bin" ]] || fail "reviewed Python interpreter is unavailable: $python3_bin"
 
 [[ -d "$doc_root" ]] || fail "release document root is not a directory: $doc_root"
 doc_root="$(cd "$doc_root" && pwd -P)"
@@ -96,61 +103,819 @@ if [[ -z "$current_release_version" ]]; then
     's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' \
     "$root/internal/buildinfo/buildinfo.go" | sed -n '1p')"
 fi
-[[ "$current_release_version" =~ ^[0-9]+\.[0-9]+$ ]] || \
-  fail "cannot determine the exact two-component release version"
+if [[ "$fixture_mode" == 1 ]]; then
+  [[ "$current_release_version" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || \
+    fail "cannot determine the exact fixture release version"
+else
+  [[ "$current_release_version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || \
+    fail "cannot determine the exact three-component semantic release version"
+fi
 
-audit_tool_root="$root/tools/current-cpa-audit"
+round14_audit_receipt_tool="$root/scripts/current_cpa_audit_unit_receipt.py"
+round14_audit_receipt_relative="docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
+round14_audit_receipt="$doc_root/$round14_audit_receipt_relative"
+if [[ "$fixture_mode" == 1 && "$current_release_version" != 1.0.0 ]]; then
+  # The legacy v0.16 mutation fixture predates the Round 14 document set. It
+  # still binds the current reviewed tool closure from the real source tree.
+  round14_audit_receipt="$root/$round14_audit_receipt_relative"
+fi
+round14_cpa_module_sum='h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w='
+round14_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
+round14_cpa_archive_sha256='ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401'
+round14_cpa_binary_sha256='aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa'
+round14_cpa_version='v7.2.137'
+round14_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'
+round14_classifier_policy_sha256='1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d'
+round14_csam_text_policy_sha256='c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f'
+if [[ "$round14_audit_receipt" == "$doc_root/$round14_audit_receipt_relative" ]]; then
+  verify_canonical_relative_path "$round14_audit_receipt_relative"
+fi
+[[ -f "$round14_audit_receipt" && ! -L "$round14_audit_receipt" ]] || \
+  fail "Round 14 CPA audit unit receipt is missing or unsafe: $round14_audit_receipt_relative"
+[[ -f "$round14_audit_receipt_tool" && ! -L "$round14_audit_receipt_tool" ]] || \
+  fail "Round 14 CPA audit unit receipt validator is missing or unsafe"
+
 audit_identity_output=""
-if ! audit_identity_output="$(python3 -B - "$audit_tool_root" <<'PY'
-import sys
-import unittest
-from pathlib import Path
-
-
-tool = Path(sys.argv[1]).resolve(strict=True)
-sys.path.insert(0, str(tool))
-sys.path.insert(0, str(tool / "tests"))
-import run
-
-
-identities = run.runner_identities()
-loader = unittest.TestLoader()
-suite = loader.discover(str(tool / "tests"), pattern="test_*.py")
-if loader.errors:
-    for error in loader.errors:
-        print(error, file=sys.stderr)
-    raise SystemExit("CPA audit unittest discovery reported loader errors")
-for key in (
-    "bundle_sha256",
-    "audit_contract_sha256",
-    "run_source_sha256",
-    "machine_schema_sha256",
-):
-    print(identities[key])
-print(suite.countTestCases())
-PY
-)"; then
-  fail "cannot determine the current CPA audit runner identity closure"
+if ! audit_identity_output="$("$python3_bin" -I -B "$round14_audit_receipt_tool" validate \
+  --receipt "$round14_audit_receipt" --output-lines)"; then
+  fail "Round 14 CPA audit unit receipt validation failed"
 fi
 audit_identity_values=()
 mapfile -t audit_identity_values <<<"$audit_identity_output"
-[[ "${#audit_identity_values[@]}" == 5 ]] || \
-  fail "cannot determine the current CPA audit runner identity closure"
+[[ "${#audit_identity_values[@]}" == 15 ]] || \
+  fail "cannot determine the current CPA audit execution receipt closure"
 current_audit_runner_bundle_sha256="${audit_identity_values[0]}"
 current_audit_contract_sha256="${audit_identity_values[1]}"
 current_audit_run_source_sha256="${audit_identity_values[2]}"
 current_audit_machine_schema_sha256="${audit_identity_values[3]}"
 current_audit_tool_test_count="${audit_identity_values[4]}"
+current_audit_tool_skip_count="${audit_identity_values[5]}"
+current_audit_tool_status="${audit_identity_values[6]}"
+current_audit_tool_started_at="${audit_identity_values[7]}"
+current_audit_tool_finished_at="${audit_identity_values[8]}"
+current_audit_tool_elapsed_ms="${audit_identity_values[9]}"
+current_audit_tool_receipt_sha256="${audit_identity_values[10]}"
+current_audit_test_sources_sha256="${audit_identity_values[11]}"
+current_audit_test_ids_sha256="${audit_identity_values[12]}"
+current_audit_tool_command="${audit_identity_values[13]}"
+current_audit_tool_platform="${audit_identity_values[14]}"
 for digest in \
   "$current_audit_runner_bundle_sha256" \
   "$current_audit_contract_sha256" \
   "$current_audit_run_source_sha256" \
-  "$current_audit_machine_schema_sha256"; do
+  "$current_audit_machine_schema_sha256" \
+  "$current_audit_tool_receipt_sha256" \
+  "$current_audit_test_sources_sha256" \
+  "$current_audit_test_ids_sha256"; do
   [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || \
     fail "current CPA audit runner identity is not a lowercase 64-character digest"
 done
 [[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
   fail "current CPA audit tool test count is invalid"
+[[ "$current_audit_tool_test_count" == 315 ]] || \
+  fail "current CPA audit harness must retain the reviewed 315-test closure"
+[[ "$current_audit_tool_skip_count" == 0 ]] || \
+  fail "current CPA audit Linux receipt must not skip tests"
+[[ "$current_audit_tool_status" == PASS ]] || \
+  fail "current CPA audit Linux receipt must report PASS"
+[[ "$current_audit_tool_elapsed_ms" =~ ^[1-9][0-9]*$ ]] || \
+  fail "current CPA audit Linux receipt elapsed time is invalid"
+[[ "$current_audit_tool_platform" == Linux/x86_64 ]] || \
+  fail "current CPA audit receipt platform must be Linux/x86_64"
+[[ "$current_audit_tool_command" == \
+  /usr/bin/python3.*' -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py' ]] || \
+  fail "current CPA audit receipt command differs from the reviewed Linux command"
+
+if [[ "$doc_root" == "$root" ]]; then
+  current_audit_execution_receipt="$(mktemp "${TMPDIR:-/tmp}/cag-current-cpa-audit-unit.XXXXXX.json")"
+  current_audit_execution_output=""
+  if ! current_audit_execution_output="$(
+    GOTOOLCHAIN=go1.26.6 PYTHONDONTWRITEBYTECODE=1 \
+      "$python3_bin" -I -B "$round14_audit_receipt_tool" run \
+      --output "$current_audit_execution_receipt" --replace
+  )"; then
+    rm -f -- "$current_audit_execution_receipt"
+    fail "current source tree failed the live Linux CPA audit unit execution gate"
+  fi
+  rm -f -- "$current_audit_execution_receipt"
+  current_audit_execution_values=()
+  mapfile -t current_audit_execution_values <<<"$current_audit_execution_output"
+  [[ "${#current_audit_execution_values[@]}" == 15 ]] || \
+    fail "live Linux CPA audit unit execution returned an invalid closure"
+  [[ "${current_audit_execution_values[0]}" == "$current_audit_runner_bundle_sha256" && \
+    "${current_audit_execution_values[1]}" == "$current_audit_contract_sha256" && \
+    "${current_audit_execution_values[2]}" == "$current_audit_run_source_sha256" && \
+    "${current_audit_execution_values[3]}" == "$current_audit_machine_schema_sha256" && \
+    "${current_audit_execution_values[4]}" == "$current_audit_tool_test_count" && \
+    "${current_audit_execution_values[5]}" == 0 && \
+    "${current_audit_execution_values[6]}" == PASS && \
+    "${current_audit_execution_values[11]}" == "$current_audit_test_sources_sha256" && \
+    "${current_audit_execution_values[12]}" == "$current_audit_test_ids_sha256" && \
+    "${current_audit_execution_values[14]}" == Linux/x86_64 ]] || \
+    fail "live Linux CPA audit unit execution differs from the current reviewed closure"
+fi
+
+verify_round14_repository_contracts() {
+  local workflow_directory="$doc_root/.github/workflows"
+  local workflow_index="$workflow_directory/README.md"
+  local relative workflow workflow_name
+  local -a active_workflows=(
+    .github/workflows/ci.yml
+    .github/workflows/codeql.yml
+    .github/workflows/policy-gate.yml
+    .github/workflows/release-rc.yml
+  )
+  local -a indexed_validation_workflows=(
+    .github/workflows/ci.yml
+    .github/workflows/codeql.yml
+    .github/workflows/policy-gate.yml
+  )
+  local -A active_workflow_allowlist=()
+
+  verify_canonical_relative_path .github
+  verify_canonical_relative_path .github/workflows
+  [[ -d "$workflow_directory" && ! -L "$workflow_directory" ]] ||
+    fail "active workflow directory must be a regular non-symlink directory: .github/workflows"
+  for relative in "${active_workflows[@]}"; do
+    [[ -z "${active_workflow_allowlist[$relative]+x}" ]] ||
+      fail "active workflow allowlist contains a duplicate: $relative"
+    active_workflow_allowlist["$relative"]=1
+    verify_canonical_relative_path "$relative"
+    [[ -f "$doc_root/$relative" && ! -L "$doc_root/$relative" ]] ||
+      fail "required Round 14 active workflow must be a regular non-symlink file: $relative"
+  done
+  for workflow in "$workflow_directory"/*.yml "$workflow_directory"/*.yaml; do
+    [[ -e "$workflow" || -L "$workflow" ]] || continue
+    relative=".github/workflows/${workflow##*/}"
+    [[ -n "${active_workflow_allowlist[$relative]+x}" ]] ||
+      fail "workflow directory contains an unreviewed Round 14 active workflow: $relative"
+  done
+
+  verify_canonical_relative_path .github/workflows/README.md
+  [[ -f "$workflow_index" && ! -L "$workflow_index" ]] ||
+    fail "workflow index must be a regular non-symlink file: .github/workflows/README.md"
+  for relative in "${indexed_validation_workflows[@]}"; do
+    workflow_name="${relative##*/}"
+    grep -Fq "| \`$workflow_name\` |" "$workflow_index" ||
+      fail "workflow index lost the Round 14 active workflow: $relative"
+  done
+  grep -Fq 'The active workflow directory contains exactly four workflows:' "$doc_root/docs/README.md" ||
+    fail "documentation index lost the exact four-workflow Round 14 boundary"
+  grep -Fq 'RC publication' "$doc_root/docs/README.md" ||
+    fail "documentation index lost the gated RC publication boundary"
+  grep -Fqx "  RC_CPA_VERSION: $round14_cpa_version" "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost the exact CPA $round14_cpa_version identity"
+  grep -Fqx "  RC_CPA_COMMIT: $round14_cpa_commit" "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost the exact CPA $round14_cpa_version commit"
+  grep -Fqx '  RC_CPA_C_ABI: '\''1'\''' "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost C ABI 1"
+  grep -Fqx '  RC_CPA_RPC_SCHEMA: '\''3'\''' "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost RPC schema 3"
+  grep -Fqx '  RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3' \
+    "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost second-machine admission schema v3"
+
+  if [[ "$doc_root" == "$root" ]]; then
+    grep -Fq '`docs/ROUND9_HOST_RUNNER.md`' \
+      "$root/integration/round9countedmock/README.md" ||
+      fail "Round 9 counted-Mock README lost its Host contract link"
+    grep -Fq '[Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 9 audit-schema link"
+    grep -Fq '[Round 11 runtime-assurance task book](ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 11 task-book link"
+    grep -Fq '[Round 9 operator-owned rollout and rollback](ROUND9_OPERATOR_ROLLOUT.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 9 operator-runbook link"
+    grep -Fq '[Round 9 execution record and traceability matrix](reports/ROUND9_EXECUTION_RECORD.md)' \
+      "$root/docs/README.md" ||
+      fail "documentation index lost the Round 9 execution-record link"
+    grep -Fq 'HTTP `503` and the fixed `audit_unavailable` error' \
+      "$root/docs/ROUND9_AUDIT_SCHEMA_V6.md" ||
+      fail "Round 9 audit guide lost the enabled-but-unavailable management contract"
+  fi
+}
+
+if [[
+  ("$fixture_mode" == 0 && "$current_release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$) ||
+  ("$fixture_mode" == 1 && "$current_release_version" == "1.0.0")
+]]; then
+  round14_documents=(
+    README.md
+    README_CN.md
+    CHANGELOG.md
+    SECURITY.md
+    docs/AUDIT_HANDOFF.md
+    docs/DESIGN.md
+    docs/INSTALL_DOCKER.md
+    docs/LIMITATIONS.md
+    docs/RAW_CAPTURE.md
+    docs/README.md
+    docs/RELEASE_POLICY.md
+    docs/ROUND6_DEVELOPMENT_HANDOFF.md
+    docs/ROUND6_LIMITATIONS.md
+    docs/ROUND6_RELEASE_GATE.md
+    docs/ROUND6_CONFIG_MIGRATION.md
+    docs/ROUND6_STREAMING_SCANNER_DESIGN.md
+    docs/ROUND8_HOST_RUNNER.md
+    docs/ROUND9_AUDIT_SCHEMA_V6.md
+    docs/ROUND9_HOST_RUNNER.md
+    docs/ROUND9_OPERATOR_ROLLOUT.md
+    docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+    docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+    docs/ROUND12_STATUS.md
+    docs/RULES.md
+    docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md
+    docs/ROUND13_STATUS.md
+    docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md
+    docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md
+    docs/ROUND14_STATUS.md
+    docs/THREAT_MODEL.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PHASE0_CPA_CONTRACT.md
+    docs/reports/PROMPT_INJECTION_REVIEW.md
+    docs/reports/RELEASE_EVIDENCE.md
+    docs/reports/ROUND8_RELEASE_READINESS.md
+    docs/reports/PERFORMANCE.md
+    docs/reports/PRIVACY.md
+    docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
+    docs/reports/ROUND8_CALIBRATION.md
+    docs/reports/ROUND9_EXECUTION_RECORD.md
+    docs/reports/TEST_REPORT.md
+    docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json
+    integration/cpalatestcontract/README.md
+    integration/pluginstorecontract/README.md
+    tools/current-cpa-audit/README.md
+  )
+  for relative in "${round14_documents[@]}"; do
+    path="$doc_root/$relative"
+    verify_canonical_relative_path "$relative"
+    [[ -f "$path" && ! -L "$path" ]] || fail "required Round 14 document is missing or unsafe: $relative"
+  done
+
+  current_classifier_prologue_documents=(
+    README.md
+    README_CN.md
+    docs/ROUND6_CONFIG_MIGRATION.md
+    docs/ROUND6_STREAMING_SCANNER_DESIGN.md
+    docs/ROUND8_HOST_RUNNER.md
+    docs/ROUND9_AUDIT_SCHEMA_V6.md
+    docs/ROUND9_HOST_RUNNER.md
+    docs/ROUND9_OPERATOR_ROLLOUT.md
+    docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+    docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+    docs/ROUND12_STATUS.md
+    docs/RULES.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PERFORMANCE.md
+    docs/reports/PRIVACY.md
+    docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
+    docs/reports/ROUND8_CALIBRATION.md
+    docs/reports/ROUND9_EXECUTION_RECORD.md
+  )
+  current_policy_version='current_classifier_policy_version: classifier-policy-v20'
+  current_policy_sha="current_classifier_policy_sha256: $round14_classifier_policy_sha256"
+  for relative in "${current_classifier_prologue_documents[@]}"; do
+    document="$doc_root/$relative"
+    prologue="$(sed -n '1,20p' "$document")"
+    [[ "$(grep -Fxc "$current_policy_version" <<<"$prologue")" == 1 && \
+       "$(grep -Fxc "$current_policy_sha" <<<"$prologue")" == 1 ]] || \
+      fail "$relative lost the exact current classifier identity in its first 20 lines"
+    [[ "$(grep -Fxc "$current_policy_version" "$document")" == 1 && \
+       "$(grep -Fxc "$current_policy_sha" "$document")" == 1 ]] || \
+      fail "$relative must contain exactly one current classifier identity; historical body identities remain allowed"
+  done
+
+  grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README.md" || \
+    fail "README.md lost the current 1.0.0 source identity"
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/README.md" || \
+    fail "README.md lost the current RC tag identity"
+  grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README.md" || \
+    fail "README.md lost the CPA $round14_cpa_version identity"
+  grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the current 1.0.0 source identity"
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the current RC tag identity"
+  grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the CPA $round14_cpa_version identity"
+  grep -Fqx 'current_source_version: 1.0.0' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost the current source version"
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost the current RC tag"
+  grep -Fqx 'current_rc_prerelease: true' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost prerelease=true"
+  grep -Fqx 'current_rc_make_latest: false' "$doc_root/docs/RELEASE_POLICY.md" || \
+    fail "RELEASE_POLICY.md lost make_latest=false"
+  grep -Fq '## Unreleased - v1.0.0-rc.1' "$doc_root/CHANGELOG.md" || \
+    fail "CHANGELOG.md lost the active v1.0.0-rc.1 section"
+  grep -Fq "round14_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/docs/ROUND14_STATUS.md" || \
+    fail "ROUND14_STATUS.md lost the exact CPA identity"
+  for relative in \
+    README.md \
+    README_CN.md \
+    docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md \
+    docs/ROUND14_STATUS.md; do
+    grep -Fq 'csam-text-policy-v1' "$doc_root/$relative" &&
+      grep -Fq "$round14_csam_text_policy_sha256" \
+        "$doc_root/$relative" ||
+      fail "$relative lost the exact CSAM text-policy identity"
+    grep -Fq 'cyber-abuse-guard.second-machine-release-admission.v3' "$doc_root/$relative" ||
+      fail "$relative lost second-machine release admission schema v3"
+  done
+  grep -Fq 'round14_audit_sqlite_schema: 7 / ACTIVE_CONTRACT' "$doc_root/docs/ROUND14_STATUS.md" ||
+    fail "ROUND14_STATUS.md lost Audit SQLite schema 7"
+  grep -Fq 'round14_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml' \
+    "$doc_root/docs/ROUND14_STATUS.md" ||
+    fail "ROUND14_STATUS.md lost the exact four-workflow inventory"
+  grep -Fq 'ALLOWED_ONLY_AFTER_ALL_ACCEPTANCE_GATES_PASS / RELEASE_RC_WORKFLOW_ONLY' \
+    "$doc_root/docs/ROUND14_STATUS.md" ||
+    fail "ROUND14_STATUS.md lost the gated RC publication contract"
+  grep -Fq 'round13_rc_tag: v1.0.0-rc.1' "$doc_root/docs/ROUND13_STATUS.md" || \
+    fail "ROUND13_STATUS.md lost the exact RC identity"
+  grep -Fq 'round13_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e' \
+    "$doc_root/docs/ROUND13_STATUS.md" || \
+    fail "ROUND13_STATUS.md lost the frozen CPA v7.2.125 identity"
+  grep -Fq 'round13_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd' \
+    "$doc_root/docs/ROUND13_STATUS.md" || \
+    fail "ROUND13_STATUS.md lost the frozen Round 13 classifier identity"
+  grep -Fq 'cpa_version: v7.2.125' \
+    "$doc_root/docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md" || \
+    fail "Round 13 task book lost the frozen CPA v7.2.125 identity"
+
+  declare -A round14_audit_identities=(
+    [round14_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+    [round14_audit_contract_sha256]="$current_audit_contract_sha256"
+    [round14_audit_run_source_sha256]="$current_audit_run_source_sha256"
+    [round14_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
+    [round14_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
+    [round14_audit_tool_skips]="$current_audit_tool_skip_count"
+    [round14_audit_test_sources_sha256]="$current_audit_test_sources_sha256"
+    [round14_audit_test_ids_sha256]="$current_audit_test_ids_sha256"
+    [round14_audit_unit_receipt_sha256]="$current_audit_tool_receipt_sha256"
+    [round14_audit_unit_started_at]="$current_audit_tool_started_at"
+    [round14_audit_unit_finished_at]="$current_audit_tool_finished_at"
+    [round14_audit_unit_elapsed_ms]="$current_audit_tool_elapsed_ms"
+    [round14_audit_unit_command]="$current_audit_tool_command"
+  )
+  for relative in \
+    docs/ROUND14_STATUS.md \
+    docs/reports/TEST_REPORT.md \
+    docs/reports/CPA_INTEGRATION.md; do
+    for key in "${!round14_audit_identities[@]}"; do
+      value="${round14_audit_identities[$key]}"
+      [[ "$(grep -Fxc -- "$key: $value" "$doc_root/$relative")" == 1 &&
+        "$(grep -Ec "^${key}:" "$doc_root/$relative")" == 1 ]] ||
+        fail "$relative must bind the exact current Round 14 audit identity: $key"
+    done
+  done
+  declare -A active_audit_identities=(
+    [round14_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+    [round14_audit_contract_sha256]="$current_audit_contract_sha256"
+    [round14_audit_run_source_sha256]="$current_audit_run_source_sha256"
+    [round14_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
+    [round14_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
+    [round14_audit_tool_skips]="$current_audit_tool_skip_count"
+    [round14_audit_test_sources_sha256]="$current_audit_test_sources_sha256"
+    [round14_audit_test_ids_sha256]="$current_audit_test_ids_sha256"
+    [round14_audit_unit_receipt_sha256]="$current_audit_tool_receipt_sha256"
+    [round14_audit_unit_started_at]="$current_audit_tool_started_at"
+    [round14_audit_unit_finished_at]="$current_audit_tool_finished_at"
+    [round14_audit_unit_elapsed_ms]="$current_audit_tool_elapsed_ms"
+    [round14_audit_unit_command]="$current_audit_tool_command"
+  )
+  for key in "${!active_audit_identities[@]}"; do
+    value="${active_audit_identities[$key]}"
+    [[ "$(grep -Fxc -- "$key: $value" "$doc_root/docs/reports/RELEASE_EVIDENCE.md")" == 1 &&
+      "$(grep -Ec "^${key}:" "$doc_root/docs/reports/RELEASE_EVIDENCE.md")" == 1 ]] ||
+      fail "docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: $key"
+  done
+
+  # Round 12 remains immutable historical evidence.  Its CPA audit closure is
+  # deliberately independent of the current Round 14 receipt above; requiring
+  # current hashes here would silently relabel an old execution as a new PASS.
+  round12_status="$doc_root/docs/ROUND12_STATUS.md"
+  declare -A historical_round12_status_identities=(
+    [round12_classifier_policy]="HISTORICAL_ROUND12 / classifier-policy-v12 / 2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b"
+    [round12_audit_runner_bundle]="6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae2f41e00c017a4"
+    [round12_audit_contract]="0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680"
+    [round12_audit_run_source]="cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73"
+    [round12_audit_machine_schema]="063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060"
+    [round12_local_audit_tool_tests]="CPA_V7.2.124_PASS / LINUX / 148_OF_148"
+  )
+  for key in "${!historical_round12_status_identities[@]}"; do
+    value="${historical_round12_status_identities[$key]}"
+    [[ "$(grep -Fxc -- "$key: $value" "$round12_status")" == 1 &&
+      "$(grep -Ec "^[[:space:]]*${key}[[:space:]]*:" "$round12_status")" == 1 ]] ||
+      fail "docs/ROUND12_STATUS.md must preserve the exact frozen Round 12 identity: $key"
+  done
+
+  round12_test_report_section="$(awk '
+    $0 == "## Frozen Round 12 working-tree pre-final Linux validation" { inside = 1; next }
+    inside && /^## / { exit }
+    inside { print }
+  ' "$doc_root/docs/reports/TEST_REPORT.md")"
+  [[ -n "$round12_test_report_section" ]] ||
+    fail "docs/reports/TEST_REPORT.md lost the frozen Round 12 validation section"
+  declare -A historical_round12_report_identities=(
+    [runner_bundle_sha256]="6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae2f41e00c017a4"
+    [audit_contract_sha256]="0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680"
+    [run_source_sha256]="cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73"
+    [machine_schema_sha256]="063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060"
+  )
+  for key in "${!historical_round12_report_identities[@]}"; do
+    value="${historical_round12_report_identities[$key]}"
+    [[ "$(grep -Fxc -- "$key: $value" <<<"$round12_test_report_section")" == 1 &&
+      "$(grep -Ec "^[[:space:]]*${key}[[:space:]]*:" <<<"$round12_test_report_section")" == 1 ]] ||
+      fail "docs/reports/TEST_REPORT.md must preserve the exact frozen Round 12 identity: $key"
+  done
+  [[ "$(grep -Fc -- '| Frozen Round 12 CPA audit tool | **PASS**, Linux 148/148.' \
+    <<<"$round12_test_report_section")" == 1 ]] ||
+    fail "docs/reports/TEST_REPORT.md must preserve the frozen Round 12 audit test count"
+
+  round14_identity_documents=(
+    CHANGELOG.md
+    docs/README.md
+    docs/ROUND14_STATUS.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PHASE0_CPA_CONTRACT.md
+    tools/current-cpa-audit/README.md
+  )
+  for relative in "${round14_identity_documents[@]}"; do
+    document="$doc_root/$relative"
+    grep -Fq "$round14_cpa_module_sum" "$document" || \
+      fail "$relative lost the exact CPA $round14_cpa_version module sum"
+    grep -Fq "$round14_cpa_go_mod_sum" "$document" || \
+      fail "$relative lost the exact CPA $round14_cpa_version go.mod sum"
+    grep -Fq "$round14_cpa_archive_sha256" "$document" || \
+      fail "$relative lost the exact CPA $round14_cpa_version archive SHA-256"
+    grep -Fq "$round14_cpa_binary_sha256" "$document" || \
+      fail "$relative lost the exact CPA $round14_cpa_version binary SHA-256"
+  done
+
+  round14_overlay_documents=(
+    docs/DESIGN.md
+    docs/INSTALL_DOCKER.md
+    docs/ROUND6_DEVELOPMENT_HANDOFF.md
+    docs/ROUND6_LIMITATIONS.md
+    docs/ROUND6_RELEASE_GATE.md
+    docs/THREAT_MODEL.md
+    docs/reports/PROMPT_INJECTION_REVIEW.md
+    docs/reports/ROUND8_RELEASE_READINESS.md
+  )
+  for relative in "${round14_overlay_documents[@]}"; do
+    document="$doc_root/$relative"
+    grep -Fq "$round14_cpa_version@$round14_cpa_commit" "$document" || \
+      fail "$relative lost its active-tree CPA $round14_cpa_version overlay"
+    grep -Fq 'current_classifier_policy_version: classifier-policy-v20' "$document" || \
+      fail "$relative lost its active-tree classifier overlay"
+  done
+
+  grep -Fq "exact $round14_cpa_version / CAG \`1.0.0\` lane must revalidate it" \
+    "$doc_root/docs/RAW_CAPTURE.md" || \
+    fail "docs/RAW_CAPTURE.md lost the active $round14_cpa_version transport guidance"
+  grep -Fq '## Frozen historical Round 12 evidence boundary' \
+    "$doc_root/docs/LIMITATIONS.md" || \
+    fail "docs/LIMITATIONS.md must explicitly freeze the retained Round 12 body"
+  grep -Fq 'cyber-abuse-guard-v1.0.0.so' \
+    "$doc_root/tools/current-cpa-audit/README.md" || \
+    fail "current CPA audit README lost the closed CAG 1.0.0 SO name"
+  grep -Fq '"source_version": {"const": "1.0.0"}' \
+    "$root/tools/current-cpa-audit/machine-evidence.schema.json" || \
+    fail "machine evidence schema lost the closed CAG 1.0.0 identity"
+  grep -Fq '"version": {"const": "1.0.0"}' \
+    "$root/tools/current-cpa-audit/host-performance-evidence.schema.json" || \
+    fail "Host performance evidence schema lost the closed CAG 1.0.0 candidate version"
+
+  round14_active_cpa_documents=(
+    README.md
+    README_CN.md
+    CHANGELOG.md
+    SECURITY.md
+    docs/AUDIT_HANDOFF.md
+    docs/DESIGN.md
+    docs/INSTALL_DOCKER.md
+    docs/LIMITATIONS.md
+    docs/RAW_CAPTURE.md
+    docs/README.md
+    docs/ROUND6_DEVELOPMENT_HANDOFF.md
+    docs/ROUND6_LIMITATIONS.md
+    docs/ROUND6_RELEASE_GATE.md
+    docs/ROUND14_STATUS.md
+    docs/THREAT_MODEL.md
+    docs/reports/CPA_INTEGRATION.md
+    docs/reports/PHASE0_CPA_CONTRACT.md
+    docs/reports/PROMPT_INJECTION_REVIEW.md
+    docs/reports/RELEASE_EVIDENCE.md
+    docs/reports/ROUND8_RELEASE_READINESS.md
+    docs/reports/TEST_REPORT.md
+    integration/cpalatestcontract/README.md
+    tools/current-cpa-audit/README.md
+  )
+  if ! "$python3_bin" -B - "$doc_root" "${round14_active_cpa_documents[@]}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+root = Path(sys.argv[1])
+relatives = sys.argv[2:]
+stale = re.compile(r"v7\.2\.(?:124|125)", re.IGNORECASE)
+active = re.compile(r"\b(?:active|current)\b|(?:活动|当前)", re.IGNORECASE)
+historical = re.compile(
+    r"\b(?:frozen|historical|retained|non-transferable|superseded)\b|(?:冻结|历史|保留|不可转移)",
+    re.IGNORECASE,
+)
+freeze_markers = {
+    "README.md": "The Round 12 block retained below is historical v7.2.124 evidence.",
+    "README_CN.md": "下方第十二轮状态仅保留为 CPA v7.2.124 历史证据",
+    "CHANGELOG.md": "## Historical unreleased - v0.16 main development",
+    "docs/AUDIT_HANDOFF.md": "下文为冻结的第十二轮历史交接记录",
+    "docs/DESIGN.md": "## Frozen historical Round 12 design body",
+    "docs/INSTALL_DOCKER.md": "## Frozen historical Round 12 installation body",
+    "docs/LIMITATIONS.md": "## Frozen historical Round 12 evidence boundary",
+    "docs/THREAT_MODEL.md": "## Frozen historical Round 12 threat-model body",
+    "docs/reports/CPA_INTEGRATION.md": "Everything below this overlay is the frozen Round 12 / CPA v7.2.124 report",
+    "docs/reports/RELEASE_EVIDENCE.md": "Everything below is frozen v0.16 / Round 12",
+    "docs/reports/TEST_REPORT.md": "All v7.2.124 and earlier results below are historical",
+}
+problems = []
+for relative in relatives:
+    text = (root / relative).read_text(encoding="utf-8")
+    lines = text.splitlines()
+    marker = freeze_markers.get(relative)
+    frozen_after = len(lines) + 1
+    if marker:
+        for index, line in enumerate(lines, 1):
+            if marker in line:
+                frozen_after = index
+                break
+
+    if relative == "docs/README.md":
+        for index, line in enumerate(lines, 1):
+            if stale.search(line) and re.search(
+                r"\[Active\s+v7\.2\.(?:124|125)|active\s+v7\.2\.(?:124|125)\s+boundary",
+                line,
+                re.IGNORECASE,
+            ):
+                problems.append(f"{relative}:{index}: stale active CPA navigation")
+
+    if relative in {
+        "docs/ROUND6_DEVELOPMENT_HANDOFF.md",
+        "docs/ROUND6_LIMITATIONS.md",
+        "docs/ROUND6_RELEASE_GATE.md",
+        "docs/reports/PROMPT_INJECTION_REVIEW.md",
+        "docs/reports/ROUND8_RELEASE_READINESS.md",
+    }:
+        for index, line in enumerate(lines, 1):
+            if stale.search(line) and re.search(
+                r"current_(?:formal_)?cpa|current\s+(?:formal\s+)?CPA\s+identity",
+                line,
+                re.IGNORECASE,
+            ):
+                problems.append(f"{relative}:{index}: stale active-tree CPA overlay")
+
+    paragraph = []
+    paragraph_start = 1
+    for index in range(1, len(lines) + 2):
+        line = lines[index - 1] if index <= len(lines) else ""
+        if line.strip():
+            if not paragraph:
+                paragraph_start = index
+            paragraph.append(line)
+            continue
+        if not paragraph:
+            continue
+        value = "\n".join(paragraph)
+        if (
+            paragraph_start < frozen_after
+            and stale.search(value)
+            and active.search(value)
+            and not historical.search(value)
+        ):
+            problems.append(
+                f"{relative}:{paragraph_start}: unfrozen current/active historical CPA claim"
+            )
+        paragraph = []
+
+if problems:
+    print("\n".join(problems), file=sys.stderr)
+    raise SystemExit(1)
+PY
+  then
+    fail "Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim"
+  fi
+
+  for relative in \
+    CHANGELOG.md \
+    docs/ROUND14_STATUS.md \
+    docs/reports/CPA_INTEGRATION.md \
+    docs/reports/RELEASE_EVIDENCE.md \
+    docs/reports/TEST_REPORT.md; do
+    active_document="$doc_root/$relative"
+    case "$relative" in
+      CHANGELOG.md)
+        active_section="$(awk '
+          $0 == "## Unreleased - v1.0.0-rc.1" { inside = 1; next }
+          inside && $0 == "### Frozen Round 13 v7.2.125 development history" { exit }
+          inside && /^## / { exit }
+          inside { print }
+        ' "$active_document")"
+        ;;
+      docs/reports/CPA_INTEGRATION.md)
+        active_section="${active_document:+$(awk '
+          /^## Round 14 active compatibility overlay$/ { inside = 1; next }
+          inside && /^## Frozen Round 13 / { exit }
+          inside { print }
+        ' "$active_document")}"
+        ;;
+      docs/reports/RELEASE_EVIDENCE.md)
+        active_section="$(awk '
+          /^## Round 14 active release boundary$/ { inside = 1; next }
+          inside && /^## Frozen Round 13 / { exit }
+          inside { print }
+        ' "$active_document")"
+        ;;
+      docs/reports/TEST_REPORT.md)
+        active_section="$(awk '
+          /^## Round 14 current test boundary$/ { inside = 1; next }
+          inside && /^## Frozen Round 13 / { exit }
+          inside { print }
+        ' "$active_document")"
+        ;;
+      *)
+        active_section="$(sed -n '/<!-- round14-status:start -->/,/<!-- round14-status:end -->/p' "$active_document")"
+        ;;
+    esac
+    [[ -n "$active_section" ]] || fail "$relative lost its active Round 14 section"
+    if grep -Eq '(^|[^0-9])248/248([^0-9]|$)|248_OF_248|3a1dd5ac6076b0e576feb0e25163efdf02f4e4f6d0759b36d5294db74a13db8e|e3fb417870fcedf6cc7231bff68e960043760a1185a8af5e34bfbb0055c3e251|81d0f7c514a74a3a013c453b13f81b9bd20f1b3ccc9fb434c1aefa26fc08a628|1e41a1b614c854fab60ad1a3be853c0bb99e38636e7a628b7a8a20814164fa6d' \
+      <<<"$active_section"; then
+      fail "$relative retains a stale active Round 14 248-test or runner identity claim"
+    fi
+  done
+
+  if ! "$python3_bin" -B - "$doc_root" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+
+root = Path(sys.argv[1])
+
+
+def split_once(relative, marker):
+    text = (root / relative).read_text(encoding="utf-8")
+    if text.count(marker) != 1:
+        raise SystemExit(f"{relative}: expected exactly one active/frozen boundary marker")
+    return text.split(marker, 1)
+
+
+for relative, marker in (
+    (
+        "docs/reports/CPA_INTEGRATION.md",
+        "Everything below this overlay, including every Round 13 v7.2.125 PASS and",
+    ),
+    (
+        "docs/reports/TEST_REPORT.md",
+        "All Round 13 v7.2.125 results and all Round 12 or earlier results below are",
+    ),
+):
+    active, _ = split_once(relative, marker)
+    if len(re.findall(r"(?<![0-9])315/315 PASS(?![0-9])", active)) != 1:
+        raise SystemExit(f"{relative}: active Round 14 overlay must contain exactly one 315/315 PASS result")
+
+
+relative = "docs/reports/RELEASE_EVIDENCE.md"
+marker = "## Frozen Round 13 release boundary"
+active, frozen = split_once(relative, marker)
+expected_target = (
+    "round14_cpa_target: v7.2.137 / "
+    "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
+)
+active_target = re.compile(r"(?m)^[ \t]*" + re.escape(expected_target) + r"[ \t]*$")
+if len(active_target.findall(active)) != 1:
+    raise SystemExit(
+        f"{relative}: active boundary must contain exactly one exact v7.2.137 round14_cpa_target"
+    )
+if len(re.findall(r"(?m)^[ \t]*round14_cpa_target[ \t]*:", active)) != 1:
+    raise SystemExit(f"{relative}: active boundary contains a duplicate or conflicting round14_cpa_target")
+
+round13_target = re.compile(
+    r"(?m)^[ \t]*historical_round13_cpa_target:[ \t]*"
+    r"v7\.2\.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e[ \t]*$"
+)
+if len(round13_target.findall(frozen)) != 1:
+    raise SystemExit(
+        f"{relative}: frozen history must contain exactly one historical_round13_cpa_target"
+    )
+
+historical_target = re.compile(
+    r"(?m)^[ \t]*historical_round12_cpa_target:[ \t]*"
+    r"v7\.2\.124 / 197f520426374e514218ed155933ac546c98d345[ \t]*$"
+)
+if len(historical_target.findall(frozen)) != 1:
+    raise SystemExit(
+        f"{relative}: frozen history must contain exactly one historical_round12_cpa_target"
+    )
+
+required_store_markers = (
+    "historical_round13_cpa_store_rc_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / "
+    "ROOT_CYBER_ABUSE_GUARD.SO / PAYLOAD_BYTE_EQUAL",
+    "historical_round13_cpa_store_checksum_contract: checksums.txt / "
+    "EXACT_STANDALONE_AND_TWO_STORE_ZIPS",
+    "payload is byte-for-byte equal to the audited standalone SO",
+    "derived-container relationship explicitly",
+)
+for required in required_store_markers:
+    if frozen.count(required) != 1:
+        raise SystemExit(
+            f"{relative}: frozen Round 13 boundary must retain exactly one RC Store marker: {required}"
+        )
+PY
+  then
+    fail "Round 14 active and frozen historical release-report contract is inconsistent"
+  fi
+
+  # The Round 13 release report is historical data. Reject active-looking
+  # `active_cpa_*` keys anywhere below its frozen boundary so a stale claim
+  # cannot be smuggled into either the Round 13 or older history.
+  if ! active_cpa_diagnostic="$("$python3_bin" -B - "$doc_root/docs/reports/RELEASE_EVIDENCE.md" 2>&1 <<'PY'
+import re
+import sys
+from pathlib import Path
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = "## Frozen Round 13 release boundary"
+if text.count(marker) != 1:
+    raise SystemExit("RELEASE_EVIDENCE.md must contain exactly one Round 13 frozen boundary")
+active, frozen = text.split(marker, 1)
+history_marker = "Everything below is frozen v0.16 / Round 12 history"
+if frozen.count(history_marker) != 1:
+    raise SystemExit("RELEASE_EVIDENCE.md must contain exactly one Round 12 history boundary")
+round13, round12_and_earlier = frozen.split(history_marker, 1)
+keys = sorted(set(re.findall(r"(?m)^active_cpa_[A-Za-z0-9_]+:", frozen)))
+if keys:
+    raise SystemExit(
+        "docs/reports/RELEASE_EVIDENCE.md: frozen release history contains active_cpa_* keys: "
+        + ", ".join(key[:-1] for key in keys)
+    )
+historical_target = re.compile(
+    r"(?m)^[ \t]*historical_round12_cpa_target:[ \t]*"
+    r"v7\.2\.124 / 197f520426374e514218ed155933ac546c98d345[ \t]*$"
+)
+if len(historical_target.findall(round12_and_earlier)) != 1:
+    raise SystemExit(
+        "docs/reports/RELEASE_EVIDENCE.md: frozen block must contain exactly one historical_round12_cpa_target"
+    )
+required_store_markers = (
+    "historical_round13_cpa_store_rc_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / "
+    "ROOT_CYBER_ABUSE_GUARD.SO / PAYLOAD_BYTE_EQUAL",
+    "historical_round13_cpa_store_checksum_contract: checksums.txt / "
+    "EXACT_STANDALONE_AND_TWO_STORE_ZIPS",
+    "payload is byte-for-byte equal to the audited standalone SO",
+    "derived-container relationship explicitly",
+)
+for required in required_store_markers:
+    if round13.count(required) != 1:
+        raise SystemExit(
+            f"docs/reports/RELEASE_EVIDENCE.md: frozen Round 13 boundary must retain exactly one RC Store marker: {required}"
+        )
+PY
+)"; then
+    fail "$active_cpa_diagnostic"
+  fi
+
+  grep -Fqx 'VERSION ?= 1.0.0' "$root/Makefile" || fail "Makefile source version differs from 1.0.0"
+  grep -Fq 'Version        = "1.0.0"' "$root/internal/buildinfo/buildinfo.go" || \
+    fail "buildinfo source version differs from 1.0.0"
+  for modfile in \
+    "$root/go.mod" \
+    "$root/integration/cpalatestcontract/go.mod" \
+    "$root/integration/pluginstorecontract/go.mod"; do
+    grep -Fq "github.com/router-for-me/CLIProxyAPI/v7 $round14_cpa_version" "$modfile" || \
+      fail "active CPA module is not pinned to $round14_cpa_version: $modfile"
+  done
+  for sumfile in \
+    "$root/go.sum" \
+    "$root/integration/cpalatestcontract/go.sum" \
+    "$root/integration/pluginstorecontract/go.sum"; do
+    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 $round14_cpa_version $round14_cpa_module_sum" "$sumfile" || \
+      fail "active CPA module sum is not exact: $sumfile"
+    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 $round14_cpa_version/go.mod $round14_cpa_go_mod_sum" "$sumfile" || \
+      fail "active CPA go.mod sum is not exact: $sumfile"
+  done
+
+  verify_round14_repository_contracts
+  printf 'release document consistency passed: source=%s rc=v%s-rc.1 cpa=%s audit_tests=%s\n' \
+    "$current_release_version" "$current_release_version" "$round14_cpa_version" \
+    "$current_audit_tool_test_count"
+  exit 0
+fi
+
+# The remaining body is the explicit v0.16 fixture-only compatibility gate.
+# The real source tree and Round 13 fixtures are fully checked above.
+[[ "$fixture_mode" == 1 ]] ||
+  fail "legacy release-document contracts may run only in fixture mode"
 
 documents=(
   README.md
@@ -202,6 +967,7 @@ active_workflows=(
   .github/workflows/ci.yml
   .github/workflows/codeql.yml
   .github/workflows/policy-gate.yml
+  .github/workflows/release-rc.yml
 )
 declare -A active_workflow_allowlist=()
 for relative in "${active_workflows[@]}"; do
@@ -363,8 +1129,8 @@ if [[ "$doc_root" == "$root" ]]; then
     fail "Round 9 audit guide lost the enabled-but-unavailable management contract"
 fi
 
-# Historical RELEASE_POLICY and ROUND8_CALIBRATION snapshots remain required
-# above, but intentionally do not use the fixed current-document prologue.
+# Historical RELEASE_POLICY remains required above but intentionally does not
+# use the fixed current-document prologue. ROUND8_CALIBRATION now does use it.
 classifier_identity_documents=(
   README.md
   README_CN.md
@@ -460,73 +1226,12 @@ for relative in "${classifier_identity_documents[@]}"; do
   fi
 done
 
-round12_status="$doc_root/docs/ROUND12_STATUS.md"
-round12_classifier_identity_line="round12_classifier_policy: $current_classifier_policy_version / $current_classifier_policy_sha256"
-[[ "$(grep -Fxc -- "$round12_classifier_identity_line" "$round12_status")" == 1 &&
-  "$(count_policy_key "$round12_status" round12_classifier_policy)" == 1 ]] ||
-  fail "docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity"
+# Current Round 14 receipt identities are validated above only against the
+# active Round 14 overlays.  Frozen Round 12 and legacy v0.16 sections are
+# historical evidence with their own immutable identities; never rewrite or
+# reinterpret them using the current audit-tool closure.
 
-declare -A round12_audit_status_identities=(
-  [round12_audit_runner_bundle]="$current_audit_runner_bundle_sha256"
-  [round12_audit_contract]="$current_audit_contract_sha256"
-  [round12_audit_run_source]="$current_audit_run_source_sha256"
-  [round12_audit_machine_schema]="$current_audit_machine_schema_sha256"
-  [round12_local_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
-)
-for key in "${!round12_audit_status_identities[@]}"; do
-  exact_line="$key: ${round12_audit_status_identities[$key]}"
-  [[ "$(grep -Fxc -- "$exact_line" "$round12_status")" == 1 &&
-    "$(count_policy_key "$round12_status" "$key")" == 1 ]] ||
-    fail "docs/ROUND12_STATUS.md must contain exactly one exact Round 12 CPA audit identity: $key"
-done
-
-round12_test_report_section="$(awk '
-  $0 == "## Round 12 working-tree pre-final Linux validation" { inside = 1; next }
-  inside && /^## / { exit }
-  inside { print }
-' "$doc_root/docs/reports/TEST_REPORT.md")"
-[[ -n "$round12_test_report_section" ]] ||
-  fail "docs/reports/TEST_REPORT.md lost the Round 12 working-tree validation section"
-declare -A round12_test_report_identities=(
-  [runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
-  [audit_contract_sha256]="$current_audit_contract_sha256"
-  [run_source_sha256]="$current_audit_run_source_sha256"
-  [machine_schema_sha256]="$current_audit_machine_schema_sha256"
-)
-for key in "${!round12_test_report_identities[@]}"; do
-  exact_line="$key: ${round12_test_report_identities[$key]}"
-  [[ "$(grep -Fxc -- "$exact_line" <<<"$round12_test_report_section")" == 1 &&
-    "$(count_policy_key_in_text "$round12_test_report_section" "$key")" == 1 ]] ||
-    fail "docs/reports/TEST_REPORT.md Round 12 section must bind the current CPA audit identity: $key"
-done
-round12_audit_pass_prefix="| Current CPA audit tool | **PASS**, Linux ${current_audit_tool_test_count}/${current_audit_tool_test_count}."
-[[ "$(grep -Fc -- "$round12_audit_pass_prefix" <<<"$round12_test_report_section")" == 1 ]] ||
-  fail "docs/reports/TEST_REPORT.md Round 12 section must bind the current CPA audit test count"
-
-unreleased_changelog_section="$(awk '
-  $0 == "## Unreleased - v0.16 main development" { inside = 1; next }
-  inside && /^## / { exit }
-  inside { print }
-' "$doc_root/CHANGELOG.md")"
-[[ -n "$unreleased_changelog_section" ]] ||
-  fail "CHANGELOG.md lost the Unreleased v0.16 development section"
-declare -A unreleased_changelog_audit_identities=(
-  [current_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
-  [current_audit_contract_sha256]="$current_audit_contract_sha256"
-  [current_audit_run_source_sha256]="$current_audit_run_source_sha256"
-  [current_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
-  [current_audit_tool_test_count]="$current_audit_tool_test_count"
-)
-for key in "${!unreleased_changelog_audit_identities[@]}"; do
-  value="${unreleased_changelog_audit_identities[$key]}"
-  [[ "$(count_exact_key_value_in_text "$unreleased_changelog_section" "$key" "$value")" == 1 &&
-    "$(count_policy_key_in_text "$unreleased_changelog_section" "$key")" == 1 ]] ||
-    fail "CHANGELOG.md Unreleased section must bind the current CPA audit identity: $key"
-done
-[[ "$(count_fixed_in_text "$unreleased_changelog_section" "Linux audit-tool verification is ${current_audit_tool_test_count}/${current_audit_tool_test_count} PASS.")" == 1 ]] ||
-  fail "CHANGELOG.md Unreleased section must bind the current CPA audit test count"
-
-if ! python3 -B - \
+if ! "$python3_bin" -B - \
   "$doc_root" \
   "$current_classifier_policy_version" \
   "$current_classifier_policy_sha256" \
@@ -684,6 +1389,8 @@ grep -Eq '^# Historical .*v0\.1\.2 candidate[[:space:]]*$' "$historical_corpus" 
   fail "docs/reports/CORPUS_REPORT.md must be explicitly labeled as historical v0.1.2 evidence"
 
 policy="$doc_root/docs/RELEASE_POLICY.md"
+grep -Fqx 'current_go_toolchain: go1.26.6' "$policy" || \
+  fail "docs/RELEASE_POLICY.md must bind the current Round 14 Go 1.26.6 toolchain"
 required_active_workflow_policy_markers=(
   'contains only `ci.yml`, `codeql.yml`, and `policy-gate.yml`; none can create'
   'point-in-time audit record, not an executable or current publication plan.'
@@ -892,7 +1599,7 @@ for relative in "${current_reports[@]}"; do
 done
 
 round8_readiness="$doc_root/docs/reports/ROUND8_RELEASE_READINESS.md"
-if ! python3 -B - "$round8_readiness" <<'PY'
+if ! "$python3_bin" -B - "$round8_readiness" <<'PY'
 import json
 import re
 import sys

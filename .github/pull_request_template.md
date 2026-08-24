@@ -8,7 +8,7 @@ Describe the change, why it is needed, and the affected trust boundary.
 - [ ] `make test` passed, or the reason it was not applicable is documented.
 - [ ] Vet, format, module, script, and safe-gate checks relevant to this change passed.
 - [ ] Performance-sensitive changes include `make round6-benchmark` results.
-- [ ] CPA integration changes retain the single pinned v7.2.116@a88197f845c979132c8978ea223c6af05cc81536 schema-2 contract.
+- [ ] CPA integration changes retain the single pinned v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa schema-3 contract.
 
 ## Security and restricted data
 
@@ -25,5 +25,5 @@ Describe the change, why it is needed, and the affected trust boundary.
 
 ## Release boundary
 
-- [ ] This pull request does not claim tag, release, deployment, Host, audit, evaluation, or production authorization.
-- [ ] Any release-related action has explicit maintainer authorization and preserves the documented attestation gates.
+- [ ] This pull request does not claim deployment, independent attestation, or stable production authorization.
+- [ ] Any `v1.0.0-rc.1` action has explicit maintainer authorization and preserves the Round 13 exact-main, Linux, second-machine, provenance, and prerelease gates.

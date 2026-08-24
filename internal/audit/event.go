@@ -37,6 +37,8 @@ const (
 	decisionKindBlockIncomplete            = "block_incomplete_inspection"
 	decisionKindBlockOpaqueMedia           = "block_opaque_media"
 	decisionKindBlockSubjectRisk           = "block_subject_risk"
+	decisionKindAuditCSAMText              = "audit_csam_text"
+	decisionKindBlockCSAMText              = "block_csam_text"
 )
 
 const (
@@ -55,6 +57,7 @@ const (
 	decisionExplanationKindIncomplete = "incomplete"
 	decisionExplanationKindOpaque     = "opaque_media"
 	decisionExplanationKindSubject    = "subject_risk"
+	decisionExplanationKindCSAMText   = "csam_text"
 
 	opaqueMediaExplanationReason = "opaque_media_present"
 )
@@ -392,6 +395,9 @@ func normalizeNewDecisionExplanation(event *Event) error {
 			SubjectRiskAction: event.Action,
 		}
 		event.ExplanationSchema = DecisionExplanationSchemaV2
+	case decisionKindAuditCSAMText, decisionKindBlockCSAMText:
+		event.DecisionExplanation = &DecisionExplanation{Kind: decisionExplanationKindCSAMText}
+		event.ExplanationSchema = DecisionExplanationSchemaV2
 	default:
 		if event.ExplanationSchema == "" {
 			event.ExplanationSchema = DecisionExplanationSchemaNone
@@ -668,6 +674,17 @@ func validateDecisionKindEventConsistency(event Event) error {
 			return errors.New("audit: block_subject_risk category must use the subject-risk taxonomy")
 		}
 		return validateNonMaliciousBlockIdentifiers(event, decisionExplanationKindSubject)
+	case decisionKindAuditCSAMText:
+		if !oneOf(event.Action, "observe", "audit") ||
+			!oneOf(event.Decision, "observe_csam_text", "audit_csam_text") {
+			return errors.New("audit: audit_csam_text decision_kind requires a non-blocking CSAM-text disposition")
+		}
+		return validateCSAMTextEvent(event, explanationSchema, false)
+	case decisionKindBlockCSAMText:
+		if event.Action != "block" || event.Decision != "block_csam_text" {
+			return errors.New("audit: block_csam_text decision_kind requires the CSAM-text block disposition")
+		}
+		return validateCSAMTextEvent(event, explanationSchema, true)
 	default:
 		return fmt.Errorf("audit: unsupported decision_kind %q", event.DecisionKind)
 	}
@@ -712,7 +729,9 @@ func validateDecisionKindExplanationSchema(decisionKind, decision, explanationSc
 		decisionKindBlockMaliciousText,
 		decisionKindBlockIncomplete,
 		decisionKindBlockOpaqueMedia,
-		decisionKindBlockSubjectRisk:
+		decisionKindBlockSubjectRisk,
+		decisionKindAuditCSAMText,
+		decisionKindBlockCSAMText:
 		if explanationSchema != DecisionExplanationSchemaV2 {
 			return fmt.Errorf("audit: %s decision_kind requires explanation_schema %s", decisionKind, DecisionExplanationSchemaV2)
 		}
@@ -720,6 +739,42 @@ func validateDecisionKindExplanationSchema(decisionKind, decision, explanationSc
 	default:
 		return fmt.Errorf("audit: unsupported decision_kind %q", decisionKind)
 	}
+}
+
+func validateCSAMTextEvent(event Event, explanationSchema string, blocking bool) error {
+	if event.Coverage != "complete" || event.IncompleteReason != "" {
+		return errors.New("audit: CSAM-text disposition requires complete inspection")
+	}
+	if event.Category != "csam_malicious" || len(event.RuleIDs) != 1 ||
+		!validCSAMTextRuleID(event.RuleIDs[0]) ||
+		event.Classifier != "csam-text-v1" {
+		return errors.New("audit: CSAM-text disposition requires a registered classifier category and rule")
+	}
+	if event.RiskScore != 0 {
+		return errors.New("audit: CSAM-text disposition must not borrow the cyber-abuse score")
+	}
+	explanation := event.DecisionExplanation
+	if explanationSchema != DecisionExplanationSchemaV2 || explanation == nil ||
+		explanation.Kind != decisionExplanationKindCSAMText {
+		return errors.New("audit: CSAM-text disposition requires the CSAM-text explanation branch")
+	}
+	if err := validateIndependentDecisionExplanation(explanation); err != nil {
+		return err
+	}
+	if blocking != (event.DecisionKind == decisionKindBlockCSAMText) {
+		return errors.New("audit: CSAM-text disposition blocking identity drifted")
+	}
+	return nil
+}
+
+func validCSAMTextRuleID(ruleID string) bool {
+	return oneOf(ruleID,
+		"CSAM-TXT-PRODUCTION-001",
+		"CSAM-TXT-SOLICITATION-001",
+		"CSAM-TXT-EXCHANGE-001",
+		"CSAM-TXT-DISSEMINATION-001",
+		"CSAM-TXT-GROOMING-001",
+	)
 }
 
 func validateAuditIneligibleRiskEvent(event Event, explanationSchema string) error {
@@ -1026,6 +1081,11 @@ func validateIndependentDecisionExplanation(explanation *DecisionExplanation) er
 		}
 		if explanation.IncompleteInspectionReason != "" || explanation.OpaqueMediaReason != "" {
 			return errors.New("audit: subject-risk explanation contains another union branch")
+		}
+	case decisionExplanationKindCSAMText:
+		if explanation.IncompleteInspectionReason != "" || explanation.OpaqueMediaReason != "" ||
+			explanation.SubjectRiskAction != "" {
+			return errors.New("audit: CSAM-text explanation contains another union branch")
 		}
 	default:
 		return errors.New("audit: decision explanation kind is unsupported")
@@ -1364,9 +1424,10 @@ func validDecision(value string) bool {
 		"observe_suspicious_text", "audit_suspicious_text",
 		"observe_incomplete_inspection", "audit_incomplete_inspection",
 		"allow_due_to_incomplete_inspection", "block_due_to_incomplete_inspection",
-		"allow_incomplete_inspection_off", "block_verified_hard_policy_under_incomplete_inspection",
+		"allow_incomplete_inspection_off",
 		"observe_opaque_media", "audit_opaque_media", "allow_with_opaque_media_audit", "block_opaque_media",
 		"audit_subject_risk", "block_subject_risk",
+		"observe_csam_text", "audit_csam_text", "block_csam_text",
 		"block_unknown_source_format", "cooldown_subject_risk")
 }
 
@@ -1378,12 +1439,16 @@ func decisionKindForDisposition(disposition string) string {
 		return decisionKindBlockMaliciousText
 	case "observe_malicious_text", "audit_malicious_text":
 		return decisionKindAuditEligibleMaliciousText
-	case "block_due_to_incomplete_inspection", "block_verified_hard_policy_under_incomplete_inspection", "block_unknown_source_format":
+	case "block_due_to_incomplete_inspection", "block_unknown_source_format":
 		return decisionKindBlockIncomplete
 	case "block_opaque_media":
 		return decisionKindBlockOpaqueMedia
 	case "block_subject_risk", "cooldown_subject_risk":
 		return decisionKindBlockSubjectRisk
+	case "observe_csam_text", "audit_csam_text":
+		return decisionKindAuditCSAMText
+	case "block_csam_text":
+		return decisionKindBlockCSAMText
 	case "legacy_unspecified":
 		return decisionKindLegacyUnspecified
 	default:
@@ -1404,6 +1469,8 @@ func validDecisionKind(value string) bool {
 		decisionKindBlockIncomplete,
 		decisionKindBlockOpaqueMedia,
 		decisionKindBlockSubjectRisk,
+		decisionKindAuditCSAMText,
+		decisionKindBlockCSAMText,
 	)
 }
 

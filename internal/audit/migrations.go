@@ -19,7 +19,7 @@ import (
 	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
-const currentSchemaVersion = 6
+const currentSchemaVersion = 7
 
 // SchemaVersion is the current durable audit schema identity exposed to
 // management metadata and compatibility tests.
@@ -118,6 +118,62 @@ ALTER TABLE raw_request_captures
     ADD COLUMN explanation_schema TEXT NOT NULL DEFAULT 'none'
     CHECK (explanation_schema IN ('none', 'decision-explanation-v1', 'decision-explanation-v2'));`
 
+// round10AuditSchema closes the durable raw-capture decision-kind contract.
+// SQLite does not support adding a CHECK constraint to an existing column, so
+// v7 rebuilds raw_request_captures while preserving every v6 audit event.
+// The copy is performed in the same BEGIN IMMEDIATE transaction as the
+// metadata update; any failed row or index recreation rolls the whole
+// migration back to the exact v6 database (which is backed up first).
+const round10AuditSchema = `
+DROP INDEX IF EXISTS idx_raw_request_captures_event;
+DROP INDEX IF EXISTS idx_raw_request_captures_timestamp;
+DROP INDEX IF EXISTS idx_raw_request_captures_request_timestamp;
+DROP INDEX IF EXISTS idx_raw_request_captures_raw_sha256_unique;
+
+ALTER TABLE raw_request_captures RENAME TO raw_request_captures_v6;
+
+CREATE TABLE raw_request_captures (
+    id             TEXT PRIMARY KEY,
+    event_id       TEXT NOT NULL,
+    timestamp_ns   INTEGER NOT NULL,
+    request_hash   TEXT NOT NULL,
+    subject_hash   TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('block', 'cooldown')),
+    decision       TEXT NOT NULL,
+    truncated      INTEGER NOT NULL CHECK (truncated IN (0, 1)),
+    redacted       INTEGER NOT NULL CHECK (redacted IN (0, 1)),
+    raw_preview    TEXT NOT NULL CHECK (length(CAST(raw_preview AS BLOB)) <= 1048576),
+    raw_sha256     TEXT NOT NULL,
+    redaction_pattern_hits INTEGER NOT NULL DEFAULT 0
+        CHECK (redaction_pattern_hits >= 0 AND redaction_pattern_hits <= 1000000),
+    redaction_version TEXT NOT NULL DEFAULT 'legacy-boolean-v0'
+        CHECK (length(redaction_version) BETWEEN 1 AND 64),
+    decision_kind  TEXT NOT NULL DEFAULT 'legacy_unspecified' CHECK (decision_kind IN (
+        'legacy_unspecified', 'allow_clean', 'audit_ineligible_risk',
+        'block_malicious_text',
+        'block_incomplete_inspection', 'block_opaque_media', 'block_subject_risk'
+    )),
+    explanation_schema TEXT NOT NULL DEFAULT 'none'
+        CHECK (explanation_schema IN ('none', 'decision-explanation-v1', 'decision-explanation-v2')),
+    FOREIGN KEY (event_id) REFERENCES audit_events(id) ON DELETE CASCADE
+);
+INSERT INTO raw_request_captures (
+    id, event_id, timestamp_ns, request_hash, subject_hash, action, decision,
+    truncated, redacted, raw_preview, raw_sha256, redaction_pattern_hits,
+    redaction_version, decision_kind, explanation_schema
+)
+SELECT id, event_id, timestamp_ns, request_hash, subject_hash, action, decision,
+    truncated, redacted, raw_preview, raw_sha256, redaction_pattern_hits,
+    redaction_version, decision_kind, explanation_schema
+FROM raw_request_captures_v6;
+
+DROP TABLE raw_request_captures_v6;
+CREATE UNIQUE INDEX idx_raw_request_captures_event ON raw_request_captures(event_id);
+CREATE INDEX idx_raw_request_captures_timestamp ON raw_request_captures(timestamp_ns DESC);
+CREATE INDEX idx_raw_request_captures_request_timestamp ON raw_request_captures(request_hash, timestamp_ns DESC);
+CREATE UNIQUE INDEX idx_raw_request_captures_raw_sha256_unique
+    ON raw_request_captures(raw_sha256) WHERE raw_sha256 <> '';`
+
 const round8RawCaptureDedupIndex = `CREATE UNIQUE INDEX IF NOT EXISTS idx_raw_request_captures_raw_sha256_unique
     ON raw_request_captures(raw_sha256)
     WHERE raw_sha256 <> '';`
@@ -172,6 +228,8 @@ type sqliteIndexContract struct {
 	name    string
 	columns []string
 	desc    []bool
+	unique  bool
+	partial bool
 }
 
 var auditEventColumnContract = []sqliteColumnContract{
@@ -226,10 +284,10 @@ var rawRequestCaptureColumnContract = []sqliteColumnContract{
 }
 
 var rawRequestCaptureIndexContract = []sqliteIndexContract{
-	{name: "idx_raw_request_captures_event", columns: []string{"event_id"}, desc: []bool{false}},
+	{name: "idx_raw_request_captures_event", columns: []string{"event_id"}, desc: []bool{false}, unique: true},
 	{name: "idx_raw_request_captures_timestamp", columns: []string{"timestamp_ns"}, desc: []bool{true}},
 	{name: "idx_raw_request_captures_request_timestamp", columns: []string{"request_hash", "timestamp_ns"}, desc: []bool{false, true}},
-	{name: "idx_raw_request_captures_raw_sha256_unique", columns: []string{"raw_sha256"}, desc: []bool{false}},
+	{name: "idx_raw_request_captures_raw_sha256_unique", columns: []string{"raw_sha256"}, desc: []bool{false}, unique: true, partial: true},
 }
 
 func migrateDatabase(db *sql.DB, cfg Config, databasePath string) error {
@@ -346,6 +404,11 @@ func migrateDatabase(db *sql.DB, cfg Config, databasePath string) error {
 			description = "add canonical Round9 decision kind, disposition, explanation schema, and raw-capture metadata"
 			if _, err := locked.Exec(round9AuditSchema); err != nil {
 				return fmt.Errorf("audit: apply schema migration 6: %w", err)
+			}
+		case 7:
+			description = "rebuild raw_request_captures to close the durable decision-kind CHECK"
+			if _, err := locked.Exec(round10AuditSchema); err != nil {
+				return fmt.Errorf("audit: apply schema migration 7: %w", err)
 			}
 		default:
 			return fmt.Errorf("audit: missing schema migration %d", next)
@@ -520,7 +583,7 @@ func validateLegacyAuditPrivacy(db sqliteQueryer, version int) error {
 	if err != nil {
 		return fmt.Errorf("inspect legacy audit privacy fields: %w", err)
 	}
-	defer rows.Close()
+	var validationErr error
 	for rows.Next() {
 		var requestHash, subjectHash, model, sourceFormat string
 		var decisionExplanation string
@@ -529,19 +592,24 @@ func validateLegacyAuditPrivacy(db sqliteQueryer, version int) error {
 			destinations = append(destinations, &decisionExplanation)
 		}
 		if err := rows.Scan(destinations...); err != nil {
-			return fmt.Errorf("scan legacy audit privacy fields: %w", err)
+			validationErr = fmt.Errorf("scan legacy audit privacy fields: %w", err)
+			break
 		}
 		if requestHash != "" && !validDigest(requestHash, "sha256:") {
-			return errors.New("request_hash is not a SHA-256 correlation value")
+			validationErr = errors.New("request_hash is not a SHA-256 correlation value")
+			break
 		}
 		if subjectHash != "" && !validDigest(subjectHash, "hmac-sha256:") {
-			return errors.New("subject_hash is not an HMAC-SHA256 correlation value")
+			validationErr = errors.New("subject_hash is not an HMAC-SHA256 correlation value")
+			break
 		}
 		if model != "" && !validDigest(model, modelHashPrefix) {
-			return errors.New("model is not a domain-separated SHA-256 correlation value")
+			validationErr = errors.New("model is not a domain-separated SHA-256 correlation value")
+			break
 		}
 		if sourceFormat != "" && !oneOf(sourceFormat, "openai", "openai-response", "interactions", SourceFormatCodexAlphaSearch, "openai-image", "openai-video", "claude", "anthropic", "gemini", SourceFormatUnknown) {
-			return errors.New("source_format is not a fixed provider value")
+			validationErr = errors.New("source_format is not a fixed provider value")
+			break
 		}
 		if version >= 5 {
 			schema := DecisionExplanationSchemaV1
@@ -549,12 +617,25 @@ func validateLegacyAuditPrivacy(db sqliteQueryer, version int) error {
 				schema = DecisionExplanationSchemaNone
 			}
 			if _, err := decodeDecisionExplanationForSchema(decisionExplanation, schema); err != nil {
-				return fmt.Errorf("decision_explanation violates the closed privacy contract: %w", err)
+				validationErr = fmt.Errorf("decision_explanation violates the closed privacy contract: %w", err)
+				break
 			}
 		}
 	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("iterate legacy audit privacy fields: %w", err)
+	iterationErr := rows.Err()
+	closeErr := rows.Close()
+	if validationErr != nil {
+		return validationErr
+	}
+	if iterationErr != nil {
+		return fmt.Errorf("iterate legacy audit privacy fields: %w", iterationErr)
+	}
+	// Close the cursor before inspecting legacy raw captures on the same
+	// migration connection.  Leaving this result set open can block the next
+	// SQLite statement when migration tests run in parallel, turning a rejected
+	// legacy row into an apparent migration hang.
+	if closeErr != nil {
+		return fmt.Errorf("close legacy audit privacy fields: %w", closeErr)
 	}
 	if version >= 4 {
 		if err := validateLegacyRawCapturePrivacy(db); err != nil {
@@ -721,6 +802,21 @@ func validateSchemaContract(db sqliteQueryer, version int) error {
 		); err != nil {
 			return err
 		}
+		if version == 4 {
+			// The v5 partial-dedup index name may already exist in a v4
+			// database. If an operator-created index occupies that name, reject
+			// it before migration 5 can silently skip CREATE INDEX IF NOT EXISTS.
+			indexExists, err := sqliteIndexExists(db, "idx_raw_request_captures_raw_sha256_unique")
+			if err != nil {
+				return fmt.Errorf("inspect future raw-capture index: %w", err)
+			}
+			if indexExists {
+				if err := requireSQLiteIndexDDLFragments(db, "idx_raw_request_captures_raw_sha256_unique",
+					"create unique index", "where raw_sha256 <> ''"); err != nil {
+					return err
+				}
+			}
+		}
 		if version >= 5 {
 			if err := requireSQLiteDDLFragments(db, "raw_request_captures",
 				"check(redaction_pattern_hits>=0andredaction_pattern_hits<=1000000)",
@@ -729,10 +825,18 @@ func validateSchemaContract(db sqliteQueryer, version int) error {
 			}
 		}
 		if version >= 6 {
-			if err := requireSQLiteDDLFragments(db, "raw_request_captures",
-				"check(decision_kindin('legacy_unspecified','allow_clean','audit_ineligible_risk','block_malicious_text','block_incomplete_inspection','block_opaque_media','block_subject_risk'))",
+			decisionKindsDDL := "check(decision_kindin('legacy_unspecified','allow_clean','audit_ineligible_risk','block_malicious_text','block_incomplete_inspection','block_opaque_media','block_subject_risk'))"
+			if err := requireSQLiteDDLFragments(db, "raw_request_captures", decisionKindsDDL,
 				"check(explanation_schemain('none','decision-explanation-v1','decision-explanation-v2'))"); err != nil {
 				return err
+			}
+			if version == 6 {
+				// Migration 7 rebuilds this table. Refuse operator-added schema
+				// objects before the first migration statement rather than silently
+				// deleting or retargeting them during RENAME/DROP.
+				if err := rejectUnexpectedRawCaptureSchemaObjects(db); err != nil {
+					return err
+				}
 			}
 		}
 		for _, index := range indexes {
@@ -759,6 +863,147 @@ func requireSQLiteIndexDDLFragments(db rowQueryer, index string, fragments ...st
 	for _, fragment := range fragments {
 		if !strings.Contains(normalized, strings.Join(strings.Fields(strings.ToLower(fragment)), " ")) {
 			return fmt.Errorf("index %s is missing required definition %s", index, fragment)
+		}
+	}
+	return nil
+}
+
+func sqliteIndexExists(db rowQueryer, name string) (bool, error) {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, name).Scan(&count); err != nil {
+		return false, err
+	}
+	return count == 1, nil
+}
+
+func rejectUnexpectedRawCaptureSchemaObjects(db sqliteQueryer) error {
+	allowedIndexes := map[string]struct{}{
+		"sqlite_autoindex_raw_request_captures_1":    {},
+		"idx_raw_request_captures_event":             {},
+		"idx_raw_request_captures_timestamp":         {},
+		"idx_raw_request_captures_request_timestamp": {},
+		"idx_raw_request_captures_raw_sha256_unique": {},
+	}
+	// A v7 migration drops the v6 indexes, renames the table, and drops the
+	// renamed table. Inspect every persistent index/trigger/view first so an
+	// operator-owned dependency cannot be silently retargeted or left broken.
+	rows, err := db.Query(`SELECT type, name, tbl_name, COALESCE(sql, '')
+FROM sqlite_master
+WHERE type IN ('index', 'trigger', 'view')
+ORDER BY type, name`)
+	if err != nil {
+		return fmt.Errorf("inspect raw-capture schema objects before migration: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var objectType, name, tableName, statement string
+		if err := rows.Scan(&objectType, &name, &tableName, &statement); err != nil {
+			return fmt.Errorf("scan raw-capture schema object before migration: %w", err)
+		}
+		referencesRawCapture := strings.Contains(strings.ToLower(statement), "raw_request_captures")
+		switch objectType {
+		case "index":
+			// SQLite indexes cannot refer to another table, so tbl_name is the
+			// authoritative dependency for an index. Only the reviewed indexes
+			// (and the primary-key autoindex) survive the table rebuild.
+			if !strings.EqualFold(tableName, "raw_request_captures") {
+				// Index names are schema-global and SQLite compares them
+				// case-insensitively. Reject a case-variant of a contract name on
+				// another table too; otherwise the later DROP INDEX could remove an
+				// operator-owned index while the contract lookup mistakes it for the
+				// raw-capture index.
+				for contractName := range allowedIndexes {
+					if strings.EqualFold(name, contractName) {
+						return fmt.Errorf("non-contract raw_request_captures index %q is attached to table %q and blocks schema migration 7", name, tableName)
+					}
+				}
+				continue
+			}
+			if _, ok := allowedIndexes[name]; ok {
+				continue
+			}
+		case "trigger":
+			// A trigger may be attached to the table or may be attached to an
+			// external table and write/read raw_request_captures in its body.
+			if !strings.EqualFold(tableName, "raw_request_captures") && !referencesRawCapture {
+				continue
+			}
+		case "view":
+			// sqlite_master has no normalized dependency graph for views. The
+			// stored CREATE VIEW statement is the durable source of truth; use a
+			// conservative case-insensitive match so quoted identifiers and
+			// formatting variants fail closed as well.
+			if !referencesRawCapture {
+				continue
+			}
+		default:
+			continue
+		}
+		return fmt.Errorf("non-contract raw_request_captures %s %q blocks schema migration 7", objectType, name)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate raw-capture schema objects before migration: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close raw-capture schema object scan: %w", err)
+	}
+	if err := rejectRawCaptureForeignKeyDependencies(db); err != nil {
+		return err
+	}
+	return nil
+}
+
+// rejectRawCaptureForeignKeyDependencies rejects every persistent foreign key
+// whose parent is raw_request_captures. SQLite rewrites such references during
+// ALTER TABLE ... RENAME; the subsequent DROP can then delete dependent rows or
+// leave a foreign key pointing at the dropped v6 name. This check deliberately
+// runs before the migration backup is published.
+func rejectRawCaptureForeignKeyDependencies(db sqliteQueryer) error {
+	rows, err := db.Query(`SELECT name FROM sqlite_master
+WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+ORDER BY name`)
+	if err != nil {
+		return fmt.Errorf("inspect raw-capture foreign-key tables before migration: %w", err)
+	}
+	tableNames := make([]string, 0)
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan raw-capture foreign-key table before migration: %w", err)
+		}
+		tableNames = append(tableNames, tableName)
+	}
+	if err := rows.Err(); err != nil {
+		_ = rows.Close()
+		return fmt.Errorf("iterate raw-capture foreign-key tables before migration: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close raw-capture foreign-key table scan: %w", err)
+	}
+
+	for _, tableName := range tableNames {
+		foreignKeys, err := db.Query(`SELECT "table" FROM pragma_foreign_key_list(?) ORDER BY id, seq`, tableName)
+		if err != nil {
+			return fmt.Errorf("inspect foreign keys for table %q before migration: %w", tableName, err)
+		}
+		for foreignKeys.Next() {
+			var parentTable string
+			if err := foreignKeys.Scan(&parentTable); err != nil {
+				_ = foreignKeys.Close()
+				return fmt.Errorf("scan foreign keys for table %q before migration: %w", tableName, err)
+			}
+			if strings.EqualFold(strings.TrimSpace(parentTable), "raw_request_captures") {
+				_ = foreignKeys.Close()
+				return fmt.Errorf("non-contract raw_request_captures foreign-key dependency from table %q blocks schema migration 7", tableName)
+			}
+		}
+		if err := foreignKeys.Err(); err != nil {
+			_ = foreignKeys.Close()
+			return fmt.Errorf("iterate foreign keys for table %q before migration: %w", tableName, err)
+		}
+		if err := foreignKeys.Close(); err != nil {
+			return fmt.Errorf("close foreign keys for table %q before migration: %w", tableName, err)
 		}
 	}
 	return nil
@@ -799,6 +1044,14 @@ func requireSQLiteTable(db sqliteQueryer, table string, required []sqliteColumnC
 }
 
 func requireSQLiteIndex(db sqliteQueryer, required sqliteIndexContract) error {
+	var unique, partial int
+	if err := db.QueryRow(`SELECT "unique", partial FROM pragma_index_list((SELECT tbl_name FROM sqlite_master WHERE type = 'index' AND name = ?)) WHERE name = ?`, required.name, required.name).Scan(&unique, &partial); err != nil {
+		return fmt.Errorf("inspect index %s attributes: %w", required.name, err)
+	}
+	if (unique == 1) != required.unique || (partial == 1) != required.partial {
+		return fmt.Errorf("index %s attribute mismatch: got unique=%t partial=%t, want unique=%t partial=%t",
+			required.name, unique == 1, partial == 1, required.unique, required.partial)
+	}
 	rows, err := db.Query(`SELECT name, "desc" FROM pragma_index_xinfo(?) WHERE key = 1 ORDER BY seqno`, required.name)
 	if err != nil {
 		return fmt.Errorf("inspect index %s: %w", required.name, err)
@@ -960,8 +1213,16 @@ func createMigrationBackupForVersion(db *sql.DB, cfg Config, databasePath string
 	if sourceVersion < 1 || sourceVersion >= currentSchemaVersion {
 		return fmt.Errorf("migration backup source schema must be between 1 and %d, got %d", currentSchemaVersion-1, sourceVersion)
 	}
+	// Keep the historical v5->v6 rollback identity stable.  That boundary
+	// changed the meaning of the durable decision column and older SOs use the
+	// pre-v6 name when locating their exact rollback copy.  A v6->v7 upgrade is
+	// the new CSAM taxonomy boundary and uses the current v7 identity.
+	targetVersion := currentSchemaVersion
+	if sourceVersion < 6 {
+		targetVersion = 6
+	}
 	stamp := cfg.Now().UTC().Format("20060102T150405.000000000Z")
-	backupPath := fmt.Sprintf("%s.pre-v%d-%s.bak", databasePath, currentSchemaVersion, stamp)
+	backupPath := fmt.Sprintf("%s.pre-v%d-%s.bak", databasePath, targetVersion, stamp)
 	manifestPath := backupPath + ".manifest.json"
 	if strings.ContainsAny(backupPath, "\x00\r\n") {
 		return errors.New("generated backup path contains control characters")
@@ -1012,7 +1273,7 @@ func createMigrationBackupForVersion(db *sql.DB, cfg Config, databasePath string
 		Schema:              migrationBackupManifestSchema,
 		DatabaseFile:        filepath.Base(backupPath),
 		SourceSchemaVersion: sourceVersion,
-		TargetSchemaVersion: currentSchemaVersion,
+		TargetSchemaVersion: targetVersion,
 		CreatedAt:           cfg.Now().UTC().Format(time.RFC3339Nano),
 		Bytes:               info.Size(),
 		SHA256:              digest,
@@ -1307,8 +1568,9 @@ func pruneMigrationBackups(databasePath string, keep int) error {
 		return err
 	}
 	type candidate struct {
-		path    string
-		modTime time.Time
+		path     string
+		modTime  time.Time
+		boundary string
 	}
 	backups := make([]candidate, 0, len(entries))
 	for _, entry := range entries {
@@ -1323,7 +1585,11 @@ func pruneMigrationBackups(databasePath string, keep int) error {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 			return fmt.Errorf("migration backup must be a regular non-symlink file: %s", match)
 		}
-		backups = append(backups, candidate{path: match, modTime: info.ModTime()})
+		boundary, ok := migrationBackupBoundary(databaseName, entry.Name())
+		if !ok {
+			continue
+		}
+		backups = append(backups, candidate{path: match, modTime: info.ModTime(), boundary: boundary})
 	}
 	sort.Slice(backups, func(i, j int) bool {
 		if backups[i].modTime.Equal(backups[j].modTime) {
@@ -1331,10 +1597,16 @@ func pruneMigrationBackups(databasePath string, keep int) error {
 		}
 		return backups[i].modTime.After(backups[j].modTime)
 	})
-	if len(backups) <= keep {
-		return nil
+	retained := make(map[string]int)
+	pruned := make([]candidate, 0)
+	for _, backup := range backups {
+		if retained[backup.boundary] < keep {
+			retained[backup.boundary]++
+			continue
+		}
+		pruned = append(pruned, backup)
 	}
-	for _, backup := range backups[keep:] {
+	for _, backup := range pruned {
 		manifestPath := backup.path + ".manifest.json"
 		if info, err := os.Lstat(manifestPath); err == nil {
 			if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
@@ -1354,19 +1626,24 @@ func pruneMigrationBackups(databasePath string, keep int) error {
 }
 
 func isMigrationBackupName(databaseName, candidate string) bool {
+	_, ok := migrationBackupBoundary(databaseName, candidate)
+	return ok
+}
+
+func migrationBackupBoundary(databaseName, candidate string) (string, bool) {
 	prefix := databaseName + ".pre-v"
 	if !strings.HasPrefix(candidate, prefix) || !strings.HasSuffix(candidate, ".bak") {
-		return false
+		return "", false
 	}
 	remainder := strings.TrimSuffix(strings.TrimPrefix(candidate, prefix), ".bak")
 	separator := strings.IndexByte(remainder, '-')
 	if separator < 1 || separator == len(remainder)-1 {
-		return false
+		return "", false
 	}
 	for index := 0; index < separator; index++ {
 		if remainder[index] < '0' || remainder[index] > '9' {
-			return false
+			return "", false
 		}
 	}
-	return true
+	return remainder[:separator], true
 }

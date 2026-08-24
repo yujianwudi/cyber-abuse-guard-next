@@ -52,7 +52,6 @@ from yaml.tokens import (
     DirectiveToken,
     DocumentEndToken,
     DocumentStartToken,
-    FlowMappingStartToken,
     FlowSequenceStartToken,
     KeyToken,
     TagToken,
@@ -122,6 +121,7 @@ ACTIVE_WORKFLOW_PATHS = (
     ".github/workflows/ci.yml",
     ".github/workflows/codeql.yml",
     ".github/workflows/policy-gate.yml",
+    ".github/workflows/release-rc.yml",
 )
 ACTIONLINT_VERSION = "v1.7.12"
 ACTIONLINT_CONFIG_PATH = ".github/actionlint.yaml"
@@ -138,6 +138,7 @@ CURRENT_CPA_AUDIT_UNITTEST_COMMAND = (
     "./tools/current-cpa-audit/tests -p 'test_*.py'"
 )
 WORKFLOW_DIRECTORY_AUXILIARY_PATHS = (".github/workflows/README.md",)
+# The sole active, tag-bound owner-authorized RC publication entrypoint.
 ACTIVE_RC_WORKFLOW_PATH = ".github/workflows/release-rc.yml"
 ROUND9_GATE_WORKFLOW_PATH = ".github/workflows/policy-gate.yml"
 ROUND9_HOST_WORKFLOW_PATH = ".github/workflows/round9-host-validation.yml"
@@ -313,9 +314,9 @@ ROUND9_SAFE_GATE_BOOTSTRAP_COMMANDS = (
     'rm -f -- "$libyaml_package" "$pyyaml_package"',
 )
 SAFE_WORKFLOW_ENV_LINES = {
-    "GOTOOLCHAIN: go1.26.4",
+    "GOTOOLCHAIN: go1.26.6",
     "GOFLAGS: -mod=readonly",
-    "GO_VERSION: '1.26.4'",
+    "GO_VERSION: '1.26.6'",
     "VERSION: '0.15'",
     "RC_VERSION: '0.15-rc.4'",
     "CYCLONEDX_GOMOD_VERSION: 'v1.9.0'",
@@ -327,9 +328,9 @@ SAFE_WORKFLOW_ENV_LINES = {
     "ROUND9_PAIRED_LABEL_AUDIT_SHA256: a2d34853f20ae1c0b18690a4f58f100fe0014c53232457d5084aa90407e2ab8f",
 }
 SAFE_WORKFLOW_ENV = {
-    "GOTOOLCHAIN": "go1.26.4",
+    "GOTOOLCHAIN": "go1.26.6",
     "GOFLAGS": "-mod=readonly",
-    "GO_VERSION": "1.26.4",
+    "GO_VERSION": "1.26.6",
     "VERSION": "0.15",
     "RC_VERSION": "0.15-rc.4",
     "CYCLONEDX_GOMOD_VERSION": "v1.9.0",
@@ -383,9 +384,9 @@ CLEAN_EXECUTION_ENV_PATHS = {
 CPA_MODULE_PATH = "github.com/router-for-me/CLIProxyAPI/v7"
 CPA_ROUND8_VERSION = "v7.2.95"
 CPA_ROUND8_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
-CPA_ACTIVE_VERSION = "v7.2.116"
-CPA_ACTIVE_COMMIT = "a88197f845c979132c8978ea223c6af05cc81536"
-CPA_ACTIVE_MODULE_SUM = "h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU="
+CPA_ACTIVE_VERSION = "v7.2.137"
+CPA_ACTIVE_COMMIT = "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
+CPA_ACTIVE_MODULE_SUM = "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w="
 CPA_ACTIVE_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 CPA_ROUND9_VERSION = "v7.2.113"
 CPA_ROUND9_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
@@ -589,7 +590,7 @@ SOURCE_RELEASE_EXCLUSION_CONTRACT_TEST_SCRIPT = (
     "scripts/source-release-exclusion-contract-test.sh"
 )
 SOURCE_RELEASE_EXCLUSION_CONTRACT_TEST_SHA256 = (
-    "09dfb17a8a8e8316830dc2f9cd59491affb1c38cab0f00f59f9f2340acf50bea"
+    "8d1ba1532b650697cc723db80b62a3fc8bd22dde3e2da69e5dd0527db49ff939"
 )
 SOURCE_RELEASE_SAFE_SHELL_FIXTURE_LINE = "  internal/config/id_rsa_policy.go; do"
 SOURCE_RELEASE_SAFE_SCRIPT_PATH_FIXTURE_LINE = "  scripts/package-tar-gz.sh \\"
@@ -1057,18 +1058,25 @@ CANDIDATE_ARTIFACTS = (
 )
 CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
-    "release-candidate-contract-test.sh": "ffd78a8531d2f8c1d10e4931327b0c7575a030381d7dd1a1dd5ac1896f33c141",
+    "release-candidate-contract-test.sh": "2e64d30b1efed40bf6ea36d0a85a47804902d0c8e476237e29e0bc61662719dc",
 }
-RC_RELEASE_SCRIPT_SHA256 = "c6d08fb43288cec1a4c56a46a980b744acbe09168030f43eb30336a9eb726256"
+RC_RELEASE_SCRIPT_SHA256 = "2d5e680dad7e4edfbe42c806df534da4de8561e421e846bf530f6a28c898cc48"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
 RELEASE_BUILD_METADATA_SCRIPT_SHA256 = (
-    "6d5312459fd238f35ddbdee6c79779cb340fba4029f49f7f6490b64f639a259c"
+    "c838bba456c08af8e6be7775f6f5353497739e894850fc3a1839d456fa273979"
 )
-RC_BUILDER_IMAGE = "docker.io/library/golang:1.26.4-bookworm"
+RC_BUILDER_IMAGE = "docker.io/library/golang:1.26.6-bookworm"
 RC_BUILDER_IMAGE_DIGEST = (
-    "sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b"
+    "sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36"
 )
 RC_BUILDER_REFERENCE = f"{RC_BUILDER_IMAGE}@{RC_BUILDER_IMAGE_DIGEST}"
+HISTORICAL_ROUND8_RC_BUILDER_IMAGE = "docker.io/library/golang:1.26.4-bookworm"
+HISTORICAL_ROUND8_RC_BUILDER_IMAGE_DIGEST = (
+    "sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b"
+)
+HISTORICAL_ROUND8_RC_BUILDER_REFERENCE = (
+    f"{HISTORICAL_ROUND8_RC_BUILDER_IMAGE}@{HISTORICAL_ROUND8_RC_BUILDER_IMAGE_DIGEST}"
+)
 RC_REPRODUCIBLE_RUNNER_NAME = "UNRECORDED_EPHEMERAL_GITHUB_HOSTED_RUNNER"
 RC_REPRODUCIBLE_WORKFLOW_RUN = "UNRECORDED_EPHEMERAL_GITHUB_ACTIONS_RUN"
 RC_REPRODUCIBLE_WORKFLOW_ATTEMPT = "UNRECORDED_EPHEMERAL_GITHUB_ACTIONS_ATTEMPT"
@@ -1154,9 +1162,141 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     rm -f -- "$temporary"
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
-ACTIVE_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
+HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
+ACTIVE_RC_WORKFLOW_SHA256 = "f136b3549e1210674d6e2324c991c32e66482b737513c51cc59c3139fe7f952a"
+ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
+ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
+    "b92bf2546f231ebb749871b1668de28af735d79970ae4639a2bb1b64b9434649"
+)
+ROUND13_RC_CONTRACT_TEST_SCRIPT = "scripts/release-rc-contract-test.sh"
+ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256 = (
+    "7ace50ab5244a9e9d56b284249ad5d92f50b95321783393975cdbf9dca57163a"
+)
+ROUND13_RC_CPA_STORE_SCRIPT = "scripts/release_rc_cpa_store.py"
+ROUND13_RC_CPA_STORE_SCRIPT_SHA256 = "514a434e33c8be7d0cdbd4e5a612b6ad7de446d07eb3d99f98931820ad4e14ae"
+ROUND13_RC_CPA_STORE_TEST_SCRIPT = "scripts/release_rc_cpa_store_test.py"
+ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256 = "74c1cb5f2eadcd0c10e9f9d348f33a7d72aabb64fa5514d85dab6e300d0590c4"
+ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT = "integration/pluginstorecontract/archive_contract_test.go"
+ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT_SHA256 = "6366ab7a95bbab730d51151a2613392409f0b41b00dd43eacfc71266f0094d74"
+ROUND13_RC_CPA_STORE_HOST_CONTRACT = "integration/pluginstorecontract/host_source_contract_test.go"
+ROUND13_RC_CPA_STORE_HOST_CONTRACT_SHA256 = "0c2aace1d206d6aa5ca625e45dc08a7e7edc3932eb68cb8bbf0c34894197cd34"
+ROUND13_RC_CPA_STORE_OVERLAY = "integration/pluginstorecontract/testfixtures/release_rc_install_overlay_test.go.txt"
+ROUND13_RC_CPA_STORE_OVERLAY_SHA256 = "8c196ab5656a27d9fe1219e95b65de272f0ebaabe155f3305f4b0cbf67f4b446"
+ROUND13_RC_ARTIFACT_ZIP_SCRIPT = "scripts/release_rc_artifact_zip.py"
+ROUND13_RC_ARTIFACT_ZIP_SCRIPT_SHA256 = (
+    "e694b03c9d6cd418216271fceb91c92075eb1d7829709eb4c2df370a1aa58795"
+)
+ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT = "scripts/release_rc_artifact_zip_test.py"
+ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT_SHA256 = (
+    "d9174bbfff63073deff3fffdcc9069d293f2b789a7d9eadfed4dec1abd766602"
+)
+ROUND13_RC_GITHUB_ADMISSION_SCRIPT = "scripts/release_rc_github_admission.py"
+ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "7b740ac42a00db7edfc247229ec24494e351f432646ed686f619b6274c3079c9"
+ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT = "scripts/release_rc_github_admission_test.py"
+ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "66d3f21e6cb9bb1d56fecaa2fd4949ea29e251b3e50e28e81472145425467ad7"
+ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT = "tools/current-cpa-audit/second_machine_release_admission.py"
+ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "aec77e979acd147b7447f7fe57f4b7ddd66dccc83d7c6dc4c0ceb73b2806f341"
+ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT = "tools/current-cpa-audit/tests/test_second_machine_release_admission.py"
+ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256 = "f747dd02b4aaa3aa2e20f0bf67f3ecc44862471e010fedad878760d5dcb80839"
+ROUND13_RC_LINKED_CONTRACT_SHA256 = {
+    ROUND13_RC_RELEASE_SCRIPT: ROUND13_RC_RELEASE_SCRIPT_SHA256,
+    ROUND13_RC_CONTRACT_TEST_SCRIPT: ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256,
+    ROUND13_RC_CPA_STORE_SCRIPT: ROUND13_RC_CPA_STORE_SCRIPT_SHA256,
+    ROUND13_RC_CPA_STORE_TEST_SCRIPT: ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256,
+    ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT: ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT_SHA256,
+    ROUND13_RC_CPA_STORE_HOST_CONTRACT: ROUND13_RC_CPA_STORE_HOST_CONTRACT_SHA256,
+    ROUND13_RC_CPA_STORE_OVERLAY: ROUND13_RC_CPA_STORE_OVERLAY_SHA256,
+    ROUND13_RC_ARTIFACT_ZIP_SCRIPT: ROUND13_RC_ARTIFACT_ZIP_SCRIPT_SHA256,
+    ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT: ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT_SHA256,
+    ROUND13_RC_GITHUB_ADMISSION_SCRIPT: ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256,
+    ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT: ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256,
+    ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256,
+    ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256,
+    "tools/current-cpa-audit/second-machine-release-admission.schema.json": "73f0f1efe005c86bf9787d4ecc53ed6a7e63d1b739f927a88f38b6c92e4bd135",
+    "tools/current-cpa-audit/Dockerfile.mock": "7a690961f1500b63d6a8a17e3081abf461619d9eeaadd8b1b97660b542712d85",
+    "tools/current-cpa-audit/README.md": "aed5f7e043b125fd56c0aeb047d1b53e41a149eb4973117035a84b117a66659d",
+    "tools/current-cpa-audit/acquire.py": "f19f7761d263dff62e747d091e056a96b8534bb7599578f2918463b58ca089d1",
+    "tools/current-cpa-audit/audit_contract.py": "1f6c93af2dd6ac11d90cbfd825c99cca2acb059a6a5fd62bf030fe35be6e97cd",
+    "tools/current-cpa-audit/counted_mock.py": "bfc53f57a9621f9f73a57595b6c4f3c33c2e7f11d58d9409a69a7c0112d8beb7",
+    "tools/current-cpa-audit/make_run_config.py": "7086506c924863298543d64dbef3c3124cc539884a68a9da4fde15acb29dff47",
+    "tools/current-cpa-audit/machine-evidence.schema.json": "3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e",
+    "tools/current-cpa-audit/repository-policy.json": "24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7",
+    "tools/current-cpa-audit/run.py": "1c84bff047a6f246c6ef9c54db049f43fe2e330692683169ee2731431d3b082a",
+    "tools/current-cpa-audit/supplemental-zip-policy.json": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a",
+    "tools/current-cpa-audit/supplemental_zip.py": "4ee52802e30eee7cf64bddd6fd30b614c8eba6bd63b2efe0e4126e1812e457d2",
+    "tools/current-cpa-audit/validate.py": "64921edc0001056ef0062a4c5a8b1f9f2ddfbab563605e5af47e2149f2d92a68",
+    "tools/current-cpa-audit/host-performance-evidence.schema.json": "db64fb501229d9410f70c2f4accaffa31421b8daa7b1b15f15be5feeb0bfc456",
+    "tools/current-cpa-audit/host_performance.py": "10e3d9388a76978eaf5ec97155cb323c474dfe554df2ef5905a9b4a086153b82",
+    "tools/current-cpa-audit/host_performance_workloads.py": "b23fea073ed5593b092c1a4bd981d22b3422690f55a918d9e25a94f7931a082d",
+    "tools/current-cpa-audit/native-host-special-paths.schema.json": "d61d1d97009bfe0c9f5ed77e2e82627ba17ba10e4e2d2036748c0a698e3e7999",
+    "tools/current-cpa-audit/native_host_special_paths.py": "9e27d5c22e7d70a4d481c3fef8647a124a24fdb0188a9a7563f0c7fbf6456126",
+    "integration/host_integration_test.go": "68e723c59380ddfa475a64e66c4605a07bcdcf89d0c20c6daf8fcc06a4b8374f",
+    "tools/current-cpa-audit/tests/test_host_performance_workloads.py": "5f684a5fbb5831ab57fc273c4192ce13b5a459034c7bb64031d8003c1cd81855",
+    "tools/current-cpa-audit/tests/test_native_host_special_paths.py": "8e29c772f0765b3655638851dfca1d42a94a2803264f64d3a0464dabc490ff0a",
+    "tools/current-cpa-audit/tests/test_supplemental_zip.py": "61deffc9460697b275fdbf245aa9ec56f6ac627561126b6bf7be694521313974",
+}
+# Round 13 is an immutable historical review baseline.  The active Round 14
+# release workflow inherits every unchanged Round 13 pin, explicitly replaces
+# the files reviewed for the CPA v7.2.137/schema-3 audit closure, and adds the
+# new lazy-read and CSAM text-only evidence modules.  Active validation must use
+# this mapping without rewriting the historical values above.
+ROUND14_RC_LINKED_CONTRACT_SHA256 = {
+    **ROUND13_RC_LINKED_CONTRACT_SHA256,
+    ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "185a901017679c8b1ac0c64d047b5c8e273c35bfc2b3e216f572167d8a7fc49a",
+    ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "710e818cd00d3dab920666992096d4317c60082715c19a374459b7c4c76365d6",
+    "tools/current-cpa-audit/README.md": "01ca1ade8eea8edd3aa4d95967bdfb5222cd93fdcc1d399df319461251baa947",
+    "tools/current-cpa-audit/acquire.py": "806f424d6a9b9d688132d414d98a2499606a3a9f230f54836cc706410c131ec3",
+    "tools/current-cpa-audit/audit_contract.py": "7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642",
+    "tools/current-cpa-audit/repository-policy.json": "688d3919de025d8e2ee52584fe7bdf8a8757bf507ae83a2e1159c403f2bc26e4",
+    "tools/current-cpa-audit/run.py": "434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665",
+    "tools/current-cpa-audit/validate.py": "64ed85b2f43aa48401069bef28cdcf3c5cbea64f6aafd20dc7a7a42df20885ca",
+    "tools/current-cpa-audit/csam_text_evidence.py": "096bc2fda7e6c7b2c3a2825325dc9ccb3656499c68f7952192d3fb027a58b431",
+    "tools/current-cpa-audit/csam_text_runner.py": "991cca40118131c6c6b3a8b18d0b003ab52082fa97169bf3903de0eb15076455",
+    "tools/current-cpa-audit/lazy_read.py": "dd89574f7402834b9f5f26e482412b083f7a1686771df81cc38038ee8c6b8119",
+    "tools/current-cpa-audit/tests/test_contract.py": "06f10300409078304ab55830e8b173c818870f80c56ac8a252ddf04b7baa4a0f",
+    "tools/current-cpa-audit/tests/test_csam_text_evidence.py": "d80d3d2b324523139824b33822c2c63b4d0ae3f482be533a1b6cbaf15ec90326",
+    "tools/current-cpa-audit/tests/test_lazy_read.py": "79ac4eb032a8f2c9ef68b88ff138d1a78e6e7907c8e9a2a64acf0b9850f4317a",
+    "tools/current-cpa-audit/tests/test_unit_receipt.py": "fbd5b0b13da93982752b62e75590dfb20329d360c25f8e7b67bc52b2e9a831bc",
+    "scripts/current_cpa_audit_unit_receipt.py": "26b1b54b34d269c5c31c59f1d063a8fe154975c7efd9d11e8ae4044d816c858b",
+    "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "1fb557487fa5571ee3cc4d37b697911e807750e89375eb8efc3af79e984e68c5",
+    "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
+    "integration/host_integration_test.go": "23c02ec1a1f92592aec8c702429193de4876b16024e4a717c83f5b4e67966f36",
+}
+ROUND13_RC_INPUT_ORDER = (
+    "ci_run_id",
+    "codeql_run_id",
+    "policy_run_id",
+    "second_machine_release_id",
+    "second_machine_asset_id",
+    "second_machine_asset_sha256",
+    "authorize_prerelease",
+)
+ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS = {
+    "jobs.admission.steps[1].env.GH_TOKEN",
+    "jobs.admission.steps[2].env.GH_TOKEN",
+    "jobs.seal_candidate.steps[3].with.github-token",
+    "jobs.seal_candidate.steps[4].env.GH_TOKEN",
+    "jobs.seal_candidate.steps[5].env.GH_TOKEN",
+    "jobs.publish_prerelease.steps[2].env.GH_TOKEN",
+    "jobs.publish_prerelease.steps[3].env.GH_TOKEN",
+    "jobs.publish_prerelease.steps[4].env.GH_TOKEN",
+}
+ROUND13_RC_ALLOWED_SECRET_EXPRESSIONS = {
+    "jobs.admission.steps[1].env.GOVERNANCE_TOKEN": "${{ secrets.CAG_RELEASE_GOVERNANCE_TOKEN }}",
+    "jobs.publish_prerelease.steps[4].env.GOVERNANCE_TOKEN": "${{ secrets.CAG_RELEASE_GOVERNANCE_TOKEN }}",
+}
+ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
+    "run-name": "RC v1.0.0-rc.1 from ${{ github.ref_name }}",
+    "jobs.admission.steps[1].env.ACTOR": "${{ github.actor }}",
+    "jobs.admission.steps[1].env.ACTOR_ID": "${{ github.actor_id }}",
+    "jobs.admission.steps[1].env.DISPATCH_REF": "${{ github.ref }}",
+    "jobs.admission.steps[1].env.DISPATCH_SHA": "${{ github.sha }}",
+    "jobs.admission.steps[1].env.TRIGGERING_ACTOR": "${{ github.triggering_actor }}",
+    "jobs.admission.steps[1].env.WORKFLOW_REF": "${{ github.workflow_ref }}",
+    "jobs.admission.steps[1].env.WORKFLOW_SHA": "${{ github.workflow_sha }}",
+}
 ROUND8_HOST_WORKFLOW_SHA256 = "0dafb17a7189abd07dabc5e45ff0e35ef4787f69defdcb5096f947aee0dec551"
-ROUND9_GATE_WORKFLOW_SHA256 = "25c287b8d55b95bd1d4ed1d8c049b0a660388dac6b48bc1986331b3fb5e5062d"
+ROUND9_GATE_WORKFLOW_SHA256 = "61058833bcb068fc7691853464e0bb0c5baa5a785904be2c2bb59a5d60531e72"
 ROUND9_HOST_WORKFLOW_SHA256 = "701ebfc27dcbcdc9adff9c9887c1eaa6af8ac959602ade0613624d363e2edf17"
 ROUND9_RC_WORKFLOW_SHA256 = "09ab4e5dedb90ffbfe8f2436c8dc7ee6353162dc825e9751c708bdca68c800e1"
 ROUND9_INDEPENDENT_AUDIT_SCRIPT = "scripts/round9_independent_audit_contract.py"
@@ -1191,10 +1331,10 @@ REPOSITORY_SECRET_SCAN_SCRIPT = "scripts/repository_secret_scan.py"
 REPOSITORY_SECRET_SCAN_TEST_SCRIPT = "scripts/repository_secret_scan_test.py"
 REPOSITORY_SECRET_SCAN_SHA256 = {
     REPOSITORY_SECRET_SCAN_SCRIPT: (
-        "1eb092a3edd00ef7889fb62e015f946d7ea5942d0ebaf3368d375d1a3718a5e3"
+        "b51c91c527891276840a5811aa7f16faea78ed36e097de663aacad3ace3f9dff"
     ),
     REPOSITORY_SECRET_SCAN_TEST_SCRIPT: (
-        "78b11d3a062f88364c5712642086d62c80dbd35e76eab49f238f46a336ab857b"
+        "9bc17ee04369cce77677d660990cbe2692e6ef14b8883c54dda0d367db1e0ba7"
     ),
 }
 RC_RELEASE_WORKFLOW_SHA256 = "5ff480e2bb84bc33da81cc4e9839e4bca50453fc7e77debc1f24dd5b04362107"
@@ -1286,7 +1426,7 @@ ROUND8_BASE_STEP_RUN_SHA256 = {
     0: "083c67c86749f4f988952b912fd1eafa32b97998417d0cbcd4d1be423b71ecdf",
     1: "0d6ed073233abaa1e9b7849828fdc63b77166c35c6f4a15bf07a73437d6bfdb6",
 }
-CODEQL_WORKFLOW_SHA256 = "54cf0629dae660c38eaede7f726f6f396e007a1779fbc0032d99a9af440cd6d7"
+CODEQL_WORKFLOW_SHA256 = "47b89fd8757d7a78eae3790b9bddde966b5dae6e8dd90f2e0eb11cef94a483f2"
 FORMAL_OPERATION_SCRIPTS = (
     "formal-release.sh",
     "generate-release-evidence.sh",
@@ -1356,11 +1496,19 @@ FROZEN_EVALUATION_STATUS_COMMAND = (
 )
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT = "scripts/round6-doc-consistency-fixture-test.sh"
 ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "d5b0d5f3971d9e8d5594f6081715b6aebb299309c301f50c633dbb679bfbe122"
+    "8637406da9df58dcfe8a4b3917738c6aec9b14319c805286336fcd5c05d37f8e"
 )
 ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "2f0de917f76fc7d53fcabab725765e1f7f2e679708a7b273036bb1c0a351b7c0",
-    "scripts/release-doc-consistency.sh": "97946d05f4d2893b58b60b542ac533f7b0c0985201a96efc3b2b7272e6f73309",
+    "scripts/release-doc-consistency-test.sh": "1a3c83824dd0ebcf9fa5160096016d3e29c1e30dafeb530f66013105a32a2c8d",
+    "scripts/release-doc-consistency.sh": "017136c07d7f07d0da23c2d9e3745ec15c0b60fb8180f0616f005ffec7d9a91b",
+}
+ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT = ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT
+ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
+    "39028c4a718c1fe9b50bc63dd25164cde1fa6f308382febffe5a2ff21c5b95af"
+)
+ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256 = {
+    "scripts/release-doc-consistency-test.sh": "11e02f5d3ebf3a7bf98a950338f1175624b98f84e9a0cd30e6f5302d3e368e05",
+    "scripts/release-doc-consistency.sh": "8ba2643198b4ecff49bec904b58db911dae6f7f37ebb52cee876fa85910f1a3c",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1384,7 +1532,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "b68dbac2c99efe94ea591ddcc2d1a93101c8fc818c59969c81874ad7dde949bb"
+    "3481c052944678c7cf0e658c793bf3ea817d99396901843e32f616398fd94887"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then
@@ -1489,20 +1637,50 @@ ROUND9_DOCKER_SANDBOX_SUBPROCESS_CONTRACT = (
 )
 ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
     "internal/classifier/malicious_text_producer_inventory_test.go": (
-        "e11969e711fc5a5c84fd0a7b5ba5317ba2bf6c2f4bf0aa33c5e4e8ac9d65ef88"
+        "200511e0b60fe3e5429c99f5f725ad636fdfc839492623d358a4e665de7dfc79"
     ),
     "docs/reports/ROUND9_MALICIOUS_TEXT_PRODUCER_INVENTORY.json": (
-        "def42b49e18fd373dbaa2730af9fc5006ba8c2c5a83e42984e78fa9c241e34aa"
+        "268e5344bda6f48f18b0c04f433be65079e1d0cc3b2fb6e63ee2aafdbeee728e"
     ),
 }
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
-ROUND6_SAFE_GATE_TEST_SHA256 = "d70cc0603c76d2ae87b60d1c11654f10602f7997ca4e898a9af250b0fb1bb545"
-GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "1ad76b2f44aa0d51a09a8b901ce11e73f1a417b26ad62382106291050682531d"
+ROUND6_SAFE_GATE_TEST_SHA256 = "d7df09aebed70991343061b2ab2146afc6aa86fd2bc60a5955fc51622fe575ef"
+ROUND14_SAFE_GATE_TEST_SHA256 = "b661199e1bc7f5a342b33d728649e742d7c2f93b75ee5ce88ab139b3bef4a67a"
+ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS = (
+    "TestSupplementalTerminalSkillActivationCannotBorrowSiblingField",
+    "TestSupplementalTerminalSkillActivationLaterFieldCancellationParity",
+    "TestSupplementalTerminalSkillActivationNegativeMatrix",
+    "TestSupplementalTerminalSkillActivationParserAndAuthorityBoundaries",
+    "TestSupplementalTerminalSkillActivationPromotionGateMutations",
+    "TestSupplementalTerminalSkillActivationProtocolMatrix",
+    "TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit",
+    "TestSupplementalTerminalMetaCarrierAffirmativeWitnessMatrix",
+    "TestSupplementalTerminalMetaCarrierContextBaitCannotBypass",
+    "TestSupplementalTerminalMetaCarrierLaterFieldCancellationParity",
+    "TestSupplementalTerminalMetaCarrierNegativeMatrix",
+    "TestSupplementalTerminalMetaCarrierProofBudgetIsIncomplete",
+    "TestSupplementalTerminalMetaCarrierPromotionGateMutations",
+    "TestSupplementalTerminalMetaCarrierProtocolMatrix",
+    "TestSupplementalTerminalMetaCarrierResponsesContentBlockMatrix",
+    "TestSupplementalTerminalMetaCarrierStreamingRiskFieldIdentity",
+    "TestSupplementalTerminalMetaCarrierTypedClauseProofs",
+)
+ROUND13_TERMINAL_META_PLUGIN_TESTS = (
+    "TestRound13TerminalMetaCarrierResponsesPersistsEligibleEvent",
+)
+GENERATE_RELEASE_EVIDENCE_SCRIPT_SHA256 = "0db398231e1da27e3425d7ac41df149cbbd2cdd8a3684cdbfc30f235e250932f"
 
 
 class ContractError(RuntimeError):
     pass
+
+
+def required_index(text: str, marker: str, context: str) -> int:
+    try:
+        return text.index(marker)
+    except ValueError as exc:
+        raise ContractError(f"{context} is missing reviewed marker: {marker}") from exc
 
 
 def validate_round9_malicious_text_producer_static_closure(root: Path) -> None:
@@ -1583,6 +1761,11 @@ def yaml_location(node: Node | None, source: Path) -> str:
 
 def validate_yaml_mapping_tree(node: Node, source: Path, path: str = "workflow") -> None:
     if isinstance(node, MappingNode):
+        if node.flow_style and node.value:
+            raise ContractError(
+                "workflow non-empty flow mappings may override the reviewed run shell "
+                f"or execution contract at {yaml_location(node, source)}"
+            )
         seen: set[str] = set()
         for key_node, value_node in node.value:
             if not isinstance(key_node, ScalarNode):
@@ -1612,7 +1795,6 @@ def parse_workflow_yaml(text: str, source: Path) -> MappingNode:
         DirectiveToken,
         DocumentEndToken,
         DocumentStartToken,
-        FlowMappingStartToken,
         FlowSequenceStartToken,
         TagToken,
     )
@@ -1621,7 +1803,7 @@ def parse_workflow_yaml(text: str, source: Path) -> MappingNode:
             if isinstance(token, forbidden_tokens):
                 raise ContractError(
                     "workflow may not use YAML anchors, aliases, tags, directives, "
-                    f"document markers, or flow collections at {source}:"
+                    f"document markers, or flow sequences at {source}:"
                     f"{token.start_mark.line + 1}:{token.start_mark.column + 1}"
                 )
             if isinstance(token, KeyToken) and token.end_mark.index > token.start_mark.index:
@@ -1701,7 +1883,10 @@ def validate_sensitive_workflow_expressions(
     *,
     allowed_token_paths: set[str],
     allowed_identity_expressions: dict[str, str],
+    allowed_secret_expressions: dict[str, str] | None = None,
 ) -> None:
+    if allowed_secret_expressions is None:
+        allowed_secret_expressions = {}
     allowed_seen: set[str] = set()
     for path, node in iter_yaml_scalars(document):
         for match in GITHUB_EXPRESSION.finditer(node.value):
@@ -1709,6 +1894,10 @@ def validate_sensitive_workflow_expressions(
             if not SENSITIVE_EXPRESSION_CONTEXT.search(expression):
                 continue
             if path in allowed_token_paths and node.value == "${{ github.token }}":
+                allowed_seen.add(path)
+                continue
+            expected_secret = allowed_secret_expressions.get(path)
+            if expected_secret is not None and node.value == expected_secret:
                 allowed_seen.add(path)
                 continue
             expected_identity = allowed_identity_expressions.get(path)
@@ -1719,7 +1908,11 @@ def validate_sensitive_workflow_expressions(
                 "workflow may not expose a repository token, github.token, or secrets context "
                 f"outside the exact reviewed GH_TOKEN env nodes, got {path} in {source}"
             )
-    expected_allowed = allowed_token_paths | set(allowed_identity_expressions)
+    expected_allowed = (
+        allowed_token_paths
+        | set(allowed_identity_expressions)
+        | set(allowed_secret_expressions)
+    )
     if allowed_seen != expected_allowed:
         raise ContractError(
             "workflow must expose only the exact reviewed github token and identity expressions"
@@ -1753,6 +1946,38 @@ def is_safe_gate_node(step: MappingNode, source: Path, path: str) -> bool:
         if line.strip()
     )
     return commands == SAFE_GATE_COMMANDS
+
+
+def validate_workflow_step_execution_context(
+    step: dict[str, Node], source: Path, step_path: str
+) -> None:
+    if "shell" in step:
+        raise ContractError(
+            f"workflow may not override the reviewed step shell at {step_path}: {source}"
+        )
+    env_node = step.get("env")
+    if env_node is None:
+        return
+    env_path = f"{step_path}.env"
+    env_values = yaml_mapping(env_node, source, env_path)
+    for env_name, env_value in env_values.items():
+        if not DANGEROUS_WORKFLOW_ENV.fullmatch(env_name):
+            continue
+        env_scalar = yaml_scalar(env_value, source, f"{env_path}.{env_name}")
+        explicitly_cleared = (
+            env_value.tag == "tag:yaml.org,2002:str" and env_scalar == ""
+        )
+        allowed_clean_value = (
+            env_path in CLEAN_EXECUTION_ENV_PATHS
+            and env_name in CLEAN_EXECUTION_ENV_MAP
+            and env_scalar == CLEAN_EXECUTION_ENV_MAP[env_name]
+        )
+        if explicitly_cleared or allowed_clean_value:
+            continue
+        raise ContractError(
+            "workflow defines dangerous execution-context environment "
+            f"{env_name} at {step_path}: {source}"
+        )
 
 
 def validate_workflow_semantic_safety(document: MappingNode, source: Path) -> None:
@@ -1814,34 +2039,7 @@ def validate_workflow_semantic_safety(document: MappingNode, source: Path) -> No
         for index, step_node in enumerate(steps):
             step_path = f"{job_path}.steps[{index}]"
             step = yaml_mapping(step_node, source, step_path)
-            if "shell" in step:
-                raise ContractError(
-                    f"workflow job {job_name} may not override the reviewed step shell: {source}"
-                )
-            env_node = step.get("env")
-            if env_node is not None:
-                env_path = f"{step_path}.env"
-                env_values = yaml_mapping(env_node, source, env_path)
-                for env_name, env_value in env_values.items():
-                    if DANGEROUS_WORKFLOW_ENV.fullmatch(env_name):
-                        env_scalar = yaml_scalar(
-                            env_value, source, f"{env_path}.{env_name}"
-                        )
-                        explicitly_cleared = (
-                            env_value.tag == "tag:yaml.org,2002:str"
-                            and env_scalar == ""
-                        )
-                        allowed_clean_value = (
-                            env_path in CLEAN_EXECUTION_ENV_PATHS
-                            and env_name in CLEAN_EXECUTION_ENV_MAP
-                            and env_scalar == CLEAN_EXECUTION_ENV_MAP[env_name]
-                        )
-                        if explicitly_cleared or allowed_clean_value:
-                            continue
-                        raise ContractError(
-                            "workflow defines dangerous execution-context environment "
-                            f"{env_name}: {source}"
-                        )
+            validate_workflow_step_execution_context(step, source, step_path)
             uses_node = step.get("uses")
             if uses_node is None:
                 continue
@@ -2597,6 +2795,15 @@ def reject_go_all_packages(text: str, source: Path) -> None:
 
 
 def audit_command_text(text: str, source: Path) -> tuple[set[str], set[str]]:
+    # This fixture deliberately uses one literal `bash -c` fault-injection
+    # harness to distinguish function `return` from process `exit` cleanup.
+    # The active RC workflow validator binds the entire fixture by SHA-256 and
+    # independently binds every executable contract it invokes, so do not
+    # reinterpret its literal test body as a production dispatch surface.
+    if tuple(source.parts[-2:]) == ("scripts", "release-rc-contract-test.sh"):
+        if hashlib.sha256(text.encode("utf-8")).hexdigest() != ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256:
+            raise ContractError("Round 14 RC contract fixture differs from reviewed text")
+        return set(), set()
     scripts = reject_dynamic_dispatch(text, source)
     reject_go_all_packages(text, source)
     return extract_make_targets(text), scripts | extract_script_references(text)
@@ -2864,6 +3071,103 @@ def validate_workflow_safety(text: str, source: Path) -> tuple[tuple[str, ...], 
                 f"workflow job {job_name} runs repository commands before its guarded checkout"
             )
     return tuple(sparse_sets)
+
+
+NO_RELEASE_FORBIDDEN_PERMISSIONS = frozenset(
+    {"contents", "attestations", "id-token", "packages"}
+)
+NO_RELEASE_FORBIDDEN_TEXT = re.compile(
+    r"(?im)(?:"
+    r"\bgh\s+release\b|"
+    r"\bgit\s+tag\b|"
+    r"\bgh\s+attestation\b|"
+    r"actions/attest-build-provenance@|"
+    r"(?:softprops/action-gh-release|ncipollo/release-action|"
+    r"actions/upload-release-asset)@|"
+    r"\b(?:create|publish|upload)[_-]?(?:release|prerelease)[_-]?asset\b"
+    r")"
+)
+
+
+def workflow_permission_entries(
+    node: Node | None, source: Path, path: str
+) -> tuple[tuple[str, str], ...]:
+    if node is None:
+        return ()
+    if isinstance(node, ScalarNode):
+        value = yaml_scalar(node, source, path)
+        if value == "read-all":
+            return (("*", "read"),)
+        if value == "write-all":
+            return (("*", "write"),)
+        if value == "{}":
+            return ()
+        raise ContractError(f"workflow {path} uses unsupported permission scalar {value!r}")
+    permissions = yaml_mapping(node, source, path)
+    return tuple(
+        (name, yaml_scalar(value, source, f"{path}.{name}"))
+        for name, value in permissions.items()
+    )
+
+
+def validate_no_release_workflow(text: str, source: Path) -> None:
+    document = parse_workflow_yaml(text, source)
+    root = yaml_mapping(document, source, "workflow")
+
+    permission_nodes = [("permissions", root.get("permissions"))]
+    jobs = yaml_mapping(root.get("jobs"), source, "jobs")
+    permission_nodes.extend(
+        (f"jobs.{job_name}.permissions", yaml_mapping(job, source, f"jobs.{job_name}").get("permissions"))
+        for job_name, job in jobs.items()
+    )
+    for path, node in permission_nodes:
+        for name, level in workflow_permission_entries(node, source, path):
+            if level not in {"read", "write", "none"}:
+                raise ContractError(
+                    f"workflow {path}.{name} uses unsupported permission level {level!r}"
+                )
+            if level == "write" and (
+                name == "*" or name in NO_RELEASE_FORBIDDEN_PERMISSIONS
+            ):
+                raise ContractError(
+                    "Round 14 NO_RELEASE forbids publication-capable workflow permission "
+                    f"{name}: write in {source}"
+                )
+
+    if NO_RELEASE_FORBIDDEN_TEXT.search(text):
+        raise ContractError(
+            f"Round 14 NO_RELEASE forbids release, tag, or attestation commands/actions in {source}"
+        )
+
+    triggers = yaml_mapping(root.get("on"), source, "on")
+    if "release" in triggers or any(name.startswith("registry_package") for name in triggers):
+        raise ContractError(
+            f"Round 14 NO_RELEASE forbids release or package publication triggers in {source}"
+        )
+    if "workflow_dispatch" in triggers:
+        # A manually dispatched workflow receives the same permission audit as
+        # every other workflow; this explicit branch makes the contract intent
+        # visible and prevents future reviewers from treating dispatch as an
+        # exemption.
+        for path, node in permission_nodes:
+            for name, level in workflow_permission_entries(node, source, path):
+                if level == "write" and name in NO_RELEASE_FORBIDDEN_PERMISSIONS:
+                    raise ContractError(
+                        "Round 14 workflow_dispatch may not receive publication permissions: "
+                        f"{path}.{name} in {source}"
+                    )
+
+
+def validate_no_release_workflows(root: Path) -> None:
+    root = root.resolve()
+    release_path = root / ACTIVE_RC_WORKFLOW_PATH
+    if release_path.exists() or release_path.is_symlink():
+        raise ContractError(
+            f"Round 14 NO_RELEASE requires the active release workflow to be absent: {ACTIVE_RC_WORKFLOW_PATH}"
+        )
+    for relative in ACTIVE_WORKFLOW_PATHS:
+        path = root / relative
+        validate_no_release_workflow(read_regular_text(path, root), path)
 
 
 def exact_string_mapping(
@@ -3213,32 +3517,65 @@ def validate_frozen_evaluation_tree_script(text: str, source: Path) -> None:
         )
 
 
-def validate_round6_doc_fixture_wrapper_script(
-    text: str, source: Path, root: Path
+def validate_doc_fixture_wrapper_script(
+    text: str,
+    source: Path,
+    root: Path,
+    *,
+    round_label: str,
+    wrapper_sha256: str,
+    dependency_sha256: dict[str, str],
 ) -> None:
-    if (
-        hashlib.sha256(text.encode("utf-8")).hexdigest()
-        != ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256
-    ):
+    if hashlib.sha256(text.encode("utf-8")).hexdigest() != wrapper_sha256:
         raise ContractError(
-            f"Round6 document fixture wrapper must match the exact reviewed contract: {source}"
+            f"{round_label} document fixture wrapper must match the exact reviewed contract: {source}"
         )
     wrapper_pin_names = {
         "scripts/release-doc-consistency-test.sh": "expected_fixture_sha256",
         "scripts/release-doc-consistency.sh": "expected_gate_sha256",
     }
-    for relative, expected in ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256.items():
+    if set(dependency_sha256) != set(wrapper_pin_names):
+        raise ContractError(
+            f"{round_label} document fixture dependency mapping is incomplete"
+        )
+    for relative, expected in dependency_sha256.items():
         pin_line = f"{wrapper_pin_names[relative]}='{expected}'"
         if text.count(pin_line) != 1:
             raise ContractError(
-                f"Round6 document fixture wrapper must pin the reviewed dependency hash: {relative}"
+                f"{round_label} document fixture wrapper must pin the reviewed dependency hash: {relative}"
             )
         dependency = root / relative
         dependency_text = read_regular_text(dependency, root)
         if hashlib.sha256(dependency_text.encode("utf-8")).hexdigest() != expected:
             raise ContractError(
-                f"Round6 document fixture dependency changed outside the reviewed contract: {dependency}"
+                f"{round_label} document fixture dependency changed outside the reviewed contract: {dependency}"
             )
+
+
+def validate_round6_doc_fixture_wrapper_script(
+    text: str, source: Path, root: Path
+) -> None:
+    validate_doc_fixture_wrapper_script(
+        text,
+        source,
+        root,
+        round_label="Round6",
+        wrapper_sha256=ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
+        dependency_sha256=ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256,
+    )
+
+
+def validate_round14_doc_fixture_wrapper_script(
+    text: str, source: Path, root: Path
+) -> None:
+    validate_doc_fixture_wrapper_script(
+        text,
+        source,
+        root,
+        round_label="Round14",
+        wrapper_sha256=ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
+        dependency_sha256=ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256,
+    )
 
 
 def validate_round6_privacy_fixture_script(text: str, source: Path) -> None:
@@ -3318,11 +3655,11 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         'go_launcher="${GO:-go}"',
         'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
         'go_bin="$selected_go_root/bin/go"',
-        "export GOTOOLCHAIN=go1.26.4",
+        "export GOTOOLCHAIN=go1.26.6",
         "export GOTOOLCHAIN=local",
         "export GOFLAGS=-mod=readonly",
         'selected_go_version="$("$go_bin" env GOVERSION)"',
-        '[[ "$selected_go_version" == go1.26.4 ]]',
+        '[[ "$selected_go_version" == go1.26.6 ]]',
         '"$("$go_bin" version)"',
         'requested_profile="${CPA_COMPAT_PROFILE:-primary}"',
         'require_latest="${CPA_COMPAT_REQUIRE_LATEST:-0}"',
@@ -3365,7 +3702,7 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
                 f"fixed CPA primary verification must bind the exact lightweight tag through Git origin and selected Go toolchain: {source}"
             )
     toolchain_selection_order = (
-        "export GOTOOLCHAIN=go1.26.4",
+        "export GOTOOLCHAIN=go1.26.6",
         'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
         'go_bin="$selected_go_root/bin/go"',
         "export GOTOOLCHAIN=local",
@@ -3376,7 +3713,7 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         toolchain_positions != sorted(toolchain_positions)
     ):
         raise ContractError(
-            f"CPA selected Go toolchain must resolve exact go1.26.4 before freezing GOTOOLCHAIN=local and isolating module caches: {source}"
+            f"CPA selected Go toolchain must resolve exact go1.26.6 before freezing GOTOOLCHAIN=local and isolating module caches: {source}"
         )
     latest_body = shell_function_body(text, "resolve_remote_latest_release_tag", source)
     for required in (
@@ -3499,11 +3836,70 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         f"{cpa_path}.run",
     )
     current_identity_markers = (
-        f"integration_summary=CPA {CPA_ACTIVE_VERSION} source/fail-open, SDK ABI/API, and Linux Host .so load checks completed",
+        f"integration_summary=CPA {CPA_ACTIVE_VERSION} schema-3 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed",
         f"cpa_primary_identity={CPA_ACTIVE_VERSION}@{CPA_ACTIVE_COMMIT}",
     )
     if any(text.count(marker) != 1 for marker in current_identity_markers):
         raise ContractError("CI must report the exact current CPA source and commit identity")
+    same_repository_markers = (
+        'candidate_head_repository="$(jq -er \'.pull_request.head.repo.full_name\' "$GITHUB_EVENT_PATH")"',
+        '[[ "$candidate_head_repository" == "$GITHUB_REPOSITORY" ]]',
+        "fork pull-request heads cannot produce an admitted audit candidate",
+    )
+    if any(text.count(marker) != 2 for marker in same_repository_markers):
+        raise ContractError(
+            "CI audit candidates must reject fork pull-request heads before sealing and verification"
+        )
+
+    admission_matches: list[tuple[int, Node, dict[str, Node]]] = []
+    for step_index, step_node in enumerate(steps):
+        step_path = f"jobs.quality-and-artifacts.steps[{step_index}]"
+        step = yaml_mapping(step_node, source, step_path)
+        if "name" in step and yaml_scalar(step["name"], source, f"{step_path}.name") == (
+            "Report post-upload candidate artifact admission coordinates"
+        ):
+            admission_matches.append((step_index, step_node, step))
+    if len(admission_matches) != 1:
+        raise ContractError(
+            "CI must contain exactly one post-upload candidate artifact admission step"
+        )
+    admission_index, admission_node, admission_step = admission_matches[0]
+    admission_path = f"jobs.quality-and-artifacts.steps[{admission_index}]"
+    require_yaml_keys(admission_node, ("name", "env", "run"), source, admission_path)
+    if exact_string_mapping(
+        admission_step["env"], source, f"{admission_path}.env"
+    ) != (
+        (
+            "CANDIDATE_ARTIFACT_DIGEST_RAW",
+            "${{ steps.upload_audit_candidate.outputs.artifact-digest }}",
+        ),
+        (
+            "CANDIDATE_ARTIFACT_ID",
+            "${{ steps.upload_audit_candidate.outputs.artifact-id }}",
+        ),
+        (
+            "CANDIDATE_ARTIFACT_NAME",
+            "cyber-abuse-guard-linux-amd64-audit-candidate",
+        ),
+    ):
+        raise ContractError(
+            "CI post-upload candidate artifact admission environment changed"
+        )
+    expected_admission_run = '''set -euo pipefail
+[[ "$CANDIDATE_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]]
+[[ "$CANDIDATE_ARTIFACT_DIGEST_RAW" =~ ^[0-9a-f]{64}$ ]]
+candidate_artifact_digest="sha256:$CANDIDATE_ARTIFACT_DIGEST_RAW"
+[[ "$candidate_artifact_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+printf 'candidate_artifact_id=%s\\n' "$CANDIDATE_ARTIFACT_ID"
+printf 'candidate_artifact_name=%s\\n' "$CANDIDATE_ARTIFACT_NAME"
+printf 'candidate_artifact_digest=%s\\n' "$candidate_artifact_digest"
+'''
+    require_yaml_scalar(
+        admission_step["run"],
+        expected_admission_run,
+        source,
+        f"{admission_path}.run",
+    )
 
     fuzz_job = yaml_mapping(jobs.get("fuzz-long"), source, "jobs.fuzz-long")
     fuzz_steps = yaml_sequence(
@@ -5918,10 +6314,15 @@ def validate_blocked_prerelease_workflow(text: str, source: Path) -> None:
         final_publish_step,
     ) or re.search(r"(?m)^\s+(?:if|continue-on-error|shell):", final_publish_step):
         raise ContractError("blocked prerelease must end with one unconditional publish step")
-def validate_rc_release_workflow(text: str, source: Path) -> None:
+def validate_historical_round8_rc_release_workflow(text: str, source: Path) -> None:
     document = parse_workflow_yaml(text, source)
-    if hashlib.sha256(text.encode("utf-8")).hexdigest() != ACTIVE_RC_WORKFLOW_SHA256:
-        raise ContractError("active RC workflow differs from the exact reviewed contract")
+    if (
+        hashlib.sha256(text.encode("utf-8")).hexdigest()
+        != HISTORICAL_ROUND8_RC_WORKFLOW_SHA256
+    ):
+        raise ContractError(
+            "historical Round 8 RC workflow differs from the exact reviewed contract"
+        )
 
     root = yaml_mapping(document, source, "workflow")
     on = yaml_mapping(root.get("on"), source, "on")
@@ -5936,7 +6337,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if len(inputs) > REPOSITORY_WORKFLOW_DISPATCH_INPUT_LIMIT:
         raise ContractError(
-            "active RC workflow exceeds the repository-reviewed workflow_dispatch input limit"
+            "historical Round 8 RC workflow exceeds the repository-reviewed workflow_dispatch input limit"
         )
     for input_name, input_node in inputs.items():
         path = f"on.workflow_dispatch.inputs.{input_name}"
@@ -5998,13 +6399,13 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             "GH_CLI_LINUX_AMD64_SHA256",
             "83d5c2ccad5498f58bf6368acb1ab32588cf43ab3a4b1c301bf36328b1c8bd60",
         ),
-        ("RC_BUILDER_IMAGE", RC_BUILDER_IMAGE),
-        ("RC_BUILDER_IMAGE_DIGEST", RC_BUILDER_IMAGE_DIGEST),
-        ("RC_BUILDER_REFERENCE", RC_BUILDER_REFERENCE),
+        ("RC_BUILDER_IMAGE", HISTORICAL_ROUND8_RC_BUILDER_IMAGE),
+        ("RC_BUILDER_IMAGE_DIGEST", HISTORICAL_ROUND8_RC_BUILDER_IMAGE_DIGEST),
+        ("RC_BUILDER_REFERENCE", HISTORICAL_ROUND8_RC_BUILDER_REFERENCE),
     )
     if exact_string_mapping(root.get("env"), source, "env") != expected_environment:
         raise ContractError(
-            "active RC workflow must pin the exact Go, release, and immutable builder identities"
+            "historical Round 8 RC workflow must pin the exact Go, release, and immutable builder identities"
         )
     gh_cli_install_markers = (
         "apt-get install -y build-essential binutils ca-certificates curl file git jq zip unzip nginx",
@@ -6018,7 +6419,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if any(text.count(marker) != 2 for marker in gh_cli_install_markers):
         raise ContractError(
-            "active RC workflow must install the exact checksum-pinned GitHub CLI in both job containers"
+            "historical Round 8 RC workflow must install the exact checksum-pinned GitHub CLI in both job containers"
         )
     top_permissions = require_yaml_keys(
         root.get("permissions"), ("actions", "contents"), source, "permissions"
@@ -6047,13 +6448,13 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("host_run_attempt", "${{ steps.release_state.outputs.host_run_attempt }}"),
     ):
         raise ContractError(
-            "active RC admission must export the reviewed release and run identities"
+            "historical Round 8 RC admission must export the reviewed release and run identities"
         )
     admission_steps = yaml_sequence(
         admission.get("steps"), source, "jobs.admission.steps"
     )
     if not admission_steps:
-        raise ContractError("active RC admission must retain its release-state step")
+        raise ContractError("historical Round 8 RC admission must retain its release-state step")
     admission_release_state = yaml_mapping(
         admission_steps[0], source, "jobs.admission.steps[0]"
     )
@@ -6071,7 +6472,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         for index, node in enumerate(publish_needs)
     ) != ("admission", "build"):
         raise ContractError(
-            "active RC publish must depend on admission and the gated build"
+            "historical Round 8 RC publish must depend on admission and the gated build"
         )
     require_yaml_scalar(
         publish.get("if"),
@@ -6138,7 +6539,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         != expected_runner_outputs
     ):
         raise ContractError(
-            "active RC build must export the exact captured runner identity to publication"
+            "historical Round 8 RC build must export the exact captured runner identity to publication"
         )
     build_permissions = require_yaml_keys(
         build.get("permissions"),
@@ -6164,7 +6565,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     require_yaml_scalar(
         build_container["image"],
-        RC_BUILDER_REFERENCE,
+        HISTORICAL_ROUND8_RC_BUILDER_REFERENCE,
         source,
         "jobs.build.container.image",
     )
@@ -6195,12 +6596,12 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         or host_evidence_download is None
     ):
         raise ContractError(
-            "active RC build must capture runner identity and attest artifacts before both reviewed transfers"
+            "historical Round 8 RC build must capture runner identity and attest artifacts before both reviewed transfers"
         )
     runner_index, runner_step = runner_identity
     if runner_index != 1:
         raise ContractError(
-            "active RC build must capture the runner context immediately after exact checkout"
+            "historical Round 8 RC build must capture the runner context immediately after exact checkout"
         )
     require_yaml_keys(
         build_steps[runner_index],
@@ -6232,7 +6633,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         != expected_runner_capture_env
     ):
         raise ContractError(
-            "active RC build must bind the honest GitHub runner context and explicit unobservable host-image sentinel"
+            "historical Round 8 RC build must bind the honest GitHub runner context and explicit unobservable host-image sentinel"
         )
     runner_run = yaml_scalar(
         runner_step.get("run"), source, f"jobs.build.steps[{runner_index}].run"
@@ -6257,7 +6658,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if any(runner_run.count(marker) != 1 for marker in runner_run_markers):
         raise ContractError(
-            "active RC runner identity capture must validate and export every reviewed field exactly once"
+            "historical Round 8 RC runner identity capture must validate and export every reviewed field exactly once"
         )
 
     artifact_build_index, artifact_build_step = artifact_build
@@ -6313,7 +6714,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             or f".runner_{field} == $runner_{field}" not in artifact_reverify_run
         ):
             raise ContractError(
-                "active RC build must reverify every emitted runner identity field"
+                "historical Round 8 RC build must reverify every emitted runner identity field"
             )
     host_evidence_index, host_evidence_step = host_evidence_download
     host_evidence_run = yaml_scalar(
@@ -6347,7 +6748,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if any(host_evidence_run.count(marker) != 1 for marker in host_zip_markers):
         raise ContractError(
-            "active RC Host artifact ingestion must cap compressed and expanded ZIP data and extract only reviewed regular entries"
+            "historical Round 8 RC Host artifact ingestion must cap compressed and expanded ZIP data and extract only reviewed regular entries"
         )
     api_artifact_size_guard = re.compile(
         r'\(\.size_in_bytes\s*\|\s*type == "number" and \. == floor and '
@@ -6362,11 +6763,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         or len(selected_artifact_size_guard.findall(host_evidence_run)) != 1
     ):
         raise ContractError(
-            "active RC Host artifact ingestion must enforce the GitHub size_in_bytes limit before download"
+            "historical Round 8 RC Host artifact ingestion must enforce the GitHub size_in_bytes limit before download"
         )
     if 'unzip -q "$archive"' in host_evidence_run:
         raise ContractError(
-            "active RC Host artifact ingestion must not use an unbounded unzip extraction path"
+            "historical Round 8 RC Host artifact ingestion must not use an unbounded unzip extraction path"
         )
     host_zip_order = (
         host_evidence_run.index("host_archive_max_bytes=1048576"),
@@ -6385,13 +6786,13 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if host_zip_order != tuple(sorted(host_zip_order)):
         raise ContractError(
-            "active RC Host artifact ingestion must verify API size, downloaded size, digest, and safe ZIP contents before extraction use"
+            "historical Round 8 RC Host artifact ingestion must verify API size, downloaded size, digest, and safe ZIP contents before extraction use"
         )
     candidate_index, candidate_step = candidate_upload
     publish_index, publish_step = publish_upload
     provenance_index, provenance_step = provenance
     if not provenance_index < candidate_index < publish_index:
-        raise ContractError("active RC provenance must be generated before either artifact transfer")
+        raise ContractError("historical Round 8 RC provenance must be generated before either artifact transfer")
     require_yaml_scalar(
         provenance_step.get("uses"),
         RC_PROVENANCE_ACTION,
@@ -6411,7 +6812,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         f"jobs.build.steps[{provenance_index}].with.subject-path",
     )
     if "if" in provenance_step or "continue-on-error" in provenance_step:
-        raise ContractError("active RC provenance generation must be unconditional and fail closed")
+        raise ContractError("historical Round 8 RC provenance generation must be unconditional and fail closed")
     require_yaml_scalar(
         candidate_step.get("if"),
         "${{ !inputs.publish_rc_release }}",
@@ -6465,7 +6866,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "Create, byte-check, and publish v0.16-rc.2 prerelease",
     )
     if len(publish_steps) != len(expected_publish_step_names):
-        raise ContractError("active RC publish job must contain exactly four reviewed steps")
+        raise ContractError("historical Round 8 RC publish job must contain exactly four reviewed steps")
     parsed_publish_steps: list[dict[str, Node]] = []
     for index, (step_node, expected_name) in enumerate(
         zip(publish_steps, expected_publish_step_names)
@@ -6475,7 +6876,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             step.get("name"), expected_name, source, f"jobs.publish.steps[{index}].name"
         )
         if "if" in step or "continue-on-error" in step:
-            raise ContractError("active RC publish verification and publication steps must fail closed")
+            raise ContractError("historical Round 8 RC publish verification and publication steps must fail closed")
         parsed_publish_steps.append(step)
 
     transfer_run = yaml_scalar(
@@ -6514,14 +6915,14 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             or f".runner_{field} == $runner_{field}" not in transfer_run
         ):
             raise ContractError(
-                "active RC publication must reverify every build runner identity field from job outputs"
+                "historical Round 8 RC publication must reverify every build runner identity field from job outputs"
             )
     expected_start = 'expected="$(printf \'%s\\n\' \\\n'
     expected_end = ' | LC_ALL=C sort)"'
     start = transfer_run.find(expected_start)
     end = transfer_run.find(expected_end, start + len(expected_start))
     if start < 0 or end < 0:
-        raise ContractError("active RC transfer verification must enumerate the exact publication assets")
+        raise ContractError("historical Round 8 RC transfer verification must enumerate the exact publication assets")
     expected_block = transfer_run[start + len(expected_start) : end]
     transfer_assets = tuple(
         match.group(1)
@@ -6529,7 +6930,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     expected_asset_names = tuple(sorted(Path(path).name for path in publish_paths))
     if len(transfer_assets) != 19 or tuple(sorted(transfer_assets)) != expected_asset_names:
-        raise ContractError("active RC transfer verification must cover exactly all 19 assets")
+        raise ContractError("historical Round 8 RC transfer verification must cover exactly all 19 assets")
     for marker in (
         'actual="$(find dist -mindepth 1 -maxdepth 1 -printf \'%f\\n\' | LC_ALL=C sort)"',
         '[[ "$actual" == "$expected" ]]',
@@ -6541,7 +6942,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in transfer_run:
             raise ContractError(
-                "active RC transfer verification must verify all 19 bytesets and exactly 17 ordinary release attestations"
+                "historical Round 8 RC transfer verification must verify all 19 bytesets and exactly 17 ordinary release attestations"
             )
     ordinary_transfer_attestation = re.compile(
         r'(?m)^\s*if gh attestation verify "dist/\$name" \\\n'
@@ -6553,11 +6954,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if len(ordinary_transfer_attestation.findall(transfer_run)) != 1:
         raise ContractError(
-            "active RC transfer verification must bind ordinary asset attestations to the exact release workflow, tag, and commit"
+            "historical Round 8 RC transfer verification must bind ordinary asset attestations to the exact release workflow, tag, and commit"
         )
     if transfer_run.count("gh attestation verify") != 2:
         raise ContractError(
-            "active RC transfer verification must contain only the reviewed Host and ordinary-asset attestation checks"
+            "historical Round 8 RC transfer verification must contain only the reviewed Host and ordinary-asset attestation checks"
         )
 
     immutability_run = yaml_scalar(
@@ -6574,7 +6975,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in immutability_run:
             raise ContractError(
-                "active RC publication precheck must require immutable Releases, v0.15 latest, and exact remote identity"
+                "historical Round 8 RC publication precheck must require immutable Releases, v0.15 latest, and exact remote identity"
             )
 
     admission_text = job_blocks(text)["admission"]
@@ -6613,11 +7014,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if any(marker not in admission_text for marker in admission_contracts):
         raise ContractError(
-            "active RC admission must route draft/new releases to build and immutable public releases to read-only verification"
+            "historical Round 8 RC admission must route draft/new releases to build and immutable public releases to read-only verification"
         )
     if admission_text.count("already_public=true") != 1:
         raise ContractError(
-            "active RC admission must set already_public only after exact immutable release validation"
+            "historical Round 8 RC admission must set already_public only after exact immutable release validation"
         )
     admission_run_texts = tuple(
         yaml_scalar(
@@ -6642,7 +7043,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             for run_text in admission_run_texts
         )
     ):
-        raise ContractError("active RC admission must remain read-only")
+        raise ContractError("historical Round 8 RC admission must remain read-only")
     build_contracts = (
         "Download and verify publication-only attested Host evidence",
         '.path == ".github/workflows/round8-host-validation.yml"',
@@ -6706,14 +7107,14 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ".artifact_count == $artifact_count",
     )
     if any(marker not in build_text for marker in build_contracts):
-        raise ContractError("active RC build does not enforce the reviewed 17/19-asset Host evidence contract")
+        raise ContractError("historical Round 8 RC build does not enforce the reviewed 17/19-asset Host evidence contract")
     if build_text.count('"unexpected_restart_count": 0') != 2:
-        raise ContractError("active RC Host evidence must lock primary and top-level unexpected restart counts")
+        raise ContractError("historical Round 8 RC Host evidence must lock primary and top-level unexpected restart counts")
     if build_text.count('"image_id": cpa_identities[') != 1 or build_text.count(
         '"build_date": cpa_identities['
     ) != 1:
         raise ContractError(
-            f"active RC Host evidence must retain the immutable CPA {CPA_ROUND8_VERSION} image identity"
+            f"historical Round 8 RC Host evidence must retain the immutable CPA {CPA_ROUND8_VERSION} image identity"
         )
     manifest_result_markers = (
         "chat_benign_upstream: 1",
@@ -6738,9 +7139,9 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "restart_cycle_passed: true",
     )
     if any(text.count(marker) != 2 for marker in manifest_result_markers):
-        raise ContractError("active RC manifest checks must lock both copies of the detailed Host result matrix")
+        raise ContractError("historical Round 8 RC manifest checks must lock both copies of the detailed Host result matrix")
     if text.count("unexpected_restart_count: 0") != 4:
-        raise ContractError("active RC manifest checks must lock lane and top-level unexpected restart counts")
+        raise ContractError("historical Round 8 RC manifest checks must lock lane and top-level unexpected restart counts")
     publish_contracts = (
         "round8-host-evidence.json.sha256",
         ".artifact_count == 19",
@@ -6778,9 +7179,9 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "already-public immutable RC release verified without mutation",
     )
     if any(marker not in publish_text for marker in publish_contracts):
-        raise ContractError("active RC publish job does not enforce the 19-asset non-latest prerelease contract")
+        raise ContractError("historical Round 8 RC publish job does not enforce the 19-asset non-latest prerelease contract")
     if "--clobber" in publish_text:
-        raise ContractError("active RC publish job must never overwrite an existing release asset")
+        raise ContractError("historical Round 8 RC publish job must never overwrite an existing release asset")
     try:
         recovery_start = publish_text.index(
             'if [[ "$(jq -r \'.draft\' <<<"$release")" == false ]]; then'
@@ -6788,7 +7189,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         recovery_end = publish_text.index("exit 0", recovery_start)
     except ValueError as error:
         raise ContractError(
-            "active RC already-public recovery must have a closed read-only terminal branch"
+            "historical Round 8 RC already-public recovery must have a closed read-only terminal branch"
         ) from error
     recovery_text = publish_text[recovery_start:recovery_end]
     for marker in (
@@ -6803,7 +7204,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in recovery_text:
             raise ContractError(
-                "active RC already-public recovery must verify immutable metadata, all 19 bytes, and remote identity"
+                "historical Round 8 RC already-public recovery must verify immutable metadata, all 19 bytes, and remote identity"
             )
     if any(
         forbidden in recovery_text
@@ -6815,11 +7216,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         )
     ):
         raise ContractError(
-            "active RC already-public recovery must be read-only"
+            "historical Round 8 RC already-public recovery must be read-only"
         )
     if not recovery_end < publish_text.index('gh release create "$TAG"', recovery_end):
         raise ContractError(
-            "active RC already-public recovery must exit before draft creation or mutation"
+            "historical Round 8 RC already-public recovery must exit before draft creation or mutation"
         )
     phase1_repair_order = (
         publish_text.index('download_and_compare_asset "$name" preexisting'),
@@ -6831,7 +7232,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if phase1_repair_order != tuple(sorted(phase1_repair_order)):
         raise ContractError(
-            "active RC Phase 1 repair must compare existing bytes, upload only missing assets, and reverify before fingerprinting"
+            "historical Round 8 RC Phase 1 repair must compare existing bytes, upload only missing assets, and reverify before fingerprinting"
         )
     cleanup_trap_position = publish_text.index("trap cleanup_publication_exit EXIT")
     public_transition_position = publish_text.index("-F draft=false", cleanup_trap_position)
@@ -6849,7 +7250,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if immutable_publication_order != tuple(sorted(immutable_publication_order)):
         raise ContractError(
-            "active RC publication must verify the immutable terminal state before final 19-asset byte comparison"
+            "historical Round 8 RC publication must verify the immutable terminal state before final 19-asset byte comparison"
         )
     for forbidden in (
         "restore_release_to_draft",
@@ -6859,7 +7260,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if forbidden in publish_text:
             raise ContractError(
-                "active RC immutable publication must not attempt an impossible draft rollback"
+                "historical Round 8 RC immutable publication must not attempt an impossible draft rollback"
             )
 
     verify_published = yaml_mapping(
@@ -6904,7 +7305,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     require_yaml_scalar(
         verify_container["image"],
-        RC_BUILDER_REFERENCE,
+        HISTORICAL_ROUND8_RC_BUILDER_REFERENCE,
         source,
         "jobs.verify_published.container.image",
     )
@@ -6932,7 +7333,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if len(verify_steps) != len(expected_verify_step_names):
         raise ContractError(
-            "active RC public verifier must contain the exact nine reviewed read-only rebuild steps"
+            "historical Round 8 RC public verifier must contain the exact nine reviewed read-only rebuild steps"
         )
     parsed_verify_steps: list[dict[str, Node]] = []
     for index, (step_node, expected_name) in enumerate(
@@ -6949,7 +7350,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         )
         if "if" in step or "continue-on-error" in step:
             raise ContractError(
-                "active RC public verifier steps must be unconditional and fail closed"
+                "historical Round 8 RC public verifier steps must be unconditional and fail closed"
             )
         parsed_verify_steps.append(step)
 
@@ -6987,7 +7388,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if verify_sparse_patterns != ROUND6_SPARSE_PATTERNS:
         raise ContractError(
-            "active RC public verifier checkout must retain the exact restricted sparse patterns"
+            "historical Round 8 RC public verifier checkout must retain the exact restricted sparse patterns"
         )
 
     verify_contract_run = yaml_scalar(
@@ -7001,7 +7402,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in verify_contract_run:
             raise ContractError(
-                "active RC public verifier must recheck the safe-gate contracts"
+                "historical Round 8 RC public verifier must recheck the safe-gate contracts"
             )
 
     verify_source_run = yaml_scalar(
@@ -7020,7 +7421,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in verify_source_run:
             raise ContractError(
-                "active RC public verifier must bind the exact annotated RC tag source"
+                "historical Round 8 RC public verifier must bind the exact annotated RC tag source"
             )
 
     verify_setup_go = parsed_verify_steps[3]
@@ -7063,7 +7464,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if verify_download_start < 0 or verify_download_end < 0:
         raise ContractError(
-            "active RC public verifier must enumerate the exact published assets"
+            "historical Round 8 RC public verifier must enumerate the exact published assets"
         )
     verify_download_block = verify_download_run[
         verify_download_start
@@ -7080,7 +7481,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         or tuple(sorted(verify_download_assets)) != expected_asset_names
     ):
         raise ContractError(
-            "active RC public verifier must download exactly the reviewed 19 assets"
+            "historical Round 8 RC public verifier must download exactly the reviewed 19 assets"
         )
     for marker in (
         'published="$RUNNER_TEMP/published"',
@@ -7092,7 +7493,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in verify_download_run:
             raise ContractError(
-                "active RC public verifier must bind every downloaded asset digest and Host evidence"
+                "historical Round 8 RC public verifier must bind every downloaded asset digest and Host evidence"
             )
 
     verify_gates_run = yaml_scalar(
@@ -7122,7 +7523,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in verify_gates_run:
             raise ContractError(
-                "active RC public verifier must run the complete Linux gates and emit only the canonical summary"
+                "historical Round 8 RC public verifier must run the complete Linux gates and emit only the canonical summary"
             )
 
     verify_rebuild_step = parsed_verify_steps[7]
@@ -7186,7 +7587,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if marker not in verify_compare_run:
             raise ContractError(
-                "active RC public verifier must byte-compare all assets and recheck the immutable release identity"
+                "historical Round 8 RC public verifier must byte-compare all assets and recheck the immutable release identity"
             )
     ordinary_public_attestation = re.compile(
         r'(?m)^\s*if gh attestation verify "\$published/\$name" \\\n'
@@ -7210,7 +7611,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         or verify_compare_run.count("gh attestation verify") != 2
     ):
         raise ContractError(
-            "active RC public verifier must bind 17 ordinary assets to the release workflow and Host evidence to the protected Host workflow"
+            "historical Round 8 RC public verifier must bind 17 ordinary assets to the release workflow and Host evidence to the protected Host workflow"
         )
 
     verify_run_texts = tuple(
@@ -7237,7 +7638,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         )
     ):
         raise ContractError(
-            "active RC public verifier must not mutate Releases, artifacts, attestations, caches, tags, or repository state"
+            "historical Round 8 RC public verifier must not mutate Releases, artifacts, attestations, caches, tags, or repository state"
         )
 
     required = (
@@ -7273,9 +7674,9 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "RC_TEST_SUMMARY_INPUT:",
         CPA_ROUND8_VERSION,
         CPA_ROUND8_COMMIT,
-        RC_BUILDER_IMAGE,
-        RC_BUILDER_IMAGE_DIGEST,
-        RC_BUILDER_REFERENCE,
+        HISTORICAL_ROUND8_RC_BUILDER_IMAGE,
+        HISTORICAL_ROUND8_RC_BUILDER_IMAGE_DIGEST,
+        HISTORICAL_ROUND8_RC_BUILDER_REFERENCE,
         RC_PROVENANCE_ACTION,
         "RC_INTERNAL_GATES_PASS / PRIVATE_HOST_TEST_CANDIDATE / HOST_VALIDATION_REQUIRED / INDEPENDENT_AUDIT_REQUIRED / PRODUCTION_NOT_APPROVED / NOT_STABLE_V0.16",
         "RC_INTERNAL_GATES_PASS / HOST_EVIDENCE_ATTESTED_PROTECTED_WORKFLOW / SANDBOX_IDENTITY_AND_LOCALITY_VERIFIED / REAL_PROVIDER_NOT_CONTACTED / PRODUCTION_NOT_ACCESSED / INDEPENDENT_AUDIT_REQUIRED / PRODUCTION_NOT_APPROVED / NOT_STABLE_V0.16",
@@ -7296,18 +7697,18 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     for marker in required:
         if marker not in text:
-            raise ContractError(f"active RC workflow is missing reviewed marker: {marker}")
+            raise ContractError(f"historical Round 8 RC workflow is missing reviewed marker: {marker}")
     if text.count(
         '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/round8-host-validation.yml"'
     ) != 3:
         raise ContractError(
-            "active RC workflow must verify the protected Host signer in ingestion, publication, and public read-only verification"
+            "historical Round 8 RC workflow must verify the protected Host signer in ingestion, publication, and public read-only verification"
         )
     if text.count(
         '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-rc.yml"'
     ) != 2:
         raise ContractError(
-            "active RC workflow must bind ordinary assets to the exact release workflow in publication and public verification"
+            "historical Round 8 RC workflow must bind ordinary assets to the exact release workflow in publication and public verification"
         )
     for marker in (
         '--signer-digest "$EXPECTED_COMMIT"',
@@ -7316,16 +7717,16 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if text.count(marker) != 5:
             raise ContractError(
-                "active RC workflow must bind all five reviewed attestation checks to the exact tag and commit"
+                "historical Round 8 RC workflow must bind all five reviewed attestation checks to the exact tag and commit"
             )
     if text.count("contents: write") != 1:
-        raise ContractError("active RC workflow must grant contents: write only in publish")
+        raise ContractError("historical Round 8 RC workflow must grant contents: write only in publish")
     if re.search(r"(?im)runs-on:\s*(?:windows|macos)", text):
-        raise ContractError("active RC workflow must remain Linux only")
+        raise ContractError("historical Round 8 RC workflow must remain Linux only")
     if "round6-prerelease-attestation.json" in text or "formal-release-attestation.json" in text:
-        raise ContractError("active RC workflow may not emit formal evidence assets")
+        raise ContractError("historical Round 8 RC workflow may not emit formal evidence assets")
     if "release-evidence-final.md" in text or "FORMAL_GATES_PASS" in text:
-        raise ContractError("active RC workflow may not claim formal release evidence")
+        raise ContractError("historical Round 8 RC workflow may not claim formal release evidence")
     for later_identity in (
         CPA_ROUND9_VERSION,
         CPA_ROUND9_COMMIT,
@@ -7334,7 +7735,486 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     ):
         if later_identity in text:
             raise ContractError(
-                "active RC workflow must retain the immutable Round 8 CPA identity"
+                "historical Round 8 RC workflow must retain the immutable Round 8 CPA identity"
+            )
+
+
+def validate_rc_release_workflow(text: str, source: Path) -> None:
+    """Validate the sole active Round 13 v1.0.0-rc.1 publication lane."""
+
+    if hashlib.sha256(text.encode("utf-8")).hexdigest() != ACTIVE_RC_WORKFLOW_SHA256:
+        raise ContractError("Round 13 RC workflow differs from the exact reviewed contract")
+
+    document = parse_workflow_yaml(text, source)
+    # The generic validate_workflow_safety contract intentionally rejects the
+    # RC lane's reviewed top-level bash default, empty permissions mapping,
+    # pinned builder container, and explicit step shells. The RC-specific
+    # structure checks below lock those exceptions exactly. Reuse the shared
+    # expression scanner here so refreshing the reviewed workflow hash can
+    # never authorize an extra token, identity, or secrets-context exposure.
+    validate_sensitive_workflow_expressions(
+        document,
+        source,
+        allowed_token_paths=ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS,
+        allowed_identity_expressions=(
+            ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS
+        ),
+        allowed_secret_expressions=ROUND13_RC_ALLOWED_SECRET_EXPRESSIONS,
+    )
+    root = require_yaml_keys(
+        document,
+        (
+            "name",
+            "run-name",
+            "on",
+            "permissions",
+            "defaults",
+            "concurrency",
+            "env",
+            "jobs",
+        ),
+        source,
+        "workflow",
+    )
+    require_yaml_scalar(root["name"], "RC Release", source, "name")
+    require_yaml_scalar(
+        root["run-name"],
+        "RC v1.0.0-rc.1 from ${{ github.ref_name }}",
+        source,
+        "run-name",
+    )
+
+    on = require_yaml_keys(root["on"], ("workflow_dispatch",), source, "on")
+    dispatch = require_yaml_keys(
+        on["workflow_dispatch"], ("inputs",), source, "on.workflow_dispatch"
+    )
+    inputs = require_yaml_keys(
+        dispatch["inputs"],
+        ROUND13_RC_INPUT_ORDER,
+        source,
+        "on.workflow_dispatch.inputs",
+    )
+    if len(inputs) > REPOSITORY_WORKFLOW_DISPATCH_INPUT_LIMIT:
+        raise ContractError("Round 13 RC workflow exceeds the reviewed dispatch input limit")
+    for input_name, input_node in inputs.items():
+        path = f"on.workflow_dispatch.inputs.{input_name}"
+        expected_keys = (
+            ("description", "required", "type", "default")
+            if input_name == "authorize_prerelease"
+            else ("description", "required", "type")
+        )
+        values = require_yaml_keys(input_node, expected_keys, source, path)
+        if not yaml_scalar(values["description"], source, f"{path}.description").strip():
+            raise ContractError(f"workflow {path}.description may not be empty")
+        require_yaml_scalar(
+            values["required"],
+            "true",
+            source,
+            f"{path}.required",
+            tag="tag:yaml.org,2002:bool",
+        )
+        require_yaml_scalar(
+            values["type"],
+            "boolean" if input_name == "authorize_prerelease" else "string",
+            source,
+            f"{path}.type",
+        )
+        if input_name == "authorize_prerelease":
+            require_yaml_scalar(
+                values["default"],
+                "false",
+                source,
+                f"{path}.default",
+                tag="tag:yaml.org,2002:bool",
+            )
+
+    require_yaml_keys(root["permissions"], (), source, "permissions")
+    defaults = require_yaml_keys(root["defaults"], ("run",), source, "defaults")
+    run_defaults = require_yaml_keys(
+        defaults["run"], ("shell",), source, "defaults.run"
+    )
+    require_yaml_scalar(run_defaults["shell"], "bash", source, "defaults.run.shell")
+    concurrency = require_yaml_keys(
+        root["concurrency"],
+        ("group", "cancel-in-progress"),
+        source,
+        "concurrency",
+    )
+    require_yaml_scalar(
+        concurrency["group"],
+        "rc-release-v1.0.0-rc.1",
+        source,
+        "concurrency.group",
+    )
+    require_yaml_scalar(
+        concurrency["cancel-in-progress"],
+        "false",
+        source,
+        "concurrency.cancel-in-progress",
+        tag="tag:yaml.org,2002:bool",
+    )
+
+    expected_environment = (
+        ("RC_TAG", "v1.0.0-rc.1"),
+        ("RC_TAG_SIGNER_POLICY", "github-verification-verified-valid-annotated-tag-and-commit"),
+        ("RC_SOURCE_VERSION", "1.0.0"),
+        ("RC_BINARY_VERSION", "1.0.0"),
+        ("RC_ARTIFACT_VERSION", "1.0.0-rc.1"),
+        ("RC_CPA_VERSION", CPA_ACTIVE_VERSION),
+        ("RC_CPA_COMMIT", CPA_ACTIVE_COMMIT),
+        ("RC_CPA_C_ABI", "1"),
+        ("RC_CPA_RPC_SCHEMA", "3"),
+        ("RC_CANDIDATE_ARTIFACT_NAME", "cyber-abuse-guard-linux-amd64-audit-candidate"),
+        ("RC_SECOND_MACHINE_ASSET_NAME", "second-machine-release-admission.json"),
+        ("RC_SECOND_MACHINE_SCHEMA", "cyber-abuse-guard.second-machine-release-admission.v3"),
+        ("RC_SECOND_MACHINE_REQUIRED_STATUS", "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS"),
+        ("RC_SUPPLEMENTAL_ARCHIVE_SHA256", "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c"),
+        ("RC_SUPPLEMENTAL_REQUIRED_STATUS", "SUPPLEMENTAL_ARCHIVE_PASS"),
+        ("RC_NATIVE_HOST_REQUIRED_STATUS", "NATIVE_HOST_SPECIAL_PATHS_PASS"),
+        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.1-second-machine-admission"),
+        ("RC_PUBLISH_TIMEOUT_SECONDS", "1200"),
+        ("RC_CLOCK_MARGIN_SECONDS", "300"),
+        ("RC_BUILDER_IMAGE", RC_BUILDER_IMAGE),
+        ("RC_BUILDER_IMAGE_DIGEST", RC_BUILDER_IMAGE_DIGEST),
+        ("RC_BUILDER_REFERENCE", RC_BUILDER_REFERENCE),
+    )
+    if exact_string_mapping(root["env"], source, "env") != expected_environment:
+        raise ContractError(
+            "Round 13 RC workflow must retain the exact release, CPA, Go, and builder identities"
+        )
+
+    jobs = require_yaml_keys(
+        root["jobs"],
+        ("admission", "seal_candidate", "publish_prerelease"),
+        source,
+        "jobs",
+    )
+    job_contracts = {
+        "admission": (
+            ("name", "runs-on", "timeout-minutes", "permissions", "outputs", "steps"),
+            "RC release admission",
+            "15",
+            (("actions", "read"), ("contents", "read")),
+        ),
+        "seal_candidate": (
+            (
+                "name",
+                "needs",
+                "runs-on",
+                "timeout-minutes",
+                "permissions",
+                "container",
+                "outputs",
+                "steps",
+            ),
+            "RC Linux amd64 audited-candidate seal and attestation",
+            "45",
+            (("actions", "read"), ("attestations", "write"), ("contents", "read"), ("id-token", "write")),
+        ),
+        "publish_prerelease": (
+            ("name", "needs", "runs-on", "timeout-minutes", "permissions", "steps"),
+            "RC prerelease publication",
+            "20",
+            (("actions", "read"), ("attestations", "read"), ("contents", "write")),
+        ),
+    }
+    parsed_jobs: dict[str, dict[str, Node]] = {}
+    for job_name, (keys, display_name, timeout, permissions) in job_contracts.items():
+        job_path = f"jobs.{job_name}"
+        job = require_yaml_keys(jobs[job_name], keys, source, job_path)
+        parsed_jobs[job_name] = job
+        require_yaml_scalar(job["name"], display_name, source, f"{job_path}.name")
+        require_yaml_scalar(job["runs-on"], "ubuntu-24.04", source, f"{job_path}.runs-on")
+        require_yaml_scalar(
+            job["timeout-minutes"],
+            timeout,
+            source,
+            f"{job_path}.timeout-minutes",
+            tag="tag:yaml.org,2002:int",
+        )
+        if exact_string_mapping(job["permissions"], source, f"{job_path}.permissions") != permissions:
+            raise ContractError(f"Round 13 RC {job_name} permissions changed")
+
+    # Every current RC step is required to run under GitHub's default success()
+    # condition and fail the job on error. Keep an explicit empty allowlist so a
+    # future genuinely conditional step requires a reviewed expression here rather
+    # than silently accepting arbitrary conditions, failure overrides, shells,
+    # or dangerous execution-context environment mutations.
+    allowed_step_if: dict[tuple[str, int], str] = {}
+    for job_name, job in parsed_jobs.items():
+        steps = yaml_sequence(job["steps"], source, f"jobs.{job_name}.steps")
+        for index, step_node in enumerate(steps):
+            step_path = f"jobs.{job_name}.steps[{index}]"
+            step = yaml_mapping(step_node, source, step_path)
+            validate_workflow_step_execution_context(step, source, step_path)
+            if "continue-on-error" in step:
+                raise ContractError(
+                    f"Round 13 RC step must fail closed without continue-on-error: {step_path}"
+                )
+            expected_if = allowed_step_if.get((job_name, index))
+            if expected_if is None:
+                if "if" in step:
+                    raise ContractError(
+                        f"Round 13 RC step must remain unconditional: {step_path}"
+                    )
+            elif "if" not in step:
+                raise ContractError(
+                    f"Round 13 RC step is missing its reviewed condition: {step_path}"
+                )
+            else:
+                require_yaml_scalar(
+                    step["if"], expected_if, source, f"{step_path}.if"
+                )
+
+    require_yaml_scalar(
+        parsed_jobs["seal_candidate"]["needs"],
+        "admission",
+        source,
+        "jobs.seal_candidate.needs",
+    )
+    require_yaml_keys(
+        parsed_jobs["seal_candidate"]["outputs"],
+        ("artifact_digest", "artifact_id", "attestation_id", "attestation_url"),
+        source,
+        "jobs.seal_candidate.outputs",
+    )
+    if exact_string_mapping(
+        parsed_jobs["seal_candidate"]["outputs"],
+        source,
+        "jobs.seal_candidate.outputs",
+    ) != (
+        (
+            "artifact_digest",
+            "${{ format('sha256:{0}', steps.upload.outputs.artifact-digest) }}",
+        ),
+        ("artifact_id", "${{ steps.upload.outputs.artifact-id }}"),
+        ("attestation_id", "${{ steps.attest.outputs.attestation-id }}"),
+        ("attestation_url", "${{ steps.attest.outputs.attestation-url }}"),
+    ):
+        raise ContractError(
+            "Round 13 RC seal candidate outputs changed from the reviewed digest contract"
+        )
+    publish_needs = yaml_sequence(
+        parsed_jobs["publish_prerelease"]["needs"],
+        source,
+        "jobs.publish_prerelease.needs",
+    )
+    if tuple(
+        yaml_scalar(node, source, f"jobs.publish_prerelease.needs[{index}]")
+        for index, node in enumerate(publish_needs)
+    ) != ("admission", "seal_candidate"):
+        raise ContractError("Round 13 RC publication must depend on admission and candidate sealing")
+    build_container = require_yaml_keys(
+        parsed_jobs["seal_candidate"]["container"],
+        ("image",),
+        source,
+        "jobs.seal_candidate.container",
+    )
+    require_yaml_scalar(
+        build_container["image"],
+        RC_BUILDER_REFERENCE,
+        source,
+        "jobs.seal_candidate.container.image",
+    )
+
+    uses = tuple(
+        re.findall(r"(?m)^\s*uses:\s+([^\s#]+)(?:\s+#.*)?$", text)
+    )
+    expected_uses = (
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
+        "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373",
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+        "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
+    )
+    if sorted(uses) != sorted(expected_uses):
+        raise ContractError("Round 13 RC GitHub action allowlist changed")
+
+    required_markers = (
+        '[[ "$GITHUB_REPOSITORY" == yujianwudi/cyber-abuse-guard-next ]]',
+        '[[ "$ACTOR" == yujianwudi ]]',
+        '[[ "$ACTOR_ID" == 153849069 ]]',
+        '[[ "$TRIGGERING_ACTOR" == yujianwudi ]]',
+        '[[ "$DISPATCH_REF" == "refs/tags/$RC_TAG" ]]',
+        '[[ "$WORKFLOW_SHA" == "$DISPATCH_SHA" ]]',
+        '"repos/${GITHUB_REPOSITORY}/branches/main/protection"',
+        '"repos/${GITHUB_REPOSITORY}/git/ref/heads/main"',
+        '"repos/${GITHUB_REPOSITORY}/immutable-releases"',
+        '"repos/${GITHUB_REPOSITORY}/actions/permissions/selected-actions"',
+        '"v1.0.0-rc-series-immutable"',
+        '.allow_squash_merge == true and .allow_merge_commit == false and',
+        '.required_signatures.enabled == true and',
+        'verify_repository_governance() {',
+        '.data.repository.release.isLatest == false and',
+        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.1" and',
+        '.verification.verified == true and .verification.reason == "valid"',
+        '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',
+        "supplemental_archive_status=",
+        "supplemental_archive_sha256=",
+        "native_host_status=",
+        'run-id: ${{ inputs.ci_run_id }}',
+        '"${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/actions/artifacts/${CANDIDATE_ARTIFACT_ID}/zip"',
+        'python3 -B scripts/release_rc_artifact_zip.py',
+        '--expected-digest "$CANDIDATE_ARTIFACT_DIGEST"',
+        '--expected-size "$CANDIDATE_ARTIFACT_SIZE"',
+        "quality-and-artifacts",
+        "fuzz-long",
+        "reproducibility",
+        "Analyze Go on Linux",
+        "round9-policy-and-corpus",
+        'gh attestation verify "$subject"',
+        '--bundle "$bundle"',
+        '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release-rc.yml"',
+        '--signer-digest "$COMMIT"',
+        '--source-ref "refs/tags/$RC_TAG"',
+        '--source-digest "$COMMIT"',
+        "--deny-self-hosted-runners",
+        '[[ "$verified" == 18 ]]',
+        '((${#assets[@]} == 19))',
+        'gh release create "$RC_TAG"',
+        "--draft",
+        "--prerelease",
+        "--latest=false",
+        "-F draft=false -F prerelease=true -f make_latest=false",
+        'bytes="$(stat -c %s "$asset")"',
+        '.state == "uploaded" and .size == $bytes',
+        "revalidate_second_machine() {",
+        'latest_after="$(latest_release_id)"',
+        '[[ "$latest_after" == "$latest_before" ]]',
+    )
+    for marker in required_markers:
+        if marker not in text:
+            raise ContractError(f"Round 13 RC workflow is missing reviewed marker: {marker}")
+    if text.count("verify_repository_governance") != 3:
+        raise ContractError(
+            "Round 14 RC must revalidate repository governance before draft creation and final publication"
+        )
+    if text.count("contents: write") != 1:
+        raise ContractError("Round 13 RC contents write must exist only in publication")
+    if text.count("attestations: write") != 1 or text.count("id-token: write") != 1:
+        raise ContractError("Round 13 RC attestation authority must exist only in build")
+    if text.count("attestations: read") != 1:
+        raise ContractError("Round 13 RC attestation read must exist only in publication")
+    if text.count("revalidate_second_machine") != 3:
+        raise ContractError("Round 13 RC must revalidate before draft creation and final publication")
+    order_context = "Round 13 RC revalidation order"
+    initial_validation = required_index(
+        text,
+        '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',
+        order_context,
+    )
+    seal_job = required_index(text, "\n  seal_candidate:", order_context)
+    publish_job = required_index(text, "\n  publish_prerelease:", order_context)
+    asset_verification_function = required_index(
+        text, "          verify_release_assets() {", order_context
+    )
+    revalidation_function = required_index(
+        text, "          revalidate_second_machine() {", order_context
+    )
+    revalidation_calls = tuple(
+        match.start()
+        for match in re.finditer(r"(?m)^          revalidate_second_machine$", text)
+    )
+    if len(revalidation_calls) != 2:
+        raise ContractError("Round 13 RC must contain exactly two publication revalidation calls")
+    draft_revalidation, final_revalidation = revalidation_calls
+    draft_create = required_index(
+        text, '          gh release create "$RC_TAG"', order_context
+    )
+    draft_asset_query = required_index(
+        text, '          release_assets="$(gh api --paginate --slurp', order_context
+    )
+    local_asset_size = required_index(
+        text, '            bytes="$(stat -c %s "$asset")"', order_context
+    )
+    final_asset_size_check = required_index(
+        text, '.state == "uploaded" and .size == $bytes', order_context
+    )
+    # The function definition contains the same call while checking its own
+    # body; the publication-order assertion must bind the final invocation
+    # after the GraphQL/draft checks, not that nested implementation call.
+    try:
+        asset_verification_call = text.rindex(
+            '          verify_release_assets "$release_id"'
+        )
+    except ValueError as exc:
+        raise ContractError(
+            f"{order_context} is missing reviewed marker: verify_release_assets"
+        ) from exc
+    final_patch = required_index(
+        text, '          published="$(gh api --method PATCH', order_context
+    )
+    latest_verification = required_index(
+        text, '          latest_after="$(latest_release_id)"', order_context
+    )
+    if (
+        '          revalidate_second_machine\n'
+        '          gh release create "$RC_TAG" "${assets[@]}" \\\n'
+    ) not in text:
+        raise ContractError(
+            "Round 13 RC draft revalidation must be immediately before create/upload"
+        )
+    if (
+        '          verify_draft_release_exact "$release_id"\n\n'
+        '          verify_repository_governance\n'
+        '          revalidate_second_machine\n'
+        '          verify_tag_unchanged\n'
+        '          # Re-fetch the draft immediately before the state transition.  This\n'
+        '          # closes the title/body/target/asset TOCTOU window after the first\n'
+        '          # draft inspection.\n'
+        '          verify_draft_release_exact "$release_id"\n'
+        '          published="$(gh api --method PATCH \\\n'
+    ) not in text:
+        raise ContractError(
+            "Round 14 RC final evidence and tag revalidation must follow the completed asset verification loop and immediately precede PATCH"
+        )
+    if not (
+        initial_validation < seal_job < publish_job < asset_verification_function
+        < draft_asset_query < local_asset_size < final_asset_size_check
+        < revalidation_function < draft_revalidation < draft_create
+        < asset_verification_call < final_revalidation
+        < final_patch < latest_verification
+    ):
+        raise ContractError(
+            "Round 13 RC revalidation order changed: initial admission must precede all "
+            "publication, draft revalidation must precede create/upload, and final "
+            "revalidation must follow exact asset verification and precede PATCH"
+        )
+    if text.count("runs-on: ubuntu-24.04") != 3:
+        raise ContractError("Round 13 RC must use exactly three fixed Linux jobs")
+    for forbidden in (
+        "windows-",
+        "macos-",
+        "ubuntu-latest",
+        "--latest=true",
+        "make_latest=true",
+        "round8-host-validation",
+        "round9-release-rc.yml",
+    ):
+        if forbidden in text:
+            raise ContractError(f"Round 13 RC workflow contains forbidden marker: {forbidden}")
+    if re.search(r"(?im)^\s*runs-on:.*self-hosted", text):
+        raise ContractError("Round 13 RC workflow may not run on a self-hosted runner")
+
+    resolved_source = source.resolve()
+    try:
+        workflow_root = resolved_source.parents[2]
+    except IndexError as exc:
+        raise ContractError("Round 13 RC workflow path is outside the reviewed repository layout") from exc
+    if (
+        resolved_source.name != "release-rc.yml"
+        or resolved_source.parent.name != "workflows"
+        or resolved_source.parent.parent.name != ".github"
+    ):
+        raise ContractError("Round 13 RC workflow path is outside .github/workflows")
+    for relative, expected_hash in ROUND14_RC_LINKED_CONTRACT_SHA256.items():
+        linked_path = workflow_root / relative
+        linked_text = read_regular_text(linked_path, workflow_root)
+        if hashlib.sha256(linked_text.encode("utf-8")).hexdigest() != expected_hash:
+            raise ContractError(
+                f"Round 14 RC linked contract differs from reviewed text: {relative}"
             )
 
 
@@ -7391,9 +8271,9 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "env",
     )
     for name, expected in (
-        ("GOTOOLCHAIN", "go1.26.4"),
+        ("GOTOOLCHAIN", "go1.26.6"),
         ("GOFLAGS", "-mod=readonly"),
-        ("GO_VERSION", "1.26.4"),
+        ("GO_VERSION", "1.26.6"),
         (
             "ROUND9_BENIGN_MANIFEST_SHA256",
             "d33e4ff8954741a2fe9c24c0d34b239c649c7e0a6d31463cddba84dc6b6580b8",
@@ -7432,11 +8312,17 @@ def validate_round9_gate_workflow(text: str, source: Path) -> None:
         "make round9-public-corpus",
         "TestClassifierPolicyIdentity",
         "TestClassifierPolicySourceInventoryClosure",
+        "audit_test_list=\"$(go test -tags=sqlite_omit_load_extension ./internal/audit -list '^Test' -count=1)\"",
+        "required_audit_tests=(",
+        "required audit test is missing from go test -list:",
+        "csam_test_list=\"$(go test ./internal/csamtext -list '^Test' -count=1)\"",
+        "required_csam_tests=(",
+        "required CSAM test is missing from go test -list:",
         'classifier_policy_sha256=${classifier_policy_sha256}',
         "test ! -e testdata/round9-independent-benign-v1/cases.jsonl",
         "test ! -e testdata/round9-independent-malicious-v1",
         "independent_corpus_executed=false",
-        "classifier-policy-v12",
+        "classifier-policy-v20",
         "1.0.10",
     ):
         if marker not in text:
@@ -9286,8 +10172,8 @@ def validate_round6_linux_build_script(text: str, source: Path) -> None:
         "exit 1",
         "fi",
         'go_version="$($go_bin env GOVERSION)"',
-        'if [[ "$go_version" != go1.26.4 ]]; then',
-        "printf 'build-linux-amd64.sh requires Go go1.26.4, got %s\\n' \"$go_version\" >&2",
+        'if [[ "$go_version" != go1.26.6 ]]; then',
+        "printf 'build-linux-amd64.sh requires Go go1.26.6, got %s\\n' \"$go_version\" >&2",
         "exit 1",
         "fi",
         'mkdir -p "$dist"',
@@ -9390,6 +10276,56 @@ def validate_round6_go_safe_development_script(text: str, source: Path) -> None:
         raise ContractError(
             f"safe-development test modes lost the exact Round 9 counted-Mock contract: {source}"
         )
+    round13_inventory = re.search(
+        r"(?ms)^expected_round13_classifier_entries=\(\n(?P<body>.*?)^\)\n",
+        text,
+    )
+    if round13_inventory is None:
+        raise ContractError(
+            f"safe-development test modes lost the Round 13 classifier inventory: {source}"
+        )
+    round13_entries = tuple(
+        line.strip()
+        for line in round13_inventory.group("body").splitlines()
+        if line.strip()
+    )
+    if any(
+        round13_entries.count(name) != 1
+        for name in ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS
+    ):
+        raise ContractError(
+            "safe-development test modes lost the exact supplemental terminal "
+            f"activation regression inventory: {source}"
+        )
+    round13_plugin_inventory = re.search(
+        r"(?ms)^expected_round13_plugin_entries=\(\n(?P<body>.*?)^\)\n",
+        text,
+    )
+    if round13_plugin_inventory is None:
+        raise ContractError(
+            f"safe-development test modes lost the Round 13 plugin inventory: {source}"
+        )
+    round13_plugin_entries = tuple(
+        line.strip()
+        for line in round13_plugin_inventory.group("body").splitlines()
+        if line.strip()
+    )
+    if any(
+        round13_plugin_entries.count(name) != 1
+        for name in ROUND13_TERMINAL_META_PLUGIN_TESTS
+    ):
+        raise ContractError(
+            "safe-development test modes lost the exact terminal META plugin "
+            f"regression inventory: {source}"
+        )
+    for marker in (
+        'require_reviewed_entries ./internal/plugin "round-thirteen plugin"',
+        "'^TestRound13[A-Za-z0-9_]*$'",
+    ):
+        if text.count(marker) != 1:
+            raise ContractError(
+                f"safe-development test modes lost the closed Round 13 plugin boundary: {source}"
+            )
     required_race_commands = (
         'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 "${safe_packages[@]}"',
         'CGO_ENABLED=1 "$go_bin" test -race -timeout=20m -tags="$test_tags" -count=1 -run="$safe_pattern" ./internal/classifier',
@@ -9521,14 +10457,14 @@ def validate_round6_makefile_contract(text: str, source: Path) -> None:
         if line.strip()
     )
     expected_round9_fuzz_commands = (
-        "@set -euo pipefail; [[ \"$$(uname -s)\" == Linux ]] || { echo 'round9-fuzz requires a Linux host' >&2; exit 1; }; case \"$$(uname -m)\" in x86_64|amd64) ;; *) echo 'round9-fuzz requires linux/amd64' >&2; exit 1 ;; esac; [[ \"$$($(GO) env GOOS)\" == linux && \"$$($(GO) env GOARCH)\" == amd64 ]] || { echo 'round9-fuzz requires GOOS=linux GOARCH=amd64' >&2; exit 1; }; [[ \"$$($(GO) version | awk '{print $$3}')\" == go1.26.4 ]] || { echo 'round9-fuzz requires Go 1.26.4' >&2; exit 1; }; case \"$(ROUND9_FUZZTIME)\" in 1s|2s|3s|4s|5s|6s|7s|8s|9s|10s) ;; *) echo 'ROUND9_FUZZTIME must be an integer duration from 1s through 10s' >&2; exit 1 ;; esac",
+        "@set -euo pipefail; [[ \"$$(uname -s)\" == Linux ]] || { echo 'round9-fuzz requires a Linux host' >&2; exit 1; }; case \"$$(uname -m)\" in x86_64|amd64) ;; *) echo 'round9-fuzz requires linux/amd64' >&2; exit 1 ;; esac; [[ \"$$($(GO) env GOOS)\" == linux && \"$$($(GO) env GOARCH)\" == amd64 ]] || { echo 'round9-fuzz requires GOOS=linux GOARCH=amd64' >&2; exit 1; }; [[ \"$$($(GO) version | awk '{print $$3}')\" == go1.26.6 ]] || { echo 'round9-fuzz requires Go 1.26.6' >&2; exit 1; }; case \"$(ROUND9_FUZZTIME)\" in 1s|2s|3s|4s|5s|6s|7s|8s|9s|10s) ;; *) echo 'ROUND9_FUZZTIME must be an integer duration from 1s through 10s' >&2; exit 1 ;; esac",
         "GOMAXPROCS=2 $(GO) test -tags=$(TEST_TAGS) ./internal/classifier -run='^$$' -fuzz='^FuzzClassifier$$' -fuzztime='$(ROUND9_FUZZTIME)' -parallel=1",
         "GOMAXPROCS=2 $(GO) test -tags=$(TEST_TAGS) ./internal/extract -run='^$$' -fuzz='^FuzzExtractRequestContentType$$' -fuzztime='$(ROUND9_FUZZTIME)' -parallel=1",
         "GOMAXPROCS=2 $(GO) test -tags=$(TEST_TAGS) ./internal/audit -run='^$$' -fuzz='^FuzzRound9AuditDecisionExplanationV2$$' -fuzztime='$(ROUND9_FUZZTIME)' -parallel=1",
     )
     if text.count("ROUND9_FUZZTIME ?= 5s") != 1 or round9_fuzz_commands != expected_round9_fuzz_commands:
         raise ContractError(
-            f"round9-fuzz must retain the exact Linux/amd64 Go 1.26.4 bounded real-fuzz contract: {source}"
+            f"round9-fuzz must retain the exact Linux/amd64 Go 1.26.6 bounded real-fuzz contract: {source}"
         )
     benchmark_commands = tuple(
         " ".join(line.split())
@@ -11870,7 +12806,7 @@ def validate_workflow_layout(root: Path) -> None:
         expected_directory_paths
     ):
         raise ContractError(
-            "workflow directory must contain exactly the three reviewed entrypoints and its README: "
+            f"workflow directory must contain exactly the {len(ACTIVE_WORKFLOW_PATHS)} reviewed entrypoints and its README: "
             + ", ".join(expected_directory_paths)
         )
 
@@ -11883,15 +12819,19 @@ def validate_workflow_layout(root: Path) -> None:
         safe_gate_test_text = read_regular_text(safe_gate_test_path, root)
         if (
             hashlib.sha256(safe_gate_test_text.encode("utf-8")).hexdigest()
-            != ROUND6_SAFE_GATE_TEST_SHA256
+            != ROUND14_SAFE_GATE_TEST_SHA256
         ):
-            raise ContractError("Round6 safe-gate test suite differs from reviewed contract")
+            raise ContractError("Round14 safe-gate test suite differs from reviewed contract")
 
     archive_path = root / ARCHIVED_RC_WORKFLOW_PATH
     archive_text = read_regular_text(archive_path, root)
     validate_archived_rc_workflow(archive_text, archive_path)
     if archive_path.resolve().is_relative_to(resolved_workflow_dir):
         raise ContractError("archived RC workflow must remain outside the executable workflow directory")
+    active_rc_path = root / ACTIVE_RC_WORKFLOW_PATH
+    validate_rc_release_workflow(
+        read_regular_text(active_rc_path, root), active_rc_path
+    )
 
 
 def default_entrypoints(root: Path) -> list[Path]:
@@ -11925,8 +12865,6 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 validate_codeql_workflow(text, entrypoint)
             elif name == "attested-prerelease.yml":
                 validate_blocked_prerelease_workflow(text, entrypoint)
-            elif name == "release-rc.yml":
-                validate_rc_release_workflow(text, entrypoint)
             elif name == "round8-host-validation.yml":
                 validate_round8_host_workflow(text, entrypoint)
             elif name == "policy-gate.yml":
@@ -11935,6 +12873,8 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 validate_round9_host_workflow(text, entrypoint)
             elif name == "round9-release-rc.yml":
                 validate_round9_rc_workflow(text, entrypoint)
+            elif name == "release-rc.yml":
+                validate_rc_release_workflow(text, entrypoint)
             elif name == "release.yml":
                 validate_formal_release_workflow(text, entrypoint)
                 continue
@@ -11991,17 +12931,30 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 validate_frozen_evaluation_tree_script(script_text, script_path)
                 inspected_scripts.add(relative)
                 continue
-            if relative == ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT:
+            if (
+                relative in ROUND14_RC_LINKED_CONTRACT_SHA256
+                and Path(relative).suffix.lower() in {".py", ".sh"}
+            ):
                 script_path = root / relative
                 script_text = read_regular_text(script_path, root)
-                validate_round6_doc_fixture_wrapper_script(script_text, script_path, root)
+                expected_hash = ROUND14_RC_LINKED_CONTRACT_SHA256[relative]
+                if hashlib.sha256(script_text.encode("utf-8")).hexdigest() != expected_hash:
+                    raise ContractError(
+                        f"Round 14 RC linked contract changed outside review: {relative}"
+                    )
                 inspected_scripts.add(relative)
-                inspected_scripts.update(ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256)
+                continue
+            if relative == ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT:
+                script_path = root / relative
+                script_text = read_regular_text(script_path, root)
+                validate_round14_doc_fixture_wrapper_script(script_text, script_path, root)
+                inspected_scripts.add(relative)
+                inspected_scripts.update(ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256)
                 continue
             if relative == "scripts/release-doc-consistency.sh":
                 script_path = root / relative
                 script_text = read_regular_text(script_path, root)
-                expected_hash = ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256[relative]
+                expected_hash = ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256[relative]
                 if hashlib.sha256(script_text.encode("utf-8")).hexdigest() != expected_hash:
                     raise ContractError(
                         "real release document gate changed outside the reviewed contract"
@@ -12013,7 +12966,7 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 script_text = read_regular_text(script_path, root)
                 if (
                     hashlib.sha256(script_text.encode("utf-8")).hexdigest()
-                    == ROUND6_SAFE_GATE_TEST_SHA256
+                    == ROUND14_SAFE_GATE_TEST_SHA256
                 ):
                     inspected_scripts.add(relative)
                     continue

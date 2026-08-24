@@ -1,0 +1,777 @@
+{
+  "$id": "https://github.com/yujianwudi/cyber-abuse-guard-next/blob/main/tools/current-cpa-audit/second-machine-release-admission.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidate": { "$ref": "#/$defs/candidate" },
+    "claim_boundary": { "const": "OWNER-RUN SECOND-MACHINE RELEASE ADMISSION; NOT INDEPENDENT PROOF" },
+    "cleanup": { "$ref": "#/$defs/cleanup" },
+    "corpus": { "$ref": "#/$defs/corpus" },
+    "cpa": { "$ref": "#/$defs/cpa" },
+    "evidence_refs": { "$ref": "#/$defs/evidence_refs" },
+    "expires_at": { "$ref": "#/$defs/timestamp" },
+    "generated_at": { "$ref": "#/$defs/timestamp" },
+    "host_admission": { "$ref": "#/$defs/host_admission" },
+    "inputs": { "$ref": "#/$defs/inputs" },
+    "native_host_special_paths": { "$ref": "#/$defs/native_host_special_paths" },
+    "performance": { "$ref": "#/$defs/performance" },
+    "realtime": { "$ref": "#/$defs/realtime" },
+    "safety": { "$ref": "#/$defs/safety" },
+    "schema": { "const": "cyber-abuse-guard.second-machine-release-admission.v3" },
+    "semantic": { "$ref": "#/$defs/semantic" },
+    "source": { "$ref": "#/$defs/source" },
+    "status": { "const": "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "supplemental_archive": { "$ref": "#/$defs/supplemental_archive" },
+    "tool_bundles": { "$ref": "#/$defs/tool_bundles" }
+  },
+  "required": [
+    "candidate",
+    "claim_boundary",
+    "cleanup",
+    "corpus",
+    "cpa",
+    "evidence_refs",
+    "expires_at",
+    "generated_at",
+    "host_admission",
+    "inputs",
+    "native_host_special_paths",
+    "performance",
+    "realtime",
+    "safety",
+    "schema",
+    "semantic",
+    "source",
+    "status",
+    "summary",
+    "supplemental_archive",
+    "tool_bundles"
+  ],
+  "type": "object",
+  "$defs": {
+    "evidence_refs": {
+      "additionalProperties": false,
+      "properties": {
+        "lazy_read": { "$ref": "#/$defs/lazy_read_ref" },
+        "csam_text": { "$ref": "#/$defs/csam_text_ref" }
+      },
+      "required": ["lazy_read", "csam_text"],
+      "type": "object"
+    },
+    "lazy_read_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "phase_boundary_path": { "const": "lazy-read/phase-boundary.json" },
+        "phase_boundary_sha256": { "$ref": "#/$defs/sha256" },
+        "phase_boundary_status": { "const": "PASS" },
+        "preflight_trace_count": { "minimum": 1, "type": "integer" },
+        "run_id": { "pattern": "^[a-z0-9][a-z0-9_.-]{2,62}$", "type": "string" },
+        "runtime_read_summary_path": { "const": "lazy-read/runtime-read-summary.json" },
+        "runtime_read_summary_sha256": { "$ref": "#/$defs/sha256" },
+        "runtime_read_trace_path": { "const": "lazy-read/runtime-read-trace.jsonl" },
+        "runtime_read_trace_sha256": { "$ref": "#/$defs/sha256" },
+        "status": { "const": "PASS" },
+        "transport_request_count": { "minimum": 1, "type": "integer" },
+        "transport_source_read_count": { "minimum": 1, "type": "integer" }
+      },
+      "required": ["phase_boundary_path", "phase_boundary_sha256", "phase_boundary_status", "preflight_trace_count", "run_id", "runtime_read_summary_path", "runtime_read_summary_sha256", "runtime_read_trace_path", "runtime_read_trace_sha256", "status", "transport_request_count", "transport_source_read_count"],
+      "type": "object"
+    },
+    "csam_text_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "benign_case_count": { "const": 21 },
+        "false_positive_count": { "const": 0 },
+        "fixture_manifest_path": { "const": "csam-text/fixture-manifest.json" },
+        "fixture_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "malicious_case_count": { "const": 15 },
+        "run_id": { "pattern": "^[a-z0-9][a-z0-9_.-]{2,62}$", "type": "string" },
+        "privacy_cleanup_path": { "const": "csam-text/privacy-cleanup.json" },
+        "privacy_cleanup_sha256": { "$ref": "#/$defs/sha256" },
+        "results_path": { "const": "csam-text/results.json" },
+        "results_sha256": { "$ref": "#/$defs/sha256" },
+        "status": { "const": "PASS" },
+        "summary_path": { "const": "csam-text/summary.json" },
+        "summary_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["benign_case_count", "false_positive_count", "fixture_manifest_path", "fixture_manifest_sha256", "malicious_case_count", "privacy_cleanup_path", "privacy_cleanup_sha256", "results_path", "results_sha256", "run_id", "status", "summary_path", "summary_sha256"],
+      "type": "object"
+    },
+    "host_admission": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_artifact_digest": { "$ref": "#/$defs/digest" },
+        "candidate_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "claim_boundary": { "const": "SECOND-MACHINE OWNER HOST ADMISSION; EXACT CANDIDATE AND PROTECTED ROUTES ONLY; NOT INDEPENDENT ATTESTATION" },
+         "cpa_commit": { "const": "85d2faddd17e6f4f8675a84ee28b131f702e8eaa" },
+        "cpa_rpc_schema": { "const": 3 },
+         "cpa_tag": { "const": "v7.2.137" },
+        "host_300s_sample_count": { "const": 301 },
+        "host_300s_samples_sha256": { "$ref": "#/$defs/sha256" },
+        "host_3600s_sample_count": { "const": 3601 },
+        "host_3600s_samples_sha256": { "$ref": "#/$defs/sha256" },
+        "platform": { "const": "linux/amd64" },
+        "realtime_route_count": { "const": 14 },
+        "realtime_routes_sha256": { "$ref": "#/$defs/sha256" },
+        "run_id": { "pattern": "^[a-z0-9][a-z0-9_.-]{2,62}$", "type": "string" },
+        "schema": { "const": "cag-current-cpa-host-admission-evidence/v1" },
+        "so_sha256": { "$ref": "#/$defs/sha256" },
+        "source_commit": { "$ref": "#/$defs/hex40" },
+        "source_tree": { "$ref": "#/$defs/hex40" },
+        "status": { "const": "PASS" },
+        "store_zip_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["candidate_artifact_digest", "candidate_manifest_sha256", "claim_boundary", "cpa_commit", "cpa_rpc_schema", "cpa_tag", "evidence_sha256", "host_300s_sample_count", "host_300s_samples_sha256", "host_3600s_sample_count", "host_3600s_samples_sha256", "platform", "realtime_route_count", "realtime_routes_sha256", "run_id", "schema", "so_sha256", "source_commit", "source_tree", "status", "store_zip_sha256"],
+      "type": "object"
+    },
+    "realtime": {
+      "additionalProperties": false,
+      "properties": {
+        "authenticated_dynamic_evidence": { "const": "NOT_PERFORMED_PROVIDER_SAFETY_BOUNDARY" },
+        "cag_visible": { "const": false },
+        "cold_starts": { "items": { "$ref": "#/$defs/realtime_cold_start" }, "maxItems": 3, "minItems": 3, "type": "array" },
+        "evidence_level": { "const": "AUTH_BOUNDARY_ONLY" },
+        "protection": { "const": "unprotected" },
+        "real_provider_calls": { "const": 0 },
+        "route_count": { "const": 14 },
+        "source_topology": { "const": "SOURCE_TOPOLOGY_UNPROTECTED" }
+      },
+      "required": ["authenticated_dynamic_evidence", "cag_visible", "cold_starts", "evidence_level", "protection", "real_provider_calls", "route_count", "source_topology"],
+      "type": "object"
+    },
+    "realtime_cold_start": {
+      "additionalProperties": false,
+      "properties": {
+        "cag_counters_after": { "$ref": "#/$defs/realtime_rpc_counters" },
+        "cag_counters_before": { "$ref": "#/$defs/realtime_rpc_counters" },
+        "cag_visible": { "const": false },
+        "cold_start": { "maximum": 3, "minimum": 1, "type": "integer" },
+        "evidence_level": { "const": "AUTH_BOUNDARY_ONLY" },
+        "event_head_after": { "maxLength": 128, "type": "string" },
+        "event_head_before": { "maxLength": 128, "type": "string" },
+        "mock_after": { "$ref": "#/$defs/realtime_mock" },
+        "mock_before": { "$ref": "#/$defs/realtime_mock" },
+        "protection": { "const": "unprotected" },
+        "real_provider_calls": { "const": 0 },
+        "routes": { "items": { "$ref": "#/$defs/realtime_route" }, "maxItems": 14, "minItems": 14, "type": "array" },
+        "target_boundary": {
+          "additionalProperties": false,
+          "properties": {
+            "counted_mock_only": { "const": true },
+            "cpa_private_bridge_only": { "const": true },
+            "real_provider_forbidden": { "const": true }
+          },
+          "required": ["counted_mock_only", "cpa_private_bridge_only", "real_provider_forbidden"],
+          "type": "object"
+        },
+        "usage_records": { "const": 0 }
+      },
+      "required": ["cag_counters_after", "cag_counters_before", "cag_visible", "cold_start", "evidence_level", "event_head_after", "event_head_before", "mock_after", "mock_before", "protection", "real_provider_calls", "routes", "target_boundary", "usage_records"],
+      "type": "object"
+    },
+    "realtime_rpc_counters": {
+      "additionalProperties": false,
+      "properties": {
+        "rpc_request_before_calls": { "minimum": 0, "type": "integer" },
+        "rpc_request_after_calls": { "minimum": 0, "type": "integer" },
+        "rpc_request_complete_calls": { "minimum": 0, "type": "integer" },
+        "rpc_request_complete_errors": { "minimum": 0, "type": "integer" },
+        "rpc_model_route_calls": { "minimum": 0, "type": "integer" },
+        "rpc_executor_calls": { "minimum": 0, "type": "integer" }
+      },
+      "required": ["rpc_request_before_calls", "rpc_request_after_calls", "rpc_request_complete_calls", "rpc_request_complete_errors", "rpc_model_route_calls", "rpc_executor_calls"],
+      "type": "object"
+    },
+    "realtime_mock": {
+      "additionalProperties": false,
+      "properties": { "auth": { "const": 0 }, "mock": { "const": 0 }, "provider": { "const": 0 } },
+      "required": ["auth", "mock", "provider"],
+      "type": "object"
+    },
+    "realtime_route": {
+      "additionalProperties": false,
+      "properties": {
+        "auth": { "enum": ["realtime", "standard"] },
+        "cag_counter_delta": { "$ref": "#/$defs/realtime_rpc_zero_delta" },
+        "credential_kind": { "const": "NONE" },
+        "method": { "enum": ["GET", "POST"] },
+        "probe_mode": { "const": "UNAUTHENTICATED" },
+        "route": { "pattern": "^/v1/realtime(?:/.*)?$", "type": "string" },
+        "status": { "enum": [401, 403] },
+        "termination": { "const": "AUTH_REJECTED" },
+        "upgrade": { "const": false }
+      },
+      "required": ["auth", "cag_counter_delta", "credential_kind", "method", "probe_mode", "route", "status", "termination", "upgrade"],
+      "type": "object"
+    },
+    "realtime_rpc_zero_delta": {
+      "additionalProperties": false,
+      "properties": {
+        "rpc_request_before_calls": { "const": 0 },
+        "rpc_request_after_calls": { "const": 0 },
+        "rpc_request_complete_calls": { "const": 0 },
+        "rpc_request_complete_errors": { "const": 0 },
+        "rpc_model_route_calls": { "const": 0 },
+        "rpc_executor_calls": { "const": 0 }
+      },
+      "required": ["rpc_request_before_calls", "rpc_request_after_calls", "rpc_request_complete_calls", "rpc_request_complete_errors", "rpc_model_route_calls", "rpc_executor_calls"],
+      "type": "object"
+    },
+    "artifact_file": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": { "minimum": 1, "type": "integer" },
+        "name": { "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$", "type": "string" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["bytes", "name", "sha256"],
+      "type": "object"
+    },
+    "candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "files": {
+          "items": { "$ref": "#/$defs/artifact_file" },
+          "maxItems": 9,
+          "minItems": 9,
+          "type": "array"
+        },
+        "github_artifact": {
+          "additionalProperties": false,
+          "properties": {
+            "digest": { "$ref": "#/$defs/digest" },
+            "id": { "minimum": 1, "type": "integer" },
+            "name": { "const": "cyber-abuse-guard-linux-amd64-audit-candidate" },
+            "run_attempt": { "minimum": 1, "type": "integer" },
+            "run_id": { "minimum": 1, "type": "integer" },
+            "size": { "minimum": 1, "type": "integer" },
+            "workflow_name": { "const": "CI" },
+            "workflow_path": { "const": ".github/workflows/ci.yml" }
+          },
+          "required": ["digest", "id", "name", "run_attempt", "run_id", "size", "workflow_name", "workflow_path"],
+          "type": "object"
+        },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["files", "github_artifact", "manifest_sha256"],
+      "type": "object"
+    },
+    "cleanup": {
+      "additionalProperties": false,
+      "properties": {
+        "all_owned_resources_absent": { "const": true },
+        "global_prune_used": { "const": false },
+        "images_removed": { "const": false },
+        "resource_count": { "minimum": 1, "type": "integer" },
+        "third_party_text_files_removed": { "minimum": 11, "type": "integer" },
+        "third_party_text_retained": { "const": false }
+      },
+      "required": ["all_owned_resources_absent", "global_prune_used", "images_removed", "resource_count", "third_party_text_files_removed", "third_party_text_retained"],
+      "type": "object"
+    },
+    "corpus": {
+      "additionalProperties": false,
+      "properties": {
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "policy_review_status": { "const": "approved" },
+        "repositories": {
+          "items": { "$ref": "#/$defs/repository_pin" },
+          "maxItems": 5,
+          "minItems": 5,
+          "type": "array"
+        },
+        "repository_count": { "const": 5 },
+        "source_count": { "const": 11 },
+        "unique_content_hashes": { "minimum": 1, "type": "integer" },
+        "unique_semantic_cases": { "const": 19 },
+        "zip_source": { "$ref": "#/$defs/zip_source" }
+      },
+      "required": ["manifest_sha256", "policy_review_status", "repositories", "repository_count", "source_count", "unique_content_hashes", "unique_semantic_cases", "zip_source"],
+      "type": "object"
+    },
+    "cpa": {
+      "additionalProperties": false,
+      "properties": {
+        "binary_path": { "minLength": 1, "type": "string" },
+         "binary_sha256": { "const": "aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa" },
+        "c_abi": { "const": 1 },
+         "commit": { "const": "85d2faddd17e6f4f8675a84ee28b131f702e8eaa" },
+        "image_id": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+         "official_asset_name": { "const": "CLIProxyAPI_7.2.137_linux_amd64.tar.gz" },
+         "official_asset_sha256": { "const": "ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401" },
+        "repo_digest": { "pattern": "^[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}$", "type": "string" },
+        "rpc_schema": { "const": 3 },
+         "tag": { "const": "v7.2.137" }
+      },
+      "required": ["binary_path", "binary_sha256", "c_abi", "commit", "image_id", "official_asset_name", "official_asset_sha256", "repo_digest", "rpc_schema", "tag"],
+      "type": "object"
+    },
+    "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "gate": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "number" },
+        "observed": { "type": "number" },
+        "operator": { "enum": ["<", "<=", "=", ">="] },
+        "status": { "const": "PASS" }
+      },
+      "required": ["limit", "observed", "operator", "status"],
+      "type": "object"
+    },
+    "host_tool_hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "acquire_sha256": { "$ref": "#/$defs/sha256" },
+        "audit_contract_sha256": { "$ref": "#/$defs/sha256" },
+        "bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "host_performance_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "host_performance_source_sha256": { "$ref": "#/$defs/sha256" },
+        "run_sha256": { "$ref": "#/$defs/sha256" },
+        "validator_sha256": { "$ref": "#/$defs/sha256" },
+        "workload_generator_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["acquire_sha256", "audit_contract_sha256", "bundle_sha256", "host_performance_schema_sha256", "host_performance_source_sha256", "run_sha256", "validator_sha256", "workload_generator_sha256"],
+      "type": "object"
+    },
+    "inputs": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "csam_text_fixture_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "csam_text_privacy_cleanup_sha256": { "$ref": "#/$defs/sha256" },
+        "csam_text_results_sha256": { "$ref": "#/$defs/sha256" },
+        "csam_text_summary_sha256": { "$ref": "#/$defs/sha256" },
+        "corpus_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "host_performance_config_sha256": { "$ref": "#/$defs/sha256" },
+        "host_performance_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "host_performance_measurements_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_300s_samples_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_3600s_samples_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_realtime_routes_sha256": { "$ref": "#/$defs/sha256" },
+        "lazy_read_phase_boundary_sha256": { "$ref": "#/$defs/sha256" },
+        "lazy_read_runtime_read_summary_sha256": { "$ref": "#/$defs/sha256" },
+        "lazy_read_runtime_read_trace_sha256": { "$ref": "#/$defs/sha256" },
+        "machine_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "native_host_go_test_log_sha256": { "$ref": "#/$defs/sha256" },
+        "native_host_special_paths_report_sha256": { "$ref": "#/$defs/sha256" },
+        "performance_workload_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "run_config_sha256": { "$ref": "#/$defs/sha256" },
+        "supplemental_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "supplemental_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "supplemental_policy_sha256": { "$ref": "#/$defs/sha256" },
+        "supplemental_results_sha256": { "$ref": "#/$defs/sha256" },
+        "transport_results_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["candidate_manifest_sha256", "csam_text_fixture_manifest_sha256", "csam_text_privacy_cleanup_sha256", "csam_text_results_sha256", "csam_text_summary_sha256", "corpus_manifest_sha256", "host_performance_config_sha256", "host_performance_evidence_sha256", "host_performance_measurements_sha256", "host_admission_evidence_sha256", "host_admission_300s_samples_sha256", "host_admission_3600s_samples_sha256", "host_admission_realtime_routes_sha256", "lazy_read_phase_boundary_sha256", "lazy_read_runtime_read_summary_sha256", "lazy_read_runtime_read_trace_sha256", "machine_evidence_sha256", "native_host_go_test_log_sha256", "native_host_special_paths_report_sha256", "performance_workload_manifest_sha256", "run_config_sha256", "supplemental_archive_sha256", "supplemental_manifest_sha256", "supplemental_policy_sha256", "supplemental_results_sha256", "transport_results_sha256"],
+      "type": "object"
+    },
+    "native_host_candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_digest": { "$ref": "#/$defs/digest" },
+        "artifact_id": { "minimum": 1, "type": "integer" },
+        "artifact_size": { "minimum": 1, "type": "integer" },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "run_attempt": { "minimum": 1, "type": "integer" },
+        "run_id": { "minimum": 1, "type": "integer" },
+        "so_sha256": { "$ref": "#/$defs/sha256" },
+        "source_commit": { "$ref": "#/$defs/hex40" },
+        "source_tree": { "$ref": "#/$defs/hex40" }
+      },
+      "required": ["artifact_digest", "artifact_id", "artifact_size", "manifest_sha256", "run_attempt", "run_id", "so_sha256", "source_commit", "source_tree"],
+      "type": "object"
+    },
+    "native_host_special_paths": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": { "$ref": "#/$defs/native_host_candidate" },
+        "cpa_abi": { "const": 1 },
+         "cpa_commit": { "const": "85d2faddd17e6f4f8675a84ee28b131f702e8eaa" },
+        "cpa_rpc_schema": { "const": 3 },
+         "cpa_tag": { "const": "v7.2.137" },
+        "critical_test_count": { "const": 35 },
+        "critical_tests_sha256": { "$ref": "#/$defs/sha256" },
+        "fail_count": { "const": 0 },
+        "go_test_log_sha256": { "$ref": "#/$defs/sha256" },
+        "go_version": { "const": "go1.26.6" },
+        "observed_test_count": { "minimum": 36, "type": "integer" },
+        "platform": { "const": "linux/amd64" },
+        "report_schema": { "const": "cyber-abuse-guard.native-host-special-paths.v1" },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "required_test_count": { "const": 36 },
+        "schema_sha256": { "$ref": "#/$defs/sha256" },
+        "skip_count": { "const": 0 },
+        "source_sha256": { "$ref": "#/$defs/sha256" },
+        "status": { "const": "NATIVE_HOST_SPECIAL_PATHS_PASS" },
+        "test_source_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["candidate", "cpa_abi", "cpa_commit", "cpa_rpc_schema", "cpa_tag", "critical_test_count", "critical_tests_sha256", "fail_count", "go_test_log_sha256", "go_version", "observed_test_count", "platform", "report_schema", "report_sha256", "required_test_count", "schema_sha256", "skip_count", "source_sha256", "status", "test_source_sha256"],
+      "type": "object"
+    },
+    "outcome": {
+      "additionalProperties": false,
+      "properties": {
+        "actual_action": { "enum": ["allow", "block_incomplete_inspection", "block_malicious_text"] },
+        "all_executions_passed": { "const": true },
+        "execution_count": { "maximum": 40, "minimum": 12, "type": "integer" },
+        "expected_action": { "enum": ["allow", "block_incomplete_inspection", "block_malicious_text"] },
+        "false_positive": { "const": false },
+        "label": { "minLength": 1, "type": "string" },
+        "malicious": { "type": "boolean" },
+        "malicious_detected": { "type": "boolean" },
+        "mode": { "enum": ["audit", "balanced", "strict"] },
+        "semantic_case_id": { "minLength": 1, "type": "string" },
+        "side_effect_violations": { "const": 0 }
+      },
+      "required": ["actual_action", "all_executions_passed", "execution_count", "expected_action", "false_positive", "label", "malicious", "malicious_detected", "mode", "semantic_case_id", "side_effect_violations"],
+      "type": "object"
+    },
+    "performance": {
+      "additionalProperties": false,
+      "properties": {
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_schema": { "minLength": 1, "type": "string" },
+        "evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "gates": { "$ref": "#/$defs/performance_gates" },
+        "measurements_sha256": { "$ref": "#/$defs/sha256" },
+        "metrics": { "$ref": "#/$defs/performance_metrics" },
+        "status": { "const": "PASS" }
+      },
+      "required": ["config_sha256", "evidence_schema", "evidence_sha256", "gates", "measurements_sha256", "metrics", "status"],
+      "type": "object"
+    },
+    "performance_gates": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_queue_peak_ratio": { "$ref": "#/$defs/gate" },
+        "five_repository_activation_p95_ms": { "$ref": "#/$defs/gate" },
+        "fixed_workload_p99_regression_percent": { "$ref": "#/$defs/gate" },
+        "host_throughput_vs_cpa_only": { "$ref": "#/$defs/gate" },
+        "large_payload_full_copy_regression": { "$ref": "#/$defs/gate" },
+        "ordinary_plugin_overhead_p95_ms": { "$ref": "#/$defs/gate" },
+        "public_adversarial_p95_ms": { "$ref": "#/$defs/gate" },
+        "public_adversarial_p99_ms": { "$ref": "#/$defs/gate" },
+        "restart_oom_panic": { "$ref": "#/$defs/gate" },
+        "unexpected_http_or_infrastructure_errors": { "$ref": "#/$defs/gate" },
+        "warm_rss_growth_60m_mib": { "$ref": "#/$defs/gate" }
+      },
+      "required": ["audit_queue_peak_ratio", "five_repository_activation_p95_ms", "fixed_workload_p99_regression_percent", "host_throughput_vs_cpa_only", "large_payload_full_copy_regression", "ordinary_plugin_overhead_p95_ms", "public_adversarial_p95_ms", "public_adversarial_p99_ms", "restart_oom_panic", "unexpected_http_or_infrastructure_errors", "warm_rss_growth_60m_mib"],
+      "type": "object"
+    },
+    "performance_metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_queue_peak_ratio": { "type": "number" },
+        "five_repository_activation_p95_ms": { "type": "number" },
+        "fixed_workload_p99_regression_percent": { "type": "number" },
+        "host_throughput_vs_cpa_only": { "type": "number" },
+        "large_payload_full_copy_regression": { "type": "number" },
+        "ordinary_plugin_overhead_p95_ms": { "type": "number" },
+        "public_adversarial_p95_ms": { "type": "number" },
+        "public_adversarial_p99_ms": { "type": "number" },
+        "restart_oom_panic": { "type": "number" },
+        "unexpected_http_or_infrastructure_errors": { "type": "number" },
+        "warm_rss_growth_60m_mib": { "type": "number" }
+      },
+      "required": ["audit_queue_peak_ratio", "five_repository_activation_p95_ms", "fixed_workload_p99_regression_percent", "host_throughput_vs_cpa_only", "large_payload_full_copy_regression", "ordinary_plugin_overhead_p95_ms", "public_adversarial_p95_ms", "public_adversarial_p99_ms", "restart_oom_panic", "unexpected_http_or_infrastructure_errors", "warm_rss_growth_60m_mib"],
+      "type": "object"
+    },
+    "repository_pin": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": { "$ref": "#/$defs/hex40" },
+        "default_branch": { "minLength": 1, "type": "string" },
+        "repository": { "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string" },
+        "repository_key": { "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$", "type": "string" },
+        "tree": { "$ref": "#/$defs/hex40" }
+      },
+      "required": ["commit", "default_branch", "repository", "repository_key", "tree"],
+      "type": "object"
+    },
+    "safety": {
+      "additionalProperties": false,
+      "properties": {
+        "business_snapshots_unchanged": { "const": true },
+        "corpus_third_party_code_executions": { "const": 0 },
+        "independent_proof": { "const": false },
+        "infrastructure_error_count": { "const": 0 },
+        "machine_third_party_code_executions": { "const": 0 },
+        "owner_run": { "const": true }
+      },
+      "required": ["business_snapshots_unchanged", "corpus_third_party_code_executions", "independent_proof", "infrastructure_error_count", "machine_third_party_code_executions", "owner_run"],
+      "type": "object"
+    },
+    "semantic": {
+      "additionalProperties": false,
+      "properties": {
+        "outcomes": {
+          "items": { "$ref": "#/$defs/outcome" },
+          "maxItems": 57,
+          "minItems": 57,
+          "type": "array"
+        },
+        "summary_by_mode": {
+          "items": { "$ref": "#/$defs/semantic_summary" },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        }
+      },
+      "required": ["outcomes", "summary_by_mode"],
+      "type": "object"
+    },
+    "semantic_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "all_semantic_contracts_passed": { "const": true },
+        "false_positives": { "const": 0 },
+        "malicious_cases": { "minimum": 1, "type": "integer" },
+        "malicious_detected": { "minimum": 1, "type": "integer" },
+        "malicious_recall_percent": { "const": 100.0 },
+        "mode": { "enum": ["audit", "balanced", "strict"] },
+        "semantic_cases": { "const": 19 },
+        "side_effect_violations": { "const": 0 }
+      },
+      "required": ["all_semantic_contracts_passed", "false_positives", "malicious_cases", "malicious_detected", "malicious_recall_percent", "mode", "semantic_cases", "side_effect_violations"],
+      "type": "object"
+    },
+    "sha256": { "pattern": "^[0-9a-f]{64}$", "type": "string" },
+    "hex40": { "pattern": "^[0-9a-f]{40}$", "type": "string" },
+    "source": {
+      "additionalProperties": false,
+      "properties": {
+        "binary_version": { "const": "1.0.0" },
+        "commit": { "$ref": "#/$defs/hex40" },
+        "repository": { "const": "yujianwudi/cyber-abuse-guard-next" },
+        "so": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": { "minimum": 1, "type": "integer" },
+            "name": { "const": "cyber-abuse-guard-v1.0.0.so" },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["bytes", "name", "sha256"],
+          "type": "object"
+        },
+        "source_version": { "const": "1.0.0" },
+        "tree": { "$ref": "#/$defs/hex40" }
+      },
+      "required": ["binary_version", "commit", "repository", "so", "source_version", "tree"],
+      "type": "object"
+    },
+    "summary": {
+      "additionalProperties": false,
+      "properties": {
+        "business_side_effects": { "const": 0 },
+        "cleanup_pass": { "const": true },
+        "false_positives": { "const": 0 },
+        "malicious_cases": { "minimum": 3, "type": "integer" },
+        "malicious_detected": { "minimum": 3, "type": "integer" },
+        "malicious_recall_percent": { "const": 100.0 },
+        "mode_count": { "const": 3 },
+        "performance_gate_count": { "const": 11 },
+        "performance_gates_passed": { "const": 11 },
+        "realtime_protection": { "const": "unprotected" },
+        "semantic_case_count": { "const": 19 },
+        "side_effect_violations": { "const": 0 },
+        "third_party_code_executions": { "const": 0 }
+      },
+      "required": ["business_side_effects", "cleanup_pass", "false_positives", "malicious_cases", "malicious_detected", "malicious_recall_percent", "mode_count", "performance_gate_count", "performance_gates_passed", "realtime_protection", "semantic_case_count", "side_effect_violations", "third_party_code_executions"],
+      "type": "object"
+    },
+    "supplemental_archive": {
+      "additionalProperties": false,
+      "properties": {
+        "archive": {
+          "additionalProperties": false,
+          "properties": {
+            "bytes": { "const": 5830796 },
+            "sha256": { "const": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c" }
+          },
+          "required": ["bytes", "sha256"],
+          "type": "object"
+        },
+        "case_count": { "const": 7 },
+        "code_executions": { "const": 0 },
+        "entry_count": { "const": 4 },
+        "input_archive_preserved": { "const": true },
+        "manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "member_text_files_created": { "const": 0 },
+        "member_text_files_removed": { "const": 0 },
+        "member_text_retained": { "const": false },
+        "outcomes": {
+          "items": { "$ref": "#/$defs/supplemental_outcome" },
+          "maxItems": 21,
+          "minItems": 21,
+          "type": "array"
+        },
+        "policy_sha256": { "const": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a" },
+        "results_sha256": { "$ref": "#/$defs/sha256" },
+        "side_effect_violations": { "const": 0 },
+        "status": { "const": "SUPPLEMENTAL_ARCHIVE_PASS" },
+        "summary_by_mode": {
+          "items": { "$ref": "#/$defs/supplemental_summary" },
+          "maxItems": 3,
+          "minItems": 3,
+          "type": "array"
+        },
+        "third_party_code_executions": { "const": 0 },
+        "total_executions": { "maximum": 840, "minimum": 252, "type": "integer" }
+      },
+      "required": ["archive", "case_count", "code_executions", "entry_count", "input_archive_preserved", "manifest_sha256", "member_text_files_created", "member_text_files_removed", "member_text_retained", "outcomes", "policy_sha256", "results_sha256", "side_effect_violations", "status", "summary_by_mode", "third_party_code_executions", "total_executions"],
+      "type": "object"
+    },
+    "supplemental_outcome": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "expected_winning_category": { "type": "null" },
+                "expected_winning_rule_id": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "expected_winning_category": { "maxLength": 128, "minLength": 1, "type": "string" },
+                "expected_winning_rule_id": { "maxLength": 128, "minLength": 1, "type": "string" }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "actual_winning_category": { "type": "null" },
+                "actual_winning_rule_id": { "type": "null" }
+              }
+            },
+            {
+              "properties": {
+                "actual_winning_category": { "maxLength": 128, "minLength": 1, "type": "string" },
+                "actual_winning_rule_id": { "maxLength": 128, "minLength": 1, "type": "string" }
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "actual_action": { "enum": ["allow", "block_malicious_text"] },
+        "actual_winning_category": { "type": ["string", "null"] },
+        "actual_winning_rule_id": { "type": ["string", "null"] },
+        "all_executions_passed": { "const": true },
+        "execution_count": { "maximum": 40, "minimum": 12, "type": "integer" },
+        "expected_action": { "enum": ["allow", "block_malicious_text"] },
+        "expected_winning_category": { "type": ["string", "null"] },
+        "expected_winning_rule_id": { "type": ["string", "null"] },
+        "false_positive": { "const": false },
+        "label": { "enum": ["defensive_context", "malicious_active"] },
+        "malicious": { "type": "boolean" },
+        "malicious_detected": { "type": "boolean" },
+        "mode": { "enum": ["audit", "balanced", "strict"] },
+        "side_effect_violations": { "const": 0 },
+        "supplemental_case_id": {
+          "enum": [
+            "supplemental-zip:ctf-sandbox:authorized-ctf",
+            "supplemental-zip:gpt55-unrestricted:activated",
+            "supplemental-zip:gpt55-unrestricted:defensive",
+            "supplemental-zip:readme:activated",
+            "supplemental-zip:readme:defensive",
+            "supplemental-zip:training-prompts:activated",
+            "supplemental-zip:training-prompts:defensive"
+          ]
+        }
+      },
+      "required": ["actual_action", "actual_winning_category", "actual_winning_rule_id", "all_executions_passed", "execution_count", "expected_action", "expected_winning_category", "expected_winning_rule_id", "false_positive", "label", "malicious", "malicious_detected", "mode", "side_effect_violations", "supplemental_case_id"],
+      "type": "object"
+    },
+    "supplemental_summary": {
+      "additionalProperties": false,
+      "properties": {
+        "all_supplemental_contracts_passed": { "const": true },
+        "false_positive_denominator": { "const": 3 },
+        "false_positives": { "const": 0 },
+        "malicious_detected": { "const": 4 },
+        "malicious_recall_denominator": { "const": 4 },
+        "malicious_recall_percent": { "const": 100.0 },
+        "mode": { "enum": ["audit", "balanced", "strict"] },
+        "side_effect_violations": { "const": 0 },
+        "supplemental_cases": { "const": 7 }
+      },
+      "required": ["all_supplemental_contracts_passed", "false_positive_denominator", "false_positives", "malicious_detected", "malicious_recall_denominator", "malicious_recall_percent", "mode", "side_effect_violations", "supplemental_cases"],
+      "type": "object"
+    },
+    "timestamp": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
+      "type": "string"
+    },
+    "tool_bundles": {
+      "additionalProperties": false,
+      "properties": {
+        "admission": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_sha256": { "$ref": "#/$defs/sha256" },
+            "source_sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["schema_sha256", "source_sha256"],
+          "type": "object"
+        },
+        "host_performance": { "$ref": "#/$defs/host_tool_hashes" },
+        "host_admission": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_sha256": { "$ref": "#/$defs/sha256" },
+            "source_sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["schema_sha256", "source_sha256"],
+          "type": "object"
+        },
+        "machine": { "$ref": "#/$defs/machine_tool_hashes" },
+        "native_host_special_paths": {
+          "additionalProperties": false,
+          "properties": {
+            "schema_sha256": { "$ref": "#/$defs/sha256" },
+            "source_sha256": { "$ref": "#/$defs/sha256" },
+            "test_source_sha256": { "$ref": "#/$defs/sha256" }
+          },
+          "required": ["schema_sha256", "source_sha256", "test_source_sha256"],
+          "type": "object"
+        }
+      },
+      "required": ["admission", "host_admission", "host_performance", "machine", "native_host_special_paths"],
+      "type": "object"
+    },
+    "machine_tool_hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "audit_contract_sha256": { "$ref": "#/$defs/sha256" },
+        "bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "machine_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "mock_source_sha256": { "$ref": "#/$defs/sha256" },
+        "policy_sha256": { "$ref": "#/$defs/sha256" },
+        "run_source_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["audit_contract_sha256", "bundle_sha256", "machine_schema_sha256", "mock_source_sha256", "policy_sha256", "run_source_sha256"],
+      "type": "object"
+    },
+    "zip_source": {
+      "additionalProperties": false,
+      "properties": {
+        "archive_member": { "minLength": 1, "type": "string" },
+        "path": { "minLength": 1, "type": "string" },
+        "repository": { "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "type": "string" },
+        "repository_key": { "minLength": 1, "type": "string" },
+        "source_sha256": { "$ref": "#/$defs/sha256" },
+        "text_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["archive_member", "path", "repository", "repository_key", "source_sha256", "text_sha256"],
+      "type": "object"
+    }
+  }
+}

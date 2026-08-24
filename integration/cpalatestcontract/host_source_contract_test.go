@@ -19,7 +19,21 @@ const (
 	cpaLatestPluginHostPackage = cpaLatestModulePath + "/internal/pluginhost"
 	cpaLatestResponsesPackage  = cpaLatestModulePath + "/internal/translator/openai/openai/responses"
 	cpaLatestResponsesHandler  = cpaLatestModulePath + "/sdk/api/handlers/openai"
-	cpaLatestFixtureSHA256     = "bce98b11218311554a05e582226d311609a49072c004a8bf62d96a5d8c01b5c8"
+	cpaLatestServicePackage    = cpaLatestModulePath + "/sdk/cliproxy"
+	cpaLatestSessionPackage    = cpaLatestModulePath + "/sdk/cliproxy/session"
+	cpaLatestMultiAgentPackage = cpaLatestModulePath + "/internal/client/codex/optimize-multi-agent-v2"
+	cpaLatestUtilityPackage    = cpaLatestModulePath + "/internal/util"
+	cpaLatestAntigravityGemini = cpaLatestModulePath + "/internal/translator/antigravity/gemini"
+	cpaLatestGeminiTranslator  = cpaLatestModulePath + "/internal/translator/gemini/gemini"
+	cpaLatestCachePackage      = cpaLatestModulePath + "/internal/cache"
+	cpaLatestExecutorPackage   = cpaLatestModulePath + "/internal/runtime/executor"
+	cpaLatestExecutorHelps     = cpaLatestModulePath + "/internal/runtime/executor/helps"
+	cpaLatestClientError       = cpaLatestModulePath + "/internal/clienterror"
+	cpaLatestAuthPackage       = cpaLatestModulePath + "/sdk/cliproxy/auth"
+	cpaLatestTranslatorSDK     = cpaLatestModulePath + "/sdk/translator"
+	cpaLatestAPIPackage        = cpaLatestModulePath + "/internal/api"
+	cpaLatestCodexLive         = cpaLatestModulePath + "/internal/client/codex/live"
+	cpaLatestFixtureSHA256     = "e44a808ee3fbcdd7d75c0ccd4575a19590ffd85ee434be6535674bc113525b35"
 
 	cpaCompatibilityProfileEnv = "CPA_COMPAT_PROFILE"
 	cpaCompatibilityModfileEnv = "CPA_COMPAT_MODFILE"
@@ -39,9 +53,9 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.116",
-	Commit:    "a88197f845c979132c8978ea223c6af05cc81536",
-	ModuleSum: "h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=",
+	Version:   "v7.2.137",
+	Commit:    "85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
+	ModuleSum: "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=",
 	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
@@ -62,6 +76,7 @@ var latestCriticalCPAHostTests = []string{
 	"TestRPCCapabilitiesAndAdapterIncludeRequestLifecycle",
 	"TestRPCInterceptorsIncludeHostCallbackID",
 	"TestSanitizePluginRequestRemovesNonJSONMetadata",
+	"TestStreamChunkRequestBodyPolicyBySchemaVersion",
 	"TestServeManagementHTMLEscapesJSONResponseStrings",
 	"TestHostRouteModelAllowsExplicitExecutorPluginTarget",
 	"TestHostRouteModelClonesPluginMetadata",
@@ -87,12 +102,26 @@ var latestCriticalCPAHostTests = []string{
 	"TestHostShutdownAllRetainsBlockedLoadTokenUntilCleanup",
 	"TestHostUnloadPluginContextDetachesBlockedCall",
 	"TestOwnsExecutorDistinguishesHostAdapters",
+	"TestPluginRefreshCompatExecutorDelegatesExecuteAndRefresh",
+	"TestPluginRefreshCompatExecutorErrorsWhenRefreshUnavailable",
+	"TestPluginRefreshCompatExecutorNoOpForAPIKeyAuth",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
 }
 
 var latestCriticalCPAHandlerTests = []string{
 	"TestHandlerRequestInterceptorTerminatesBeforeAuth",
 	"TestHandlerRequestInterceptorTerminatesAfterAuth",
+	"TestHandlerStreamInterceptorRewritesAndDropsChunks",
+	"TestHandlerStreamInterceptorLegacySchemaClonesRequestBodiesOnPayloadChunks",
+	"TestHandlerStreamInterceptorInitializesHeadersBeforeReturn",
+	"TestHandlerStreamInterceptorInitializesHeadersWithoutPayload",
+}
+
+var latestCriticalCPAServiceTests = []string{
+	"TestRegisterExecutorForAuth_PluginAuthProviderWrapsOpenAICompatRefresh",
+	"TestRegisterExecutorForAuth_OpenAICompatWithoutPluginAuthProviderStaysBare",
+	"TestRegisterExecutorForAuth_OpenAICompatInfoPathAlsoWrapsPluginRefresh",
+	"TestUnregisterOpenAICompatExecutorRemovesPluginRefreshWrapper",
 }
 
 type latestResolvedCPAModule struct {
@@ -151,6 +180,14 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 			t.Fatalf("latest CPA handler package no longer lists required test %q", name)
 		}
 	}
+	serviceTests := runLatestGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", cpaLatestServicePackage,
+	)
+	for _, name := range latestCriticalCPAServiceTests {
+		if !linePresent(serviceTests, name) {
+			t.Fatalf("latest CPA service package no longer lists required test %q", name)
+		}
+	}
 
 	// Execute the complete upstream Host suite for the current platform. The
 	// required-name check above keeps the contract explicit, while running the
@@ -160,6 +197,10 @@ func TestLatestCPAOfficialHostRoutingSourceContract(t *testing.T) {
 	runLatestGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
 		cpaLatestPluginHostPackage,
+	)
+	runLatestGoCommand(t, goBinary,
+		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+		"-run", "^("+strings.Join(latestCriticalCPAServiceTests, "|")+")$", cpaLatestServicePackage,
 	)
 	runLatestGoCommand(t, goBinary,
 		"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
@@ -187,6 +228,10 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		"TestNormalizeResponsesWebsocketRequestWithPreviousResponseIDIncremental",
 		"TestNormalizeResponsesWebsocketRequestInjectsPreviousResponseIDForIncremental",
 		"TestCodexLocalCompactionSummaryAdditionalToolsConstraints",
+		"TestPrepareCodexMultiAgentV2ToolsAtResponsesBoundary",
+		"TestResponsesPreparesCodexMultiAgentV2ToolsForHTTPAndSSE",
+		"TestResponsesWebsocketPreparesCodexMultiAgentV2Tools",
+		"TestPrepareCodexMultiAgentV2ToolsAtResponsesBoundarySkipsOtherClients",
 	}
 	for _, upstreamTest := range handlerTests {
 		listed = runLatestGoCommand(t, goBinary,
@@ -207,15 +252,29 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		t.Fatalf("read latest CPA Responses translator source: %v", err)
 	}
 	for _, required := range [][]byte{
-		[]byte(`item.Get("type").String() == "additional_tools"`),
-		[]byte(`appendChatTools(item.Get("tools"))`),
+		[]byte(`for _, chatTool := range mergeResponsesRequestChatTools(root)`),
+		[]byte(`chatCompletionsTools = append(chatCompletionsTools, gjson.ParseBytes(chatTool).Value())`),
 	} {
 		if !bytes.Contains(source, required) {
 			t.Fatalf("latest CPA Responses translator lost additional_tools contract marker %q", required)
 		}
 	}
+	toolsSourcePath := filepath.Join(module.Dir, "internal", "translator", "openai", "openai", "responses", "openai_openai-responses_tools.go")
+	toolsSource, err := os.ReadFile(toolsSourcePath)
+	if err != nil {
+		t.Fatalf("read latest CPA Responses tool-merge source: %v", err)
+	}
+	for _, required := range [][]byte{
+		[]byte(`func walkResponsesToolDeclarations(`),
+		[]byte(`if item.Get("type").String() == "additional_tools"`),
+		[]byte(`func mergeResponsesRequestChatTools(`),
+	} {
+		if !bytes.Contains(toolsSource, required) {
+			t.Fatalf("latest CPA Responses tool-merge source lost contract marker %q", required)
+		}
+	}
 
-	// CPA v7.2.116 keeps request normalization split out of the websocket transport
+	// CPA v7.2.137 keeps request normalization split out of the websocket transport
 	// file. Pin the semantic implementation file while the upstream behavior
 	// tests above continue to guard the public contract.
 	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")
@@ -230,6 +289,272 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 	} {
 		if !bytes.Contains(handlerSource, required) {
 			t.Fatalf("latest CPA Responses handler lost Responses Lite additional_tools marker %q", required)
+		}
+	}
+}
+
+func TestLatestCPANoCopyAndResponsesFailureContract(t *testing.T) {
+	goBinary, moduleArguments, module := prepareLatestCPAModule(t)
+	testGroups := []struct {
+		packagePath string
+		tests       []string
+	}{
+		{
+			packagePath: cpaLatestUtilityPackage,
+			tests: []string{
+				"TestNoInPlaceSJSONWrites",
+				"TestInPlaceByteWritesAreReviewed",
+				"TestGetGJSONBytesNoCopy",
+				"TestParseGJSONBytesNoCopyReferencesInput",
+			},
+		},
+		{
+			packagePath: cpaLatestAntigravityGemini,
+			tests: []string{
+				"TestFixCLIToolResponseReusesHistoryWithoutFunctionResponses",
+				"TestConvertGeminiRequestToAntigravityBoundsLargePayloadCopies",
+			},
+		},
+		{
+			packagePath: cpaLatestGeminiTranslator,
+			tests: []string{
+				"TestConvertGeminiRequestToGeminiReusesLargeNormalizedPayload",
+			},
+		},
+		{
+			packagePath: cpaLatestHandlersPackage,
+			tests: []string{
+				"TestBuildOpenAIResponsesStreamFailedChunkPreservesNestedError",
+			},
+		},
+		{
+			packagePath: cpaLatestResponsesHandler,
+			tests: []string{
+				"TestForwardResponsesStreamUsesResponseFailedForCodex",
+			},
+		},
+		{
+			packagePath: cpaLatestMultiAgentPackage,
+			tests: []string{
+				"TestIsCodexMultiAgentClient",
+				"TestPrepareCodexMultiAgentV2ToolsOnlyPreparesToolDefinitions",
+			},
+		},
+		{
+			packagePath: cpaLatestSessionPackage,
+			tests: []string{
+				"TestEnrichCarriesRequestPayloadIntoSelectionOptions",
+			},
+		},
+		{
+			packagePath: cpaLatestCachePackage,
+			tests: []string{
+				"TestClaudeThinkingReplayAppendsAssistantTurns",
+				"TestClaudeThinkingReplayClearDoesNotClearKimiState",
+			},
+		},
+		{
+			packagePath: cpaLatestExecutorPackage,
+			tests: []string{
+				"TestClaudeThinkingReplayEnabledRequiresCompatClaudeAPIKey",
+				"TestClaudeExecutorCompatThinkingReplayRestoresOmittedBlock",
+				"TestClaudeExecutorCompatThinkingReplayRestoresOmittedBlockInStream",
+				"TestClaudeExecutorCompatThinkingReplayClearsAfterUpstreamBadRequest",
+				"TestClaudeExecutorCompatThinkingReplayRestoresMultipleOmittedBlocks",
+			},
+		},
+	}
+
+	for _, group := range testGroups {
+		listed := runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", group.packagePath,
+		)
+		for _, name := range group.tests {
+			if !linePresent(listed, name) {
+				t.Fatalf("latest CPA package %s no longer lists required test %q", group.packagePath, name)
+			}
+		}
+		runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+			"-run", "^("+strings.Join(group.tests, "|")+")$", group.packagePath,
+		)
+	}
+
+	// CPA also recognizes official Codex clients from Originator when a proxy or
+	// SDK supplies a generic User-Agent. Upstream's behavior test currently
+	// exercises only User-Agent, so pin the alternate public request branch and
+	// cover it end-to-end in integration/host_integration_test.go.
+	handlerSourcePath := filepath.Join(
+		module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_handlers.go",
+	)
+	handlerSource, err := os.ReadFile(handlerSourcePath)
+	if err != nil {
+		t.Fatalf("read latest CPA Responses stream handler source: %v", err)
+	}
+	for _, required := range [][]byte{
+		[]byte(`c.GetHeader("Originator")`),
+		[]byte(`case "codex desktop", "codex-tui", "codex_cli_rs":`),
+		[]byte(`strings.HasPrefix(originator, "codex desktop/")`),
+		[]byte(`strings.HasPrefix(originator, "codex-tui/")`),
+		[]byte(`strings.HasPrefix(originator, "codex_cli_rs/")`),
+	} {
+		if !bytes.Contains(handlerSource, required) {
+			t.Fatalf("latest CPA Responses handler lost Originator Codex marker %q", required)
+		}
+	}
+}
+
+func TestLatestCPAPluginHookNoCopyAuthAndRealtimeBoundaryContract(t *testing.T) {
+	goBinary, moduleArguments, module := prepareLatestCPAModule(t)
+	assertRealtimeSourceBoundary(t, module.Dir)
+	testGroups := []struct {
+		packagePath string
+		tests       []string
+	}{
+		{
+			packagePath: cpaLatestTranslatorSDK,
+			tests:       []string{"TestHasPluginHooks"},
+		},
+		{
+			packagePath: cpaLatestExecutorHelps,
+			tests:       []string{"TestTranslateRequestPairPreservesPluginHookInvocations"},
+		},
+		{
+			packagePath: cpaLatestExecutorPackage,
+			tests: []string{
+				"TestAntigravityReplayRequestIndexRandomizedDifferential",
+				"TestApplyAntigravityReasoningReplayItemsRebuildsIndexAfterMutation",
+				"TestAntigravityReplayMergeRandomizedDifferential",
+				"TestAntigravityReplayNonArrayPartsFailsClosed",
+				"TestAntigravityConcurrentRequestsReusePooledConnections",
+				"TestAntigravityTransportScopeNeverLeaksToken",
+			},
+		},
+		{
+			packagePath: cpaLatestClientError,
+			tests:       []string{"TestIsRequestFault"},
+		},
+		{
+			packagePath: cpaLatestAuthPackage,
+			tests: []string{
+				"TestManager_DeepSeekInsufficientBalanceRotatesCredentialAndRebindsSession",
+				"TestManager_DeepSeekCredentialFailuresRotateCredential",
+			},
+		},
+		{
+			packagePath: cpaLatestAPIPackage,
+			tests:       []string{"TestRealtimeStandardRoutesAndClientSecretAuth"},
+		},
+		{
+			packagePath: cpaLatestCodexLive,
+			tests: []string{
+				"TestCreateClientSecretMapsStandardRealtimeModel",
+				"TestHandleHangupForwardsPinnedOAuthCall",
+				"TestHandleDirectWebsocketRelaysStandardRealtimeFrames",
+			},
+		},
+	}
+
+	for _, group := range testGroups {
+		listed := runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", group.packagePath,
+		)
+		for _, name := range group.tests {
+			if !linePresent(listed, name) {
+				t.Fatalf("latest CPA package %s no longer lists required test %q", group.packagePath, name)
+			}
+		}
+		runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+			"-run", "^("+strings.Join(group.tests, "|")+")$", group.packagePath,
+		)
+	}
+}
+
+// assertRealtimeSourceBoundary binds the negative-coverage claim to the exact
+// upstream handler source, rather than relying only on an unauthenticated HTTP
+// probe. Realtime is intentionally registered outside the protected v1 group
+// and its handler package has no CAG interceptor, model-router, or request
+// lifecycle entry point. If CPA later moves this route into the plugin-aware
+// execution path, this contract must be updated deliberately.
+func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
+	t.Helper()
+	read := func(relative string) []byte {
+		data, err := os.ReadFile(filepath.Join(moduleDir, filepath.FromSlash(relative)))
+		if err != nil {
+			t.Fatalf("read CPA v7.2.137 realtime source %s: %v", relative, err)
+		}
+		return data
+	}
+
+	routes := read("internal/api/server_routes.go")
+	for _, marker := range [][]byte{
+		// Keep one source marker for every v7.2.137 /v1/realtime* registration.
+		// These routes intentionally do not inherit the protected v1 group.
+		[]byte(`s.engine.GET("/v1/realtime", realtimeAuth, s.codexLiveHandler.HandleRealtimeWebsocket)`),
+		[]byte(`s.engine.POST("/v1/realtime", realtimeAuth, s.codexLiveHandler.Handle)`),
+		[]byte(`s.engine.POST("/v1/realtime/calls", realtimeAuth, s.codexLiveHandler.Handle)`),
+		[]byte(`s.engine.GET("/v1/realtime/calls/:call_id", realtimeAuth, s.codexLiveHandler.HandleSideband)`),
+		[]byte(`s.engine.POST("/v1/realtime/client_secrets", standardAuth, s.codexLiveHandler.CreateClientSecret)`),
+		[]byte(`s.engine.POST("/v1/realtime/sessions", standardAuth, s.codexLiveHandler.CreateLegacySession)`),
+		[]byte(`s.engine.POST("/v1/realtime/transcription_sessions", standardAuth, s.codexLiveHandler.HandleTranscriptionSession)`),
+		[]byte(`s.engine.GET("/v1/realtime/translations", realtimeAuth, s.codexLiveHandler.HandleTranslation)`),
+		[]byte(`s.engine.POST("/v1/realtime/translations", realtimeAuth, s.codexLiveHandler.HandleTranslation)`),
+		[]byte(`s.engine.POST("/v1/realtime/translations/client_secrets", standardAuth, s.codexLiveHandler.HandleTranslation)`),
+		[]byte(`s.engine.POST("/v1/realtime/calls/:call_id/hangup", standardAuth, s.codexLiveHandler.HandleHangup)`),
+		[]byte(`s.engine.POST("/v1/realtime/calls/:call_id/accept", standardAuth, s.codexLiveHandler.HandleSIPControl)`),
+		[]byte(`s.engine.POST("/v1/realtime/calls/:call_id/reject", standardAuth, s.codexLiveHandler.HandleSIPControl)`),
+		[]byte(`s.engine.POST("/v1/realtime/calls/:call_id/refer", standardAuth, s.codexLiveHandler.HandleSIPControl)`),
+	} {
+		if count := bytes.Count(routes, marker); count != 1 {
+			t.Fatalf("CPA v7.2.137 realtime route source marker %q occurs %d times, want exactly once", marker, count)
+		}
+	}
+	for _, marker := range [][]byte{
+		[]byte(`realtimeAuth := realtimeAuthMiddleware(s.accessManager, s.codexLiveHandler)`),
+		[]byte(`standardAuth := realtimeStandardAuthMiddleware(s.accessManager)`),
+	} {
+		if count := bytes.Count(routes, marker); count != 1 {
+			t.Fatalf("CPA v7.2.137 realtime auth source marker %q occurs %d times, want exactly once", marker, count)
+		}
+	}
+
+	// The realtime route registrations must remain outside the v1 group that
+	// installs AuthMiddleware and the normal request execution handlers.
+	v1Start := bytes.Index(routes, []byte(`v1 := s.engine.Group("/v1")`))
+	realtimeStart := bytes.Index(routes, []byte(`realtimeAuth := realtimeAuthMiddleware`))
+	if v1Start < 0 || realtimeStart < 0 || realtimeStart <= v1Start {
+		t.Fatal("CPA v7.2.137 realtime routes are not visibly registered after the protected v1 group")
+	}
+
+	for _, relative := range []string{
+		"internal/client/codex/live/live.go",
+		"internal/client/codex/live/websocket.go",
+		"internal/client/codex/live/sideband.go",
+		"internal/client/codex/live/capabilities.go",
+		"internal/client/codex/live/client_secret.go",
+	} {
+		source := read(relative)
+		for _, forbidden := range [][]byte{
+			// Negative CAG/plugin-hook markers. Realtime handlers and their
+			// capability stubs must stay outside the CAG execution lifecycle.
+			[]byte("RequestInterceptor"),
+			[]byte("ResponseInterceptor"),
+			[]byte("StreamChunkInterceptor"),
+			[]byte("InterceptRequest"),
+			[]byte("InterceptResponse"),
+			[]byte("InterceptStream"),
+			[]byte("PluginHooks"),
+			[]byte("SetPluginHooks"),
+			[]byte("RouteModel("),
+			[]byte("newRequestLifecycleTracker"),
+			[]byte("applyRequestInterceptors"),
+			[]byte("cyber-abuse-guard"),
+			[]byte("CAG"),
+		} {
+			if bytes.Contains(source, forbidden) {
+				t.Fatalf("CPA v7.2.137 realtime handler %s unexpectedly contains plugin-aware execution marker %q", relative, forbidden)
+			}
 		}
 	}
 }

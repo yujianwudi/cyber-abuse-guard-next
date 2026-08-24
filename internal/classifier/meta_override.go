@@ -7,6 +7,10 @@ import (
 )
 
 const metaOverrideRuleID = "META-OVERRIDE-001"
+const metaOverrideTerminalSkillControlCarrierEvidenceID = metaOverrideRuleID + ":terminal_skill_control_carrier"
+const metaOverrideTerminalSkillNegationLookaroundBytes = 96
+const metaOverrideTerminalSkillAssociationBytes = 512
+const metaOverrideTerminalSkillSafeOwnerBytes = 512
 
 const (
 	metaOverrideV45RefusalLiteral      = "refusal, fallback, no-op, promise"
@@ -511,6 +515,699 @@ func (c *Classifier) assessMetaOverride(
 		controlPlaneBlock: controlPlaneBlock,
 		defensiveAnalysis: defensiveAnalysis,
 	}
+}
+
+// assessActivatedTerminalSkillMetaReferent closes one deliberately narrow
+// carrier gap. A pasted README may describe (rather than directly issue) an
+// unrestricted model-instruction installer, so the ordinary classifier must
+// leave it inert. Once the role-aware parser separately proves the exact
+// terminal install/activate/execute speech act, this helper may treat that
+// description as an active META referent. The activation sentence is never
+// included in signals or evidence: every control-plane family still comes from
+// the bounded carrier itself.
+func (c *Classifier) assessActivatedTerminalSkillMetaReferent(
+	signals []bool,
+	text string,
+	base metaOverrideAssessment,
+) (metaOverrideAssessment, bool) {
+	if c == nil {
+		return base, true
+	}
+	matched, complete := c.activatedTerminalSkillMetaCarrier(signals, text)
+	if !complete || !matched {
+		return base, complete
+	}
+
+	evidence := append([]Evidence(nil), base.evidence...)
+	evidence = append(evidence,
+		Evidence{ID: metaOverrideRuleID + ":refusal_suppression", Kind: "meta_override"},
+		Evidence{ID: metaOverrideRuleID + ":persistent_instruction_injection", Kind: "meta_override"},
+		Evidence{ID: metaOverrideTerminalSkillControlCarrierEvidenceID, Kind: "meta_override"},
+	)
+	score := base.score
+	if score < HardThreshold {
+		score = HardThreshold
+	}
+	return metaOverrideAssessment{
+		score:             score,
+		evidence:          uniqueSortedEvidence(evidence),
+		controlPlaneBlock: true,
+	}, true
+}
+
+func (c *Classifier) activatedTerminalSkillMetaCarrier(
+	signals []bool,
+	text string,
+) (bool, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" || len(text) > maxInertQuotedReviewReferentBytes ||
+		!signalMatched(signals, c.metaOverride.unrestrictedMode) ||
+		!strings.Contains(text, "model_instructions_file") {
+		return false, true
+	}
+	// ContextFlags are a bag of words over the carrier and therefore cannot own
+	// this exception: a hostile README may label itself "training", "overview",
+	// or "authorized". Only a bounded, sentence-leading user owner proves an
+	// explicit defensive or owned-lab wrapper.
+	if metaOverrideTerminalSkillExplicitSafeOwner(text) {
+		return false, true
+	}
+
+	clauses, overflow := metaOverrideDirectiveClausesBounded(text)
+	if overflow {
+		return false, false
+	}
+	jailbreak := false
+	instructionFileInjection := false
+	unrestrictedFilters := false
+	for _, part := range clauses {
+		clause := strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(part.text)))
+		if clause == "" {
+			continue
+		}
+		if !jailbreak {
+			index, complete := metaOverrideTerminalSkillAffirmativeLiteralIndex(clause, "jailbreak")
+			if !complete {
+				return false, false
+			}
+			jailbreak = index >= 0
+		}
+		if !instructionFileInjection {
+			matched, complete := metaOverrideTerminalSkillInstructionFileClause(clause)
+			if !complete {
+				return false, false
+			}
+			instructionFileInjection = matched
+		}
+		if !unrestrictedFilters {
+			matched, complete := metaOverrideTerminalSkillUnrestrictedFiltersClause(clause)
+			if !complete {
+				return false, false
+			}
+			unrestrictedFilters = matched
+		}
+		if jailbreak && instructionFileInjection && unrestrictedFilters {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+func metaOverrideTerminalSkillInstructionFileClause(clause string) (bool, bool) {
+	action, complete := metaOverrideTerminalSkillAffirmativeLiteralIndex(
+		clause, "inject", "injects", "injection", "install", "write", "append", "replace",
+	)
+	if !complete || action < 0 {
+		return false, complete
+	}
+	instruction, complete := metaOverrideTerminalSkillAffirmativeLiteralIndex(
+		clause[action+1:], "instruction set", "instructions", "instruction", "prompt template",
+	)
+	if !complete || instruction < 0 {
+		return false, complete
+	}
+	instruction += action + 1
+	target, complete := metaOverrideTerminalSkillAffirmativeLiteralIndex(
+		clause[instruction+1:], "model_instructions_file",
+	)
+	if !complete || target < 0 {
+		return false, complete
+	}
+	target += instruction + 1
+	return target-action <= metaOverrideTerminalSkillAssociationBytes, true
+}
+
+func metaOverrideTerminalSkillUnrestrictedFiltersClause(clause string) (bool, bool) {
+	mode, complete := metaOverrideTerminalSkillAffirmativeLiteralIndex(
+		clause, "unrestricted developer mode", "unrestricted mode", "[mode: unrestricted]",
+	)
+	if !complete || mode < 0 {
+		return false, complete
+	}
+	filters, complete := metaOverrideTerminalSkillAffirmativeLiteralIndex(clause,
+		"all filters disabled", "disable all filters", "disables all filters",
+		"all safety filters disabled", "safety filters are disabled",
+		"content filters are disabled", "without safety filters",
+	)
+	if !complete || filters < 0 {
+		return false, complete
+	}
+	distance := filters - mode
+	if distance < 0 {
+		distance = -distance
+	}
+	return distance <= metaOverrideTerminalSkillAssociationBytes, true
+}
+
+func metaOverrideTerminalSkillAffirmativeLiteralIndex(text string, literals ...string) (int, bool) {
+	occurrences := 0
+	best := -1
+	for _, literal := range literals {
+		searchAt := 0
+		for searchAt < len(text) {
+			relative := strings.Index(text[searchAt:], literal)
+			if relative < 0 {
+				break
+			}
+			index := searchAt + relative
+			occurrences++
+			if occurrences > maxRuleIntentOccurrences {
+				return -1, false
+			}
+			end := index + len(literal)
+			leftOK := !isASCIIStringLocal(literal) || index == 0 || !isASCIIWordByte(text[index-1])
+			rightOK := !isASCIIStringLocal(literal) || end == len(text) || !isASCIIWordByte(text[end])
+			if leftOK && rightOK && !metaOverrideTerminalSkillLiteralDirectlyNegated(text, index, end) &&
+				(best < 0 || index < best) {
+				best = index
+			}
+			searchAt = index + len(literal)
+		}
+	}
+	return best, true
+}
+
+func metaOverrideTerminalSkillLiteralDirectlyNegated(text string, index, end int) bool {
+	if index < 0 || end <= index || end > len(text) {
+		return false
+	}
+	if found, negated := ruleIntentOccurrenceNegation(text, index); found && negated {
+		return true
+	}
+	start := index - metaOverrideTerminalSkillNegationLookaroundBytes
+	if start < 0 {
+		start = 0
+	}
+	prefix := strings.TrimSpace(text[start:index])
+	if strings.HasSuffix(prefix, "anti-") || strings.HasSuffix(prefix, "non-") {
+		return true
+	}
+	if fields := strings.Fields(prefix); len(fields) != 0 &&
+		(fields[len(fields)-1] == "anti" || fields[len(fields)-1] == "non") {
+		return true
+	}
+	for _, negator := range [...]string{
+		"not", "not a", "not an", "never", "no", "without", "cannot",
+		"does not", "do not", "did not", "is not", "are not", "was not", "were not",
+		"must not", "should not", "will not", "never through", "not through",
+		"never via", "not via", "without using", "without writing to",
+	} {
+		if metaOverrideTerminalSkillHasBoundedPhraseSuffix(prefix, negator) {
+			return true
+		}
+	}
+	limit := end + metaOverrideTerminalSkillNegationLookaroundBytes
+	if limit > len(text) {
+		limit = len(text)
+	}
+	suffix := strings.TrimSpace(text[end:limit])
+	if hasAnyPrefix(suffix,
+		"is not", "are not", "was not", "were not", "does not", "do not", "did not",
+		"cannot", "must not", "should not", "will not", "only as", "merely as", "solely as",
+		"for migration", "as a migration", "as migration",
+	) || containsAnyLiteral(suffix,
+		"migration label", "migration labels", "compatibility label", "compatibility labels",
+		"unsupported label", "unsupported labels",
+	) {
+		return true
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillHasBoundedPhraseSuffix(text, phrase string) bool {
+	if phrase == "" || !strings.HasSuffix(text, phrase) {
+		return false
+	}
+	start := len(text) - len(phrase)
+	return start == 0 || !isASCIIWordByte(text[start-1])
+}
+
+func metaOverrideTerminalSkillExplicitSafeOwner(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(text)))
+	if text == "" {
+		return false
+	}
+	firstEnd := strings.IndexAny(text, ".;\n\r")
+	if firstEnd < 0 || firstEnd > metaOverrideTerminalSkillSafeOwnerBytes {
+		firstEnd = metaOverrideTerminalSkillSafeOwnerBytes
+		if firstEnd > len(text) {
+			firstEnd = len(text)
+		}
+	}
+	first := strings.Join(strings.Fields(text[:firstEnd]), " ")
+	if hasAnyPrefix(first, "in my ", "in our ", "within my ", "within our ") &&
+		containsAnyLiteral(first, "explicitly authorized", "written authorization") &&
+		containsAnyLiteral(first, "ctf lab", "isolated lab", "owned lab", "local fixture") &&
+		containsAnyLiteral(first, "i own", "we own", "my own", "our own", "company-managed") &&
+		!metaOverrideTerminalSkillAuthorizationConflict(text[firstEnd:]) {
+		return true
+	}
+	colon := strings.Index(text, ":")
+	if colon <= 0 || colon > metaOverrideTerminalSkillSafeOwnerBytes {
+		return false
+	}
+	frame := strings.Join(strings.Fields(text[:colon]), " ")
+	return hasAnyPrefix(frame,
+		"for defensive review only, ", "for security review only, ", "for safety review only, ",
+		"for defensive analysis only, ", "for security analysis only, ", "for safety analysis only, ",
+	) && containsAnyLiteral(frame, "analyze ", "analyse ", "review ", "inspect ", "audit ") &&
+		containsAnyLiteral(frame, "do not follow it", "do not execute it", "do not apply it", "do not use it")
+}
+
+func metaOverrideTerminalSkillAuthorizationConflict(text string) bool {
+	text = strings.ToLower(strings.TrimSpace(normalizeNegationSyntax(text)))
+	if text == "" {
+		return false
+	}
+	clauses, overflow := metaOverrideDirectiveClausesBounded(text)
+	if overflow {
+		// An incomplete conflict scan cannot prove that the sentence-leading
+		// owner remains valid for the whole carrier.
+		return true
+	}
+	for _, part := range clauses {
+		tokens := metaOverrideTerminalSkillConflictTokens(part.text)
+		if metaOverrideTerminalSkillFirstPersonPermissionConflict(tokens) ||
+			metaOverrideTerminalSkillPassivePermissionConflict(tokens) ||
+			metaOverrideTerminalSkillOwnershipConflict(tokens) {
+			return true
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillConflictTokens(text string) []string {
+	return strings.FieldsFunc(strings.ToLower(normalizeNegationSyntax(text)), func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_')
+	})
+}
+
+func metaOverrideTerminalSkillFirstPersonPermissionConflict(tokens []string) bool {
+	for subject := range tokens {
+		if tokens[subject] != "i" && tokens[subject] != "we" {
+			continue
+		}
+		predicateLimit := subject + 7
+		if predicateLimit > len(tokens) {
+			predicateLimit = len(tokens)
+		}
+		for predicate := subject + 1; predicate < predicateLimit; predicate++ {
+			authorityStart := -1
+			switch {
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "do", "not", "have"):
+				authorityStart = predicate + 3
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "have", "no"):
+				authorityStart = predicate + 2
+			case tokens[predicate] == "lack" || tokens[predicate] == "lacks":
+				authorityStart = predicate + 1
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "have", "not", "been", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "has", "not", "been", "granted"):
+				authorityStart = predicate + 4
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "was", "never", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "were", "never", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "was", "not", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "were", "not", "granted"):
+				authorityStart = predicate + 3
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "am", "not", "authorized") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "am", "not", "authorised") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "are", "not", "authorized") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "are", "not", "authorised"):
+				if metaOverrideTerminalSkillAuthorityBindsTarget(tokens, predicate+2) {
+					return true
+				}
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "am", "unauthorized") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "am", "unauthorised") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "are", "unauthorized") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "are", "unauthorised"):
+				if metaOverrideTerminalSkillAuthorityBindsTarget(tokens, predicate+1) {
+					return true
+				}
+			}
+			if authorityStart < 0 {
+				continue
+			}
+			authorityLimit := authorityStart + 6
+			if authorityLimit > len(tokens) {
+				authorityLimit = len(tokens)
+			}
+			for authority := authorityStart; authority < authorityLimit; authority++ {
+				if metaOverrideTerminalSkillAuthorityNoun(tokens[authority]) &&
+					metaOverrideTerminalSkillAuthorityBindsTarget(tokens, authority) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillPassivePermissionConflict(tokens []string) bool {
+	for authority := range tokens {
+		if !metaOverrideTerminalSkillAuthorityNoun(tokens[authority]) ||
+			!metaOverrideTerminalSkillAuthorityBindsTarget(tokens, authority) {
+			continue
+		}
+		limit := authority + 13
+		if limit > len(tokens) {
+			limit = len(tokens)
+		}
+		for predicate := authority + 1; predicate < limit; predicate++ {
+			if metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "was", "never", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "were", "never", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "has", "not", "been", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "have", "not", "been", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "was", "not", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "were", "not", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "is", "not", "granted") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "was", "denied") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "were", "denied") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "is", "denied") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "has", "been", "denied") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "have", "been", "denied") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "was", "revoked") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "were", "revoked") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "is", "revoked") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "has", "been", "revoked") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "have", "been", "revoked") {
+				return true
+			}
+		}
+	}
+	for index := 0; index+3 < len(tokens); index++ {
+		if metaOverrideTerminalSkillTokenSequenceAt(tokens, index, "there", "is", "no") &&
+			metaOverrideTerminalSkillAuthorityNoun(tokens[index+3]) &&
+			metaOverrideTerminalSkillAuthorityBindsTarget(tokens, index+3) {
+			return true
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillOwnershipConflict(tokens []string) bool {
+	for subject := range tokens {
+		if tokens[subject] != "i" && tokens[subject] != "we" {
+			continue
+		}
+		limit := subject + 13
+		if limit > len(tokens) {
+			limit = len(tokens)
+		}
+		for predicate := subject + 1; predicate < limit; predicate++ {
+			owner := -1
+			switch {
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "am", "not", "the", "owner") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "are", "not", "the", "owner"):
+				owner = predicate + 3
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "have", "no", "ownership") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "has", "no", "ownership"):
+				owner = predicate + 2
+			case metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "do", "not", "have", "ownership"):
+				owner = predicate + 3
+			}
+			if owner >= 0 && metaOverrideTerminalSkillAuthorityBindsTarget(tokens, owner) {
+				return true
+			}
+			if !metaOverrideTerminalSkillTokenSequenceAt(tokens, predicate, "do", "not") ||
+				predicate+2 >= len(tokens) ||
+				!metaOverrideTerminalSkillOwnershipVerb(tokens[predicate+2]) {
+				continue
+			}
+			for object := predicate + 3; object < limit; object++ {
+				if metaOverrideTerminalSkillTargetNoun(tokens[object]) {
+					return true
+				}
+			}
+		}
+	}
+
+	for target := range tokens {
+		if !metaOverrideTerminalSkillTargetNoun(tokens[target]) {
+			continue
+		}
+		limit := target + 11
+		if limit > len(tokens) {
+			limit = len(tokens)
+		}
+		for relation := target + 1; relation < limit; relation++ {
+			if metaOverrideTerminalSkillTokenSequenceAt(tokens, relation, "is", "not", "mine") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, relation, "is", "not", "ours") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, relation, "does", "not", "belong", "to", "me") ||
+				metaOverrideTerminalSkillTokenSequenceAt(tokens, relation, "does", "not", "belong", "to", "us") {
+				return true
+			}
+			if metaOverrideTerminalSkillTokenSequenceAt(tokens, relation, "belongs", "to") &&
+				!metaOverrideTerminalSkillOwnershipRelationNegated(tokens, relation) &&
+				metaOverrideTerminalSkillThirdPartyOwnerAt(tokens, relation+2) {
+				return true
+			}
+			if relation+2 < len(tokens) && tokens[relation] == "is" &&
+				(tokens[relation+1] == "owned" || tokens[relation+1] == "managed" || tokens[relation+1] == "controlled") &&
+				tokens[relation+2] == "by" && metaOverrideTerminalSkillThirdPartyOwnerAt(tokens, relation+3) {
+				return true
+			}
+		}
+	}
+
+	for index := range tokens {
+		if index+2 < len(tokens) && tokens[index] == "third" && tokens[index+1] == "party" &&
+			metaOverrideTerminalSkillTargetNoun(tokens[index+2]) {
+			return true
+		}
+		if index+1 < len(tokens) && tokens[index] == "without" &&
+			metaOverrideTerminalSkillAuthorityNoun(tokens[index+1]) &&
+			(metaOverrideTerminalSkillAuthorityBindsTarget(tokens, index+1) ||
+				metaOverrideTerminalSkillTargetNounWithin(tokens, index, 5, 0)) {
+			return true
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillTokenSequenceAt(tokens []string, index int, sequence ...string) bool {
+	if index < 0 || len(sequence) == 0 || index+len(sequence) > len(tokens) {
+		return false
+	}
+	for offset, token := range sequence {
+		if tokens[index+offset] != token {
+			return false
+		}
+	}
+	return true
+}
+
+func metaOverrideTerminalSkillAuthorityNoun(token string) bool {
+	switch token {
+	case "permission", "authorization", "authorisation", "approval":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillAuthorityBindsTarget(tokens []string, authority int) bool {
+	if authority < 0 || authority >= len(tokens) {
+		return false
+	}
+	start := authority - 8
+	if start < 0 {
+		start = 0
+	}
+	limit := authority + 14
+	if limit > len(tokens) {
+		limit = len(tokens)
+	}
+	for link := authority + 1; link < limit; link++ {
+		if metaOverrideTerminalSkillAuthorizationClauseBoundary(tokens[link]) {
+			return false
+		}
+		if metaOverrideTerminalSkillAuthorityScopeLink(tokens[link]) {
+			return metaOverrideTerminalSkillAuthorityLinkBindsTarget(tokens, authority, link, limit)
+		}
+	}
+	for link := authority - 1; link >= start; link-- {
+		if metaOverrideTerminalSkillAuthorizationClauseBoundary(tokens[link]) {
+			return false
+		}
+		if metaOverrideTerminalSkillAuthorityScopeLink(tokens[link]) {
+			return metaOverrideTerminalSkillAuthorityLinkBindsTarget(tokens, authority, link, limit)
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillAuthorityLinkBindsTarget(tokens []string, authority, link, limit int) bool {
+	sideLimit := limit
+	if link < authority {
+		sideLimit = authority
+	}
+	if tokens[link] != "to" {
+		return metaOverrideTerminalSkillDirectTargetPhrase(tokens, link+1, sideLimit)
+	}
+	actionLimit := link + 4
+	if actionLimit > sideLimit {
+		actionLimit = sideLimit
+	}
+	for action := link + 1; action < actionLimit; action++ {
+		if metaOverrideTerminalSkillAuthorityRelationBarrier(tokens[action]) {
+			return false
+		}
+		if metaOverrideTerminalSkillAuthorityActionModifier(tokens[action]) {
+			continue
+		}
+		if !metaOverrideTerminalSkillAuthorityTargetAction(tokens[action]) {
+			return false
+		}
+		return metaOverrideTerminalSkillTargetObjectAfterAction(tokens, action+1, sideLimit)
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillDirectTargetPhrase(tokens []string, start, limit int) bool {
+	targetLimit := start + 6
+	if targetLimit > limit {
+		targetLimit = limit
+	}
+	for index := start; index < targetLimit; index++ {
+		if metaOverrideTerminalSkillTargetNoun(tokens[index]) {
+			return true
+		}
+		if !metaOverrideTerminalSkillTargetQualifier(tokens[index]) {
+			return false
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillTargetObjectAfterAction(tokens []string, start, limit int) bool {
+	targetLimit := start + 8
+	if targetLimit > limit {
+		targetLimit = limit
+	}
+	for index := start; index < targetLimit; index++ {
+		if metaOverrideTerminalSkillAuthorityRelationBarrier(tokens[index]) {
+			return false
+		}
+		if metaOverrideTerminalSkillTargetNoun(tokens[index]) {
+			return true
+		}
+	}
+	return false
+}
+
+func metaOverrideTerminalSkillTargetQualifier(token string) bool {
+	switch token {
+	case "the", "a", "an", "this", "that", "my", "our", "actual", "production", "live", "remote", "external", "local", "isolated", "owned", "company", "managed", "customer", "tenant", "sandbox", "test":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillAuthorityActionModifier(token string) bool {
+	switch token {
+	case "directly", "explicitly", "temporarily", "legally", "safely":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillAuthorityTargetAction(token string) bool {
+	switch token {
+	case "use", "access", "operate", "test", "scan", "deploy", "run", "modify", "configure", "connect", "inspect", "audit", "control", "manage":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillAuthorityRelationBarrier(token string) bool {
+	switch token {
+	case "granted", "because", "but", "although", "however", "whereas", "unless":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillAuthorizationClauseBoundary(token string) bool {
+	switch token {
+	case "because", "but", "although", "however", "whereas", "unless":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillAuthorityScopeLink(token string) bool {
+	switch token {
+	case "to", "for", "of", "over", "on", "regarding", "concerning", "against":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillOwnershipVerb(token string) bool {
+	return token == "own"
+}
+
+func metaOverrideTerminalSkillTargetNoun(token string) bool {
+	switch token {
+	case "target", "host", "system", "fixture":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillThirdPartyNoun(token string) bool {
+	switch token {
+	case "user", "company", "organization", "organisation", "owner", "customer", "tenant", "client":
+		return true
+	default:
+		return false
+	}
+}
+
+func metaOverrideTerminalSkillThirdPartyOwnerAt(tokens []string, index int) bool {
+	if index < 0 || index >= len(tokens) {
+		return false
+	}
+	if tokens[index] == "another" && index+1 < len(tokens) &&
+		metaOverrideTerminalSkillThirdPartyNoun(tokens[index+1]) {
+		return true
+	}
+	return metaOverrideTerminalSkillTokenSequenceAt(tokens, index, "someone", "else") ||
+		metaOverrideTerminalSkillTokenSequenceAt(tokens, index, "a", "third", "party") ||
+		metaOverrideTerminalSkillTokenSequenceAt(tokens, index, "third", "party")
+}
+
+func metaOverrideTerminalSkillOwnershipRelationNegated(tokens []string, relation int) bool {
+	if relation <= 0 || relation > len(tokens) {
+		return false
+	}
+	if tokens[relation-1] == "not" || tokens[relation-1] == "never" {
+		return true
+	}
+	return relation >= 2 && tokens[relation-2] == "no" && tokens[relation-1] == "longer"
+}
+
+func metaOverrideTerminalSkillTargetNounWithin(tokens []string, center, before, after int) bool {
+	start := center - before
+	if start < 0 {
+		start = 0
+	}
+	limit := center + after + 1
+	if limit > len(tokens) {
+		limit = len(tokens)
+	}
+	for index := start; index < limit; index++ {
+		if metaOverrideTerminalSkillTargetNoun(tokens[index]) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Classifier) metaOverrideSignalsForText(text string) []bool {

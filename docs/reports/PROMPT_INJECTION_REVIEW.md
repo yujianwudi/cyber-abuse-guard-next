@@ -1,8 +1,8 @@
 # Defensive Review: public prompt-injection references and v0.15 Round 6 controls
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
 > **Frozen historical snapshot.** The Round 6 addendum and the older
@@ -11,13 +11,20 @@ current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b6
 > classifier identity, validation, taxonomy, and "current" statements must not
 > be inherited as current release or v0.15 PASS evidence.
 >
-> The current formal CPA identity is:
+> The current Round 14 active-tree overlay is CAG source `1.0.0` on Linux
+> amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
-> current_formal_cpa: v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835
-> current_module_sum: h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=
+> current_formal_cpa: v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+> current_cpa_plugin_c_abi_rpc_schema: 1 / 3
+> current_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+> current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
+> current_complete_linux_ci_host_release: NOT_RUN / PENDING / NO_RELEASE_THIS_ROUND
 > ```
+>
+> `/v1/realtime*` bypasses CAG. Historical review PASS statements below do not
+> establish v7.2.130/schema-3, realtime, Host, candidate, or release PASS.
 
 ## Round 6 CPA pinned-compatibility addendum
 

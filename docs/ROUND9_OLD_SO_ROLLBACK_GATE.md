@@ -1,6 +1,7 @@
 # Round 9 Linux old-SO rollback gate
 
-This gate is an isolated compatibility drill for audit schema v6. It is not a
+This gate is an isolated compatibility drill across the historical audit
+schema-v5/v6 rollback boundary and the current schema v7. It is not a
 production rollback command and does not authorize Balanced admission,
 deployment, a tag, or a release.
 
@@ -53,7 +54,7 @@ supported audit schema: 5
 The tag object, peeled commit, and tree remain provenance records; each run
 cryptographically verifies the reviewed capsule, classifier constants, schema
 constant, and aggregate ruleset digest. It then builds a temporary Linux amd64
-SO with Go 1.26.4 and `GOFLAGS=-mod=readonly`. Historical build metadata uses
+SO with Go 1.26.6 and `GOFLAGS=-mod=readonly`. Historical build metadata uses
 the predecessor module path
 `github.com/yujianwudi/cyber-abuse-guard/internal/buildinfo`, never the current
 `cyber-abuse-guard-next` module path. The generated report explicitly records
@@ -75,22 +76,23 @@ outside that directory.
 2. Let that SO create schema v5, then insert one synthetic audit event and one
    synthetic Raw Capture preview. No Provider, account pool, production
    database, customer request, or restricted evaluation material is used.
-3. Open the v5 fixture with the current audit package. It must migrate to v6 and
-   create exactly one `.pre-v6-*.bak` plus paired manifest even though the
-   optional legacy backup switch is false.
+3. Open the v5 fixture with the current audit package. It must migrate through
+   v6 to current schema v7 and create exactly one `.pre-v6-*.bak` plus paired
+   manifest even though the optional legacy backup switch is false.
 4. Strictly validate the closed manifest fields, mode `0400`, filename, bytes,
    SHA-256, source `5`, target `6`, `exact_snapshot=true`, rollback instruction,
    synthetic sentinel rows, and SQLite `PRAGMA quick_check=ok`.
-5. Give an isolated copy of schema v6 to the historical SO. Registration must
-   fail with `database schema version 6 is newer than supported version 5`, and
-   the probe database hash and sidecar state must remain unchanged.
+5. Give an isolated copy of current schema v7 to the historical SO.
+   Registration must fail with
+   `database schema version 7 is newer than supported version 5`, and the probe
+   database hash and sidecar state must remain unchanged.
 6. Restore the verified backup with no-overwrite file creation, mode `0600`,
    file and directory `fsync`, and a byte-for-byte SHA-256 comparison with the
    manifest.
 7. Load the historical SO against that restored schema-v5 copy. Registration,
    sentinel retention, and `quick_check` must pass.
 
-The generated report uses schema `round9-old-so-rollback-gate/v2`, records that
+The generated report uses schema `round9-old-so-rollback-gate/v3`, records that
 only `plugin.register` ran, and fixes the final conclusion to:
 
 ```text
@@ -111,14 +113,14 @@ operator-configured module proxy. For a fully network-isolated run, prewarm and
 verify that module cache, then set `GOPROXY=off`.
 
 ```bash
-GO=/home/yujian/.cache/codex-go/go1.26.4/bin/go \
+GO=/home/yujian/.cache/codex-go/go1.26.6/bin/go \
 GOFLAGS=-mod=readonly \
 make round9-old-so-rollback-gate
 ```
 
 The default report path is
 `dist/round9-worklogs/round9-old-so-rollback.json`. Temporary source, SO, v5,
-v6, backup, restore, and ABI probe files are deleted when the gate exits.
+v7, backup, restore, and ABI probe files are deleted when the gate exits.
 
 ## Remaining external conditions
 

@@ -170,11 +170,27 @@ func TestLatestCPAStartupPrivacyResourceDispatchSourceContract(t *testing.T) {
 		"internal", "api", "middleware", "response_writer.go")
 	finalizeTokens := responseSource.nodeTokens(responseSource.mustFunction(t, "Finalize"))
 	requireLatestCPASequence(t, finalizeTokens,
-		`hasAPIError := len(slicesAPIResponseError) > 0 || finalStatusCode >= http.StatusBadRequest`,
-		"HTTP 418 error-only log admission")
+		`hasAPIError := hasActionableError(c, finalStatusCode, slicesAPIResponseError)`,
+		"actionable HTTP error-only log admission helper")
 	requireLatestCPASequence(t, finalizeTokens,
 		`forceLog := w.logOnErrorOnly && hasAPIError && !w.logger.IsEnabled()`,
 		"disabled logger forced error artifact")
+
+	// CPA v7.2.137 moved the error-only admission policy into a helper. Keep
+	// the semantic guard explicit: API errors always qualify, client-closed
+	// requests do not, cancellation only qualifies for an error status, and
+	// all remaining HTTP errors qualify. This prevents a source refactor from
+	// silently broadening error-only capture while avoiding a brittle inline
+	// expression assertion.
+	actionableTokens := responseSource.nodeTokens(responseSource.mustFunction(t, "hasActionableError"))
+	for marker, description := range map[string]string{
+		`if hasActionableAPIResponseErrors(apiErrors) { return true }`:                   "API error admission",
+		`if statusCode == clienterror.StatusClientClosedRequest { return false }`:        "client-closed exclusion",
+		`if isContextCanceled(c) && statusCode < http.StatusBadRequest { return false }`: "successful cancellation exclusion",
+		`return statusCode >= http.StatusBadRequest`:                                     "HTTP error admission",
+	} {
+		requireLatestCPASequence(t, actionableTokens, marker, description)
+	}
 }
 
 func TestLatestCPARequestErrorLogManagementSourceContract(t *testing.T) {

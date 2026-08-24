@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import copy
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,24 @@ HERE = Path(__file__).resolve().parent
 TOOL = HERE.parent
 sys.path.insert(0, str(TOOL))
 
+from audit_contract import (
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
+    CANDIDATE_ARTIFACT_NAME,
+    CANDIDATE_REPOSITORY,
+    CANDIDATE_WORKFLOW_NAME,
+    CANDIDATE_WORKFLOW_PATH,
+    CPA_COMMIT,
+    CPA_C_ABI,
+    CPA_OFFICIAL_BINARY_SHA256,
+    CPA_OFFICIAL_ASSET_NAME,
+    CPA_OFFICIAL_ASSET_SHA256,
+    CPA_RPC_SCHEMA,
+    CPA_TAG,
+    EVIDENCE_SCHEMA,
+)
+from fixtures import evidence_files
+
 try:
     from jsonschema import Draft202012Validator
 except ImportError:  # pragma: no cover - optional local schema verifier
@@ -17,6 +37,61 @@ except ImportError:  # pragma: no cover - optional local schema verifier
 
 
 class SchemaTests(unittest.TestCase):
+    def test_machine_schema_v2_closes_the_supplemental_zip_plane(self) -> None:
+        schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
+        self.assertEqual(schema["properties"]["schema"], {"const": EVIDENCE_SCHEMA})
+        for field in (
+            "supplemental_zip_manifest",
+            "supplemental_zip_results",
+            "supplemental_zip_summary",
+        ):
+            self.assertIn(field, schema["required"])
+        cold = schema["$defs"]["cold_start"]
+        self.assertEqual(
+            cold["properties"]["supplemental_execution_count"], {"const": 84}
+        )
+        cleanup = schema["$defs"]["cleanup"]["properties"]
+        self.assertEqual(cleanup["supplemental_member_text_files_created"], {"const": 0})
+        self.assertEqual(cleanup["supplemental_member_text_files_removed"], {"const": 0})
+        self.assertEqual(cleanup["supplemental_member_text_retained"], {"const": False})
+        self.assertEqual(cleanup["supplemental_input_archive_preserved"], {"const": True})
+
+    def test_machine_schema_pins_the_active_cpa_identity(self) -> None:
+        schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
+        properties = schema["$defs"]["cpa_identity"]["properties"]
+        self.assertEqual(
+            properties["binary_sha256"], {"const": CPA_OFFICIAL_BINARY_SHA256}
+        )
+        self.assertEqual(properties["commit"], {"const": CPA_COMMIT})
+        self.assertEqual(properties["c_abi"], {"const": CPA_C_ABI})
+        self.assertEqual(
+            properties["official_asset_name"], {"const": CPA_OFFICIAL_ASSET_NAME}
+        )
+        self.assertEqual(
+            properties["official_asset_sha256"],
+            {"const": CPA_OFFICIAL_ASSET_SHA256},
+        )
+        self.assertEqual(properties["tag"], {"const": CPA_TAG})
+        self.assertEqual(properties["rpc_schema"], {"const": CPA_RPC_SCHEMA})
+        cag_properties = schema["$defs"]["cag_identity"]["properties"]
+        self.assertEqual(cag_properties["so_name"], {"const": CAG_SO_NAME})
+        self.assertEqual(
+            cag_properties["source_version"], {"const": CAG_SOURCE_VERSION}
+        )
+        candidate = schema["$defs"]["candidate_identity"]["properties"]
+        self.assertEqual(
+            candidate["artifact"]["properties"]["name"],
+            {"const": CANDIDATE_ARTIFACT_NAME},
+        )
+        self.assertEqual(candidate["repository"], {"const": CANDIDATE_REPOSITORY})
+        self.assertEqual(
+            candidate["workflow"]["properties"],
+            {
+                "name": {"const": CANDIDATE_WORKFLOW_NAME},
+                "path": {"const": CANDIDATE_WORKFLOW_PATH},
+            },
+        )
+
     def test_machine_schema_is_valid_json_and_every_object_is_closed(self) -> None:
         schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
         self.assertEqual(schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
@@ -76,6 +151,26 @@ class SchemaTests(unittest.TestCase):
             truncated = {**transport, field: transport[field][:-1]}
             with self.subTest(field=field):
                 self.assertFalse(validator.is_valid(truncated))
+
+    @unittest.skipIf(Draft202012Validator is None, "jsonschema is not installed")
+    def test_machine_timestamps_require_strict_utc_z_syntax(self) -> None:
+        schema = json.loads((TOOL / "machine-evidence.schema.json").read_text("utf-8"))
+        Draft202012Validator.check_schema(schema)
+        validator = Draft202012Validator(schema)
+        with tempfile.TemporaryDirectory() as directory:
+            _, evidence, _ = evidence_files(Path(directory))
+            self.assertTrue(validator.is_valid(evidence))
+            for timestamp in (
+                "garbage-timestamp-value",
+                "2026-08-04T00:00:00+00:00",
+                "2026-08-04T00:00:00.1234567Z",
+                "2026-08-04 00:00:00Z",
+                "2026-08-04T00:00:00Zjunk",
+            ):
+                wrong = copy.deepcopy(evidence)
+                wrong["started_at"] = timestamp
+                with self.subTest(timestamp=timestamp):
+                    self.assertFalse(validator.is_valid(wrong))
 
     def test_schema_documents_required_fail_closed_gates(self) -> None:
         raw = (TOOL / "machine-evidence.schema.json").read_text("utf-8")

@@ -50,6 +50,14 @@ SSH_KEY_BASENAMES = frozenset(
 SECRET_SUFFIXES = frozenset({".ppk", ".p12", ".pfx", ".jks", ".keystore"})
 SECRET_EXACT_NAMES = frozenset({".env", ".netrc", ".npmrc"})
 PUBLIC_IPV4 = re.compile(r"(?<![0-9])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9])")
+# WSL's kernel release has four dotted numeric components, so its prefix is
+# also syntactically a public IPv4 address.  Exempt only the canonical JSON
+# `kernel_release` value produced by the reviewed Linux receipt, with the
+# explicit WSL suffix and current Linux major.  Do not exempt bare dotted
+# values, arbitrary version fields, prose, or address-shaped metadata.
+WSL_KERNEL_RELEASE_VALUE = re.compile(
+    r'[\"\']kernel_release[\"\']\s*:\s*[\"\']6(?:\.[0-9]{1,3}){3}-microsoft-standard-WSL2[\"\']',
+)
 
 OLD_SO_RAW_CAPTURE_PATH = (
     "testdata/round9-old-so-v0.16-rc.2-source/internal/audit/raw_capture.go"
@@ -166,7 +174,10 @@ def line_findings(relative: str, text: str, content_sha256: str = "") -> list[Fi
                 ):
                     continue
                 findings.append(Finding(relative, line_number, rule))
+        version_spans = [match.span() for match in WSL_KERNEL_RELEASE_VALUE.finditer(line)]
         for match in PUBLIC_IPV4.finditer(line):
+            if any(start <= match.start() < end for start, end in version_spans):
+                continue
             try:
                 address = ipaddress.ip_address(match.group(0))
             except ValueError:

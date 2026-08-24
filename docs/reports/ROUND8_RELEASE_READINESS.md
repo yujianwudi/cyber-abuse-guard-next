@@ -1,11 +1,11 @@
 # Round 8 v0.16-rc.2 release readiness
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
-> **Active-tree identity overlay refreshed 2026-08-04 (Asia/Shanghai).** The
+> **Active-tree identity overlay refreshed 2026-08-09 (Asia/Shanghai).** The
 > `current_classifier_policy_*` fields above identify the repository tree
 > containing this report. They are navigation metadata only and do not rebind
 > or relabel the frozen Round 8 evidence below.
@@ -14,17 +14,24 @@ Historical snapshot last updated: 2026-07-22 (Asia/Shanghai)
 
 > **Frozen historical snapshot.** This report preserves the Round 8
 > `v0.16-rc.2` source-tree release contract as recorded on the date above. Every
-> embedded CPA v7.2.95 value and every "current" or "only current" statement is
-> relative to that frozen Round 8 snapshot; none is the active repository release
-> identity.
+> embedded CPA v7.2.95 value and every "current", "only current", or "active"
+> statement, including the eight-workflow count, is relative to that frozen
+> Round 8 snapshot; none is the active repository release identity.
 >
-> The current formal CPA identity is:
+> The current Round 14 active-tree overlay is CAG source `1.0.0` on Linux
+> amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
-> current_formal_cpa: v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835
-> current_module_sum: h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=
+> current_formal_cpa: v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+> current_cpa_plugin_c_abi_rpc_schema: 1 / 3
+> current_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+> current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
+> current_complete_linux_ci_host_release: NOT_RUN / PENDING / NO_RELEASE_THIS_ROUND
 > ```
+>
+> `/v1/realtime*` bypasses CAG. Historical Round 8 PASS statements below do
+> not establish v7.2.130/schema-3, realtime, Host, candidate, or release PASS.
 
 This document describes the source-tree release contract. It is not a Host
 attestation, independent audit, production authorization, or Release record.

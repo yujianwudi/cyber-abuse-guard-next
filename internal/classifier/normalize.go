@@ -20,6 +20,8 @@ const (
 	// without colliding with legitimate replacement characters in user text.
 	compactHardBoundary     rune = '\uFDD0'
 	compactHardBoundaryText      = "\uFDD0"
+	compactJoinedBoundary   rune = '\uFDD1'
+	compactPartBoundary     rune = '\uFDD2'
 )
 
 type normalizedViews struct {
@@ -96,7 +98,7 @@ func normalizePartsInto(parts []string, destination []rune, scratch *normalizati
 			break
 		}
 		if partIndex > 0 {
-			runes = appendBoundary(runes)
+			runes = appendPartBoundary(runes)
 		}
 		consumedBytes := len(part)
 		if consumedBytes > remainingBytes {
@@ -121,7 +123,7 @@ func normalizePartsInto(parts []string, destination []rune, scratch *normalizati
 				if replacement, ok := commonHomoglyphReplacement(r); ok {
 					r = replacement
 				}
-				if r == compactHardBoundary {
+				if r == compactHardBoundary || r == compactJoinedBoundary || r == compactPartBoundary {
 					r = unicode.ReplacementChar
 				}
 				runes = append(runes, r)
@@ -177,7 +179,7 @@ func normalizeBytesInto(value []byte, destination []rune, scratch *normalization
 			if replacement, ok := commonHomoglyphReplacement(r); ok {
 				r = replacement
 			}
-			if r == compactHardBoundary {
+			if r == compactHardBoundary || r == compactJoinedBoundary || r == compactPartBoundary {
 				r = unicode.ReplacementChar
 			}
 			runes = append(runes, r)
@@ -206,10 +208,19 @@ func finishNormalizedViews(runes []rune, truncated bool) normalizedViews {
 	storageUsed := len(runes)
 	standard := runes[:0]
 	lastSpace := true
+	hasReconstructableBoundary := false
+	hasPartBoundary := false
 	for _, r := range runes {
 		if isLineBoundary(r) || r == compactHardBoundary {
 			standard = appendBoundary(standard)
 			lastSpace = true
+			hasReconstructableBoundary = true
+			continue
+		}
+		if r == compactPartBoundary {
+			standard = appendPartBoundary(standard)
+			lastSpace = true
+			hasPartBoundary = true
 			continue
 		}
 		if unicode.IsSpace(r) {
@@ -225,6 +236,32 @@ func finishNormalizedViews(runes []rune, truncated bool) normalizedViews {
 	for len(standard) > 0 && standard[len(standard)-1] == ' ' {
 		standard = standard[:len(standard)-1]
 	}
+	if !hasReconstructableBoundary && !hasPartBoundary {
+		return normalizedViews{standardRunes: standard, truncated: truncated, storageUsed: storageUsed}
+	}
+	// Remove only hard boundaries that split one bounded homogeneous lexical
+	// token. Downstream semantic and eligibility checks must see the same token
+	// reconstructed by the compact matcher; retaining the marker there would
+	// detect a rule but then downgrade its candidate as ambiguous.
+	if hasReconstructableBoundary {
+		for index := len(standard) - 1; index >= 0; index-- {
+			if standard[index] == compactHardBoundary && boundedLexicalFragmentsAround(standard, index) {
+				standard[index] = compactJoinedBoundary
+			}
+		}
+	}
+	write := 0
+	for _, r := range standard {
+		if r == compactJoinedBoundary {
+			continue
+		}
+		if r == compactPartBoundary {
+			r = compactHardBoundary
+		}
+		standard[write] = r
+		write++
+	}
+	standard = standard[:write]
 	return normalizedViews{standardRunes: standard, truncated: truncated, storageUsed: storageUsed}
 }
 
@@ -232,8 +269,24 @@ func appendBoundary(runes []rune) []rune {
 	for len(runes) > 0 && runes[len(runes)-1] == ' ' {
 		runes = runes[:len(runes)-1]
 	}
-	if len(runes) == 0 || runes[len(runes)-1] != compactHardBoundary {
+	if len(runes) == 0 ||
+		(runes[len(runes)-1] != compactHardBoundary &&
+			runes[len(runes)-1] != compactPartBoundary) {
 		runes = append(runes, compactHardBoundary)
+	}
+	return runes
+}
+
+func appendPartBoundary(runes []rune) []rune {
+	for len(runes) > 0 && runes[len(runes)-1] == ' ' {
+		runes = runes[:len(runes)-1]
+	}
+	if len(runes) > 0 && runes[len(runes)-1] == compactHardBoundary {
+		runes[len(runes)-1] = compactPartBoundary
+		return runes
+	}
+	if len(runes) == 0 || runes[len(runes)-1] != compactPartBoundary {
+		runes = append(runes, compactPartBoundary)
 	}
 	return runes
 }
@@ -354,11 +407,73 @@ func leetReplacement(r rune) (rune, bool) {
 	}
 }
 
+func isSingleRuneLeetPartRune(r rune) bool {
+	if isASCIILetterOrDigit(r) {
+		return true
+	}
+	_, ok := leetReplacement(r)
+	return ok
+}
+
+// singleRunePartBoundary reports whether leet lookaround may cross a provider
+// part sentinel. Character-per-part runs retain their narrow legacy path. A
+// single-rune leet part may also sit between bounded uneven ASCII fragments
+// such as `ran`, `$`, and `om`; the same fragment-pair bound used by lexical
+// reconstruction keeps long independent fields such as `section`, `@`, and
+// `items` isolated.
+func singleRunePartBoundary(runes []rune, boundary int) bool {
+	if boundary <= 0 || boundary+1 >= len(runes) ||
+		!isSingleRuneLeetPartRune(runes[boundary-1]) ||
+		!isSingleRuneLeetPartRune(runes[boundary+1]) {
+		return false
+	}
+	left := boundary - 1
+	right := boundary + 1
+	if (left == 0 || runes[left-1] == compactPartBoundary) &&
+		(right+1 == len(runes) || runes[right+1] == compactPartBoundary) {
+		return true
+	}
+	return boundedIsolatedLeetPartBoundary(runes, boundary)
+}
+
+func boundedIsolatedLeetPartBoundary(runes []rune, boundary int) bool {
+	leftEnd := -1
+	rightStart := -1
+	switch {
+	case boundary+2 < len(runes) && runes[boundary+2] == compactPartBoundary:
+		if _, ok := leetReplacement(runes[boundary+1]); !ok {
+			return false
+		}
+		leftEnd = boundary - 1
+		rightStart = boundary + 3
+	case boundary >= 2 && runes[boundary-2] == compactPartBoundary:
+		if _, ok := leetReplacement(runes[boundary-1]); !ok {
+			return false
+		}
+		leftEnd = boundary - 3
+		rightStart = boundary + 1
+	default:
+		return false
+	}
+	if leftEnd < 0 || rightStart >= len(runes) {
+		return false
+	}
+	leftRunes, _, leftOK := compactFragmentBackward(runes, leftEnd, compactLexicalASCII)
+	rightRunes, _, rightOK := compactFragmentForward(runes, rightStart, compactLexicalASCII)
+	return leftOK && rightOK && compactFragmentPairLengthsAllowed(leftRunes, rightRunes)
+}
+
 func letterNear(runes []rune, index, direction int) bool {
 	for steps, i := 0, index+direction; i >= 0 && i < len(runes) && steps < 12; steps, i = steps+1, i+direction {
 		r := runes[i]
 		if unicode.IsSpace(r) || r == compactHardBoundary {
 			return false
+		}
+		if r == compactPartBoundary {
+			if !singleRunePartBoundary(runes, i) {
+				return false
+			}
+			continue
 		}
 		if unicode.IsLetter(r) {
 			return true
@@ -373,7 +488,19 @@ func letterNear(runes []rune, index, direction int) bool {
 func isolatedLetterNear(runes []rune, index, direction int) bool {
 	for steps, i := 0, index+direction; i >= 0 && i < len(runes) && steps < 12; steps, i = steps+1, i+direction {
 		r := runes[i]
-		if unicode.IsSpace(r) || (!isCompactRune(r) && r != compactHardBoundary) {
+		if r == compactHardBoundary {
+			return false
+		}
+		if r == compactPartBoundary {
+			if !singleRunePartBoundary(runes, i) {
+				return false
+			}
+			continue
+		}
+		if unicode.IsSpace(r) {
+			continue
+		}
+		if !isCompactRune(r) {
 			continue
 		}
 		if !unicode.IsLetter(r) {

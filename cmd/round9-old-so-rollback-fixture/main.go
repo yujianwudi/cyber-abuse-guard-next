@@ -1,6 +1,7 @@
 // Command round9-old-so-rollback-fixture migrates one synthetic schema-v5
-// database inside a marked private sandbox. It is not an operator migration
-// utility and intentionally refuses paths outside that sandbox.
+// database to the current audit schema inside a marked private sandbox. It is
+// not an operator migration utility and intentionally refuses paths outside
+// that sandbox.
 package main
 
 import (
@@ -22,7 +23,7 @@ import (
 const (
 	sandboxMarkerName    = ".round9-old-so-rollback-sandbox"
 	sandboxMarkerContent = "isolated-synthetic-fixture-only-v1\n"
-	requiredGoVersion    = "go1.26.4"
+	requiredGoVersion    = "go1.26.6"
 )
 
 type migrationResult struct {
@@ -83,13 +84,13 @@ func main() {
 		},
 	})
 	if store == nil {
-		fatal(errors.New("schema-v6 migration returned a nil audit store"))
+		fatal(errors.New("current-schema migration returned a nil audit store"))
 	}
 	if openErr != nil {
 		_ = store.Close()
-		fatal(fmt.Errorf("schema-v6 migration failed: %w", openErr))
+		fatal(fmt.Errorf("current-schema migration failed: %w", openErr))
 	}
-	if status := store.Status(); status.SchemaVersion != 6 || !status.Healthy {
+	if status := store.Status(); status.SchemaVersion != audit.SchemaVersion || !status.Healthy {
 		_ = store.Close()
 		fatal(fmt.Errorf("migrated store status schema=%d healthy=%v", status.SchemaVersion, status.Healthy))
 	}
@@ -98,14 +99,14 @@ func main() {
 	}
 	version, quickCheck, err = inspectSQLite(database)
 	if err != nil {
-		fatal(fmt.Errorf("inspect schema-v6 output: %w", err))
+		fatal(fmt.Errorf("inspect current-schema output: %w", err))
 	}
-	if version != 6 || quickCheck != "ok" {
-		fatal(fmt.Errorf("output schema=%d quick_check=%q, want schema=6 quick_check=ok", version, quickCheck))
+	if version != audit.SchemaVersion || quickCheck != "ok" {
+		fatal(fmt.Errorf("output schema=%d quick_check=%q, want schema=%d quick_check=ok", version, quickCheck, audit.SchemaVersion))
 	}
 	result := migrationResult{
 		SourceSchemaVersion: 5,
-		TargetSchemaVersion: 6,
+		TargetSchemaVersion: audit.SchemaVersion,
 		SQLiteQuickCheck:    quickCheck,
 		Platform:            "linux/amd64",
 		GoRuntime:           runtime.Version(),

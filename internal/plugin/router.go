@@ -18,6 +18,7 @@ import (
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/buildinfo"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/csamtext"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/subject"
 )
@@ -76,13 +77,13 @@ func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
 }
 
 // callModelRouteRequest shares the existing classifier, audit, subject-risk,
-// and failure semantics with schema-v2 request interception without encoding
+// and failure semantics with schema-v3 request interception without encoding
 // and decoding a second full request body. The returned failureRecorded bit
 // tells the interceptor adapter whether the router layer already accounted for
 // an operational failure, avoiding duplicate router_errors increments.
 func (p *Plugin) callModelRouteRequest(request pluginapi.ModelRouteRequest) (result modelRouteCallResult) {
-	// CPA v7.2.116 still routes Codex Alpha Search exclusively through the
-	// ModelRouter surface. For ordinary Host-originated requests, schema-v2
+	// CPA v7.2.137 still routes Codex Alpha Search exclusively through the
+	// ModelRouter surface. For ordinary Host-originated requests, schema-v3
 	// RequestInterceptor is the production enforcement path and this registered
 	// router must be an O(1) no-op to avoid duplicate classification. Direct
 	// calls without PluginID remain available to the legacy executor contract and
@@ -202,6 +203,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		return nil, "", &modelRouteFailure{code: "invalid_classifier_limits", reason: "cyber_abuse_guard_inspection_failure"}
 	}
 	coverageSink := newCoverageDimensionSink(session)
+	csamSink := newCSAMTextStreamSink(coverageSink, csamTextMode(string(state.config.Mode)))
 	limits := extract.Limits{
 		// MaxScanBytes is now only the deprecated window alias. The streaming
 		// entry points below never slice the raw JSON body by this value.
@@ -217,11 +219,15 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 	var extracted extract.Result
 	var extractErr error
 	if unknownSourceFormat {
-		extracted, extractErr = extract.ScanUntrustedRequest(request.Body, request.Headers, limits, coverageSink)
+		extracted, extractErr = extract.ScanUntrustedRequest(request.Body, request.Headers, limits, csamSink)
 	} else {
-		extracted, extractErr = extract.ScanProfiledRequest(request.Body, request.Headers, requestProfile, limits, coverageSink)
+		extracted, extractErr = extract.ScanProfiledRequest(request.Body, request.Headers, requestProfile, limits, csamSink)
 	}
 	if extractErr != nil && len(extracted.IncompleteReasons) == 0 {
+		// Keep the independent CSAM side-car's lifecycle aligned with the
+		// extractor on operational failures. Its transient input must not survive
+		// a failed replay or be mistaken for a complete clean result.
+		csamSink.Abort()
 		session.Abort()
 		// Invalid limits or an extractor invariant failure is operational. It is
 		// deliberately kept on the existing mode-aware runtime-failure path and
@@ -233,7 +239,28 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 		return nil, "", &modelRouteFailure{code: "inspection_failure", reason: "cyber_abuse_guard_inspection_failure"}
 	}
 	result := session.Finish()
+	csamResult := csamSink.Finish()
+	csamPrivacyTainted := csamSink.PrivacyTainted()
+	if validCSAMTextResult(csamResult) {
+		p.counters.csamTextDetections.Add(1)
+		switch csamResult.Action {
+		case csamtext.ActionBlock:
+			p.counters.csamTextBlocks.Add(1)
+		case csamtext.ActionAudit, csamtext.ActionObserve:
+			p.counters.csamTextAudits.Add(1)
+		}
+	}
+	if csamTextIncomplete(csamResult) {
+		p.counters.csamTextIncomplete.Add(1)
+	}
 	incompleteReasons := append([]extract.IncompleteReason(nil), extracted.IncompleteReasons...)
+	// CSAM text is an independent, privacy-tainted side-car. Its private
+	// budget/ordering exhaustion is diagnostic-only and must not be projected
+	// into the canonical extractor incomplete reasons: doing so would make a
+	// side-car limit look like classification_chunk_limit and would change the
+	// transport disposition (notably turning an otherwise ordinary Strict
+	// request into block_incomplete_inspection). Only the main extractor and
+	// classifier coverage contracts may drive the request-level incomplete path.
 	coverageReasons := extractorCoverageIncompleteReasons(incompleteReasons)
 	if !extracted.IsComplete() && len(incompleteReasons) == 0 {
 		// Defensive invariant fallback. The category remains bounded and no raw
@@ -315,6 +342,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 
 	outcome := inspectionOutcome{
 		Classification: result,
+		CSAMText:       csamResult,
 		Incomplete:     incompleteReasons,
 		OpaqueMedia:    extracted.OpaqueMedia,
 	}
@@ -373,7 +401,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 	}
 
 	if persistDecision {
-		p.recordDecision(state, request, &requestHash, subjectHash, extracted.TextBytesScanned, result, decision, incompleteReasons, subjectReason, request.Body, time.Since(started))
+		p.recordDecision(state, request, &requestHash, subjectHash, extracted.TextBytesScanned, result, csamResult, csamPrivacyTainted, decision, incompleteReasons, subjectReason, request.Body, time.Since(started))
 	}
 	recordFinalCoverage := func() {
 		p.recordStreamingCoverageWithFinalDisposition(
@@ -503,7 +531,7 @@ func extractionProfile(format string) (extract.RequestProfile, bool) {
 	case "interactions":
 		profile.Source = extract.SourceProfileInteractions
 	case audit.SourceFormatCodexAlphaSearch:
-		// CPA v7.2.116 exposes Alpha Search model payloads only to ModelRouter.
+		// CPA v7.2.137 exposes Alpha Search model payloads only to ModelRouter.
 		// They have no chat-role envelope, so treat their model-visible strings as
 		// direct untrusted text while retaining a distinct structural profile.
 		profile.Source = extract.SourceProfileCodexAlphaSearch
@@ -983,8 +1011,15 @@ func (p *Plugin) recordIncompleteCounters(reasons []extract.IncompleteReason, de
 	}
 }
 
-func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRouteRequest, requestHash *requestHashMemo, subjectHash string, scanned int, result classifier.Result, decision inspectionDecision, incompleteReasons []extract.IncompleteReason, subjectReason string, rawRequest []byte, latency time.Duration) {
+func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRouteRequest, requestHash *requestHashMemo, subjectHash string, scanned int, result classifier.Result, csamResult csamtext.Result, csamPrivacyTainted bool, decision inspectionDecision, incompleteReasons []extract.IncompleteReason, subjectReason string, rawRequest []byte, latency time.Duration) {
 	if state == nil || state.audit == nil || !state.config.Audit.Enabled || state.config.Mode == config.ModeObserve {
+		return
+	}
+	if (decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText) &&
+		!validCSAMTextResult(csamResult) {
+		// A CSAM-specific decision is only writable when the classifier-to-policy
+		// handoff is complete and internally consistent. This keeps a caller-made
+		// Result from becoming a persisted category/rule producer.
 		return
 	}
 	action := "audit"
@@ -1004,18 +1039,30 @@ func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRout
 		decision.Category,
 		len(incompleteReasons) == 0,
 	)
+	if decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText {
+		decisionExplanation = auditCSAMTextExplanation(csamResult)
+	}
 	// Round 9 makes the bounded winning category/rule mandatory for a malicious-
 	// text block. These are stable policy identifiers, not request content, and
 	// are required to prove that the block came from an eligible candidate. Other
 	// decisions continue to honor the operator's legacy identifier logging flags.
-	logCategory := state.config.Audit.LogCategory || decision.Kind == decisionBlockMaliciousText
-	logRuleIDs := state.config.Audit.LogRuleIDs || decision.Kind == decisionBlockMaliciousText
+	logCategory := state.config.Audit.LogCategory || decision.Kind == decisionBlockMaliciousText ||
+		decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText
+	logRuleIDs := state.config.Audit.LogRuleIDs || decision.Kind == decisionBlockMaliciousText ||
+		decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText
+	riskScore := result.Score
+	if decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText {
+		// CSAM text uses an independent taxonomy. Never persist the legacy
+		// cyber-abuse score alongside its event, otherwise the audit validator
+		// would interpret the event as borrowing the legacy classifier risk.
+		riskScore = 0
+	}
 	event := audit.Event{
 		ID:               newEventID(),
 		Timestamp:        time.Now().UTC(),
 		Action:           action,
 		Mode:             string(state.config.Mode),
-		RiskScore:        result.Score,
+		RiskScore:        riskScore,
 		Model:            audit.HashModel(request.RequestedModel),
 		SourceFormat:     audit.CanonicalSourceFormat(request.SourceFormat),
 		Stream:           request.Stream,
@@ -1036,6 +1083,11 @@ func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRout
 		event.Coverage = "incomplete"
 		event.IncompleteReason = incompleteCategory(incompleteReasons)
 	}
+	if decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText {
+		event.Classifier = "csam-text-v1"
+		event.Category = string(csamResult.Category)
+		event.RuleIDs = []string{csamResult.RuleID}
+	}
 	if logCategory {
 		event.Category = decision.Category
 	}
@@ -1049,6 +1101,13 @@ func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRout
 		event.SubjectHash = subjectHash
 	}
 	if decision.Block && state.config.Audit.RawCapture.Enabled {
+		if csamPrivacyTainted || validCSAMTextResult(csamResult) {
+			// A candidate, positive, or side-car coverage loss must never persist
+			// request text, even when a stronger legacy/incomplete/opaque decision
+			// wins. The taint is request-level and contains no source material.
+			p.recordAuditEvent(state, event)
+			return
+		}
 		p.recordAuditEventWithRawCapture(state, event, rawRequest)
 	} else {
 		p.recordAuditEvent(state, event)

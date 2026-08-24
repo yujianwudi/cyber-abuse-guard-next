@@ -56,3 +56,15 @@ func TestClassifierProofBudgetIncompleteReasonIsValid(t *testing.T) {
 		t.Fatal("classifier proof-budget incomplete reason was rejected")
 	}
 }
+
+func TestRemovedVerifiedHardPolicyIncompleteDispositionIsRejected(t *testing.T) {
+	t.Parallel()
+
+	const removed = "block_verified_hard_policy_under_incomplete_inspection"
+	if validDecision(removed) {
+		t.Fatalf("removed disposition %q remains in the active audit decision set", removed)
+	}
+	if got := decisionKindForDisposition(removed); got != decisionKindLegacyUnspecified {
+		t.Fatalf("removed disposition kind = %q, want %q", got, decisionKindLegacyUnspecified)
+	}
+}

@@ -1,16 +1,52 @@
-# 审计交接说明 — CPA Cyber Abuse Guard v0.16 Round 12 当前边界与历史证据
+# 审计交接说明 — Cyber Abuse Guard Next v1.0.0-rc.1 / CPA v7.2.137
+
+## 第十四轮当前交接边界
+
+当前唯一活动目标为 Linux amd64、CPA
+`v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`、C ABI 1 / RPC schema 3。
+模块校验和为 `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`，go.mod
+校验和为 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`；正式 Linux
+amd64 归档为 21,072,175 bytes / SHA-256
+`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`，
+内含二进制 SHA-256 为
+`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`。
+任务与状态以[第十四轮任务书](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)和
+[状态页](ROUND14_STATUS.md)为准。
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
-## 2026-08-04 Round 12 / CPA v7.2.116 当前交接边界
+第十三轮 v7.2.125/schema 2 以下全部记录均为 superseded historical；所有旧
+PASS 保留原身份且不可转移到本轮。全部 `/v1/realtime*` 当前绕过 CAG
+`RequestInterceptor`、`ModelRouter` 和 request lifecycle，属于
+**OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE**。当前仅 chat、Responses 等已注册
+回调路径受保护，不得声称全流量覆盖。
 
-The active source/compile target is now CPA
-`v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
+## 已被取代的第十三轮历史交接边界
+
+当前唯一目标为 Linux amd64、源码版本 `1.0.0`、候选标签
+`v1.0.0-rc.1`、CPA
+`v7.2.125@2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`、C ABI 1 / RPC schema 2。
+任务与验收以[第十三轮任务书](ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md)和
+[状态页](ROUND13_STATUS.md)为准。所有 v7.2.124 及更早的 CI、二号机、五仓、
+性能和 Host 结论均为历史证据，不能转移 PASS。
+
+本轮当前仍处于实施与本地验证阶段；精确候选 GitHub 检查、CodeRabbit、二号机、
+合并、签名标签和 prerelease 均未完成。下文为冻结的第十二轮历史交接记录。
+
+```text
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
+```
+
+## 2026-08-09 冻结的 Round 12 / CPA v7.2.124 历史交接边界
+
+The source/compile target for this frozen Round 12 record was CPA
+`v7.2.124@197f520426374e514218ed155933ac546c98d345`, C ABI 1 / RPC schema 2,
 with classifier source identity `classifier-policy-v12` /
-`795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`.
+`2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`.
 Round 12 changes classifier role/streaming semantics as well as the exact CPA
 module pin, so both the policy version and digest changed. No v7.2.113 Round 9
 result or earlier `classifier-policy-v10` result transfers to this source tree.
@@ -19,8 +55,9 @@ The canonical status vocabulary is frozen in
 [the Round 12 status boundary](ROUND12_STATUS.md). Exact baseline
 `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed its five GitHub
 engineering contexts through CI `30880739397`, Policy and Corpus Gate
-`30880739368`, and CodeQL `30880739360`. The result is baseline engineering
-evidence only; it does not transfer to the Round 12 working candidate.
+`30880739368`, and CodeQL `30880739360`. The result is historical v7.2.116
+baseline engineering evidence only; it does not transfer to the v7.2.124
+working candidate.
 
 The supplied 1,320-transport second-machine report is an owner-run input
 diagnostic, not the RT12-05/06 final-candidate execution and not independent
@@ -28,14 +65,15 @@ attestation. The final candidate commit/tree/SO still requires its own
 second-machine run.
 
 ```text
-local_v7_2_116_source_contract: PASS / LINUX_AMD64 / GO1.26.4 / PINNED_MODULE_ORIGIN_AND_SUMS
-remote_latest_release_api: PASS / v7.2.116
-remote_tag_ref_api: PASS / a88197f845c979132c8978ea223c6af05cc81536 / COMMIT_VERIFIED
-remote_git_tag_gate: NOT_COMPLETED_LOCAL_NETWORK / TWO_BOUNDED_TIMEOUT_RUNS / GITHUB_CI_REQUIRED
-baseline_exact_main_ci_codeql_policy: PASS / EXACT_MAIN_ONLY / 21267e742b624b29a75bd3683fd6914f76c764b5
-working_candidate_ci_codeql_policy: PENDING_FINAL_CANDIDATE
-input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-final_candidate_second_machine: PENDING_FINAL_CANDIDATE_EXECUTION
+local_v7_2_124_source_compile: PASS / GO1.26.4 / LINUX_AMD64 / FULL_LOCAL_MATRIX / PROFILES_PRIMARY / REMOTE_TAG_CHECK_SKIPPED / REMOTE_LATEST_CHECK_SKIPPED
+remote_latest_release_api: PASS / v7.2.124 / INDEPENDENT_API_VERIFICATION
+remote_tag_ref_api: PASS / 197f520426374e514218ed155933ac546c98d345 / COMMIT_VERIFIED / INDEPENDENT_API_VERIFICATION
+remote_combined_make_gate: NETWORK_FAILED / GITHUB_GIT_CURL_52 / NOT_CODE_FAILURE
+historical_v7_2_116_exact_main_ci_codeql_policy: PASS / EXACT_MAIN_ONLY / 21267e742b624b29a75bd3683fd6914f76c764b5
+working_candidate_ci_codeql_policy: NOT_RUN / PENDING_EXACT_HEAD
+native_host_so: NOT_RUN / LOCAL_DEPLOYMENT_PROHIBITED
+input_second_machine_report: HISTORICAL_V7.2.116_DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
+final_candidate_second_machine: NOT_RUN / PENDING_EXACT_HEAD_EXECUTION
 protected_host: NOT_PROVIDED
 independent_attestation: NOT_PROVIDED
 production_approved: NOT_PROVIDED
