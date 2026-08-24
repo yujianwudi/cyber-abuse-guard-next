@@ -52,7 +52,7 @@ func cyberAbuseGuardRawCaptureBody(t *testing.T, previews []string) []byte {
 	}
 	response := map[string]any{
 		"enabled":                             true,
-		"audit_schema_version":                 6,
+        "audit_schema_version":                 7,
 		"decision_kind_semantics":              "canonical-mutually-exclusive-v1",
 		"explanation_schema_semantics":          "decision-explanation-v2",
 		"captures":                            captures,
@@ -165,7 +165,7 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 		response["encoded_preview_bytes_deprecated"] != true ||
 		response["preferred_preview_field"] != "raw_preview_b64" ||
 		response["raw_capture_response_schema_version"] != float64(4) ||
-		response["audit_schema_version"] != float64(6) ||
+        response["audit_schema_version"] != float64(7) ||
 		response["decision_kind_semantics"] != "canonical-mutually-exclusive-v1" ||
 		response["explanation_schema_semantics"] != "decision-explanation-v2" ||
 		response["cpa_host_response_bytes"] != float64(rec.Body.Len()) {

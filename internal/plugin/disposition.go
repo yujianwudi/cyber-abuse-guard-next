@@ -5,6 +5,7 @@ import (
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/csamtext"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 )
@@ -14,6 +15,7 @@ import (
 // boundary as strings.
 type inspectionOutcome struct {
 	Classification classifier.Result
+	CSAMText       csamtext.Result
 	Incomplete     []extract.IncompleteReason
 	OpaqueMedia    bool
 	SubjectBlocked bool
@@ -33,6 +35,8 @@ const (
 	decisionBlockIncomplete            decisionKind = "block_incomplete_inspection"
 	decisionBlockOpaqueMedia           decisionKind = "block_opaque_media"
 	decisionBlockSubjectRisk           decisionKind = "block_subject_risk"
+	decisionAuditCSAMText              decisionKind = "audit_csam_text"
+	decisionBlockCSAMText              decisionKind = "block_csam_text"
 )
 
 // inspectionDecision is the complete transport disposition for an inspected
@@ -174,6 +178,36 @@ func eligibilityExplanationMatches(
 }
 
 const metaOverrideRuleID = "META-OVERRIDE-001"
+
+// validCSAMTextResult is the closed, content-free handoff contract between the
+// side-car and transport policy. Public fields remain a JSON projection, but
+// only a classifier-produced, private-proof-bound positive can affect policy.
+func validCSAMTextResult(result csamtext.Result) bool {
+	if !result.PolicyFindingProofComplete() || !result.Detected || !result.Eligible ||
+		result.Category != csamtext.CategoryCSAMMalicious ||
+		result.Confidence != csamtext.ConfidenceHigh || result.Coverage != csamtext.CoverageComplete ||
+		result.Reason != csamtext.ReasonEligible {
+		return false
+	}
+	if result.Action != csamtext.ActionObserve && result.Action != csamtext.ActionAudit &&
+		result.Action != csamtext.ActionBlock {
+		return false
+	}
+	switch result.Intent {
+	case csamtext.IntentProduction:
+		return result.RuleID == "CSAM-TXT-PRODUCTION-001"
+	case csamtext.IntentSolicitation:
+		return result.RuleID == "CSAM-TXT-SOLICITATION-001"
+	case csamtext.IntentExchange:
+		return result.RuleID == "CSAM-TXT-EXCHANGE-001"
+	case csamtext.IntentDissemination:
+		return result.RuleID == "CSAM-TXT-DISSEMINATION-001"
+	case csamtext.IntentGrooming:
+		return result.RuleID == "CSAM-TXT-GROOMING-001"
+	default:
+		return false
+	}
+}
 
 // standaloneMetaControlResult identifies the narrow Round 9 case where an
 // active current-user control-plane request is itself the eligible malicious
@@ -322,12 +356,49 @@ func inspectionDisposition(mode config.Mode, outcome inspectionOutcome, opaquePo
 		}
 	}
 
+	// CSAM text is an independent, closed policy branch. It must never be
+	// projected into classifier.Result or borrow that classifier's private
+	// eligibleMaliciousWinner proof. A block requires the CSAM classifier's own
+	// complete joint-evidence result plus current/trusted user eligibility.
+	if !decision.Block && validCSAMTextResult(outcome.CSAMText) {
+		decision.EvaluateSubject = false
+		decision.Category = string(outcome.CSAMText.Category)
+		switch mode {
+		case config.ModeObserve:
+			decision.Observe = true
+			decision.Audit = false
+			decision.Code = "observe_csam_text"
+			decision.Kind = decisionAuditCSAMText
+		case config.ModeAudit:
+			decision.Audit = true
+			decision.Observe = false
+			decision.Code = "audit_csam_text"
+			decision.Kind = decisionAuditCSAMText
+		case config.ModeBalanced, config.ModeStrict:
+			if outcome.CSAMText.Eligible && outcome.CSAMText.Action == csamtext.ActionBlock &&
+				outcome.CSAMText.Coverage == csamtext.CoverageComplete {
+				decision.Block = true
+				decision.Audit = false
+				decision.Observe = false
+				decision.Code = "block_csam_text"
+				decision.Kind = decisionBlockCSAMText
+				decision.RouteReason = "cyber_abuse_guard_csam_text"
+			} else {
+				decision.Audit = true
+				decision.Observe = false
+				decision.Code = "audit_csam_text"
+				decision.Kind = decisionAuditCSAMText
+			}
+		}
+	}
+
 	// A complete malicious-text block always wins and retains its taxonomy.
 	// Otherwise an explicit opaque-media block wins over allow/audit/observe in
 	// enforcing modes. This keeps the configured media disposition orthogonal to
 	// wrapper-only control-plane audits instead of letting an audit downgrade a
 	// required opaque-media block.
-	if outcome.OpaqueMedia && !decision.Block {
+	if outcome.OpaqueMedia && !decision.Block &&
+		decision.Kind != decisionAuditCSAMText && decision.Kind != decisionBlockCSAMText {
 		switch opaquePolicy {
 		case config.OpaqueMediaPolicyBlock:
 			switch mode {
@@ -381,7 +452,8 @@ func inspectionDisposition(mode config.Mode, outcome inspectionOutcome, opaquePo
 	// malicious-text block of its own.
 	if outcome.SubjectBlocked {
 		decision.EvaluateSubject = false
-		if decision.Kind == decisionBlockMaliciousText {
+		if decision.Kind == decisionBlockMaliciousText ||
+			decision.Kind == decisionAuditCSAMText || decision.Kind == decisionBlockCSAMText {
 			return decision
 		}
 		switch mode {

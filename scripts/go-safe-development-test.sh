@@ -258,6 +258,7 @@ expected_round9_plugin_entries=(
   TestInspectionDispositionForgedEligibleResultCannotBecomeMaliciousTextBlock
   TestInspectionDispositionMalformedEligibleWinnerFailsClosed
   TestInspectionDispositionMaliciousTextBlockOutranksSubjectRisk
+  TestInspectionDispositionCSAMTextOutranksOpaqueMedia
   TestInspectionDispositionNonMaliciousBlockKindsAreTaxonomyIsolated
   TestInspectionDispositionOpaqueAuditUsesAuditDecisionKind
   TestInspectionDispositionCleanAllowSkipsSubjectEvaluation
@@ -713,6 +714,46 @@ expected_round12_plugin_entries=(
 require_reviewed_entries ./internal/plugin "round-twelve plugin" \
   '^TestRound12[A-Za-z0-9_]*$' "${expected_round12_plugin_entries[@]}"
 
+expected_round13_classifier_entries=(
+	BenchmarkRound13DefensiveRequestObjectProofBudget4KB64Tokens
+	TestSupplementalTerminalSkillActivationCannotBorrowSiblingField
+	TestSupplementalTerminalSkillActivationLaterFieldCancellationParity
+	TestSupplementalTerminalSkillActivationNegativeMatrix
+	TestSupplementalTerminalSkillActivationParserAndAuthorityBoundaries
+	TestSupplementalTerminalSkillActivationPromotionGateMutations
+	TestSupplementalTerminalSkillActivationProtocolMatrix
+	TestSupplementalTerminalSkillActivationStreamingBudgetIsExplicit
+	TestSupplementalTerminalMetaCarrierNegativeMatrix
+	TestSupplementalTerminalMetaCarrierAffirmativeWitnessMatrix
+	TestSupplementalTerminalMetaCarrierContextBaitCannotBypass
+	TestSupplementalTerminalMetaCarrierLaterFieldCancellationParity
+	TestSupplementalTerminalMetaCarrierProofBudgetIsIncomplete
+	TestSupplementalTerminalMetaCarrierPromotionGateMutations
+	TestSupplementalTerminalMetaCarrierProtocolMatrix
+	TestSupplementalTerminalMetaCarrierResponsesContentBlockMatrix
+	TestSupplementalTerminalMetaCarrierStreamingRiskFieldIdentity
+	TestSupplementalTerminalMetaCarrierTypedClauseProofs
+	TestRound13AssistantMixedScriptContinuationCannotBeSuppressed
+	TestRound13AssistantQuotedRestatementProofBudgetParity
+	TestRound13AssistantQuotedRestatementSuffixRemainsDetectable
+	TestRound13AssistantScopedRestatementCannotHideOperationalContinuation
+	TestRound13AssistantScopedRestatementProofBudgetParity
+	TestRound13DefensiveRequestObjectClassificationBudget
+	TestRound13MixedScriptSafetyObjectCannotConsumeOperationalContinuation
+	TestRound13ProfiledClearNonUserSafetyFieldsAllow
+  TestRound13ProfiledNegationReversalPolicyRemainsDetectable
+	TestRound13ProfiledNonUserSafetyOverrideRemainsDetectable
+	TestRound13SafetyPolicyNegationReversalGovernors
+	TestRound13SystemQuotedRestatementSuffixProfiledParity
+	TestRound13ToolPayloadSafetyFramingCannotSuppress
+)
+
+expected_round13_plugin_entries=(
+	TestRound13TerminalMetaCarrierResponsesPersistsEligibleEvent
+)
+require_reviewed_entries ./internal/plugin "round-thirteen plugin" \
+  '^TestRound13[A-Za-z0-9_]*$' "${expected_round13_plugin_entries[@]}"
+
 # Every classifier test-like entry visible without the consumed_evaluation build
 # tag is explicitly classified. Restricted evaluation/holdout tests are not
 # compiled or listed in development test/race/list modes. Any new visible test,
@@ -723,6 +764,7 @@ expected_safe_classifier_entries=(
   BenchmarkClassifierLargeBenign
   BenchmarkClassifierLargePunctuation
   BenchmarkClassifierRoleAwareConversation
+  BenchmarkFragmentBoundaryProfiledGroup512
   BenchmarkMetaOverrideBilingualMixed
   BenchmarkMetaOverrideLongPrompt
   BenchmarkMetaOverrideManyParts
@@ -767,6 +809,7 @@ expected_safe_classifier_entries=(
   TestCommonPastTenseOperationalAbuse
   TestCompactRuleIntentFirstRunePreflightPreservesObfuscatedMatches
   TestCompactEvidenceDoesNotCrossParts
+	TestCompactFragmentIndependentLexemeIsExactAndAllocationFree
   TestCompactMatcherHandlesUnderscoresAndShortLiterals
   TestCompactMatcherPreservesEnglishWordBoundaries
   TestContextLabelDoesNotOverrideOperationalRealTarget
@@ -792,6 +835,7 @@ expected_safe_classifier_entries=(
   TestDefensiveQuotedReviewReferentClassificationChargesWindowBudget
   TestDefensiveMaintenanceLabelDoesNotLaunderOperationalAbuse
   TestDefensiveMaintenanceRequestsRemainUsable
+  TestFirstPartySecurityEvidenceToolingRemainsUsable
   TestDevelopmentAuthorizationCannotOverrideConflictingHarm
   TestDevelopmentCategorySpecificityMatrix
   TestDevelopmentContextPolarityDoesNotReverseRisk
@@ -826,6 +870,24 @@ expected_safe_classifier_entries=(
   TestFindingOriginSurvivesStreamingCompatOver64Segments
   TestFindingOriginSurvivesLongStreamingFieldAndClearsWhenIncomplete
   TestFindingOriginTracksWinningRoleAndProvenance
+  TestFragmentBoundaryBatchNewlineParity
+	TestFragmentBoundaryDiscourseConnectorCannotHideDirective
+  TestFragmentBoundaryDoesNotCrossInterleavedPhysicalOwner
+  TestFragmentBoundaryDoesNotCrossLogicalOwners
+  TestFragmentBoundaryDoesNotJoinPunctuatedIndependentSentences
+  TestFragmentBoundaryFiveByFiveNewlineBatchStreamingParity
+  TestFragmentBoundaryNormalizationRejectsInternalIndependentLexemes
+  TestFragmentBoundaryNormalizationRequiresProvenPartReconstruction
+  TestFragmentBoundaryOverlongDefensiveOwnerRemainsNonBlocking
+  TestFragmentBoundaryProviderAdjacentOrdinaryBlocksRemainIndependent
+  TestFragmentBoundaryProviderContentBlocksBeyondFragmentLimitParity
+  TestFragmentBoundaryProviderContentBlocksParity
+  TestFragmentBoundaryProviderLargeOrdinaryGroupRemainsIndependent
+  TestFragmentBoundaryProviderPrecedingDefensiveOwnerRemainsNonBlocking
+  TestFragmentBoundaryReconstructionRejectsLargePartRuns
+  TestFragmentBoundaryReconstructionUsesOnlyAcceptedBoundaries
+  TestFragmentBoundaryScanSessionSameFieldChunks
+  TestFragmentBoundaryStreamingKeepsOriginalGroupWinner
   TestHardThresholdBlocksEveryEnabledMode
   TestImplementationFollowUpAndRefusalScope
   TestIndependentExecutionTailASCIISinglePassPreservesTransitions
@@ -854,6 +916,9 @@ expected_safe_classifier_entries=(
   TestNoPermissionIssuesDoesNotClearAuthorizedLabContext
   TestNoRansomwareCrossMatchForCredentialRequest
   TestNormalizationAndPartBudgetsAreBounded
+  TestNormalizePartBoundaryLeetMatchesBoundedUnevenFragments
+  TestNormalizePartBoundaryLeetMatchesUnsplitForEveryReplacement
+  TestNormalizePartBoundaryLeetRejectsIndependentParts
   TestNormalizedRuneBufferScrubsPromptDerivedStorage
   TestOfflineForensicsSafetyClauseCannotWashOperationalOverride
   TestOversizedPotentialActionRunePreflightPreservesCompactFallback
@@ -864,9 +929,18 @@ expected_safe_classifier_entries=(
   TestProtectedAuthorizationAcrossPartsDoesNotBypass
   TestProfiledMetadataIndexSentinelsDoNotOptLegacySlicesIn
   TestProfiledMetadataNormalizesMixedLegacyIndexesWithoutMutatingCaller
+  TestProfiledNonUserSafetyWholeFieldClassificationChargesWindowBudget
   TestProfiledSameScopeIndependentFieldIncompleteBatchStreamingParity
   TestProfiledMetadataUnscopedLegacyAssistantCannotBecomeHistoricalReferent
+  TestProfiledStreamingAuthoritativeReconstructionKeepsIndependentWinner
+  TestProfiledStreamingAuthoritativeReconstructionPureDefensiveWrapperParity
+  TestProfiledStreamingGroupAuthoritativeAggregateReplacement
+  TestProfiledStreamingGroupWinnerUsesBatchTiePrecedence
+  TestProfiledStreamingWinnerRequestLocalSystemCarrierParity
+  TestProviderMultipartIndependentSymbolFieldDoesNotCompose
+  TestProviderMultipartSymbolLeetRansomwareBatchStreamingParity
   TestQualifiedNeutralCoreBecomesOperationalAbuse
+  TestReconstructedIsolatedPartRunsPreserveSymbolLeetTokens
   TestResultJSONOmitsZeroCoverage
   TestRoleAwareClassifierNeverSilentlyAgesOutAbuse
   TestRoleAwareClearSafetyContentIsNotAttributedAsIntent
@@ -993,6 +1067,7 @@ expected_safe_classifier_entries+=("${expected_round8_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round9_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round10_classifier_entries[@]}")
 expected_safe_classifier_entries+=("${expected_round12_classifier_entries[@]}")
+expected_safe_classifier_entries+=("${expected_round13_classifier_entries[@]}")
 declare -A safe_seen=()
 for name in "${expected_safe_classifier_entries[@]}"; do
 	if [[ -v safe_seen["$name"] ]]; then
@@ -1054,10 +1129,14 @@ case "$mode" in
       ${#expected_round12_classifier_entries[@]} +
       ${#expected_round12_plugin_entries[@]}
     ))
-    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d round12_entries=%d\n' \
+    round13_entry_count=$((
+      ${#expected_round13_classifier_entries[@]} +
+      ${#expected_round13_plugin_entries[@]}
+    ))
+    printf 'Round6 safe development boundary: packages=%d classifier_entries=%d round8_entries=%d round9_entries=%d round10_entries=%d round12_entries=%d round13_entries=%d\n' \
       "${#safe_packages[@]}" "${#expected_safe_classifier_entries[@]}" \
       "$round8_entry_count" "$round9_entry_count" "$round10_entry_count" \
-      "$round12_entry_count"
+      "$round12_entry_count" "$round13_entry_count"
     ;;
   test)
     "$go_bin" test -tags="$test_tags" -count=1 "${safe_packages[@]}"

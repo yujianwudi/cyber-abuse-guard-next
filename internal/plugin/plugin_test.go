@@ -38,18 +38,20 @@ func TestRegistrationMatchesTargetCPAContract(t *testing.T) {
 			GitHubRepository string
 		}
 		Capabilities struct {
-			ModelRouter           bool     `json:"model_router"`
-			Executor              bool     `json:"executor"`
-			ExecutorModelScope    string   `json:"executor_model_scope"`
-			ExecutorInputFormats  []string `json:"executor_input_formats"`
-			ExecutorOutputFormats []string `json:"executor_output_formats"`
-			RequestInterceptor    bool     `json:"request_interceptor"`
-			RequestLifecycle      bool     `json:"request_lifecycle_plugin"`
-			ManagementAPI         bool     `json:"management_api"`
+			ModelRouter            bool     `json:"model_router"`
+			Executor               bool     `json:"executor"`
+			ExecutorModelScope     string   `json:"executor_model_scope"`
+			ExecutorInputFormats   []string `json:"executor_input_formats"`
+			ExecutorOutputFormats  []string `json:"executor_output_formats"`
+			RequestInterceptor     bool     `json:"request_interceptor"`
+			RequestLifecycle       bool     `json:"request_lifecycle_plugin"`
+			ResponseInterceptor    bool     `json:"response_interceptor"`
+			StreamChunkInterceptor bool     `json:"response_stream_interceptor"`
+			ManagementAPI          bool     `json:"management_api"`
 		}
 	}
 	decodeOKResult(t, raw, &result)
-	if pluginabi.SchemaVersion != 2 || result.SchemaVersion != pluginabi.SchemaVersion {
+	if pluginabi.SchemaVersion != 3 || result.SchemaVersion != pluginabi.SchemaVersion {
 		t.Fatalf("schema_version = %d, want %d", result.SchemaVersion, pluginabi.SchemaVersion)
 	}
 	if result.Metadata.Name == "" || result.Metadata.Version == "" || result.Metadata.Author == "" || result.Metadata.GitHubRepository == "" {
@@ -61,7 +63,10 @@ func TestRegistrationMatchesTargetCPAContract(t *testing.T) {
 	if !result.Capabilities.ModelRouter || !result.Capabilities.Executor ||
 		!result.Capabilities.RequestInterceptor || !result.Capabilities.RequestLifecycle ||
 		!result.Capabilities.ManagementAPI {
-		t.Fatalf("schema-v2 capabilities mismatch: %+v", result.Capabilities)
+		t.Fatalf("schema-v3 capabilities mismatch: %+v", result.Capabilities)
+	}
+	if result.Capabilities.ResponseInterceptor || result.Capabilities.StreamChunkInterceptor {
+		t.Fatalf("CAG must not register response interceptor chains: %+v", result.Capabilities)
 	}
 	if result.Capabilities.ExecutorModelScope != "static" {
 		t.Fatalf("executor_model_scope = %q, want static", result.Capabilities.ExecutorModelScope)
@@ -91,6 +96,48 @@ func TestRegistrationDoesNotAdvertiseUsagePlugin(t *testing.T) {
 	}
 	if result.Capabilities.UsagePlugin {
 		t.Fatal("capabilities.usage_plugin = true; Cyber-Abuse-Guard must not receive CPA usage records")
+	}
+}
+
+func TestRPCCallbackCountersAreFixedContentFreeManagementTelemetry(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	register(t, p, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n")
+
+	for _, method := range []string{
+		pluginabi.MethodRequestInterceptBefore,
+		pluginabi.MethodRequestInterceptAfter,
+		pluginabi.MethodModelRoute,
+		pluginabi.MethodExecutorExecute,
+		pluginabi.MethodRequestComplete,
+	} {
+		if _, code := p.Call(method, []byte(`{}`)); code != 0 {
+			t.Fatalf("%s return code=%d", method, code)
+		}
+	}
+
+	status := managementJSON(t, p, http.MethodGet, managementBasePath+"/status", nil)
+	rawCounters, ok := status["counters"].(map[string]any)
+	if !ok {
+		t.Fatalf("management counters=%#v", status["counters"])
+	}
+	want := map[string]float64{
+		"rpc_request_before_calls":    1,
+		"rpc_request_after_calls":     1,
+		"rpc_request_complete_calls":  1,
+		"rpc_request_complete_errors": 1,
+		"rpc_model_route_calls":       1,
+		"rpc_executor_calls":          1,
+	}
+	for name, expected := range want {
+		if got := rawCounters[name]; got != expected {
+			t.Fatalf("counter %s=%#v, want %v; counters=%#v", name, got, expected, rawCounters)
+		}
+	}
+	for name := range rawCounters {
+		if strings.Contains(name, "request_id") || strings.Contains(name, "model_name") || strings.Contains(name, "route_path") {
+			t.Fatalf("callback telemetry contains a caller-derived label: %q", name)
+		}
 	}
 }
 
@@ -128,12 +175,20 @@ func TestSchemaNegotiationRejectsLegacyAndAcceptsFutureHost(t *testing.T) {
 		t.Fatalf("future reconfigure response schema=%d, want %d", negotiated.SchemaVersion, pluginabi.SchemaVersion)
 	}
 
+	runtimeBeforeLegacy := p.runtime.Load()
 	raw, code = p.Call(pluginabi.MethodPluginReconfigure,
 		lifecyclePayloadWithSchema(t, legacySchema, "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
 	if code != 0 {
-		t.Fatalf("legacy schema reconfigure code=%d envelope=%s", code, raw)
+		t.Fatalf("legacy reconfigure return code=%d envelope=%s; Host must retain the active registration", code, raw)
 	}
-	decodeOKResult(t, raw, &negotiated)
+	var retained registration
+	decodeOKResult(t, raw, &retained)
+	if retained.SchemaVersion != pluginabi.SchemaVersion {
+		t.Fatalf("legacy reconfigure negotiated schema=%d, want %d", retained.SchemaVersion, pluginabi.SchemaVersion)
+	}
+	if p.runtime.Load() != runtimeBeforeLegacy {
+		t.Fatal("rejected legacy reconfigure replaced the active runtime")
+	}
 	if route := callRoute(t, p, maliciousRequest); route.Handled {
 		t.Fatalf("rejected legacy reconfigure replaced the negotiated off runtime: %+v", route)
 	}

@@ -114,6 +114,36 @@ class RepositorySecretScanTests(unittest.TestCase):
                 path.write_text("127.0.0.1 192.0.2.10 198.51.100.4 203.0.113.8\n", encoding="utf-8")
             self.assertEqual([], scan_paths(root, paths))
 
+    def test_reviewed_wsl_kernel_release_is_not_public_host_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "receipt.json").write_text(
+                '{"kernel_release":"6.18.33.1-microsoft-standard-WSL2",'
+                '"python_version":"3.14.4"}\n',
+                encoding="utf-8",
+            )
+            self.assertEqual([], scan_paths(root, ["receipt.json"]))
+
+    def test_kernel_release_exception_does_not_hide_public_addresses(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = []
+            kernel_shape = ".".join(("6", "18", "33", "1"))
+            public_shape = ".".join(("8", "8", "8", "8"))
+            values = (
+                f'{{"kernel_release":"{kernel_shape}"}}\n',
+                f'{{"kernel_version":"{kernel_shape}-microsoft-standard-WSL2"}}\n',
+                f'{{"kernel_release":"{public_shape}-microsoft-standard-WSL2"}}\n',
+                f"kernel_release={kernel_shape}-microsoft-standard-WSL2\n",
+            )
+            for index, value in enumerate(values):
+                path = root / f"bad-{index}.txt"
+                path.write_text(value, encoding="utf-8")
+                paths.append(path.name)
+            findings = scan_paths(root, paths)
+            self.assertEqual(len(values), len(findings))
+            self.assertTrue(all(item.rule == "public-ipv4-metadata" for item in findings))
+
     def test_restricted_paths_are_refused_before_content_scan(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

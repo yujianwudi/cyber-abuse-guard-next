@@ -1,69 +1,246 @@
-# v0.16 release evidence — CPA v7.2.116 active target plus frozen history
+# v1.0.0-rc.1 evidence — CPA v7.2.137 active target; gated RC publication
+
+## Round 14 active release boundary
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+round14_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+round14_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+round14_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+round14_cpa_plugin_c_abi_rpc_schema: 1 / 3
+round14_cpa_linux_asset: CLIProxyAPI_7.2.137_linux_amd64.tar.gz / 21072175_BYTES / SHA256_ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401
+round14_cpa_checksums_sha256: 9ae7dee90cd717a373acb58fad0163264891d5a76b27fb15d4c88bd10467012e
+round14_cpa_linux_binary: 63738088_BYTES / SHA256_aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa
+round14_classifier_policy: classifier-policy-v20 / 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
+round14_audit_expected_test_count: 315 / EXECUTED
+round14_audit_runner_bundle_sha256: 5c3e6af865cd2197245ee44b5fa1cf71e83deaed780408e55f92fc1e162472ec
+round14_audit_contract_sha256: 7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642
+round14_audit_run_source_sha256: 434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665
+round14_audit_machine_schema_sha256: 3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e
+round14_audit_tool_tests: PASS / LINUX / 315_OF_315
+round14_audit_tool_skips: 0
+round14_audit_test_sources_sha256: cc6c1e0468d519ea83d4bf5003768ce46ed9f2078c6e234f311d9c95831a936c
+round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
+round14_audit_unit_receipt_sha256: 1fb557487fa5571ee3cc4d37b697911e807750e89375eb8efc3af79e984e68c5
+round14_audit_unit_started_at: 2026-08-24T15:02:16.052Z
+round14_audit_unit_finished_at: 2026-08-24T15:02:52.193Z
+round14_audit_unit_elapsed_ms: 36141
+round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
+round14_targeted_schema3_host_fixture: PASS / 5_TESTS
+round14_targeted_cag_rpc_schema: PASS / WSL
+round14_targeted_upstream_hook_no_copy_auth_realtime_contract: PASS / 1_TEST
+round14_complete_linux_matrix: NOT_RUN / PENDING
+round14_exact_candidate_ci: NOT_RUN / PENDING
+round14_second_machine_and_five_repository_zip_fp: EXACT_FIX_NOT_RUN / PARENT_20D6268_PASS_DOES_NOT_TRANSFER
+round14_host_performance_and_soak: EXACT_FIX_NOT_RUN / V1.44_ONE_SHOT_COLLECTOR_LOCAL_TEST_PASS
+round14_realtime_protection: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
+round14_tag_and_release: NOT_CREATED / ALLOWED_ONLY_AFTER_ALL_ACCEPTANCE_GATES_PASS / RELEASE_RC_WORKFLOW_ONLY
+round14_cpa_remote_tag_commit_recheck: PASS / GITHUB_API_TAG_REF_AND_COMMIT_VERIFIED / 2026-08-21
+round14_official_asset_and_binary_recheck: PASS / LINUX_DOWNLOAD_AND_CHECKSUMS_RECHECKED / 2026-08-21
 ```
 
-Last updated: 2026-08-04 (Asia/Shanghai)
+RC publication is conditionally authorized only after every acceptance gate
+passes through the reviewed `release-rc.yml` lane. The operator canceled all
+second-machine execution for this round; no remote evidence exists. The named
+local targeted results are dirty-worktree development evidence only and do not
+yet close any exact-fix candidate, second-machine, performance, release, or
+production gate.
+The prior `f663ea6` / `0eaed101` candidate passed semantic, CSAM and native-Host
+  lanes, but the later exact `a216395` candidate is the most recent superseded
+  evidence boundary: its named GitHub, semantic, CSAM and native-Host lanes
+  passed, while Host A/B failed closed at CPA+CAG concurrency 4 / repetition 3
+  with `queue_sample:MissedDeadline`. The current persistent-connection fix does
+  not change cadence or thresholds. All old-candidate results transfer no PASS
+  after the collector bytes changed.
+Every Round 13 v7.2.125 and Round 12 or earlier result below is frozen
+`HISTORICAL / SUPERSEDED` evidence for its original bytes and identity; no PASS
+is transferred to v7.2.137/schema 3. The fresh v7.2.137 upstream asset recheck
+does not close the exact-fix candidate, second-machine, performance, or release
+gates.
 
-## CPA v7.2.116 active dependency target — baseline engineering PASS, Round 12 release gates open
+The current receipt records the final Linux `315/315 PASS` audit-unit
+self-check with zero skips. It remains an unsigned, repository-owned
+development record: its hashes provide drift detection and traceability, not an
+independent execution guarantee. Merge admission remains bound to the exact
+pushed commit's GitHub required checks and artifact; the local receipt cannot
+satisfy that gate. The prior 283-test receipt remains immutable historical
+evidence.
 
-The source/compile target is
-`v7.2.116@a88197f845c979132c8978ea223c6af05cc81536`, C ABI 1 / RPC schema 2,
-with module sum `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`. The standard upstream
-Linux amd64 input `CLIProxyAPI_7.2.116_linux_amd64.tar.gz` is identified by
-SHA-256 `469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b`.
-This upstream hash is not a CAG artifact hash, and the asset was not downloaded
-or executed for this documentation update.
+## Frozen Round 13 release boundary — historical / superseded
+
+```text
+historical_round13_source_version: 1.0.0
+historical_round13_binary_version: 1.0.0
+historical_round13_rc_tag: v1.0.0-rc.1
+historical_round13_release_artifact_version: 1.0.0-rc.1
+historical_round13_cpa_target: v7.2.125 / 2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e
+historical_round13_platform: linux-amd64
+historical_round13_classifier_policy: classifier-policy-v20 / 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
+historical_round13_source_policy_sha256: 24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7
+historical_round13_audit_runner_bundle_sha256: 34b11d4089ef4d26635fa78252f2a9f84c00dbbc0d702af8cf96e2e550d19c4e
+historical_round13_audit_contract_sha256: f39870ebf951d5721647225b5ef8873b467c7db166a17ce30fb04054dae0939f
+historical_round13_audit_run_source_sha256: c4c071a8ba739dc3e1e0eeeefeb6793e63701b81cdc833503770258fd5ec0fcd
+historical_round13_audit_machine_schema_sha256: 4f601dbf39d61a2700ca4b734804a85b287fd47a3f6a8de68db4b668d8a8a963
+historical_round13_audit_tool_tests: PASS / LINUX / 248_OF_248
+historical_round13_live_five_repository_acquisition: IDENTITY_REVIEW_PASS / LIVE_ACQUISITION_RERUN_REQUIRED / NO_PASS_CLAIM / THIRD_PARTY_CODE_EXECUTIONS_0
+historical_round13_local_source_matrix: DIRTY_WORKTREE_V20_FULL_LOCAL_LINUX_GATES_PASS / CPA_AUDIT_248_OF_248 / SAFE_GATE_219_TESTS_78_SKIPS / RC_7_PLUS_12_PLUS_25_PASS / GO_UNIT_VET_RACE_FUZZ / ROUND6_SCRIPT_BENCHMARK / ROUND10_PERFORMANCE / CPA_V7.2.125_REMOTE_CONTRACTS / GOVULNCHECK_0 / DOC_MUTATION_PASS_381.5S / NOT_FINAL_CANDIDATE
+historical_round13_local_development_corpus: MALICIOUS_RECALL_154_OF_154 / BENIGN_HITS_3_OF_142 / LOCAL_ONLY_NOT_SECOND_MACHINE_FP
+historical_round13_local_round10_performance: V20_DIRTY_SOURCE_ONLY_PASS / JSON_D22F70DA...F81F8C / ORDINARY_C16_P95_2.221072MS / FIVE_REPOSITORY_P95_107.383314MS / CODEX_ALL_P95_47.629570MS / PUBLIC_P95_P99_8.709887_9.522366MS / SQLITE_P95_1.115742MS / QUEUE_28_OF_256 / 2304_OPS_ZERO_FAILURE_PANIC / NOT_HOST_PERFORMANCE_OR_RSS / NOT_EXACT_CANDIDATE
+historical_round13_local_native_host: PRE_V18_DIRTY_WORKTREE_PASS_SUPERSEDED / SO_5693F2FB...F8393B / STORE_1CBF59E1...65EB23 / V20_NOT_RUN / V20_RERUN_REQUIRED / NOT_FINAL_CANDIDATE / NOT_HOST_PERFORMANCE
+historical_round13_exact_candidate_artifacts_reproducibility: NOT_BUILT / NOT_RUN / PENDING
+historical_round13_local_coderabbit: PRE_SUPPLEMENTAL_ORACLE_FIX_REVIEW_SUPERSEDED / CURRENT_TARGETED_INTERNAL_REVIEW_CLEAN / GITHUB_CODERABBIT_PENDING
+historical_round13_pr_required_checks: PR_REQUIRED_CHECKS_NOT_RUN
+historical_round13_premerge_second_machine: PREMERGE_DIAGNOSTIC_NOT_RUN
+historical_round13_postmain_required_checks: NOT_RUN
+historical_round13_postmain_release_admission: NOT_RUN
+historical_round13_release_type: prerelease
+historical_round13_make_latest: false
+historical_round13_exact_main_artifacts: NOT_BUILT
+historical_round13_ci_candidate_contract: UNIQUE_LIVE_NINE_FILE_ARTIFACT / ID_DIGEST_SIZE_RUN_BOUND
+historical_round13_second_machine_admission_contract: FIXED_DRAFT_RELEASE_ASSET / DOWNLOADED_CANONICAL_REPORT / 24H_TTL / OWNER_RUN_NOT_INDEPENDENT
+historical_round13_rc_binary_contract: REUSE_CYBER_ABUSE_GUARD_V1.0.0.SO_BYTES / NO_RECOMPILE / NO_STANDALONE_RC_RENAME
+historical_round13_cpa_store_rc_asset: cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip / ROOT_CYBER_ABUSE_GUARD.SO / PAYLOAD_BYTE_EQUAL
+historical_round13_cpa_store_checksum_contract: checksums.txt / EXACT_STANDALONE_AND_TWO_STORE_ZIPS
+historical_round13_tag_and_release: NOT_CREATED / NO_MERGE / NO_RELEASE
+historical_round13_stable_production_approval: NOT_PROVIDED
+```
+
+The 2026-08-10 root-isolated local CPA v7.2.125 Host/Router matrix passed in
+179.790 seconds using a `1.0.0-dirty` SO. Its SO SHA-256 is
+`5693f2fb9313a07b0c7ea171458e0386e7279bd14ca8cf926cbb462cbdf8393b`
+and its Store ZIP SHA-256 is
+`1cbf59e1fb6c77f2cc7bc2debc0bad20d509f4db3fa9a4ccbbb5f8af2665eb23`.
+This closes only a dirty-development functional check; it is not the clean PR
+or main artifact, does not provide Host latency/RSS evidence, and cannot
+authorize merge, tag, or release. The ordinary-user invocation separately
+stopped at the passwordless-sudo bind-mount preflight before Host execution.
+At the time of this frozen record, GitHub's upstream latest was `v7.2.127`;
+the Round 13 release contract remained deliberately frozen to the exact
+v7.2.125 identity above.
+
+The current v20 in-process performance report has SHA-256
+`d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c`:
+ordinary p95 is `2.221072 ms`, five-repository surrogate p95 is
+`107.383314 ms`, Codex-all surrogate p95 is `47.629570 ms`, public p95/p99
+is `8.709887/9.522366 ms`, SQLite c16 p95 is `1.115742 ms`, sampled queue
+maximum is `28/256`, and all 2,304 operations completed without a reported
+failure or recovered panic. This is
+source-only evidence, not CPA Host latency, RSS, paired throughput, or a
+production SLO. The final remote-enabled compatibility matrix verified the
+exact v7.2.125 tag and commit; two earlier low-speed failures are superseded.
+Exact pushed-head GitHub checks remain required.
+
+Publication is allowed only from the exact merged `main` after all Round 13
+Linux, required-check, CodeRabbit, second-machine, manifest, checksum, SBOM,
+provenance, and reproducibility gates pass. `release-rc.yml` accepts only the
+three required run IDs, the numeric draft Release/asset IDs of the fixed
+`second-machine-release-admission.json`, its lowercase SHA-256, and explicit
+authorization. It does not accept self-reported PASS, commit, tree, SO hash, or
+metric strings.
+
+The workflow queries the exact `CI` run for one and only one live
+`cyber-abuse-guard-linux-amd64-audit-candidate`, records its GitHub artifact
+ID/digest/size/retention identity, downloads its exact nine files, and seals
+them without recompilation. The published standalone binary remains the audited
+`cyber-abuse-guard-v1.0.0.so`; no standalone RC-named SO is created. The
+original Store ZIP and candidate evidence remain byte anchors. A deterministic
+CPA-facing RC Store ZIP contains one root `cyber-abuse-guard.so` entry whose
+payload is byte-for-byte equal to the audited standalone SO, and the derived
+`checksums.txt` indexes that standalone SO plus both Store ZIPs. Provenance
+records the derived-container relationship explicitly.
+
+The owner server creates the portable second-machine admission only after the
+non-portable path/inode-bound machine and Host-performance evidence passes its
+full validators. GitHub then proves the report is the fixed-name uploaded asset
+of an exact-commit draft staging Release, downloads its actual bytes, checks
+API digest/size and the fixed 24-hour validity window, and uses the exact-tag
+validator to recompute the three mode summaries, zero false positives, 100%
+malicious recall, zero prohibited side effects/third-party execution, cleanup,
+and all current performance gates. The report contains hashes and summaries,
+not the third-party source text. It is owner-run release admission, not an
+independent attestation. The classifier identity block immediately below is a
+frozen Round 13 historical identity and is not part of the active Round 14
+prologue.
+
+```text
+historical_round13_classifier_policy_version: classifier-policy-v20
+historical_round13_classifier_policy_sha256: 888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd
+```
+
+Frozen Round 13 historical section last updated: 2026-08-12 (Asia/Shanghai)
+
+Everything below is frozen v0.16 / Round 12 history and does not transfer a
+PASS to CPA v7.2.125 or `v1.0.0-rc.1`.
+
+## Frozen Round 12 CPA v7.2.124 dependency target — local source/compile PASS, exact candidate gates open
+
+The frozen Round 12 source/compile target was
+`v7.2.124@197f520426374e514218ed155933ac546c98d345`, C ABI 1 / RPC schema 2,
+with module sum `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=`. The standard plugin-capable
+Linux amd64 input `CLIProxyAPI_7.2.124_linux_amd64.tar.gz` is 20,833,216 bytes
+and is identified by SHA-256
+`bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`.
+This upstream identity is not a CAG artifact hash or Host PASS; the `_no-plugin`
+asset cannot load CAG.
 The top `current_classifier_policy_*` prologue identifies the active working
-tree; it is not metadata for the frozen v7.2.113 evidence sections below.
+tree; it is not metadata for the frozen Round 12 v7.2.124 or v7.2.113 evidence
+sections below.
 
-The canonical current boundary is
-[Round 12 active status](../ROUND12_STATUS.md). Exact baseline
+The canonical frozen boundary is
+[Round 12 status](../ROUND12_STATUS.md). Exact baseline
 `main@21267e742b624b29a75bd3683fd6914f76c764b5` passed its five GitHub
 engineering contexts through CI `30880739397`, Policy and Corpus Gate
-`30880739368`, and CodeQL `30880739360`. Those results are exact-main baseline
-evidence only. They do not transfer to the Round 12 working candidate or close
+`30880739368`, and CodeQL `30880739360`. Those results are historical v7.2.116
+exact-main baseline evidence only. They do not transfer to the v7.2.124 working candidate or close
 protected Host, independent, release, or production gates.
 
 The supplied 1,320-transport second-machine report is retained only as
-`DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION`.
-RT12-05/06 against the final candidate remains
-`PENDING_FINAL_CANDIDATE_EXECUTION`; no Round 12 second-machine PASS is claimed.
+`HISTORICAL_V7.2.116_DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE /
+NOT_INDEPENDENT_ATTESTATION`. RT12-05/06 against the v7.2.124 final candidate is
+`NOT_RUN / PENDING_EXACT_HEAD_EXECUTION`; no Round 12 second-machine PASS is claimed.
 
-The reviewed v7.2.113-to-v7.2.116 range keeps C ABI 1, RPC schema 2, and all 235
+The reviewed v7.2.116-to-v7.2.124 range keeps C ABI 1 and RPC schema 2, with all
+87 previously tracked ABI/API/Host blobs byte-identical. The new plugin OAuth
+refresh compatibility executor does not apply to CAG because CAG registers no
+`AuthProvider`. CPA's Multi-Agent v2 path now prepares eligible official Codex
+tool definitions before `RequestInterceptor`; source and native Host regression
+must therefore cover HTTP/SSE normal-user nonblocking and malicious current-user
+zero-side-effect termination. These static delta facts do not satisfy a source,
+CI, Host, watchdog, sandbox, artifact, audit, or release gate.
+
+The historical v7.2.113-to-v7.2.116 range kept C ABI 1, RPC schema 2, and all 235
 scoped plugin blobs byte-identical. Home may refresh an OAuth credential and
 retry once within the same logical request after a 401. Claude builds its final
 upstream wire headers after request interceptors have run. CAG does not register
 `UsagePlugin`, so Home's result-only usage record is not a CAG callback. These
-reviewed delta facts do not satisfy a source, CI, Host, watchdog, sandbox,
-artifact, audit, or release gate.
+reviewed delta facts remain historical v7.2.116 context.
 
 ```text
-active_cpa_target: v7.2.116 / a88197f845c979132c8978ea223c6af05cc81536
-active_cpa_c_abi: 1
-active_cpa_rpc_schema: 2
-active_cpa_module_sum: h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=
-active_cpa_linux_amd64_sha256: 469adcf760936764781687cfc7057f8ca0db3a685d418dd3d9d84cb1910bde3b
-active_cpa_local_source_compile: PASS / LINUX_AMD64 / GO1.26.4 / PINNED_MODULE_ORIGIN_AND_SUMS
-active_cpa_remote_latest_release_api: PASS / v7.2.116
-active_cpa_remote_tag_ref_api: PASS / a88197f845c979132c8978ea223c6af05cc81536 / COMMIT_VERIFIED
-active_cpa_remote_git_tag_gate: NOT_COMPLETED_LOCAL_NETWORK / TWO_BOUNDED_TIMEOUT_RUNS / GITHUB_CI_REQUIRED
-active_cpa_exact_main_baseline_ci: PASS / EXACT_MAIN_ONLY / 21267e742b624b29a75bd3683fd6914f76c764b5
-active_cpa_round12_candidate_ci: PENDING_FINAL_CANDIDATE
-active_cpa_input_second_machine_report: DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
-active_cpa_final_candidate_second_machine: PENDING_FINAL_CANDIDATE_EXECUTION
-active_cpa_protected_host: NOT_PROVIDED
-active_cpa_independent_attestation: NOT_PROVIDED
-active_cpa_release: NOT_CREATED
-active_cpa_production_approval: NOT_PROVIDED
-active_cpa_release_ready: NOT_PROVIDED
+historical_round12_cpa_target: v7.2.124 / 197f520426374e514218ed155933ac546c98d345
+historical_round12_cpa_c_abi: 1
+historical_round12_cpa_rpc_schema: 2
+historical_round12_cpa_module_sum: h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=
+historical_round12_cpa_linux_amd64_sha256: bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176
+historical_round12_cpa_local_source_compile: PASS / GO1.26.4 / LINUX_AMD64 / FULL_LOCAL_MATRIX / PROFILES_PRIMARY / REMOTE_TAG_CHECK_SKIPPED / REMOTE_LATEST_CHECK_SKIPPED
+historical_round12_cpa_remote_latest_release_api: PASS / v7.2.124 / INDEPENDENT_API_VERIFICATION
+historical_round12_cpa_remote_tag_ref_api: PASS / 197f520426374e514218ed155933ac546c98d345 / COMMIT_VERIFIED / INDEPENDENT_API_VERIFICATION
+historical_round12_cpa_remote_combined_make_gate: NETWORK_FAILED / GITHUB_GIT_CURL_52 / NOT_CODE_FAILURE
+historical_round12_cpa_exact_main_baseline_ci: HISTORICAL_V7.2.116_ONLY / 21267e742b624b29a75bd3683fd6914f76c764b5
+historical_round12_cpa_candidate_ci: NOT_RUN / PENDING_EXACT_HEAD
+historical_round12_cpa_native_host_so: NOT_RUN / LOCAL_DEPLOYMENT_PROHIBITED
+historical_round12_cpa_input_second_machine_report: HISTORICAL_V7.2.116_DIAGNOSTIC_ONLY / NOT_FINAL_CANDIDATE / NOT_INDEPENDENT_ATTESTATION
+historical_round12_cpa_final_candidate_second_machine: NOT_RUN / PENDING_EXACT_HEAD_EXECUTION
+historical_round12_cpa_protected_host: NOT_PROVIDED
+historical_round12_cpa_independent_attestation: NOT_PROVIDED
+historical_round12_cpa_release: NOT_CREATED
+historical_round12_cpa_production_approval: NOT_PROVIDED
+historical_round12_cpa_release_ready: NOT_PROVIDED
 ```
 
-Overall v7.2.116 status is **EXACT-MAIN BASELINE ENGINEERING PASS / ROUND 12
-FINAL-CANDIDATE GATES PENDING / NO RELEASE**. No v7.2.113 result
-is relabelled or used to close a v7.2.116 gate.
+Frozen Round 12 v7.2.124 status is **LOCAL SOURCE/COMPILE MATRIX PASS / INDEPENDENT API
+IDENTITY PASS / REMOTE-ENABLED MAKE GATE NETWORK_FAILED / EXACT-HEAD CI, NATIVE
+HOST, AND SECOND-MACHINE NOT RUN / NO RELEASE**. No v7.2.116 or earlier result
+is relabelled or used to close a v7.2.124 gate.
 
 The previously documented old repository and `v0.15` Release returned GitHub
 API `404` on 2026-08-04. Their availability is `UNAVAILABLE` and security
@@ -83,13 +260,14 @@ as successful engineering checks.
 Those checks are not a protected Host, independent audit, sandbox, artifact,
 Release, or production PASS. No checked-in report or GitHub-attested artifact
 binds a second-machine watchdog PASS to `a9fba4e`; that evidence remains
-`NOT_PROVIDED`. Nothing in this frozen section transfers to v7.2.116.
+`NOT_PROVIDED`. Nothing in this frozen section transfers to v7.2.124,
+v7.2.125, or `v1.0.0-rc.1`.
 
 ## Frozen pre-final CPA v7.2.113 Round 9 source-tree status — not a release PASS
 
 This retained section predates the final `main@a9fba4e` baseline. Its references
 to the active/current snapshot are historical and must not be read as the
-v7.2.116 state.
+v7.2.124 or active v7.2.125 state.
 
 At that time, the development target was Linux amd64 source validation only; no
 candidate tag or executable publication workflow is active. The source uses

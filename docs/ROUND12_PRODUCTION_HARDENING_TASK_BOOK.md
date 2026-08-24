@@ -1,15 +1,15 @@
 # Cyber-Abuse-Guard Next 第十二轮生产误报、审计证据与仓库治理任务书
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
 状态：**批准实施 / 未完成验收 / 禁止发布**
 工作分支：`codex/round12-production-hardening`
 合并目标：`main`
 平台范围：**仅 Linux amd64**
-CPA 固定目标：**CLIProxyAPI v7.2.116**
+CPA 固定目标：**CLIProxyAPI v7.2.124**
 发布范围：**源码、测试、审计工具与证据；不创建 tag 或插件 Release**
 
 ## 1. 权威基线
@@ -21,9 +21,10 @@ repository: yujianwudi/cyber-abuse-guard-next
 baseline_branch: main
 baseline_commit: 21267e742b624b29a75bd3683fd6914f76c764b5
 baseline_tree: 6272ac0ba818d39b89481db1f8e360e9b262fde6
-cpa_version: v7.2.116
-cpa_commit: a88197f845c979132c8978ea223c6af05cc81536
-cpa_module_sum: h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=
+round12_cpa_target: v7.2.124 / 197f520426374e514218ed155933ac546c98d345
+round12_cpa_module_sum: h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=
+historical_baseline_cpa_version: v7.2.116
+historical_baseline_cpa_commit: a88197f845c979132c8978ea223c6af05cc81536
 go_toolchain: go1.26.4
 platform: linux/amd64
 ```
@@ -49,7 +50,7 @@ evidence_level: SECOND_MACHINE_DIAGNOSTIC / NOT_INDEPENDENT_ATTESTATION
 3. 补齐仓库原生指代激活，不再依赖单个复合凭据窃取尾句证明全部召回；
 4. 固化一套当前 CPA 的五仓库隔离诊断工具和闭合机器证据 schema；
 5. 修正管理请求上限、重复认证头、第三方许可和活动状态文档的漂移；
-6. 在 GitHub Linux 门禁与二号机 CPA v7.2.116 隔离审计均通过后，以 PR 合并
+6. 在 GitHub Linux 门禁与二号机 CPA v7.2.124 隔离审计均通过后，以 PR 合并
    到 `main`；不创建插件发行版。
 
 ## 3. 安全不变量
@@ -181,13 +182,17 @@ fingerprint 回归全过。
 - 固定 seed，模式/样本顺序随机化，至少三次冷启动结果一致；
 - 第三方代码执行计数恒为 0；基础设施错误为 0。
 
-### RT12-06：CPA v7.2.116 特殊路径与性能（P1）
+### RT12-06：CPA v7.2.124 特殊路径与性能（P1）
 
 二号机和/或 Linux Host integration 必须覆盖：
 
 - Audit/Balanced/Strict；Chat、Responses、适用的 Interactions；batch/stream；
 - Home OAuth 401 同一逻辑请求最多刷新重试一次，started stream 不重放；
 - Alpha Search 两条 alias；
+- `codex.optimize-multi-agent-v2=true` 下三类官方 Codex User-Agent 的
+  `/v1/responses` HTTP/SSE 工具定义改写；正常请求零误拦，独立恶意当前用户请求
+  在 Auth/Provider/Usage/Executor/Mock/SSE 前阻断，schema/description 单独出现风险
+  字样不得被误当成当前用户执行意图；
 - management missing/wrong key 401；
 - malformed、oversize、unknown schema、multipart、opaque media、incomplete；
 - interceptor priority、duplicate SO、RPC error、panic fuse；

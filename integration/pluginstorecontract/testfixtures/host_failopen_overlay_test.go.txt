@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -15,8 +16,8 @@ import (
 )
 
 func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
-	t.Run("guard-rpc-registers-schema2-request-lifecycle", func(t *testing.T) {
-		plugin := contractSchema2RequestLifecyclePlugin("cyber-abuse-guard", func(_ context.Context, _ pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	t.Run("guard-rpc-registers-schema3-request-lifecycle", func(t *testing.T) {
+		plugin := contractSchema3RequestLifecyclePlugin("cyber-abuse-guard", func(_ context.Context, _ pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 			return contractTermination("cyber-abuse-guard"), nil
 		}, nil)
 		plugin.Capabilities.ModelRouter = modelRouterFunc(func(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
@@ -29,25 +30,101 @@ func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
 
 		registered, errRegister := registerRPCPlugin(context.Background(), nil, "cyber-abuse-guard", lookup, pluginabi.MethodPluginRegister, []byte("mode: enforce"))
 		if errRegister != nil {
-			t.Fatalf("register schema-2 Guard: %v", errRegister)
+			t.Fatalf("register schema-3 Guard: %v", errRegister)
 		}
-		if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 2 || lookup.lastLifecycle.SchemaVersion != 2 {
-			t.Fatalf("Guard registration versions = ABI %d host schema %d lifecycle schema %d, want 1/2/2",
+		if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 3 || lookup.lastLifecycle.SchemaVersion != 3 {
+			t.Fatalf("Guard registration versions = ABI %d host schema %d lifecycle schema %d, want 1/3/3",
 				pluginabi.ABIVersion, pluginabi.SchemaVersion, lookup.lastLifecycle.SchemaVersion)
 		}
 		if registered.Capabilities.RequestInterceptor == nil || registered.Capabilities.RequestLifecyclePlugin == nil {
-			t.Fatalf("schema-2 Guard capabilities = %#v, want request interceptor and lifecycle plugin", registered.Capabilities)
+			t.Fatalf("schema-3 Guard capabilities = %#v, want request interceptor and lifecycle plugin", registered.Capabilities)
 		}
 		if registered.Capabilities.ModelRouter == nil {
-			t.Fatal("schema-2 Guard omitted the Alpha Search compatibility ModelRouter")
+			t.Fatal("schema-3 Guard omitted the Alpha Search compatibility ModelRouter")
 		}
 		ordinary, errOrdinary := registered.Capabilities.ModelRouter.RouteModel(context.Background(), pluginapi.ModelRouteRequest{SourceFormat: "openai"})
 		if errOrdinary != nil || ordinary.Handled {
-			t.Fatalf("ordinary schema-2 Guard ModelRouter callback = %#v, %v; want unhandled", ordinary, errOrdinary)
+			t.Fatalf("ordinary schema-3 Guard ModelRouter callback = %#v, %v; want unhandled", ordinary, errOrdinary)
 		}
 		alpha, errAlpha := registered.Capabilities.ModelRouter.RouteModel(context.Background(), pluginapi.ModelRouteRequest{SourceFormat: "codex-alpha-search"})
 		if errAlpha != nil || !alpha.Handled || alpha.TargetKind != pluginapi.ModelRouteTargetSelf {
 			t.Fatalf("Alpha Search compatibility ModelRouter callback = %#v, %v", alpha, errAlpha)
+		}
+	})
+
+	t.Run("host-apply-config-retains-active-guard-after-legacy-schema-reconfigure-rejection", func(t *testing.T) {
+		client := newContractCAGClient(false)
+		loader := &contractCAGLoader{client: client}
+		host := NewForTest(loader)
+		t.Cleanup(host.ShutdownAll)
+		cfg := contractCAGHostConfig(t)
+
+		host.ApplyConfig(context.Background(), cfg)
+		assertActiveCAGRequestLifecycleSnapshot(t, host, "initial registration")
+		if loader.openCalls != 1 {
+			t.Fatalf("initial CAG loader opens = %d, want 1", loader.openCalls)
+		}
+
+		// CPA always sends its current schema in plugin.reconfigure. This raw RPC
+		// double changes only the schema observed by the simulated CAG lifecycle
+		// handler to schema 2. The paired CAG unit contract exercises the same
+		// branch in production code; this overlay owns the official Host effect.
+		host.ApplyConfig(context.Background(), cfg)
+		assertActiveCAGRequestLifecycleSnapshot(t, host, "legacy schema reconfigure rejection")
+		state := client.lifecycleState()
+		if state.registerCalls != 1 || state.reconfigureCalls != 1 {
+			t.Fatalf("CAG lifecycle calls = register %d reconfigure %d, want 1/1", state.registerCalls, state.reconfigureCalls)
+		}
+		if state.hostSchema != pluginabi.SchemaVersion || state.forwardedSchema != pluginabi.SchemaVersion-1 {
+			t.Fatalf("CAG reconfigure schemas = Host %d forwarded %d, want %d/%d",
+				state.hostSchema, state.forwardedSchema, pluginabi.SchemaVersion, pluginabi.SchemaVersion-1)
+		}
+		if !state.envelopeOK {
+			t.Fatal("legacy CAG reconfigure returned an error envelope; official Host would remove CAG from the next active snapshot")
+		}
+		if state.resultSchema != pluginabi.SchemaVersion || !state.requestInterceptor || !state.requestLifecycle {
+			t.Fatalf("retained CAG registration = schema %d request_interceptor=%t request_lifecycle=%t, want %d/true/true",
+				state.resultSchema, state.requestInterceptor, state.requestLifecycle, pluginabi.SchemaVersion)
+		}
+		if loader.openCalls != 1 {
+			t.Fatalf("CAG loader opens after reconfigure = %d, want 1", loader.openCalls)
+		}
+
+		assertContractTermination(t, host, "cyber-abuse-guard")
+
+		host.CompleteRequest(context.Background(), pluginapi.RequestCompletion{
+			RequestID: "legacy-reconfigure-retained-interceptor",
+			Outcome:   pluginapi.RequestCompletionRejected,
+		})
+		select {
+		case <-client.completionCalled:
+		case <-time.After(time.Second):
+			t.Fatal("retained CAG request lifecycle did not receive request completion")
+		}
+	})
+
+	t.Run("host-apply-config-error-envelope-negative-control-drops-guard", func(t *testing.T) {
+		client := newContractCAGClient(true)
+		host := NewForTest(&contractCAGLoader{client: client})
+		t.Cleanup(host.ShutdownAll)
+		cfg := contractCAGHostConfig(t)
+
+		host.ApplyConfig(context.Background(), cfg)
+		assertActiveCAGRequestLifecycleSnapshot(t, host, "negative-control initial registration")
+		host.ApplyConfig(context.Background(), cfg)
+
+		// This is the mutation control for the retained-registration assertion:
+		// the same official Host path receives an error envelope and must lose the
+		// Guard record. Therefore changing the retained path to an error makes the
+		// positive contract above fail rather than silently passing fail-open.
+		if errActive := activeCAGRequestLifecycleSnapshotError(host); errActive == nil {
+			t.Fatal("error-envelope negative control unexpectedly retained CAG")
+		}
+		if records := host.activeRecords(); len(records) != 0 {
+			t.Fatalf("error-envelope negative-control snapshot = %#v, want no active CAG record", records)
+		}
+		if client.lifecycleState().envelopeOK {
+			t.Fatal("error-envelope negative control was recorded as OK")
 		}
 	})
 
@@ -167,7 +244,7 @@ func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("request-lifecycle-reports-all-schema2-outcomes", func(t *testing.T) {
+	t.Run("request-lifecycle-reports-all-schema3-outcomes", func(t *testing.T) {
 		completions := make(chan pluginapi.RequestCompletion, 1)
 		host := newHostWithRecords(contractRequestLifecycleRecord(
 			"cyber-abuse-guard",
@@ -218,13 +295,163 @@ func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
 			t.Fatal("schema-1 compatibility ModelRouter = nil")
 		}
 		if registered.Capabilities.RequestInterceptor != nil || registered.Capabilities.RequestLifecyclePlugin != nil {
-			t.Fatal("schema-1 compatibility Router unexpectedly exposes schema-2 request lifecycle capabilities")
+			t.Fatal("schema-1 compatibility Router unexpectedly exposes schema-3 request lifecycle capabilities")
 		}
 		response, errRoute := registered.Capabilities.ModelRouter.RouteModel(context.Background(), pluginapi.ModelRouteRequest{RequestedModel: "legacy-model"})
 		if errRoute != nil || !response.Handled || response.Target != "legacy-provider" {
 			t.Fatalf("schema-1 compatibility RouteModel() = %#v, %v", response, errRoute)
 		}
 	})
+}
+
+type contractCAGLifecycleState struct {
+	registerCalls      int
+	reconfigureCalls   int
+	hostSchema         uint32
+	forwardedSchema    uint32
+	envelopeOK         bool
+	resultSchema       uint32
+	requestInterceptor bool
+	requestLifecycle   bool
+}
+
+type contractCAGClient struct {
+	errorOnLegacy    bool
+	completionCalled chan struct{}
+	state            contractCAGLifecycleState
+}
+
+func newContractCAGClient(errorOnLegacy bool) *contractCAGClient {
+	return &contractCAGClient{
+		errorOnLegacy:    errorOnLegacy,
+		completionCalled: make(chan struct{}),
+	}
+}
+
+func (c *contractCAGClient) Call(_ context.Context, method string, request []byte) ([]byte, error) {
+	if c == nil {
+		return nil, errors.New("CAG Host contract client is unavailable")
+	}
+	switch method {
+	case pluginabi.MethodPluginRegister:
+		c.state.registerCalls++
+		var lifecycle rpcLifecycleRequest
+		if errDecode := json.Unmarshal(request, &lifecycle); errDecode != nil || lifecycle.SchemaVersion != pluginabi.SchemaVersion {
+			return nil, fmt.Errorf("decode Host register lifecycle: schema=%d error=%v", lifecycle.SchemaVersion, errDecode)
+		}
+		return marshalRPCResult(contractCAGRetainedRegistration())
+	case pluginabi.MethodPluginReconfigure:
+		c.state.reconfigureCalls++
+		var lifecycle rpcLifecycleRequest
+		if errDecode := json.Unmarshal(request, &lifecycle); errDecode != nil {
+			return nil, fmt.Errorf("decode Host reconfigure lifecycle: %w", errDecode)
+		}
+		c.state.hostSchema = lifecycle.SchemaVersion
+		lifecycle.SchemaVersion = pluginabi.SchemaVersion - 1
+		c.state.forwardedSchema = lifecycle.SchemaVersion
+		var response []byte
+		if c.errorOnLegacy {
+			response = marshalRPCError("unsupported_schema", "unsupported schema version")
+		} else {
+			var errResponse error
+			response, errResponse = marshalRPCResult(contractCAGRetainedRegistration())
+			if errResponse != nil {
+				return nil, errResponse
+			}
+		}
+		var envelope pluginabi.Envelope
+		if errEnvelope := json.Unmarshal(response, &envelope); errEnvelope != nil {
+			return nil, fmt.Errorf("decode CAG reconfigure envelope: %w", errEnvelope)
+		}
+		state := contractCAGLifecycleState{envelopeOK: envelope.OK}
+		if envelope.OK {
+			var registration rpcRegistration
+			if errRegistration := json.Unmarshal(envelope.Result, &registration); errRegistration != nil {
+				return nil, fmt.Errorf("decode retained CAG registration: %w", errRegistration)
+			}
+			state.resultSchema = registration.SchemaVersion
+			state.requestInterceptor = registration.Capabilities.RequestInterceptor
+			state.requestLifecycle = registration.Capabilities.RequestLifecyclePlugin
+		}
+		state.registerCalls = c.state.registerCalls
+		state.reconfigureCalls = c.state.reconfigureCalls
+		state.hostSchema = c.state.hostSchema
+		state.forwardedSchema = c.state.forwardedSchema
+		c.state = state
+		return response, nil
+	case pluginabi.MethodRequestInterceptBefore, pluginabi.MethodRequestInterceptAfter:
+		return marshalRPCResult(contractTermination("cyber-abuse-guard"))
+	case pluginabi.MethodRequestComplete:
+		select {
+		case <-c.completionCalled:
+		default:
+			close(c.completionCalled)
+		}
+		return marshalRPCResult(rpcEmptyResponse{})
+	default:
+		return nil, fmt.Errorf("unexpected CAG Host contract RPC method %q", method)
+	}
+}
+
+func (c *contractCAGClient) Shutdown() {}
+
+func (c *contractCAGClient) lifecycleState() contractCAGLifecycleState {
+	return c.state
+}
+
+func contractCAGRetainedRegistration() rpcRegistration {
+	plugin := contractSchema3RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+		return contractTermination("cyber-abuse-guard"), nil
+	}, nil)
+	return rpcRegistration{
+		SchemaVersion: pluginabi.SchemaVersion,
+		Metadata:      plugin.Metadata,
+		Capabilities:  rpcCapabilitiesFromPlugin(plugin),
+	}
+}
+
+type contractCAGLoader struct {
+	client    *contractCAGClient
+	openCalls int
+}
+
+func (l *contractCAGLoader) Open(file pluginFile, _ *Host) (pluginClient, error) {
+	if file.ID != "cyber-abuse-guard" {
+		return nil, fmt.Errorf("unexpected CAG Host contract plugin %q", file.ID)
+	}
+	l.openCalls++
+	return l.client, nil
+}
+
+func contractCAGHostConfig(t *testing.T) *config.Config {
+	t.Helper()
+	enabled := true
+	return &config.Config{Plugins: config.PluginsConfig{
+		Enabled: true,
+		Dir:     makePluginDir(t, "cyber-abuse-guard"),
+		Configs: map[string]config.PluginInstanceConfig{
+			"cyber-abuse-guard": {Enabled: &enabled, Priority: 300},
+		},
+	}}
+}
+
+func activeCAGRequestLifecycleSnapshotError(host *Host) error {
+	records := host.activeRecords()
+	if len(records) != 1 || records[0].id != "cyber-abuse-guard" {
+		return fmt.Errorf("active Host snapshot = %#v, want only cyber-abuse-guard", records)
+	}
+	caps := records[0].plugin.Capabilities
+	if caps.RequestInterceptor == nil || caps.RequestLifecyclePlugin == nil {
+		return fmt.Errorf("CAG capabilities = %#v, want request interceptor and lifecycle", caps)
+	}
+	return nil
+}
+
+func assertActiveCAGRequestLifecycleSnapshot(t *testing.T, host *Host, phase string) {
+	t.Helper()
+	if errActive := activeCAGRequestLifecycleSnapshotError(host); errActive != nil {
+		t.Fatalf("%s: %v", phase, errActive)
+	}
 }
 
 func contractTermination(id string) pluginapi.RequestInterceptResponse {
@@ -266,11 +493,11 @@ func contractRequestLifecycleRecord(
 	return capabilityRecord{
 		id:       id,
 		priority: priority,
-		plugin:   contractSchema2RequestLifecyclePlugin(id, intercept, complete),
+		plugin:   contractSchema3RequestLifecyclePlugin(id, intercept, complete),
 	}
 }
 
-func contractSchema2RequestLifecyclePlugin(
+func contractSchema3RequestLifecyclePlugin(
 	name string,
 	intercept func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error),
 	complete func(context.Context, pluginapi.RequestCompletion),
@@ -319,7 +546,7 @@ func assertLifecycleFallback(t *testing.T, scenario string) {
 	enabled := true
 	disabled := false
 	loader := newTestSymbolLoader()
-	fixturePlugin := contractSchema2RequestLifecyclePlugin("fixture", func(_ context.Context, req pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	fixturePlugin := contractSchema3RequestLifecyclePlugin("fixture", func(_ context.Context, req pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 		return pluginapi.RequestInterceptResponse{
 			Headers: http.Header{"X-Fixture-Fallback": []string{"zzz-interceptor"}},
 			Body:    append(req.Body, []byte("|fallback")...),
@@ -329,7 +556,7 @@ func assertLifecycleFallback(t *testing.T, scenario string) {
 	fixtureLookup := newTestSymbolLookup(fixture)
 	loader.lookups["zzz-interceptor"] = fixtureLookup
 
-	guardPlugin := contractSchema2RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	guardPlugin := contractSchema3RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 		return contractTermination("cyber-abuse-guard"), nil
 	}, nil)
 	guard := &testPlugin{registerResult: guardPlugin, reconfigureResult: guardPlugin}
@@ -359,8 +586,8 @@ func assertLifecycleFallback(t *testing.T, scenario string) {
 	}})
 
 	assertContractFallback(t, host)
-	if fixtureLookup.lastLifecycle.SchemaVersion != 2 {
-		t.Fatalf("fallback interceptor lifecycle schema_version = %d, want 2", fixtureLookup.lastLifecycle.SchemaVersion)
+	if fixtureLookup.lastLifecycle.SchemaVersion != 3 {
+		t.Fatalf("fallback interceptor lifecycle schema_version = %d, want 3", fixtureLookup.lastLifecycle.SchemaVersion)
 	}
 	if host.PluginRegistered("cyber-abuse-guard") {
 		t.Fatalf("Guard unexpectedly registered in scenario %q", scenario)

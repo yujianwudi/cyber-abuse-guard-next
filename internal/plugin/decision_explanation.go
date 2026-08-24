@@ -6,8 +6,19 @@ import (
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/audit"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/csamtext"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 )
+
+// auditCSAMTextExplanation is intentionally tiny and independent from the
+// existing classifier explanation contract. The CSAM text side-car has no
+// score, occurrence, scope, or prompt-derived fields to persist.
+func auditCSAMTextExplanation(result csamtext.Result) *audit.DecisionExplanation {
+	if !validCSAMTextResult(result) {
+		return nil
+	}
+	return &audit.DecisionExplanation{Kind: "csam_text"}
+}
 
 // auditDecisionExplanation converts the classifier's bounded explanation into
 // the separately validated persistence contract. It deliberately ignores

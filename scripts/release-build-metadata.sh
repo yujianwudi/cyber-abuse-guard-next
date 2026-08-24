@@ -30,8 +30,8 @@ runner_name="${RC_RUNNER_NAME:-NOT_PROVIDED}"
 runner_image_os="${RC_RUNNER_IMAGE_OS:-${ImageOS:-NOT_PROVIDED}}"
 runner_image_version="${RC_RUNNER_IMAGE_VERSION:-${ImageVersion:-NOT_PROVIDED}}"
 if [[ "${RELEASE_RC_BUILD:-0}" == 1 ]]; then
-  trusted_builder_image='docker.io/library/golang:1.26.4-bookworm'
-  trusted_builder_image_digest='sha256:b305420a68d0f229d91eb3b3ed9e519fcf2cf5461da4bef997bf927e8c0bfd2b'
+  trusted_builder_image='docker.io/library/golang:1.26.6-bookworm'
+  trusted_builder_image_digest='sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36'
   trusted_builder_reference="${trusted_builder_image}@${trusted_builder_image_digest}"
   reproducible_runner_name='UNRECORDED_EPHEMERAL_GITHUB_HOSTED_RUNNER'
   unobservable_runner_image='UNOBSERVABLE_FROM_PINNED_JOB_CONTAINER'
@@ -45,7 +45,7 @@ if [[ "${RELEASE_RC_BUILD:-0}" == 1 ]]; then
   [[ "$builder_image" == "$trusted_builder_image" && \
     "$builder_image_digest" == "$trusted_builder_image_digest" && \
     "$builder_reference" == "$trusted_builder_reference" ]] || \
-    release_die "RC build metadata requires the trusted pinned Go 1.26.4 builder reference"
+    release_die "RC build metadata requires the trusted pinned Go 1.26.6 builder reference"
   [[ "$cc_command" == gcc ]] || \
     release_die "RC build metadata requires go env CC to be exactly gcc"
   [[ "$gcc_target" == x86_64-linux-gnu ]] || \

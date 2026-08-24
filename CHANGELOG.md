@@ -1,13 +1,301 @@
 # Changelog
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
-Source-tree status updated: 2026-08-08 (Asia/Shanghai)
+Source-tree status updated: 2026-08-24 (Asia/Shanghai)
 
-## Unreleased - v0.16 main development
+## Unreleased - v1.0.0-rc.1
+
+- Preserve ordinary Host-performance sampler failure IDs on the fail-closed
+  exception and emit only allowlisted internal identifiers such as
+  `queue_sample:MissedDeadline` or `resource_sample:RuntimeAuditFailure` in the
+  CLI failure line. This closes the diagnostic gap exposed when the
+  `f663ea6`/`0eaed101` second-machine run failed in the CPA+CAG concurrency-4
+  cell while retaining every sampling cadence, threshold and no-raw-request
+  boundary unchanged.
+- Replace the structurally slow `docker stats --no-stream` Host-performance
+  sampler with three bounded Docker Engine API v1.44 one-shot reads over the
+  fixed root-owned private Unix socket. Bind every response to the full
+  container ID/name, recheck socket identity and permissions around each read,
+  derive CPU from successive Engine counters and RSS from the Docker working
+  set, reset the counter baseline for every measurement lane so warmup gaps
+  cannot dilute its first sample, and fail closed on response, counter or
+  identity drift. The second
+  machine rejects API v1.41-v1.43 but completed five v1.44 three-container
+  probes in about 48-55 ms including command-process overhead. A direct
+  three-container double read with the fixed 20 ms baseline completed in
+  36.704 ms with three positive system-counter deltas, restoring the fixed
+  one-second sampling lane without weakening performance thresholds.
+- Refresh the reviewed Keysmith default-branch identity to
+  `2cb7f382ea8a08e9af5a6d9c16580b45f639891a` /
+  `0d46f7e9ffe6907b2483d9955a6f40a8f75800dd`. Both selected blobs and their
+  source/text SHA-256 values are byte-identical to the prior review, so the
+  19-case ground truth and classifier policy remain unchanged.
+- Replace Host-performance plugin extraction with a bounded Docker stdout tar
+  stream. The collector never writes plugin bytes to disk, rejects unsafe or
+  duplicate paths, links, special members and extra entries, and hashes the
+  exact sole candidate SO in memory, avoiding root-owned `0700` trees when
+  Docker is invoked through passwordless sudo.
+- Eliminate Round 14 CSAM false positives for coordinated protective outputs
+  such as reporting guides, hotline/platform notices, safety/protection
+  checklists, prevention resources, and quoted security-research detections.
+  The exact 21-case benign live denominator is now a three-mode unit
+  regression while the existing harmful continuation controls remain blocked.
+- Charge profiled assistant/system whole-field safety suppression to the same
+  bounded streaming classification budget as ordinary windows and fail closed
+  on exhaustion, preventing complete non-user fields from bypassing
+  `MaxChunks`.
+- Bind portable second-machine evidence to the exact same-run Host admission
+  object and canonical raw bytes. Accept only bounded 500-2000 ms Host sampler
+  jitter while retaining exact 301/3601 samples and complete 300/3600-second
+  windows, and keep cleanup error notes compatible with Python 3.10 without
+  masking the primary failure.
+- Relabel the frozen Round 13 release block with explicit
+  `historical_round13_*` keys and reject any active-looking CPA key below its
+  historical boundary.
+- Upgrade every active Linux build, CI, compatibility, performance, receipt and
+  RC builder contract to Go 1.26.6, closing `GO-2026-5972` and the remaining
+  Go 1.26.4 standard-library findings without rewriting frozen Round 8/9 evidence.
+- Make CSAM privacy taint irreversible across private-budget exhaustion and
+  mixed-policy winners, keep tainted blocks out of Raw Capture, treat coverage
+  exhaustion as Balanced audit / Strict fail-closed, and add legal/compliance/
+  reporting false-positive regressions. The resulting policy identity is
+  `csam-text-policy-v1` / `c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f`.
+- Close the provider multipart symbol-leet gap for bounded single-character
+  `@`/`!`/`$` fragments in batch and streaming paths without joining ordinary
+  independent fields, including bounded uneven fragments around an isolated
+  leet symbol. Replay profiled streaming winner slots in the same independent,
+  aggregate and external ranking order as batch classification so complete
+  ties retain the same winner, while keeping authoritative aggregate
+  replacement intact. The active classifier identity
+  remains `classifier-policy-v20` and advances to SHA-256
+  `1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d`.
+- Degrade audit readiness on queue admission loss until a post-loss durable
+  write and explicit Flush barrier close the loss generation. Reject unknown
+  Raw Capture indexes/triggers before any v6-to-v7 backup or DDL so migration
+  cannot silently discard operator schema objects.
+- Harden RC admission around the repository owner identity, exact main
+  protection and Actions policy, squash-only merge governance, immutable
+  Releases and a no-bypass RC tag ruleset; revalidate governance and main tip
+  before both draft creation and final publication.
+- Close the Round 14 release-document contract around Audit SQLite schema 7,
+  CSAM text policy `csam-text-policy-v1` / SHA-256
+  `c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f`,
+  second-machine release admission v3, and the exact four-workflow inventory.
+  RC publication is allowed only after every applicable acceptance gate passes
+  through `release-rc.yml`; the current pending state cannot publish.
+- Start Round 14 by moving the sole active CPA contract to official
+  CLIProxyAPI `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, module sum
+  `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`, unchanged go.mod sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1 and RPC schema 3.
+  The official Linux amd64 archive `CLIProxyAPI_7.2.137_linux_amd64.tar.gz`
+  is 21072175 bytes with SHA-256
+  `ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
+  its 63738088-byte binary has SHA-256
+  `aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`,
+  and the checksums file has SHA-256
+  `9ae7dee90cd717a373acb58fad0163264891d5a76b27fb15d4c88bd10467012e`.
+  Because the classifier-policy protected summary includes the root
+  `go.mod`/`go.sum`, this module-pin change updates the active
+  `classifier-policy-v20` SHA-256 to
+  `d7aac3618ad2f8f7c0354db721150f8e6bcb0bf8d269fd91bb7fede12fb2750e`;
+  the policy version remains v20.
+- Record the current audit-tool development result as `315/315 PASS` with zero
+  skips on WSL Linux/x86_64 under Go 1.26.6. A canonical repository-owned development
+  self-check receipt records unittest stderr, command and time window plus the
+  315 test IDs, every tested implementation/test source byte, and receipt fields
+  `runner_bundle=5c3e6af865cd2197245ee44b5fa1cf71e83deaed780408e55f92fc1e162472ec`,
+  `audit_contract=7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642`,
+  `run_source=434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665`,
+  `machine_schema=3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e`,
+  `test_sources=cc6c1e0468d519ea83d4bf5003768ce46ed9f2078c6e234f311d9c95831a936c`,
+  `test_ids=54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f`,
+  and `receipt_sha256=1fb557487fa5571ee3cc4d37b697911e807750e89375eb8efc3af79e984e68c5`.
+  It is unsigned and cannot
+  replace exact-commit CI or independent evidence. Five schema-3 Host fixture
+  tests, the targeted CAG RPC schema test under WSL, and one upstream
+  hook/no-copy/auth/realtime source-contract test also pass. Complete Linux,
+  exact-candidate CI,
+  second-machine, five-repository/ZIP, false-positive, Host-performance and
+  release gates remain `NOT_RUN / PENDING`; publication stays blocked until
+  all applicable acceptance gates pass.
+- Replace the Host-performance queue sampler's per-sample management TCP
+  connection with one private HTTP/1.1 connection per measured cell, plus one
+  connection shared by the three timing preflight polls. Keep the 100 ms
+  cadence, deadlines, sample counts and every performance threshold unchanged;
+  reject public targets, server-requested closes, reconnect requirements,
+  oversized or non-strict JSON responses, invalid queue state and missed
+  deadlines. Exact `a216395` CI, semantic, CSAM and native-Host PASS records do
+  not transfer: its Host A/B run failed at CPA+CAG concurrency 4 / repetition 3
+  with `queue_sample:MissedDeadline`, and the current fix still requires new
+  exact-commit CI and Host verification.
+- Per operator instruction, all second-machine execution for this round is
+  canceled: no SSH, remote container, provider, or Host-performance task was
+  started and no remote evidence exists. The mandatory second-machine release
+  gates remain unsatisfied; the release workflow's fail-closed admission
+  contract is unchanged.
+- Declare CPA v7.2.137 `/v1/realtime*` explicitly
+  `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE` because it bypasses CAG. Freeze
+  all Round 13 v7.2.125 and Round 12 or earlier results as historical,
+  superseded evidence without relabelling or transferring any old PASS.
+
+### Frozen Round 13 v7.2.125 development history
+
+Everything below this heading, up to the next top-level version section, is
+historical Round 13 or earlier evidence. It does not describe the active Round
+14 v7.2.137/schema 3 result and transfers no PASS.
+
+- Correct the supplemental Codex archive oracle without changing the production
+  classifier policy. Target authorization/ownership and model-control
+  authorization are now independent reviewed axes: the owned, authorized CTF
+  target still has no grant to install a concealed model-control takeover, so
+  Audit records it and Balanced/Strict must block it with the exact
+  `defense_evasion / META-OVERRIDE-001` winner before any upstream side effect.
+  Supplemental policy/manifest/result and transport-result contracts advance to
+  v2; the portable second-machine report retains expected and actual winner
+  pairs. The separate 7-case/252-execution denominator is now four malicious
+  and three non-malicious cases. All 248 audit-tool tests pass on Linux; the
+  complete dirty-worktree Linux source gates pass; clean final-candidate GitHub,
+  native Host, and second-machine gates remain non-transferable and pending.
+- Advance the classifier contract to `classifier-policy-v20` /
+  `888cfe509f77b1321f4f16a70e5e2558c270cac57d3447a831737261fb1188fd`.
+  A terminal install/activate sentence can recover the previously missed
+  descriptive META carrier only when clause-local, affirmative evidence proves
+  a jailbreak purpose, an instruction-file injection, unrestricted mode, and
+  disabled filters. Word boundaries, common negations, migration-label text,
+  bounded occurrence proof, structured defensive/owned-lab owners, and exact
+  cross-field cancellation keep ordinary documentation nonblocking. Streaming
+  deduplication now clears pending risk only for the same logical field.
+- Pin the sole active Host contract to official CLIProxyAPI `v7.2.125` at
+  `2e6b1d83f6c304a102aa33c1faf0a4f94d0d331e`, Go module sum
+  `h1:jz3yxTI7mp+ej2kI1T4OPs+QhIgP6Mmu5BGvipjQWRg=`, go.mod sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1 and RPC schema 2.
+  The official Linux amd64 archive SHA-256 is
+  `4e940b7dc5bdf867b5c58ca30f1b368fae6dc2e041e8a351d5c2c07f3f610233`;
+  its `cli-proxy-api` binary SHA-256 is
+  `656cde7bfd966dbcaaa9d9260dd1de75716c0b9dead66d91ceb2d8d55f6d623a`.
+- Add source-contract and targeted unit coverage for v7.2.125 no-copy payload
+  invariants, large Antigravity requests, official Codex Multi-Agent v2,
+  Responses `response.failed`, Codex `Originator`, and Claude replay behavior.
+  The native Host lane that must prove pre-provider CAG blocks emit no SSE and
+  zero Provider/Auth/Executor/Usage/counted-Mock side effects remains pending.
+- Align the real v7.2.125 Host path with its asynchronous full-client load:
+  wait for auth readiness and the Host counting-selector conversion before
+  installing the final selector, and exercise official Codex
+  `response.failed`, Originator, Claude replay, ordered tool-schema, Usage
+  Queue, and Store-install behavior through the dirty-worktree Host blackbox.
+- Reduce false positives without weakening tool-schema visibility. Complete
+  system safety policies and assistant refusals are allow-safe unless an
+  operational reversal follows; hostile tool-schema text remains audit-only.
+  Ordinary tool arguments such as `document` and `format` remain inspectable
+  instead of being mislabeled opaque media, while concrete data URLs and
+  provider media containers stay opaque. A natural-language structural gate
+  removes repeated refusal parsing from large tool schemas and restores the
+  wrapper path to 2,585 allocations/op under the unchanged 3,000 limit.
+- Make same-path SQLite hot reconfiguration tolerate the retiring Store's
+  legitimate WAL/SHM cleanup without treating it as an external inode swap,
+  while preserving replacement and tamper detection.
+- Make complete audit shutdown a hard raw-preview privacy gate: an active Store
+  purges retained rows and truncates WAL before publication, while a nil or
+  inactive Store rejects hot shutdown and requires restart. Sensitive preview
+  reads now pin a read-only SQLite snapshot before the fresh storage gate, so a
+  concurrent WAL writer cannot change the rows released by that authorization.
+- Remove the long ASCII edge conversion from independent-lexeme matching with
+  exact zero-allocation rune comparisons. Restore 12 retired Round 8 workflow
+  tests to unittest discovery so Safe Gate reports `217` tests / `78` explicit
+  skips instead of silently omitting them.
+- Normalize the pinned `actions/upload-artifact@v7.0.1` bare SHA-256 output to
+  the canonical `sha256:<hex>` admission identity in both CI and the RC seal
+  job. YAML-structural contracts and digest mutation tests prevent comments or
+  stale reviewed hashes from masking a regression; Safe Gate now reports `218`
+  tests / `78` explicit skips.
+- Make hot reconfiguration generation-safe. Subject state is prepared in an
+  independent controller before candidate database work, failed reconfiguration
+  cannot mutate the active controller, and a successful swap clears old
+  request-lifecycle entries so after-auth cannot reuse an old-policy result.
+  Enabled audit storage cannot change `audit.data_dir` by hot reload; the
+  candidate is rejected before directory creation or SQLite migration and must
+  instead use a controlled restart.
+- Advance the classifier contract to `classifier-policy-v18` /
+  `64da89df5f207893b45d4d7a32100d76025483ef3dc4003fbfe295b4e4c7ba82`.
+  Bounded same-owner lexical reconstruction closes partial-word newline,
+  streaming-chunk, and adjacent provider content-block splits such as
+  `ste\nal` and `窃\n取`, while role, turn, scope, provenance, fragment-count,
+  rune, script, and replay-work limits prevent cross-owner composition. The v18
+  proof boundary also fails active on a Han/ASCII transition inside one
+  whitespace token, preventing an unknown CJK connector from being consumed
+  together with a later operational ransomware clause. A part boundary followed
+  by a leading line break now collapses to one hard boundary instead of charging
+  duplicate normalization and directive-analysis capacity.
+- Refresh the live five-repository review policy to SHA-256
+  `24c27f34f946cbd64cdc5ab82487e8d3eb61e8b49cdd2aa912e26fc723977fb7`.
+  Keysmith advances to commit `d7d53fb1ba2f754545c03d0e584adfc46d0a091b` /
+  tree `4649daf381d3323231c3d8d6eac4c2cf6d7bc938`; Codex-X remains at commit
+  `826a142fc040920a5c23c3dafabbfc8d21655478` / tree
+  `95e2638756c97b844179a905513d41ea2e8aea0e`. Keysmith's two selected blobs
+  remain byte-identical and the other four repository pins still match their
+  current default-branch heads, so the existing semantic labels and 19-case
+  denominator are unchanged. A fresh full acquisition remains required: three
+  bounded attempts stopped on GitHub transport resets/timeouts before corpus
+  validation, retained no corpus text, executed no third-party code, and make no
+  PASS claim.
+- Rebind the current CPA audit runner to bundle
+  `34b11d4089ef4d26635fa78252f2a9f84c00dbbc0d702af8cf96e2e550d19c4e`,
+  audit contract
+  `f39870ebf951d5721647225b5ef8873b467c7db166a17ce30fb04054dae0939f`,
+  run source
+  `c4c071a8ba739dc3e1e0eeeefeb6793e63701b81cdc833503770258fd5ec0fcd`,
+  and machine schema
+  `4f601dbf39d61a2700ca4b734804a85b287fd47a3f6a8de68db4b668d8a8a963`.
+  All 248 audit-tool tests pass on Linux.
+- Keep the Host-performance workload denominator code-owned and comparable:
+  the five-repository activation lane must contain exactly 16 requests across
+  eight Chat and eight Responses bodies before any source text is read. Bind
+  each Docker bind-mount backing identity to the exact inspect `Source` text
+  while retaining a separate resolved-path digest, so equivalent trailing,
+  repeated, or dot slashes cannot cause a false preflight rejection.
+- Select the 2026-08-12 classifier-policy-v20 source-only performance rerun as
+  the sole current dirty-worktree performance artifact. Its JSON SHA-256 is
+  `d22f70da97f0f69c665f2792787190902c533038cbc34e913f582de6eef81f8c`,
+  with ordinary c16 p95 `2.221072 ms`, five-repository surrogate p95
+  `107.383314 ms`, Codex-all p95 `47.629570 ms`, public p95/p99
+  `8.709887/9.522366 ms`, SQLite c16 p95 `1.115742 ms`, queue max `28/256`,
+  and zero failures or recovered panics across 2,304 operations. It is not CPA
+  Host, RSS, paired-throughput, release, or production-SLO evidence.
+- Refresh the latest complete dirty-worktree local development gates: CPA audit
+  248/248, Safe Gate 219 tests/78 skips, RC suites 7+12+25, full Go unit/vet,
+  race with no data race, fuzz, Round 6 script/benchmark, Round 10 performance,
+  exact CPA v7.2.125 remote contracts, `govulncheck` with zero vulnerabilities,
+  and the 381.5-second document mutation suite all pass. These results leave
+  `PR_REQUIRED_CHECKS_NOT_RUN / PREMERGE_DIAGNOSTIC_NOT_RUN / NO_MERGE /
+  NO_RELEASE` and do not close final-candidate gates.
+- Make supplemental review approval unconditional, reject unknown archive
+  summary keys, and best-effort zero the four mutable text buffers owned by the
+  audit Harness before releasing them. This does not claim whole-process memory
+  zeroization: decompression, decoding, JSON, socket, CPA, and Docker may create
+  other transient copies.
+- Move the active source identity from historical `0.16` development to strict
+  three-component SemVer `1.0.0`; the only authorized publication in this round
+  is Linux prerelease tag/artifact `v1.0.0-rc.1` with `latest=false`.
+
+## Historical unreleased - v0.16 main development
+
+- Advance the sole active CPA contract from official `v7.2.116` to official
+  `v7.2.124` (`197f520426374e514218ed155933ac546c98d345`) with module sum
+  `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=` and unchanged C ABI 1 / RPC
+  schema 2. The standard plugin-capable Linux amd64 asset is
+  `CLIProxyAPI_7.2.124_linux_amd64.tar.gz`, 20,833,216 bytes, SHA-256
+  `bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`;
+  `_no-plugin` cannot load CAG. The reviewed 87 existing ABI/API/Host blobs are
+  byte-identical. New source contracts cover the plugin OAuth refresh wrapper,
+  while the native Host contract adds official Codex Desktop/TUI/CLI-RS,
+  HTTP/SSE Multi-Agent v2 tool-preparation allow/block and zero-side-effect
+  cases. Historical v7.2.116 CI, second-machine, and five-repository results are
+  not relabelled as v7.2.124 evidence; exact-commit CI, native `.so` Host load,
+  and second-machine validation remain separate gates.
 
 - Complete the Round 12 working-tree implementation without claiming final
   acceptance or a release. SQLite audit writes now enforce the configured live
@@ -23,7 +311,7 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   fixed at 1 MiB and 2 MiB, while case-variant duplicate `Authorization` and
   `X-API-Key` values resolve to a deterministic conflict identity. The
   classifier advances to `classifier-policy-v12` /
-  `795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c`:
+  `2e9d02371c2ff18d6f5efe7765db45517471603ea9d772c73664bf92c7625a5b`:
   an outer defensive owner suppresses only its own inert carrier, and a later
   explicit activation must be in the same scope and a distinct logical field;
   missing paths or exhausted proof budgets remain incomplete rather than
@@ -92,20 +380,20 @@ Source-tree status updated: 2026-08-08 (Asia/Shanghai)
   and expected-failure `--env-file` paths; it retained no file/container and
   found zero credential-field mentions in the unit journal. The current runner
   now gives only its descriptor-bound, per-cold-start `/cag/config` directory
-  write access because CPA v7.2.116 persists plugin config before hot reload;
+  write access because CPA v7.2.124 persists plugin config before hot reload;
   it rejects any config-directory file-set, owner, link-count, size, or mount
   access drift before and after each Audit/Balanced/Strict transition. The current runner
   identity closure is:
 
   ```text
-  current_audit_runner_bundle_sha256: a91dc6eee3b312a7c54644b48f71cc7399101d58973241df57bcd386093c36b3
-  current_audit_contract_sha256: 0138461e9eeff6e5f79ef8f45df2c4c5ab31fa39728f563f2a4fd1367675707a
-  current_audit_run_source_sha256: 71e6ab7cca276d2ae1859db6b011daaca858c08441fbe07d923045819d1bd5f8
-  current_audit_machine_schema_sha256: b689b10fae2e48432f28d3c6fb7c72459f7162fb21fb5afd5fb65e62df45d728
-  current_audit_tool_test_count: 145
+  current_audit_runner_bundle_sha256: 6c9bcece412f3164845f831856b39fc23e80b0939ae64e3adae2f41e00c017a4
+  current_audit_contract_sha256: 0b518e0ca12011dc9fe2064740ed799adf5faaf0da8f474512b0ba6557360680
+  current_audit_run_source_sha256: cd42cff19d6f01c60f42e382b329c9682f7cb5a995b6213a3fa7094c7966fe73
+  current_audit_machine_schema_sha256: 063d70925671b54a0726778df4f8224471c1705d8ac39a9ee8bb44340d824060
+  current_audit_tool_test_count: 181
   ```
 
-  Linux audit-tool verification is 145/145 PASS. The diagnostic harness explicitly
+  Linux audit-tool verification is 181/181 PASS. The diagnostic harness explicitly
   excludes a hostile process sharing its dedicated UID because directory
   creation and the daemon path handoff are not atomic same-UID boundaries. The
   final local Go 1.26.4 Linux race lane completed in 977.8 seconds without a

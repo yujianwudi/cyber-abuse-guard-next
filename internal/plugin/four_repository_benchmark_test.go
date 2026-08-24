@@ -32,7 +32,16 @@ func BenchmarkFourRepositoryModelRoute(b *testing.B) {
 		body    []byte
 		headers http.Header
 	}{
-		{name: "off/chat-clean", config: "mode: off\n", format: "openai", body: shortChat},
+		{
+			name: "off/chat-clean",
+			// Keep the disabled fast-path benchmark hermetic. Audit defaults to
+			// enabled, which would otherwise open the operator-style default path
+			// under $HOME and make the result depend on a database left by another
+			// checkout or schema version.
+			config: "mode: off\naudit:\n  enabled: false\n",
+			format: "openai",
+			body:   shortChat,
+		},
 		{name: "balanced/chat-clean", config: balancedConfig, format: "openai", body: shortChat},
 		{name: "balanced/responses-clean", config: balancedConfig, format: "openai-response", body: shortResponses},
 		{

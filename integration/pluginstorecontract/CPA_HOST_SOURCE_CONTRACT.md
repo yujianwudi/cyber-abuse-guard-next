@@ -1,11 +1,11 @@
-# CPA v7.2.116 schema-2 Host source contract
+# CPA v7.2.137 schema-3 Host source contract
 
 This isolated module pins `github.com/router-for-me/CLIProxyAPI/v7` to
-`v7.2.116` at commit `a88197f845c979132c8978ea223c6af05cc81536`.
+`v7.2.137` at commit `85d2faddd17e6f4f8675a84ee28b131f702e8eaa`.
 `host_source_contract_test.go` verifies the resolved module version, tag commit,
 and both module checksums, lists the official `internal/pluginhost` tests,
 requires a fixed set of critical names, and then runs the complete upstream
-Host test suite for the current Linux platform. The fixed set includes schema-2
+Host test suite for the current Linux platform. The fixed set includes schema-3
 RequestInterceptor/lifecycle behavior, the current Guard's narrow Alpha Search
 ModelRouter registration, and explicit schema-1 ModelRouter compatibility.
 
@@ -23,7 +23,7 @@ go test -count=1 -v ./...
 
 The upstream selection is intentionally broad enough to cover:
 
-- schema-2 RPC negotiation, RequestInterceptor priority/termination,
+- schema-3 RPC negotiation, RequestInterceptor priority/termination,
   error/panic fail-open, metadata sanitization, and completion lifecycle;
 - descending Router priority and first handled match;
 - same-priority ordering by ascending plugin ID;
@@ -38,11 +38,21 @@ The upstream selection is intentionally broad enough to cover:
 
 `TestCPAHostFailOpenFixtureContract` then adds a test-only fixture to an
 ephemeral copy of the checksum-verified upstream source. The current Guard path
-registers schema-2 RequestInterceptor and RequestLifecyclePlugin capabilities
+registers schema-3 RequestInterceptor and RequestLifecyclePlugin capabilities
 plus a ModelRouter that handles only `codex-alpha-search`.
 The fixture covers Guard/competing-interceptor priority, plugin-ID tie breaks,
 termination, load/register/enable failure, fuse, interceptor error/panic
-fail-open, metadata sanitization, and all four completion outcomes. A separately
+fail-open, metadata sanitization, and all four completion outcomes. Its official
+Host `ApplyConfig` regression uses a CAG-shaped raw RPC double: after an initial
+schema-3 activation, the simulated CAG lifecycle handler receives a
+legacy-schema reconfigure and returns an OK envelope containing the retained
+schema-3 RequestInterceptor and RequestLifecyclePlugin registration. The next
+Host snapshot must still contain and invoke both capabilities. A paired negative
+control returns an error envelope on the same Host path and proves that the
+official Host then drops CAG from the next snapshot, so changing the retained
+response to an error makes the positive contract fail. Production CAG's actual
+legacy-schema response is independently pinned by
+`internal/plugin.TestSchemaNegotiationRejectsLegacyAndAcceptsFutureHost`. A separately
 named subtest preserves only the legacy schema-1 ModelRouter compatibility
 contract. No Host algorithm is copied into this repository.
 
@@ -54,7 +64,7 @@ isolation.
 The separate `make cpa-router-fixture-blackbox` CI target builds
 `integration/testfixtures/router_fixture.c` as a minimal second dynamic
 Router/executor and exercises the public native ABI. It remains a schema-1
-compatibility fixture and is not evidence of the current Guard's schema-2
+compatibility fixture and is not evidence of the current Guard's schema-3
 registration path. That target is CI-only in this handoff. Panic and fuse remain
 source-overlay evidence because a C plugin cannot safely manufacture a
 recoverable Go panic or mutate the Host's private fuse state.

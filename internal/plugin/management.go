@@ -22,6 +22,7 @@ import (
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/buildinfo"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/config"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/csamtext"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
 )
 
@@ -46,8 +47,8 @@ const (
 	managementStartupPrivacyProofPath   = managementBasePath + "/health/startup-privacy-proof"
 	startupPrivacyProofResourcePath     = "/v0/resource/plugins/" + ID + "/health/startup-privacy-proof"
 	managementMigrationBackupPurgePath  = managementBasePath + "/migration-backups/purge"
-	managementAuthDocumentation         = "CPA v7.2.116 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
-	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 2 RequestInterceptor protocol-path failures"
+	managementAuthDocumentation         = "CPA v7.2.137 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
+	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 3 RequestInterceptor protocol-path failures"
 	migrationBackupDeleteConfirmation   = "DELETE_ALL_MIGRATION_BACKUPS"
 	migrationBackupRollbackConfirmation = "ACKNOWLEDGE_OLD_SO_ROLLBACK_REQUIRES_EXTERNAL_BACKUP"
 )
@@ -66,7 +67,7 @@ type resourceRoute struct {
 }
 
 // managementRawCapture preserves the readable preview for existing operators
-// and adds a canonical transport-safe representation. CPA v7.2.116 HTML-escapes
+// and adds a canonical transport-safe representation. CPA v7.2.137 HTML-escapes
 // every JSON string returned by ServeManagementHTTP, so raw_preview_b64 is the
 // only byte-stable representation across the plugin/Host boundary.
 type managementRawCapture struct {
@@ -354,6 +355,7 @@ func managementCredentialPresent(headers http.Header) bool {
 func (p *Plugin) managementStatus(state *runtimeState) []byte {
 	build := buildinfo.Current()
 	policyIdentity := classifier.CurrentPolicyIdentity()
+	csamTextPolicyIdentity := csamtext.CurrentPolicyIdentity()
 	loaded := state != nil && !p.shutdown.Load()
 	auditStorage := disabledAuditStorageVerification()
 	auditStatus := any(managementAuditStatus{
@@ -494,6 +496,8 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 		"ruleset_version_match":       rulesetVersion != "" && rulesetVersion == build.RulesetVersion,
 		"classifier_policy_version":   policyIdentity.Version,
 		"classifier_policy_sha256":    policyIdentity.SHA256,
+		"csam_text_policy_version":    csamTextPolicyIdentity.Version,
+		"csam_text_policy_sha256":     csamTextPolicyIdentity.SHA256,
 		"router_errors":               p.counters.routerErrors.Load(),
 		"router_errors_semantics":     routerErrorsDocumentation,
 		"panics_recovered":            p.counters.panicsRecovered.Load(),
@@ -528,7 +532,7 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 			"request_interceptor_enumeration_supported": false,
 			"router_enumeration_supported":              false,
 			"duplicate_plugin_binary_scan_supported":    false,
-			"reason":                                    "CPA v7.2.116 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
+			"reason":                                    "CPA v7.2.137 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
 		},
 	}
 	if state != nil {
@@ -696,6 +700,9 @@ func (p *Plugin) managementRawCaptures(state *runtimeState, values url.Values) [
 	_ = state.audit.Flush(ctx)
 	page, err := state.audit.QueryRawCapturesPage(ctx, query)
 	if err != nil {
+		if errors.Is(err, audit.ErrStorageBlocked) {
+			return managementError(http.StatusServiceUnavailable, "audit_storage_blocked", "raw request captures are temporarily unavailable")
+		}
 		return managementError(http.StatusServiceUnavailable, "audit_unavailable", "raw request captures are temporarily unavailable")
 	}
 	response, err := managementBoundRawCaptureResponse(page, requestedLimit)
@@ -730,7 +737,7 @@ func managementRawCaptureResponseDefaults(enabled bool, requestedLimit int) mana
 }
 
 // managementBoundRawCaptureResponse selects the largest newest-first prefix
-// whose complete CPA v7.2.116 Host-visible JSON body fits the fixed response
+// whose complete CPA v7.2.137 Host-visible JSON body fits the fixed response
 // budget. Each sensitive row is counted once; only the small metadata envelope
 // is re-encoded while the prefix grows.
 func managementBoundRawCaptureResponse(page audit.RawCapturePage, requestedLimit int) (managementRawCaptureResponse, error) {
@@ -949,7 +956,7 @@ func managementRawCaptureResponseBodies(response managementRawCaptureResponse) (
 	return body, len(hostBody), nil
 }
 
-// managementCPAHostSanitizeJSON mirrors CPA v7.2.116
+// managementCPAHostSanitizeJSON mirrors CPA v7.2.137
 // internal/htmlsanitize.JSONBody. The compatibility contract module compares
 // this prediction with the real Host ServeManagementHTTP behavior.
 func managementCPAHostSanitizeJSON(body []byte) ([]byte, bool) {
@@ -1318,7 +1325,7 @@ func auditQuery(values url.Values) (audit.Query, error) {
 	}
 	if query.DecisionKind != "" && !oneOfString(query.DecisionKind,
 		"legacy_unspecified", "allow_clean", "audit_ineligible_risk", "audit_eligible_malicious_text", "block_malicious_text",
-		"block_incomplete_inspection", "block_opaque_media", "block_subject_risk") {
+		"block_incomplete_inspection", "block_opaque_media", "block_subject_risk", "audit_csam_text", "block_csam_text") {
 		return audit.Query{}, fmt.Errorf("decision_kind is invalid")
 	}
 	if query.Category != "" && !validManagementFilterToken(query.Category) {

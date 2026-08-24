@@ -21,9 +21,9 @@ const (
 	cpaLatestOpenAIGeminiPackage       = cpaLatestModulePath + "/internal/translator/openai/gemini"
 
 	cpaLatestInteractionsHandlerFixture       = "latest_interactions_handler_overlay_test.go.txt"
-	cpaLatestInteractionsHandlerFixtureSHA256 = "424501cfa8e07e138abd5acbc3c9b5b8470868f46c83232906484719cabd68b5"
+	cpaLatestInteractionsHandlerFixtureSHA256 = "8e581e3de82a7dd3ceff051d139cc35af4f8dff74b9c705346c399201a0c30a3"
 	cpaLatestInteractionsHostFixture          = "latest_interactions_pluginhost_overlay_test.go.txt"
-	cpaLatestInteractionsHostFixtureSHA256    = "37c0c7502cbacc2f18e2fbd39fa62aeccde9373a047a5589f1da8f68a12ed58f"
+	cpaLatestInteractionsHostFixtureSHA256    = "48ad9948f4f2bc52a78d9d8c68a728ade7b1e6fedba8afa695ec69b4753db8b5"
 	cpaLatestHomeOAuthRetryFixture            = "latest_home_oauth_retry_overlay_test.go.txt"
 	cpaLatestHomeOAuthRetryFixtureSHA256      = "216e40962593363e269e8a3b30f7686137aca4654773168aa2025b0b16fa07cc"
 )
@@ -132,7 +132,7 @@ func TestLatestCPAInteractionsHandlerAndTranslatorOverlayContract(t *testing.T) 
 	})
 }
 
-func TestLatestCPAInteractionsSchema2RequestLifecycleOverlayContract(t *testing.T) {
+func TestLatestCPAInteractionsSchema3RequestLifecycleOverlayContract(t *testing.T) {
 	runLatestCPAOverlayFixture(t, latestCPAOverlayFixture{
 		fixtureName:   cpaLatestInteractionsHostFixture,
 		fixtureSHA256: cpaLatestInteractionsHostFixtureSHA256,

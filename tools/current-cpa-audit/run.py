@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the fixed five-repository corpus against CPA v7.2.116 in isolation.
+"""Run the fixed five-repository corpus against CPA v7.2.137 in isolation.
 
 The harness never executes corpus bytes.  It gives CPA exactly one internal
 counted-Mock upstream, publishes no host port, records no request text, and
@@ -16,6 +16,7 @@ import os
 import platform
 import re
 import secrets
+import signal
 import shutil
 import socket
 import sqlite3
@@ -23,6 +24,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import traceback
 from contextlib import contextmanager
@@ -35,32 +37,51 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 from acquire import validate_policy
 from audit_contract import (
+    AUDIT_SCHEMA_VERSION,
     CLAIM_BOUNDARY,
+    CPA_OFFICIAL_ASSET_SIZE,
+    CPA_TAG,
     EVIDENCE_SCHEMA,
     FIXED_REPOSITORIES,
     MOCK_CONTRACT,
     MODES,
     PROTOCOLS,
+    REALTIME_ROUTE_CONTRACT,
+    REALTIME_RPC_COUNTER_KEYS,
     RESULT_SCHEMA,
     STREAM_VALUES,
+    SUPPLEMENTAL_ZIP_RESULT_SCHEMA,
     BoundCorpus,
     ContractError,
+    add_exception_note,
     apply_template,
     build_execution_plan,
+    build_supplemental_execution_plan,
     canonical_bytes,
     expected_request_hash,
     load_json_bytes,
+    load_json_file,
     read_regular_bytes,
     regular_file_info,
     sha256_bytes,
     sha256_file,
     validate_allow_response,
     validate_block_response,
+    validate_candidate_manifest_file,
     validate_corpus_manifest,
     validate_machine_evidence,
     validate_manifest_policy,
     validate_result,
     validate_run_config,
+    validate_supplemental_result,
+    validate_supplemental_run_config_files,
+)
+from supplemental_zip import load_selected_supplemental_texts
+from lazy_read import LazyReadError, LazyReadRecorder
+from second_machine_release_admission import (
+    validate_csam_text_evidence,
+    validate_lazy_read_bindings,
+    validate_lazy_read_evidence,
 )
 
 
@@ -74,20 +95,28 @@ CPA_PORT = 8317
 MOCK_PORT = 18080
 MOCK_SOURCE_PATH = "/opt/cag-audit/counted_mock.py"
 MOCK_ENTRYPOINT = ["python3", "-I", "-S", "-B", MOCK_SOURCE_PATH]
+REALTIME_ROUTES = REALTIME_ROUTE_CONTRACT
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_CONFIG_BYTES = 2 * 1024 * 1024
-SCHEMA_VERSION = 6
+# Backward-compatible local name used throughout the runner and its fixtures.
+SCHEMA_VERSION = AUDIT_SCHEMA_VERSION
 RUNNER_BUNDLE_FILES = (
     "Dockerfile.mock",
     "README.md",
     "acquire.py",
     "audit_contract.py",
     "counted_mock.py",
+    "csam_text_evidence.py",
+    "csam_text_runner.py",
+    "lazy_read.py",
     "make_run_config.py",
     "machine-evidence.schema.json",
     "repository-policy.json",
     "run.py",
+    "second_machine_release_admission.py",
+    "supplemental-zip-policy.json",
+    "supplemental_zip.py",
     "validate.py",
 )
 
@@ -102,6 +131,16 @@ class CleanupFailure(AuditFailure):
     def __init__(self, errors: Sequence[str]) -> None:
         self.cleanup_error_id = sha256_bytes(canonical_bytes(list(errors)))[:16]
         super().__init__(f"cleanup failed closed; cleanup_error_id={self.cleanup_error_id}")
+
+
+def _zeroize_supplemental_texts(values: dict[str, bytearray]) -> bool:
+    """Zero caller-owned buffers and report whether the cleanup was proven."""
+
+    buffers = tuple(values.values())
+    for raw in buffers:
+        raw[:] = b"\x00" * len(raw)
+    values.clear()
+    return not values and all(not any(raw) for raw in buffers)
 
 
 def now_iso() -> str:
@@ -221,7 +260,8 @@ def ephemeral_mock_environment(
         except Exception as cleanup_error:
             if primary_error is None:
                 raise
-            primary_error.add_note(
+            add_exception_note(
+                primary_error,
                 "ephemeral Mock environment cleanup also failed: "
                 f"{type(cleanup_error).__name__}: {cleanup_error}"
             )
@@ -523,7 +563,7 @@ def remove_manifest_corpus(
             bound_corpus.close()
 
 
-def run_process(argv: Sequence[str], *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+def _process_environment() -> dict[str, str]:
     environment = os.environ.copy()
     environment.update(
         {
@@ -536,6 +576,10 @@ def run_process(argv: Sequence[str], *, timeout: int = 60) -> subprocess.Complet
             "http_proxy": "",
         }
     )
+    return environment
+
+
+def run_process(argv: Sequence[str], *, timeout: int = 60) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             list(argv),
@@ -547,10 +591,132 @@ def run_process(argv: Sequence[str], *, timeout: int = 60) -> subprocess.Complet
             errors="replace",
             timeout=timeout,
             check=False,
-            env=environment,
+            env=_process_environment(),
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         fail(f"command failed without shell execution: {argv[0]}: {type(exc).__name__}")
+
+
+def run_process_bytes(
+    argv: Sequence[str],
+    *,
+    timeout: int,
+    max_stdout_bytes: int,
+    max_stderr_bytes: int,
+) -> subprocess.CompletedProcess[bytes]:
+    """Run a binary command without a shell and cap both captured streams."""
+
+    if (
+        not argv
+        or timeout < 1
+        or max_stdout_bytes < 1
+        or max_stderr_bytes < 1
+    ):
+        fail("binary command limits are invalid")
+    try:
+        process = subprocess.Popen(
+            list(argv),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_process_environment(),
+            start_new_session=os.name == "posix",
+        )
+    except OSError as exc:
+        fail(f"binary command failed without shell execution: {argv[0]}: {type(exc).__name__}")
+    if process.stdout is None or process.stderr is None:  # pragma: no cover - Popen contract
+        fail("binary command pipes are unavailable")
+
+    stdout_chunks: list[bytes] = []
+    stderr_chunks: list[bytes] = []
+    overflow = threading.Event()
+    stream_errors: list[str] = []
+    overflow_streams: list[str] = []
+
+    def drain(
+        stream: Any,
+        limit: int,
+        destination: list[bytes],
+        label: str,
+    ) -> None:
+        total = 0
+        try:
+            while True:
+                chunk = stream.read(min(64 * 1024, max(1, limit + 1 - total)))
+                if not chunk:
+                    return
+                total += len(chunk)
+                if total > limit:
+                    overflow_streams.append(label)
+                    overflow.set()
+                    return
+                destination.append(chunk)
+        except OSError:
+            stream_errors.append(label)
+            overflow.set()
+        finally:
+            stream.close()
+
+    readers = (
+        threading.Thread(
+            target=drain,
+            args=(process.stdout, max_stdout_bytes, stdout_chunks, "stdout"),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=drain,
+            args=(process.stderr, max_stderr_bytes, stderr_chunks, "stderr"),
+            daemon=True,
+        ),
+    )
+    for reader in readers:
+        reader.start()
+
+    deadline = time.monotonic() + timeout
+    timed_out = False
+    while process.poll() is None:
+        if overflow.wait(0.05):
+            break
+        if time.monotonic() >= deadline:
+            timed_out = True
+            break
+
+    if process.poll() is None:
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            else:  # pragma: no cover - the audit runner is Linux-only
+                process.terminate()
+            process.wait(timeout=2)
+        except (OSError, ProcessLookupError, subprocess.TimeoutExpired):
+            try:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:  # pragma: no cover - the audit runner is Linux-only
+                    process.kill()
+            except (OSError, ProcessLookupError):
+                pass
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                fail("binary command could not be terminated")
+
+    for reader in readers:
+        reader.join(timeout=2)
+    if any(reader.is_alive() for reader in readers):
+        fail("binary command pipe reader did not terminate")
+    if timed_out:
+        fail(f"binary command timed out without shell execution: {argv[0]}")
+    if stream_errors:
+        fail("binary command output could not be read")
+    if overflow_streams:
+        fail(f"binary command {sorted(set(overflow_streams))[0]} exceeded its byte limit")
+    return subprocess.CompletedProcess(
+        list(argv),
+        int(process.returncode),
+        b"".join(stdout_chunks),
+        b"".join(stderr_chunks),
+    )
 
 
 class Docker:
@@ -568,6 +734,29 @@ class Docker:
             fail(
                 f"docker {operation} failed rc={result.returncode}; "
                 f"stderr_sha256={sha256_bytes(result.stderr.encode('utf-8'))}"
+            )
+        return result
+
+    def run_binary(
+        self,
+        args: Sequence[str],
+        *,
+        timeout: int = 60,
+        check: bool = True,
+        max_stdout_bytes: int,
+        max_stderr_bytes: int = 1024 * 1024,
+    ) -> subprocess.CompletedProcess[bytes]:
+        result = run_process_bytes(
+            [*self.prefix, *args],
+            timeout=timeout,
+            max_stdout_bytes=max_stdout_bytes,
+            max_stderr_bytes=max_stderr_bytes,
+        )
+        if check and result.returncode != 0:
+            operation = " ".join(args[:3])
+            fail(
+                f"docker {operation} failed rc={result.returncode}; "
+                f"stderr_sha256={sha256_bytes(result.stderr)}"
             )
         return result
 
@@ -750,7 +939,7 @@ def image_identity(docker: Docker, expected: Mapping[str, Any], role: str) -> di
         version = str(labels.get("org.opencontainers.image.version", ""))
         revision = str(labels.get("org.opencontainers.image.revision", "")).lower()
         if version.lstrip("v") != str(expected["tag"]).lstrip("v") or revision != expected["commit"]:
-            fail("CPA image labels do not bind v7.2.116")
+            fail(f"CPA image labels do not bind {CPA_TAG}")
     else:
         if (
             labels.get("io.cyber-abuse-guard.mock-contract") != MOCK_CONTRACT
@@ -1036,16 +1225,38 @@ class Harness:
         self.mock_name = f"{self.run_id}-mock"
         self.network_name = f"{self.run_id}-net"
         self.results_path = self.evidence_dir / "transport-results.jsonl"
+        self.supplemental_results_path = (
+            self.evidence_dir / "supplemental-zip-results.jsonl"
+        )
         self.runtime_root = self.evidence_dir / ".runtime"
         self.corpus_root = Path(config["paths"]["corpus_manifest"]).parent
         self.cases = {case["id"]: case for case in manifest["semantic_cases"]}
         self.plan = build_execution_plan(manifest, self.seed, self.cold_count)
+        self.supplemental_manifest: dict[str, Any] | None = None
+        self.supplemental_manifest_raw = b""
+        self.supplemental_policy: dict[str, Any] | None = None
+        self.supplemental_policy_raw = b""
+        self.supplemental_cases: dict[str, dict[str, Any]] = {}
+        self.supplemental_plan: list[Any] = []
+        self.supplemental_texts: dict[str, bytearray] = {}
+        self.supplemental_texts_zeroized = False
+        self.supplemental_archive_identity: tuple[int, int, int, int] | None = None
+        self.supplemental_archive_preserved = False
         self.cleanup = CleanupTracker(
             docker, self.run_id, self.cpa_name, self.mock_name, self.network_name
         )
         self.results_handle: Any = None
+        self.supplemental_results_handle: Any = None
         self.results_count = 0
+        self.supplemental_results_count = 0
+        self.supplemental_action_counts = {
+            "allow": 0,
+            "block_incomplete_inspection": 0,
+            "block_malicious_text": 0,
+            "transport_error": 0,
+        }
         self.cold_evidence: list[dict[str, Any]] = []
+        self.realtime_evidence: list[dict[str, Any]] = []
         self.runtime_hashes: list[str] = []
         self.runner_identity: dict[str, str] = {}
         self.cag_pre: tuple[str, str] = ("", "")
@@ -1066,6 +1277,19 @@ class Harness:
         self.active_cpa_mounts: dict[
             str, tuple[Path, Path, bool, tuple[tuple[int, int], ...]]
         ] = {}
+        # The lazy-read recorder is created before static verification so the
+        # BoundCorpus observer can prove the preflight/transport phase edge.
+        # It receives only path/size/digest metadata; source bytes remain
+        # caller-owned and are never passed to the evidence producer.
+        self.lazy_read: LazyReadRecorder | None = None
+        self._lazy_observe_mode: str | None = "preflight"
+        self._pending_bound_read: tuple[str, int, str] | None = None
+        self._source_case_identity: dict[str, str] = {}
+        for semantic_case in self.manifest["semantic_cases"]:
+            source_path = semantic_case["source"]["corpus_file"]
+            self._source_case_identity.setdefault(source_path, semantic_case["id"])
+        self.lazy_read_finalized = False
+        self.csam_text_validated = False
 
     @property
     def management_headers(self) -> dict[str, str]:
@@ -1079,17 +1303,83 @@ class Harness:
     def control_headers(self) -> dict[str, str]:
         return {"Authorization": "Bearer " + self.control_token}
 
+    @property
+    def supplemental_member_text_retained(self) -> bool:
+        return not self.supplemental_texts_zeroized
+
+    @staticmethod
+    def supplemental_archive_stat_identity(info: os.stat_result) -> tuple[int, int, int, int]:
+        return (info.st_dev, info.st_ino, info.st_nlink, info.st_size)
+
+    def verify_supplemental_archive_identity(self) -> None:
+        if self.supplemental_archive_identity is None:
+            fail("supplemental ZIP archive was not bound before verification")
+        archive_path = Path(self.config["paths"]["supplemental_zip"])
+        info = regular_file_info(
+            archive_path, "supplemental ZIP archive", require_single_link=True
+        )
+        if self.supplemental_archive_stat_identity(info) != self.supplemental_archive_identity:
+            fail("supplemental ZIP archive inode, link count, size, or device drifted")
+        if sha256_file(
+            archive_path,
+            self.config["supplemental_zip"]["archive_bytes"],
+            require_single_link=True,
+        ) != self.config["supplemental_zip"]["archive_sha256"]:
+            fail("supplemental ZIP archive SHA-256 drifted")
+
+    def bind_supplemental_inputs(self) -> None:
+        (
+            supplemental_manifest,
+            supplemental_manifest_raw,
+            supplemental_policy,
+            supplemental_policy_raw,
+            archive_info,
+        ) = validate_supplemental_run_config_files(self.config)
+        self.supplemental_manifest = supplemental_manifest
+        self.supplemental_manifest_raw = supplemental_manifest_raw
+        self.supplemental_policy = supplemental_policy
+        self.supplemental_policy_raw = supplemental_policy_raw
+        self.supplemental_cases = {
+            case["id"]: case for case in supplemental_manifest["reviewed_cases"]
+        }
+        self.supplemental_plan = build_supplemental_execution_plan(
+            supplemental_manifest, self.seed, self.cold_count
+        )
+        self.supplemental_archive_identity = self.supplemental_archive_stat_identity(
+            archive_info
+        )
+        self.supplemental_texts = load_selected_supplemental_texts(
+            Path(self.config["paths"]["supplemental_zip"]),
+            supplemental_policy,
+            supplemental_manifest,
+            policy_sha256=sha256_bytes(supplemental_policy_raw),
+        )
+        for case_id, case in self.supplemental_cases.items():
+            source = case["source"]
+            raw = self.supplemental_texts.get(source["entry_id"])
+            if (
+                raw is None
+                or len(raw) != source["text_bytes"]
+                or sha256_bytes(raw) != source["normalized_text_sha256"]
+            ):
+                fail(f"supplemental ZIP selected text identity changed: {case_id}")
+        self.verify_supplemental_archive_identity()
+
     def verify_static_inputs(self) -> None:
+        validate_candidate_manifest_file(self.config)
         require_private_directory(self.corpus_root, "acquisition root")
         require_private_directory(self.corpus_root / "corpus", "private corpus directory")
         manifest_path = Path(self.config["paths"]["corpus_manifest"])
         if manifest_path.parent != self.corpus_root:
             fail("corpus manifest path resolution drifted")
         validate_corpus_manifest(self.manifest)
+        if getattr(self, "lazy_read", None) is None:
+            fail("lazy-read recorder is unavailable during static verification")
         self.bound_corpus = BoundCorpus(
             self.corpus_root,
             self.manifest["filesystem_identity"],
             "runner corpus",
+            read_observer=self._bound_read_observer,
         )
         self.bound_corpus.verify_manifest_files(self.manifest)
         self.corpus_validated = True
@@ -1114,6 +1404,7 @@ class Harness:
             load_json_bytes(policy_raw, "fixed source policy"), require_approved=True
         )
         validate_manifest_policy(self.manifest, policy, require_approved=True)
+        self.bind_supplemental_inputs()
         mock_source = Path(self.config["paths"]["mock_source"])
         if mock_source.resolve(strict=True) != (TOOL_DIR / "counted_mock.py").resolve(strict=True):
             fail("run config selected a different counted-Mock source")
@@ -1140,13 +1431,17 @@ class Harness:
         if self.cag_pre != (cag["commit"], cag["tree"]):
             fail("CAG source commit/tree does not match run config")
         cag_so = Path(self.config["paths"]["cag_so"])
-        if sha256_file(cag_so) != cag["so_sha256"]:
+        if sha256_file(cag_so, require_single_link=True) != cag["so_sha256"]:
             fail("CAG shared object SHA drifted")
 
         cpa = self.config["identities"]["cpa"]
         asset = Path(self.config["paths"]["cpa_official_asset"])
-        regular_file_info(asset, "CPA official release asset")
-        if asset.name != cpa["official_asset_name"] or sha256_file(asset) != cpa["official_asset_sha256"]:
+        asset_info = regular_file_info(asset, "CPA official release asset")
+        if (
+            asset.name != cpa["official_asset_name"]
+            or asset_info.st_size != CPA_OFFICIAL_ASSET_SIZE
+            or sha256_file(asset) != cpa["official_asset_sha256"]
+        ):
             fail("CPA official release asset identity drifted")
         image_identity(self.docker, cpa, "cpa")
         image_identity(self.docker, self.config["identities"]["mock"], "mock")
@@ -1159,6 +1454,14 @@ class Harness:
             if not self.docker.absent(kind, name):
                 fail(f"pre-existing audit resource name refused: {kind} {name}")
         self.verify_mock_image_source()
+        # Static verification is the only phase allowed to inspect every
+        # source.  Start transport only after every identity/image gate has
+        # passed, so a partial preflight can never publish a PASS boundary.
+        try:
+            self.lazy_read.start_transport()
+        except LazyReadError as exc:
+            fail(str(exc))
+        self._lazy_observe_mode = "transport"
 
     def verify_mock_image_source(self) -> None:
         """Copy and hash the stopped image payload before any Mock code runs."""
@@ -1946,6 +2249,107 @@ class Harness:
         event = self.event_head()
         return str(event.get("id", "")) if event is not None else ""
 
+    def cag_counter_snapshot(self) -> dict[str, int]:
+        value, _, _ = http_json(
+            self.cpa_url,
+            "GET",
+            "/v0/management/plugins/cyber-abuse-guard/status",
+            headers=self.management_headers,
+        )
+        counters = value.get("counters") if isinstance(value, dict) else None
+        if not isinstance(counters, dict) or not counters:
+            fail("CAG status counters are missing during realtime boundary probe")
+        result: dict[str, int] = {}
+        for key in REALTIME_RPC_COUNTER_KEYS:
+            raw = counters.get(key)
+            if type(raw) is not int or raw < 0:
+                fail(f"CAG status is missing fixed RPC callback counter {key}")
+            result[key] = raw
+        return result
+
+    def probe_realtime_boundary(self, cold_start: int) -> dict[str, Any]:
+        """Prove the fixed v7.2.137 realtime registrations bypass CAG.
+
+        Every request is deliberately unauthenticated, so the isolated Host must
+        terminate in its realtime authentication middleware.  Supplying model or
+        Provider credentials here would turn a negative-coverage probe into a
+        real-upstream risk and is therefore forbidden.
+        """
+        before_counters = self.cag_counter_snapshot()
+        before_event = self.event_head_id()
+        self.drain_usage_queue()
+        before_mock = self.mock_snapshot()
+        observations: list[dict[str, Any]] = []
+        for method, route, auth in REALTIME_ROUTES:
+            route_counters_before = self.cag_counter_snapshot()
+            status, raw, headers, _ = http_request(
+                self.cpa_url,
+                method,
+                route,
+                body=(b"{}" if method == "POST" else None),
+                headers={"Accept": "application/json"},
+                timeout=5.0,
+            )
+            route_counters_after = self.cag_counter_snapshot()
+            if status not in {401, 403}:
+                fail(
+                    f"realtime negative-coverage probe did not stop at authentication: "
+                    f"{method} {route} status={status} body_sha256={sha256_bytes(raw)}"
+                )
+            observations.append(
+                {
+                    "auth": auth,
+                    "cag_counter_delta": {
+                        key: route_counters_after[key] - route_counters_before[key]
+                        for key in REALTIME_RPC_COUNTER_KEYS
+                    },
+                    "credential_kind": "NONE",
+                    "method": method,
+                    "probe_mode": "UNAUTHENTICATED",
+                    "route": route,
+                    "status": status,
+                    "termination": "AUTH_REJECTED",
+                    "upgrade": headers.get("upgrade", "").lower() == "websocket",
+                }
+            )
+        after_counters = self.cag_counter_snapshot()
+        after_event = self.event_head_id()
+        usage_records = len(self.usage_queue())
+        after_mock = self.mock_snapshot()
+        if (
+            before_counters != after_counters
+            or before_event != after_event
+            or before_mock != {"auth": 0, "mock": 0, "provider": 0}
+            or after_mock != before_mock
+            or usage_records != 0
+            or any(item["upgrade"] for item in observations)
+            or any(
+                any(delta != 0 for delta in item["cag_counter_delta"].values())
+                for item in observations
+            )
+        ):
+            fail("realtime negative-coverage probe reached CAG, usage, Mock, or websocket upgrade")
+        return {
+            "cag_counters_after": after_counters,
+            "cag_counters_before": before_counters,
+            "cag_visible": False,
+            "cold_start": cold_start,
+            "evidence_level": "AUTH_BOUNDARY_ONLY",
+            "event_head_after": after_event,
+            "event_head_before": before_event,
+            "mock_after": after_mock,
+            "mock_before": before_mock,
+            "protection": "unprotected",
+            "real_provider_calls": 0,
+            "routes": observations,
+            "target_boundary": {
+                "counted_mock_only": True,
+                "cpa_private_bridge_only": True,
+                "real_provider_forbidden": True,
+            },
+            "usage_records": usage_records,
+        }
+
     def new_event(self, previous_id: str) -> dict[str, Any] | None:
         deadline = time.monotonic() + 3.0
         while time.monotonic() < deadline:
@@ -1961,6 +2365,12 @@ class Harness:
     def event_summary(event: Mapping[str, Any] | None) -> dict[str, Any] | None:
         if event is None:
             return None
+        explanation = event.get("decision_explanation")
+        winning_rule_id = (
+            explanation.get("winning_rule_id")
+            if isinstance(explanation, dict)
+            else None
+        )
         return {
             "action": event.get("action"),
             "category": event.get("category") or None,
@@ -1972,6 +2382,7 @@ class Harness:
             "incomplete_reason": event.get("incomplete_reason") or None,
             "mode": event.get("mode"),
             "request_hash": event.get("request_hash"),
+            "winning_rule_id": winning_rule_id or None,
         }
 
     def open_results(self) -> None:
@@ -1981,6 +2392,26 @@ class Harness:
         descriptor = os.open(self.results_path, flags, 0o600)
         self.results_handle = os.fdopen(descriptor, "wb", closefd=True)
         os.chmod(self.results_path, 0o600)
+        supplemental_descriptor: int | None = None
+        try:
+            supplemental_descriptor = os.open(
+                self.supplemental_results_path, flags, 0o600
+            )
+            self.supplemental_results_handle = os.fdopen(
+                supplemental_descriptor, "wb", closefd=True
+            )
+            supplemental_descriptor = None
+            os.chmod(self.supplemental_results_path, 0o600)
+        except BaseException:
+            if (
+                self.supplemental_results_handle is not None
+                and not self.supplemental_results_handle.closed
+            ):
+                self.supplemental_results_handle.close()
+            elif supplemental_descriptor is not None:
+                os.close(supplemental_descriptor)
+            self.results_handle.close()
+            raise
 
     def append_result(self, result: Mapping[str, Any]) -> bytes:
         if self.results_handle is None or self.results_handle.closed:
@@ -1992,11 +2423,28 @@ class Harness:
         self.results_count += 1
         return raw
 
+    def append_supplemental_result(self, result: Mapping[str, Any]) -> bytes:
+        if (
+            self.supplemental_results_handle is None
+            or self.supplemental_results_handle.closed
+        ):
+            fail("supplemental ZIP result handle is not open")
+        raw = canonical_bytes(result) + b"\n"
+        self.supplemental_results_handle.write(raw)
+        self.supplemental_results_handle.flush()
+        os.fsync(self.supplemental_results_handle.fileno())
+        self.supplemental_results_count += 1
+        action = result.get("actual_action")
+        if action in self.supplemental_action_counts:
+            self.supplemental_action_counts[action] += 1
+        return raw
+
     def execute_entry(self, entry: Any, ordinal: int) -> bytes:
         case = self.cases[entry.semantic_case_id]
         source = case["source"]
         if self.bound_corpus is None:
             fail("bound corpus is unavailable during execution")
+        self._pending_bound_read = None
         raw_text = self.bound_corpus.read(
             source["corpus_file"],
             f"corpus text {case['id']}",
@@ -2007,15 +2455,74 @@ class Harness:
             or sha256_bytes(raw_text) != source["text_sha256"]
         ):
             fail(f"corpus text identity changed: {case['id']}")
+        pending_read = self._pending_bound_read
+        self._pending_bound_read = None
+        if pending_read is None:
+            fail(f"lazy-read observer missed transport source: {case['id']}")
         try:
             text = raw_text.decode("utf-8", "strict")
         except UnicodeDecodeError:
             fail(f"corpus text is no longer UTF-8: {case['id']}")
+        return self.execute_transport_case(
+            entry, ordinal, case, raw_text, text, False, pending_read
+        )
+
+    def execute_supplemental_entry(self, entry: Any, ordinal: int) -> bytes:
+        case = self.supplemental_cases[entry.semantic_case_id]
+        source = case["source"]
+        raw_text = self.supplemental_texts.get(source["entry_id"])
+        if (
+            raw_text is None
+            or len(raw_text) != source["text_bytes"]
+            or sha256_bytes(raw_text) != source["normalized_text_sha256"]
+        ):
+            fail(f"supplemental ZIP selected text identity changed: {case['id']}")
+        try:
+            text = raw_text.decode("utf-8", "strict")
+        except UnicodeDecodeError:
+            fail(f"supplemental ZIP selected text is no longer UTF-8: {case['id']}")
+        source_path = "corpus/supplemental/" + sha256_bytes(
+            str(source["entry_id"]).encode("utf-8", "strict")
+        )
+        pending_read = (
+            source_path,
+            source["text_bytes"],
+            source["normalized_text_sha256"],
+        )
+        return self.execute_transport_case(
+            entry, ordinal, case, raw_text, text, True, pending_read
+        )
+
+    def execute_transport_case(
+        self,
+        entry: Any,
+        ordinal: int,
+        case: Mapping[str, Any],
+        raw_text: bytes | bytearray,
+        text: str,
+        supplemental: bool,
+        lazy_source: tuple[str, int, str],
+    ) -> bytes:
+        source = case["source"]
         body = apply_template(case["template"]["id"], text, entry.protocol, entry.stream, MODEL)
         request_bytes = canonical_bytes(body)
         request_digest = sha256_bytes(request_bytes)
         audit_request_hash = expected_request_hash(request_bytes)
         expected = case["expected_action_by_mode"][entry.mode]
+
+        source_path, source_bytes, source_sha256 = lazy_source
+        if source_bytes != len(raw_text) or source_sha256 != sha256_bytes(raw_text):
+            fail(f"lazy-read source identity changed: {case['id']}")
+        try:
+            self.lazy_read.record_transport(
+                source_path=source_path,
+                source_bytes=source_bytes,
+                source_sha256=source_sha256,
+                case_identity=case["id"],
+                request_sha256=request_digest,
+            )
+        except LazyReadError as exc:
+            fail(str(exc))
 
         self.drain_usage_queue()
         self.reset_mock()
@@ -2072,7 +2579,11 @@ class Harness:
             "audit_event": event_summary,
             "cold_start": entry.cold_start,
             "error_contract": error_contract,
-            "execution_id": f"{self.run_id}:{ordinal:08d}",
+            "execution_id": (
+                f"{self.run_id}:supplemental:{ordinal:08d}"
+                if supplemental
+                else f"{self.run_id}:{ordinal:08d}"
+            ),
             "expected_action": expected,
             "expected_action_by_mode": dict(case["expected_action_by_mode"]),
             "expected_audit_request_hash": audit_request_hash,
@@ -2086,25 +2597,44 @@ class Harness:
             "request_sha256": request_digest,
             "response_bytes": len(response),
             "response_sha256": sha256_bytes(response),
-            "schema": RESULT_SCHEMA,
-            "semantic_case_id": case["id"],
+            "schema": (
+                SUPPLEMENTAL_ZIP_RESULT_SCHEMA if supplemental else RESULT_SCHEMA
+            ),
             "side_effect_deltas": side_effects,
-            "source_text_sha256": source["text_sha256"],
+            "source_text_sha256": (
+                source["normalized_text_sha256"]
+                if supplemental
+                else source["text_sha256"]
+            ),
             "stream": entry.stream,
             "stream_terminated": stream_terminated,
             "template_sha256": case["template"]["sha256"],
             "usage_recorded": usage_count == 1,
         }
+        result[
+            "supplemental_case_id" if supplemental else "semantic_case_id"
+        ] = case["id"]
+        result_label = (
+            f"supplemental ZIP execution {ordinal}"
+            if supplemental
+            else f"transport execution {ordinal}"
+        )
+        append = self.append_supplemental_result if supplemental else self.append_result
         try:
-            validate_result(result, self.cases, f"transport execution {ordinal}")
+            if supplemental:
+                validate_supplemental_result(
+                    result, self.supplemental_cases, result_label
+                )
+            else:
+                validate_result(result, self.cases, result_label)
         except ContractError as exc:
             error_id = sha256_bytes(str(exc).encode("utf-8"))[:16]
             result["passed"] = False
             result["infrastructure_error"] = f"closed_contract_failure:{error_id}"
-            raw_result = self.append_result(result)
+            raw_result = append(result)
             del raw_result
             fail(
-                f"transport execution {ordinal} failed closed; contract_error_id={error_id}"
+                f"{result_label} failed closed; contract_error_id={error_id}"
             )
         finally:
             raw_text = b""
@@ -2112,7 +2642,7 @@ class Harness:
             body = {}
             request_bytes = b""
             response = b""
-        return self.append_result(result)
+        return append(result)
 
     def sqlite_checkpoint(self, database: Path) -> dict[str, Any]:
         self.cleanup.checkpoint_attempts += 1
@@ -2183,6 +2713,9 @@ class Harness:
         execution_count: int,
         order_sha256: str,
         result_bytes: bytes,
+        supplemental_execution_count: int,
+        supplemental_order_sha256: str,
+        supplemental_result_bytes: bytes,
         runtime_hash: str,
     ) -> dict[str, Any]:
         self.verify_sandbox()
@@ -2228,18 +2761,38 @@ class Harness:
             "sqlite": sqlite,
             "started_at": started_at,
             "stop": stop,
+            "supplemental_execution_count": supplemental_execution_count,
+            "supplemental_order_sha256": supplemental_order_sha256,
+            "supplemental_results_sha256": sha256_bytes(
+                supplemental_result_bytes
+            ),
         }
 
-    def run_cold_start(self, cold_start: int, ordinal_offset: int) -> int:
+    def run_cold_start(
+        self,
+        cold_start: int,
+        ordinal_offset: int,
+        supplemental_ordinal_offset: int,
+    ) -> tuple[int, int]:
         entries = [entry for entry in self.plan if entry.cold_start == cold_start]
+        supplemental_entries = [
+            entry
+            for entry in self.supplemental_plan
+            if entry.cold_start == cold_start
+        ]
         if not entries:
             fail(f"cold start {cold_start} has no planned executions")
+        if not supplemental_entries:
+            fail(f"cold start {cold_start} has no supplemental ZIP executions")
         initial_mode = entries[0].mode
         self.failure_stage = "cold_runtime_prepare"
         cold_root, runtime_hash = self.prepare_cold_runtime(cold_start, initial_mode)
         self.runtime_hashes.append(runtime_hash)
         started_at = now_iso()
         self.start_cold(cold_root, initial_mode)
+        self.failure_stage = "realtime_negative_coverage"
+        if getattr(self, "cpa_url", ""):
+            self.realtime_evidence.append(self.probe_realtime_boundary(cold_start))
         current_mode = initial_mode
         self.failure_stage = "transport_matrix"
         cold_raw = bytearray()
@@ -2266,6 +2819,34 @@ class Harness:
                     ),
                     flush=True,
                 )
+        self.failure_stage = "supplemental_zip_matrix"
+        supplemental_cold_raw = bytearray()
+        supplemental_order: list[tuple[str, str, str, bool]] = []
+        for index, entry in enumerate(supplemental_entries, start=1):
+            if entry.mode != current_mode:
+                self.reconfigure(entry.mode)
+                current_mode = entry.mode
+                self.verify_sandbox()
+            ordinal = supplemental_ordinal_offset + index
+            supplemental_cold_raw.extend(
+                self.execute_supplemental_entry(entry, ordinal)
+            )
+            supplemental_order.append(
+                (entry.mode, entry.semantic_case_id, entry.protocol, entry.stream)
+            )
+            if index % 25 == 0 or index == len(supplemental_entries):
+                print(
+                    json.dumps(
+                        {
+                            "cold_start": cold_start,
+                            "completed": index,
+                            "plane": "supplemental_zip",
+                            "total": len(supplemental_entries),
+                        },
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
         self.failure_stage = "cold_finish"
         cold = self.finish_cold(
             cold_root,
@@ -2273,24 +2854,371 @@ class Harness:
             len(entries),
             sha256_bytes(canonical_bytes(order)),
             bytes(cold_raw),
+            len(supplemental_entries),
+            sha256_bytes(canonical_bytes(supplemental_order)),
+            bytes(supplemental_cold_raw),
             runtime_hash,
         )
         self.cold_evidence.append(cold)
-        return len(entries)
+        return len(entries), len(supplemental_entries)
 
     def close_results(self) -> None:
-        if self.results_handle is not None and not self.results_handle.closed:
-            self.results_handle.flush()
-            os.fsync(self.results_handle.fileno())
-            self.results_handle.close()
+        errors: list[str] = []
+        for label, handle in (
+            ("transport", self.results_handle),
+            ("supplemental_zip", self.supplemental_results_handle),
+        ):
+            if handle is None or handle.closed:
+                continue
+            try:
+                handle.flush()
+                os.fsync(handle.fileno())
+            except BaseException as exc:
+                errors.append(f"{label}:{type(exc).__name__}")
+            finally:
+                try:
+                    handle.close()
+                except BaseException as exc:
+                    errors.append(f"{label}_close:{type(exc).__name__}")
+        if errors:
+            fail("result close failed: " + ",".join(errors))
 
     def remove_corpus_texts(self) -> None:
+        self._lazy_observe_mode = None
         removed, retained = remove_manifest_corpus(
             self.manifest, self.corpus_root, self.bound_corpus
         )
         self.cleanup.text_files_removed = removed
         self.cleanup.text_retained = retained
         self.corpus_cleanup_completed = True
+
+    def _bound_read_observer(self, source_path: str, source_bytes: int, source_sha256: str) -> None:
+        """Receive metadata only from BoundCorpus after a verified read."""
+
+        lazy_read = getattr(self, "lazy_read", None)
+        if lazy_read is None:
+            fail("lazy-read observer received a read before recorder initialization")
+        mode = self._lazy_observe_mode
+        case_identity = self._source_case_identity.get(source_path, source_path)
+        if mode == "preflight":
+            try:
+                lazy_read.record_preflight(
+                    source_path=source_path,
+                    source_bytes=source_bytes,
+                    source_sha256=source_sha256,
+                    case_identity=case_identity,
+                )
+            except LazyReadError as exc:
+                fail(str(exc))
+        elif mode == "transport":
+            if self._pending_bound_read is not None:
+                fail("lazy-read transport opened more than one source for a request")
+            self._pending_bound_read = (source_path, source_bytes, source_sha256)
+
+    def _abort_lazy_read(self) -> None:
+        lazy_read = getattr(self, "lazy_read", None)
+        if lazy_read is None or self.lazy_read_finalized:
+            return
+        try:
+            lazy_read.abort()
+        except BaseException:
+            pass
+
+    def finalize_lazy_read(self) -> None:
+        if self.lazy_read_finalized:
+            fail("lazy-read evidence was finalized twice")
+        lazy_read = getattr(self, "lazy_read", None)
+        if lazy_read is None:
+            fail("lazy-read recorder is unavailable during finalization")
+        try:
+            lazy_read.finalize(
+                expected_transport_reads=self.results_count
+                + self.supplemental_results_count,
+                finally_cleanup_complete=(
+                    self.corpus_cleanup_completed
+                    and self.supplemental_texts_zeroized
+                    and not self.runtime_root.exists()
+                    and self.owned_resources_absent()
+                ),
+                post_unlink_nlink_zero=not self.cleanup.text_retained,
+                supplemental_member_text_retained=self.supplemental_member_text_retained,
+                temporary_secret_or_config_retained=(
+                    self.active_auth_dir is not None or self.runtime_root.exists()
+                ),
+                third_party_text_retained=self.cleanup.text_retained,
+            )
+            phase = load_json_file(lazy_read.phase_path, "lazy-read phase boundary")
+            summary = load_json_file(lazy_read.summary_path, "lazy-read runtime summary")
+            trace_raw = read_regular_bytes(
+                lazy_read.trace_path,
+                "lazy-read runtime trace",
+                64 * 1024 * 1024,
+                require_single_link=True,
+            )
+            lazy_projection = validate_lazy_read_evidence(
+                phase, trace_raw, summary
+            )
+            if self.supplemental_manifest is None:
+                fail("supplemental ZIP manifest is unavailable for lazy-read validation")
+            validate_lazy_read_bindings(
+                trace_raw,
+                self.manifest,
+                read_regular_bytes(
+                    self.results_path,
+                    "lazy-read transport results",
+                    128 * 1024 * 1024,
+                    require_single_link=True,
+                ),
+                self.supplemental_manifest,
+                read_regular_bytes(
+                    self.supplemental_results_path,
+                    "lazy-read supplemental results",
+                    128 * 1024 * 1024,
+                    require_single_link=True,
+                ),
+            )
+            if lazy_projection["transport_request_count"] != (
+                self.results_count + self.supplemental_results_count
+            ):
+                fail("lazy-read validated denominator differs from result counters")
+        except (LazyReadError, ContractError, OSError) as exc:
+            fail(str(exc))
+        self.lazy_read_finalized = True
+
+    def verify_bound_host_directory_alias(
+        self, bound_directory: Path, host_directory: Path, label: str
+    ) -> None:
+        """Prove a child-created real directory is below the held evidence inode."""
+
+        if (
+            self.evidence_dir != self.evidence_binding.bound_path
+            or self.host_evidence_dir != self.evidence_binding.path
+        ):
+            fail(f"{label} binding contract is inconsistent")
+        try:
+            bound_relative = bound_directory.relative_to(self.evidence_dir)
+            host_relative = host_directory.relative_to(self.host_evidence_dir)
+        except ValueError:
+            fail(f"{label} is outside the evidence directory")
+        if (
+            bound_relative != host_relative
+            or not bound_relative.parts
+            or any(part in {"", ".", ".."} for part in bound_relative.parts)
+        ):
+            fail(f"{label} aliases do not identify the same safe relative path")
+
+        self.evidence_binding.verify_path()
+        try:
+            bound_info = bound_directory.lstat()
+            host_info = host_directory.lstat()
+        except OSError as exc:
+            fail(f"{label} cannot be verified: {type(exc).__name__}")
+        bound_security = (
+            bound_info.st_uid,
+            bound_info.st_gid,
+            stat.S_IMODE(bound_info.st_mode),
+        )
+        host_security = (
+            host_info.st_uid,
+            host_info.st_gid,
+            stat.S_IMODE(host_info.st_mode),
+        )
+        if (
+            stat.S_ISLNK(bound_info.st_mode)
+            or stat.S_ISLNK(host_info.st_mode)
+            or not stat.S_ISDIR(bound_info.st_mode)
+            or not stat.S_ISDIR(host_info.st_mode)
+            or (bound_info.st_dev, bound_info.st_ino)
+            != (host_info.st_dev, host_info.st_ino)
+            or bound_security != host_security
+            or host_security[:2] != self.evidence_binding.path_security[:2]
+            or (os.name == "posix" and host_security[2] & 0o077)
+        ):
+            fail(f"{label} is not the descriptor-bound private directory")
+        self.evidence_binding.verify_path()
+
+    @staticmethod
+    def _required_csam_setting(name: str) -> str:
+        value = os.environ.get(name, "")
+        if not value or len(value) > 4096 or any(ord(char) < 0x20 for char in value):
+            fail(f"CSAM live runner setting is missing or malformed: {name}")
+        return value
+
+    def run_csam_text_evidence(self) -> None:
+        """Run and validate the independent synthetic CSAM live plane.
+
+        The hook and private endpoints are deliberately operator-owned inputs;
+        this runner never discovers or executes anything from the reviewed
+        repositories or supplemental archive.  A missing hook/configuration is
+        a hard failure, rather than a silent downgrade to a synthetic PASS.
+        """
+
+        if self.csam_text_validated:
+            fail("CSAM text evidence was executed twice")
+        cpa_url = self._required_csam_setting("CAG_CSAM_TEXT_CPA_URL")
+        mock_url = self._required_csam_setting("CAG_CSAM_TEXT_MOCK_URL")
+        hook = self._required_csam_setting("CAG_CSAM_TEXT_COLD_START_HOOK")
+        hook_path = Path(hook)
+        if not hook_path.is_absolute():
+            fail("CAG_CSAM_TEXT_COLD_START_HOOK must be an absolute path")
+        # The producer intentionally rejects proc-fd magic-link parents. Give
+        # it the verified normal Host alias, while this parent runner keeps all
+        # reads below the descriptor-bound alias after proving both names refer
+        # to the same private inode.
+        output = self.evidence_dir / "csam-text"
+        host_output = self.host_evidence_dir / "csam-text"
+        runtime_root = self.host_evidence_dir / ".csam-runtime"
+        self.evidence_binding.verify_path()
+        if os.path.lexists(output) or os.path.lexists(host_output):
+            fail("CSAM evidence output must be absent before execution")
+        if os.path.lexists(runtime_root):
+            fail("CSAM runtime root must be absent before execution")
+        self.evidence_binding.verify_path()
+        command = [
+            sys.executable,
+            "-I",
+            "-B",
+            str(TOOL_DIR / "csam_text_runner.py"),
+            "--run-id",
+            self.run_id,
+            "--output-dir",
+            str(host_output),
+            "--cpa-url",
+            cpa_url,
+            "--mock-url",
+            mock_url,
+            "--cold-start-hook",
+            str(hook_path),
+            "--runtime-root",
+            str(runtime_root),
+        ]
+        allowed_env = {
+            "PATH": "/usr/bin:/bin",
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PYTHONNOUSERSITE": "1",
+        }
+        for name in (
+            "CAG_CSAM_CLIENT_KEY",
+            "CAG_CSAM_MANAGEMENT_KEY",
+            "CAG_CSAM_MOCK_CONTROL_TOKEN",
+            "CAG_CSAM_UPSTREAM_KEY",
+        ):
+            allowed_env[name] = self._required_csam_setting(name)
+        completed: subprocess.CompletedProcess[bytes] | None = None
+        invocation_error: BaseException | None = None
+        try:
+            completed = subprocess.run(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                env=allowed_env,
+                timeout=3_600,
+                check=False,
+                shell=False,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            invocation_error = exc
+        binding_error: AuditFailure | None = None
+        try:
+            self.evidence_binding.verify_path()
+        except AuditFailure as exc:
+            binding_error = exc
+        cleanup_errors: list[str] = []
+        if os.path.lexists(runtime_root):
+            try:
+                remove_owned_tree(runtime_root)
+            except BaseException as exc:
+                cleanup_errors.append(f"runtime:{type(exc).__name__}")
+        try:
+            if not self.owned_resources_absent():
+                self.cleanup.emergency()
+            if not self.owned_resources_absent():
+                cleanup_errors.append("docker:resources_remain")
+        except BaseException as exc:
+            cleanup_errors.append(f"docker:{type(exc).__name__}")
+        if cleanup_errors:
+            raise CleanupFailure(sorted(set(cleanup_errors)))
+        if binding_error is not None:
+            raise binding_error
+        if invocation_error is not None:
+            fail(
+                "CSAM live runner invocation failed: "
+                f"{type(invocation_error).__name__}"
+            )
+        if completed is None:  # pragma: no cover - defensive exhaustiveness
+            fail("CSAM live runner invocation produced no result")
+        if completed.returncode != 0:
+            diagnostic = sha256_bytes(
+                completed.stdout[:4096] + b"\x00" + completed.stderr[:4096]
+            )
+            fail(
+                "CSAM live runner did not produce PASS; "
+                f"diagnostic_sha256={diagnostic}"
+            )
+        self.verify_bound_host_directory_alias(
+            output, host_output, "CSAM evidence output"
+        )
+        expected_names = {
+            "fixture-manifest.json",
+            "results.json",
+            "summary.json",
+            "privacy-cleanup.json",
+        }
+        try:
+            children = {child.name for child in output.iterdir()}
+        except OSError as exc:
+            fail(f"CSAM evidence directory is unavailable: {type(exc).__name__}")
+        if children != expected_names:
+            fail("CSAM evidence directory contains unexpected or missing files")
+        try:
+            fixture = load_json_bytes(
+                read_regular_bytes(
+                    output / "fixture-manifest.json",
+                    "CSAM fixture manifest",
+                    2 * 1024 * 1024,
+                    require_single_link=True,
+                ),
+                "CSAM fixture manifest",
+            )
+            results = load_json_bytes(
+                read_regular_bytes(
+                    output / "results.json",
+                    "CSAM results",
+                    64 * 1024 * 1024,
+                    require_single_link=True,
+                ),
+                "CSAM results",
+            )
+            summary = load_json_bytes(
+                read_regular_bytes(
+                    output / "summary.json",
+                    "CSAM summary",
+                    2 * 1024 * 1024,
+                    require_single_link=True,
+                ),
+                "CSAM summary",
+            )
+            cleanup = load_json_bytes(
+                read_regular_bytes(
+                    output / "privacy-cleanup.json",
+                    "CSAM privacy cleanup",
+                    2 * 1024 * 1024,
+                    require_single_link=True,
+                ),
+                "CSAM privacy cleanup",
+            )
+            validate_csam_text_evidence(
+                fixture,
+                results,
+                summary,
+                cleanup,
+                expected_run_id=self.run_id,
+            )
+        except (ContractError, OSError, ValueError) as exc:
+            fail(f"CSAM live evidence failed closed: {type(exc).__name__}")
+        self.csam_text_validated = True
 
     def owned_resources_absent(self) -> bool:
         return all(
@@ -2308,6 +3236,8 @@ class Harness:
         business_before: list[dict[str, Any]],
         business_after: list[dict[str, Any]],
     ) -> dict[str, Any]:
+        if self.supplemental_manifest is None:
+            fail("supplemental ZIP manifest is unavailable for machine evidence")
         cpa_config = self.config["identities"]["cpa"]
         mock_config = self.config["identities"]["mock"]
         cleanup = {
@@ -2317,6 +3247,10 @@ class Harness:
             "graceful_stop_attempts": self.cleanup.graceful_stop_attempts,
             "images_removed": False,
             "resources": self.cleanup.resources,
+            "supplemental_input_archive_preserved": self.supplemental_archive_preserved,
+            "supplemental_member_text_files_created": 0,
+            "supplemental_member_text_files_removed": 0,
+            "supplemental_member_text_retained": self.supplemental_member_text_retained,
             "third_party_text_files_removed": self.cleanup.text_files_removed,
             "third_party_text_retained": self.cleanup.text_retained,
         }
@@ -2343,9 +3277,12 @@ class Harness:
                 "unique_semantic_cases": self.manifest["unique_semantic_cases"],
             },
             "identities": {
+                "candidate": self.config["identities"]["candidate"],
                 "cag": {
                     "commit": self.config["identities"]["cag"]["commit"],
+                    "so_name": self.config["identities"]["cag"]["so_name"],
                     "so_sha256": self.config["identities"]["cag"]["so_sha256"],
+                    "source_version": self.config["identities"]["cag"]["source_version"],
                     "tree": self.config["identities"]["cag"]["tree"],
                 },
                 "configuration": {
@@ -2355,11 +3292,13 @@ class Harness:
                 "cpa": {
                     "binary_path": cpa_config["binary_path"],
                     "binary_sha256": cpa_config["binary_sha256"],
+                    "c_abi": cpa_config["c_abi"],
                     "commit": cpa_config["commit"],
                     "image_id": cpa_config["image_id"],
                     "official_asset_name": cpa_config["official_asset_name"],
                     "official_asset_sha256": cpa_config["official_asset_sha256"],
                     "repo_digest": cpa_config["repo_digest"],
+                    "rpc_schema": cpa_config["rpc_schema"],
                     "tag": cpa_config["tag"],
                 },
                 "mock": {
@@ -2377,8 +3316,63 @@ class Harness:
                 "run_id": self.run_id,
                 "seed": self.seed,
             },
+            "realtime": {
+                "authenticated_dynamic_evidence": "NOT_PERFORMED_PROVIDER_SAFETY_BOUNDARY",
+                "cag_visible": False,
+                "cold_starts": self.realtime_evidence,
+                "evidence_level": "AUTH_BOUNDARY_ONLY",
+                "protection": "unprotected",
+                "real_provider_calls": 0,
+                "route_count": len(REALTIME_ROUTES),
+                "source_topology": "SOURCE_TOPOLOGY_UNPROTECTED",
+            },
             "schema": EVIDENCE_SCHEMA,
             "started_at": started_at,
+            "supplemental_zip_manifest": {
+                "archive_bytes": self.supplemental_manifest["archive"]["bytes"],
+                "archive_sha256": self.supplemental_manifest["archive"]["sha256"],
+                "code_executions": 0,
+                "manifest_path": "supplemental-zip-manifest.json",
+                "manifest_sha256": sha256_bytes(self.supplemental_manifest_raw),
+                "member_text_files_created": 0,
+                "policy_path": "supplemental-zip-policy.json",
+                "policy_sha256": sha256_bytes(self.supplemental_policy_raw),
+                "selected_entry_count": self.supplemental_manifest[
+                    "selected_entry_count"
+                ],
+                "third_party_code_executions": 0,
+                "unique_reviewed_cases": self.supplemental_manifest[
+                    "unique_reviewed_cases"
+                ],
+            },
+            "supplemental_zip_results": {
+                "modes": list(MODES),
+                "protocols": list(PROTOCOLS),
+                "results_path": "supplemental-zip-results.jsonl",
+                "results_sha256": sha256_file(self.supplemental_results_path),
+                "streams": list(STREAM_VALUES),
+                "supplemental_executions": self.supplemental_results_count,
+            },
+            "supplemental_zip_summary": {
+                "allow_executions": self.supplemental_action_counts["allow"],
+                "block_incomplete_inspection_executions": self.supplemental_action_counts[
+                    "block_incomplete_inspection"
+                ],
+                "block_malicious_text_executions": self.supplemental_action_counts[
+                    "block_malicious_text"
+                ],
+                "code_executions": 0,
+                "malicious_case_count": sum(
+                    case["label"] == "malicious_active"
+                    for case in self.supplemental_cases.values()
+                ),
+                "passed_executions": self.supplemental_results_count,
+                "third_party_code_executions": 0,
+                "total_executions": self.supplemental_results_count,
+                "transport_error_executions": self.supplemental_action_counts[
+                    "transport_error"
+                ],
+            },
             "third_party_code_executions": 0,
             "transport": {
                 "modes": list(MODES),
@@ -2396,10 +3390,22 @@ class Harness:
         business_before: list[dict[str, Any]] = []
         business_after: list[dict[str, Any]] = []
         try:
+            try:
+                self.lazy_read = LazyReadRecorder(self.evidence_dir, self.run_id)
+            except LazyReadError as exc:
+                fail(str(exc))
             self.failure_stage = "static_inputs"
             self.verify_static_inputs()
             write_exclusive(self.evidence_dir / "corpus-manifest.json", self.manifest_raw)
             write_exclusive(self.evidence_dir / "run-config.json", self.config_raw)
+            write_exclusive(
+                self.evidence_dir / "supplemental-zip-policy.json",
+                self.supplemental_policy_raw,
+            )
+            write_exclusive(
+                self.evidence_dir / "supplemental-zip-manifest.json",
+                self.supplemental_manifest_raw,
+            )
             business_before = business_snapshot(self.docker, self.run_id)
             self.runtime_root.mkdir(mode=0o700)
             os.chmod(self.runtime_root, 0o700)
@@ -2407,8 +3413,13 @@ class Harness:
             self.failure_stage = "network_create"
             self.create_network()
             ordinal_offset = 0
+            supplemental_ordinal_offset = 0
             for cold_start in range(1, self.cold_count + 1):
-                ordinal_offset += self.run_cold_start(cold_start, ordinal_offset)
+                core_count, supplemental_count = self.run_cold_start(
+                    cold_start, ordinal_offset, supplemental_ordinal_offset
+                )
+                ordinal_offset += core_count
+                supplemental_ordinal_offset += supplemental_count
             self.close_results()
             self.failure_stage = "network_cleanup"
             self.cleanup.remove_network()
@@ -2417,6 +3428,8 @@ class Harness:
             if cag_post != self.cag_pre:
                 fail("CAG source HEAD/tree moved during the audit")
             business_after = business_snapshot(self.docker, self.run_id)
+            self.verify_supplemental_archive_identity()
+            self.supplemental_archive_preserved = True
             self.failure_stage = "evidence_finalize"
             succeeded = True
         finally:
@@ -2449,6 +3462,21 @@ class Harness:
                     cleanup_errors.append(f"corpus_fds:{type(cleanup_exc).__name__}")
                 finally:
                     self.bound_corpus = None
+            self.supplemental_texts_zeroized = _zeroize_supplemental_texts(
+                self.supplemental_texts
+            )
+            if succeeded and not cleanup_errors:
+                try:
+                    self.run_csam_text_evidence()
+                except BaseException as csam_exc:
+                    cleanup_errors.append(f"csam_text:{type(csam_exc).__name__}")
+            if succeeded and not cleanup_errors:
+                try:
+                    self.finalize_lazy_read()
+                except BaseException as lazy_exc:
+                    cleanup_errors.append(f"lazy_read:{type(lazy_exc).__name__}")
+            elif not self.lazy_read_finalized:
+                self._abort_lazy_read()
             if cleanup_errors:
                 raise CleanupFailure(cleanup_errors)
         evidence = self.machine_evidence(started_at, business_before, business_after)
@@ -2457,6 +3485,7 @@ class Harness:
             evidence,
             self.results_path,
             corpus_root=None,
+            supplemental_results_path=self.supplemental_results_path,
         )
         write_json(self.evidence_dir / "machine-evidence.json", evidence)
         return evidence
@@ -2489,6 +3518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         validate_corpus_manifest(manifest, manifest_path.parent)
         cleanup_manifest = (manifest, manifest_path.parent)
+        validate_candidate_manifest_file(config)
         policy_raw = read_regular_bytes(POLICY_PATH, "fixed source policy", 2 * 1024 * 1024)
         policy_sha256 = sha256_bytes(policy_raw)
         if (
@@ -2518,6 +3548,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 {
                     "completed": True,
                     "evidence": str(evidence_dir / "machine-evidence.json"),
+                    "supplemental_code_executions": evidence[
+                        "supplemental_zip_summary"
+                    ]["code_executions"],
+                    "supplemental_executions": evidence[
+                        "supplemental_zip_results"
+                    ]["supplemental_executions"],
                     "third_party_code_executions": evidence["third_party_code_executions"],
                     "transport_executions": evidence["transport"]["transport_executions"],
                 },

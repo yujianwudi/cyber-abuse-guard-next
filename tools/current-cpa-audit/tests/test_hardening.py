@@ -21,21 +21,32 @@ sys.path.insert(0, str(TOOL))
 sys.path.insert(0, str(HERE))
 
 import acquire
+import audit_contract
 import run
 import validate as validator_cli
 from audit_contract import (
     BLOCK_REFUSAL_MESSAGE,
+    CAG_SO_NAME,
+    CAG_SOURCE_VERSION,
+    CANDIDATE_ARTIFACT_NAME,
+    CPA_C_ABI,
     CPA_COMMIT,
+    CPA_OFFICIAL_BINARY_SHA256,
+    CPA_OFFICIAL_ASSET_NAME,
+    CPA_OFFICIAL_ASSET_SHA256,
+    CPA_RPC_SCHEMA,
     CPA_TAG,
     MOCK_CONTRACT,
     RUN_CONFIG_SCHEMA,
     ContractError,
+    candidate_identity,
     canonical_bytes,
     load_json_file,
     review_sha256,
     sha256_bytes,
     validate_corpus_manifest,
     validate_block_response,
+    validate_candidate_manifest_file,
     build_execution_plan,
     validate_evidence_run_config,
     validate_manifest_policy,
@@ -43,23 +54,43 @@ from audit_contract import (
     validate_result,
     validate_run_config,
 )
-from fixtures import STAMP, digest, evidence_files, manifest
+from fixtures import (
+    STAMP,
+    audit_candidate_manifest,
+    candidate_provenance,
+    digest,
+    evidence_files,
+    manifest,
+)
 
 
 def valid_run_config() -> dict[str, Any]:
     return {
         "corpus_manifest_sha256": "1" * 64,
         "identities": {
-            "cag": {"commit": "1" * 40, "so_sha256": "2" * 64, "tree": "3" * 40},
+            "candidate": candidate_provenance(
+                commit="1" * 40,
+                tree="3" * 40,
+                so_sha256="2" * 64,
+            ),
+            "cag": {
+                "commit": "1" * 40,
+                "so_name": CAG_SO_NAME,
+                "so_sha256": "2" * 64,
+                "source_version": CAG_SOURCE_VERSION,
+                "tree": "3" * 40,
+            },
             "cpa": {
                 "binary_path": "/usr/local/bin/CLIProxyAPI",
-                "binary_sha256": "3" * 64,
+                "binary_sha256": CPA_OFFICIAL_BINARY_SHA256,
+                "c_abi": CPA_C_ABI,
                 "commit": CPA_COMMIT,
                 "image_id": "sha256:" + "4" * 64,
                 "image_ref": "registry.example/cpa@sha256:" + "5" * 64,
-                "official_asset_name": "cpa.tar.gz",
-                "official_asset_sha256": "6" * 64,
+                "official_asset_name": CPA_OFFICIAL_ASSET_NAME,
+                "official_asset_sha256": CPA_OFFICIAL_ASSET_SHA256,
                 "repo_digest": "registry.example/cpa@sha256:" + "5" * 64,
+                "rpc_schema": CPA_RPC_SCHEMA,
                 "tag": CPA_TAG,
             },
             "mock": {
@@ -71,12 +102,16 @@ def valid_run_config() -> dict[str, Any]:
             },
         },
         "paths": {
+            "candidate_manifest": "/srv/audit-candidate-manifest.json",
             "cag_repository": "/srv/cag",
-            "cag_so": "/srv/cag.so",
+            "cag_so": f"/srv/{CAG_SO_NAME}",
             "corpus_manifest": "/srv/acquisition/corpus-manifest.json",
-            "cpa_official_asset": "/srv/cpa.tar.gz",
+            "cpa_official_asset": f"/srv/{CPA_OFFICIAL_ASSET_NAME}",
             "evidence_directory": "/srv/evidence",
             "mock_source": "/srv/counted_mock.py",
+            "supplemental_zip": "/srv/Codex-full.zip",
+            "supplemental_zip_manifest": "/srv/supplemental-zip-manifest.json",
+            "supplemental_zip_policy": "/srv/supplemental-zip-policy.json",
         },
         "policy_sha256": "a" * 64,
         "run": {
@@ -86,6 +121,14 @@ def valid_run_config() -> dict[str, Any]:
             "seed": 1205,
         },
         "schema": RUN_CONFIG_SCHEMA,
+        "supplemental_zip": {
+            "archive_bytes": 5830796,
+            "archive_sha256": "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
+            "manifest_sha256": "b" * 64,
+            "policy_sha256": "9c6076e5fee920da9b59334c0cf9ddfa18f5c33a26a66719a04c609e77fb632a",
+            "selected_entry_count": 4,
+            "unique_reviewed_cases": 7,
+        },
     }
 
 
@@ -114,25 +157,73 @@ def config_bound_to_evidence(
     config = {
         "corpus_manifest_sha256": evidence["corpus"]["manifest_sha256"],
         "identities": {
+            "candidate": copy.deepcopy(evidence["identities"]["candidate"]),
             "cag": copy.deepcopy(evidence["identities"]["cag"]),
             "cpa": cpa,
             "mock": mock_config,
         },
         "paths": {
+            "candidate_manifest": "/srv/audit-candidate-manifest.json",
             "cag_repository": "/srv/cag",
-            "cag_so": "/srv/cag.so",
+            "cag_so": f"/srv/{CAG_SO_NAME}",
             "corpus_manifest": "/srv/acquisition/corpus-manifest.json",
-            "cpa_official_asset": "/srv/cpa.tar.gz",
+            "cpa_official_asset": f"/srv/{CPA_OFFICIAL_ASSET_NAME}",
             "evidence_directory": evidence_directory,
             "mock_source": "/srv/counted_mock.py",
+            "supplemental_zip": "/srv/Codex-full.zip",
+            "supplemental_zip_manifest": "/srv/supplemental-zip-manifest.json",
+            "supplemental_zip_policy": "/srv/supplemental-zip-policy.json",
         },
         "policy_sha256": evidence["identities"]["runner"]["policy_sha256"],
         "run": copy.deepcopy(evidence["run"]),
         "schema": RUN_CONFIG_SCHEMA,
+        "supplemental_zip": {
+            "archive_bytes": evidence["supplemental_zip_manifest"]["archive_bytes"],
+            "archive_sha256": evidence["supplemental_zip_manifest"]["archive_sha256"],
+            "manifest_sha256": evidence["supplemental_zip_manifest"]["manifest_sha256"],
+            "policy_sha256": evidence["supplemental_zip_manifest"]["policy_sha256"],
+            "selected_entry_count": evidence["supplemental_zip_manifest"][
+                "selected_entry_count"
+            ],
+            "unique_reviewed_cases": evidence["supplemental_zip_manifest"][
+                "unique_reviewed_cases"
+            ],
+        },
     }
     raw = canonical_bytes(config) + b"\n"
     evidence["identities"]["configuration"]["input_sha256"] = sha256_bytes(raw)
     return config, raw
+
+
+def candidate_bound_config(
+    root: Path,
+) -> tuple[dict[str, Any], Path, Path, dict[str, Any]]:
+    config = valid_run_config()
+    artifact_root = root / "candidate"
+    artifact_root.mkdir()
+    so_path = artifact_root / CAG_SO_NAME
+    so_path.write_bytes(b"exact CI candidate SO")
+    so_sha256 = sha256_bytes(so_path.read_bytes())
+    config["identities"]["cag"]["so_sha256"] = so_sha256
+    candidate = audit_candidate_manifest(
+        commit=config["identities"]["cag"]["commit"],
+        tree=config["identities"]["cag"]["tree"],
+        so_sha256=so_sha256,
+    )
+    candidate_raw = canonical_bytes(candidate) + b"\n"
+    candidate_path = artifact_root / "audit-candidate-manifest.json"
+    candidate_path.write_bytes(candidate_raw)
+    config["paths"]["candidate_manifest"] = str(candidate_path.resolve())
+    config["paths"]["cag_so"] = str(so_path.resolve())
+    config["identities"]["candidate"] = candidate_identity(
+        candidate,
+        candidate_raw,
+        cag_identity=config["identities"]["cag"],
+        artifact_id="123456789",
+        artifact_name=CANDIDATE_ARTIFACT_NAME,
+        artifact_digest="sha256:" + digest("candidate-artifact-admission"),
+    )
+    return config, candidate_path, so_path, candidate
 
 
 class FakeGitHubClient:
@@ -451,6 +542,23 @@ class AcquisitionIntegrationTests(unittest.TestCase):
                 ).acquire()
             self.assertFalse(output.exists())
 
+        stale_head = copy.deepcopy(approve_policy_for_client(pending, discovery_client))
+        for source in stale_head["repositories"][0]["paths"]:
+            source["reviewed_source"]["commit"] = "f" * 40
+            source["reviewed_source"]["tree"] = "e" * 40
+        acquire.validate_policy(stale_head, require_approved=True)
+        current_head_client = FakeGitHubClient(stale_head)
+        with tempfile.TemporaryDirectory() as parent:
+            output = Path(parent) / "stale-head-acquisition"
+            with self.assertRaises(ContractError):
+                acquire.Acquirer(
+                    stale_head,
+                    current_head_client,
+                    output,
+                    sha256_bytes(canonical_bytes(stale_head) + b"\n"),
+                ).acquire()
+            self.assertFalse(output.exists())
+
     def test_write_exclusive_rejects_a_hardlink_created_while_open(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -648,6 +756,12 @@ class ClosedContractRegressionTests(unittest.TestCase):
             "path_traversal": lambda value: value["paths"].__setitem__(
                 "evidence_directory", "/srv/../escape"
             ),
+            "candidate_manifest_name": lambda value: value["paths"].__setitem__(
+                "candidate_manifest", "/srv/candidate.json"
+            ),
+            "candidate_manifest_directory": lambda value: value["paths"].__setitem__(
+                "candidate_manifest", "/other/audit-candidate-manifest.json"
+            ),
             "mount_delimiter": lambda value: value["paths"].__setitem__(
                 "cag_so", "/srv/cag,other.so"
             ),
@@ -663,6 +777,15 @@ class ClosedContractRegressionTests(unittest.TestCase):
                     "repo_digest": "registry.example/mock@sha256:" + "0" * 64,
                 }
             ),
+            "supplemental_archive_sha": lambda value: value[
+                "supplemental_zip"
+            ].__setitem__("archive_sha256", "f" * 64),
+            "supplemental_policy_sha": lambda value: value[
+                "supplemental_zip"
+            ].__setitem__("policy_sha256", "e" * 64),
+            "supplemental_case_count": lambda value: value[
+                "supplemental_zip"
+            ].__setitem__("unique_reviewed_cases", 6),
         }
         for label, mutate in mutations.items():
             value = valid_run_config()
@@ -671,6 +794,352 @@ class ClosedContractRegressionTests(unittest.TestCase):
                 validate_run_config(value)
         with self.assertRaises(ContractError):
             build_execution_plan(manifest(), 1205, 11)
+
+        for value in ("1", "9", "10", "9" * 32):
+            with self.subTest(kind="ascii-decimal-accepted", value=value):
+                self.assertEqual(
+                    audit_contract.positive_decimal(value, "decimal"), value
+                )
+        for value in ("\u0661", "\u00b2", "\uff11", "1\u0661"):
+            with self.subTest(kind="unicode-decimal-rejected", value=value):
+                with self.assertRaisesRegex(
+                    ContractError, "decimal must be a positive decimal string"
+                ):
+                    audit_contract.positive_decimal(value, "decimal")
+
+    def test_candidate_manifest_runtime_binding_is_mandatory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config, candidate_path, _, _ = candidate_bound_config(Path(directory))
+            validated, raw = validate_candidate_manifest_file(config)
+            self.assertEqual(
+                sha256_bytes(raw), config["identities"]["candidate"]["manifest_sha256"]
+            )
+            self.assertEqual(validated["run_id"], "987654321")
+
+            candidate_path.unlink()
+            with self.assertRaisesRegex(ContractError, "cannot be resolved"):
+                validate_candidate_manifest_file(config)
+
+        commit = "1" * 40
+        tree = "2" * 40
+        so_sha256 = "3" * 64
+        cag_identity = {
+            "commit": commit,
+            "so_name": CAG_SO_NAME,
+            "so_sha256": so_sha256,
+            "source_version": CAG_SOURCE_VERSION,
+            "tree": tree,
+        }
+        manifest = audit_candidate_manifest(
+            commit=commit,
+            tree=tree,
+            so_sha256=so_sha256,
+        )
+        identity = candidate_provenance(
+            commit=commit,
+            tree=tree,
+            so_sha256=so_sha256,
+        )
+
+        for branch in ("main", "feature/release-1.2_candidate", "a" + "b" * 254):
+            with self.subTest(kind="accepted", branch=branch):
+                accepted_manifest = copy.deepcopy(manifest)
+                accepted_manifest["head_branch"] = branch
+                self.assertEqual(
+                    audit_contract.validate_candidate_manifest(
+                        accepted_manifest, cag_identity
+                    )["head_branch"],
+                    branch,
+                )
+                accepted_identity = copy.deepcopy(identity)
+                accepted_identity["head_branch"] = branch
+                self.assertEqual(
+                    audit_contract.validate_candidate_identity(
+                        accepted_identity, cag_identity, "unit candidate"
+                    )["head_branch"],
+                    branch,
+                )
+
+        for branch in (
+            "/leading",
+            "trailing/",
+            "trailing.",
+            "double//slash",
+            "double..dot",
+            "topic@{1",
+        ):
+            with self.subTest(kind="manifest-rejected", branch=branch):
+                rejected_manifest = copy.deepcopy(manifest)
+                rejected_manifest["head_branch"] = branch
+                with self.assertRaisesRegex(
+                    ContractError, "candidate manifest.head_branch"
+                ):
+                    audit_contract.validate_candidate_manifest(
+                        rejected_manifest, cag_identity
+                    )
+            with self.subTest(kind="identity-rejected", branch=branch):
+                rejected_identity = copy.deepcopy(identity)
+                rejected_identity["head_branch"] = branch
+                with self.assertRaisesRegex(
+                    ContractError, "unit candidate.head_branch"
+                ):
+                    audit_contract.validate_candidate_identity(
+                        rejected_identity, cag_identity, "unit candidate"
+                    )
+
+        for field in ("commit", "tree", "so_sha256"):
+            incomplete_cag_identity = copy.deepcopy(cag_identity)
+            incomplete_cag_identity.pop(field)
+            with self.subTest(kind="missing-manifest-cag-identity", field=field):
+                with self.assertRaisesRegex(
+                    ContractError,
+                    f"candidate manifest CAG identity is missing required fields.*{field}",
+                ):
+                    audit_contract.validate_candidate_manifest(
+                        manifest, incomplete_cag_identity
+                    )
+
+        for field in (
+            "commit",
+            "tree",
+            "source_version",
+            "so_name",
+            "so_sha256",
+        ):
+            incomplete_cag_identity = copy.deepcopy(cag_identity)
+            incomplete_cag_identity.pop(field)
+            with self.subTest(kind="missing-cag-identity", field=field):
+                with self.assertRaisesRegex(
+                    ContractError, f"missing required fields.*{field}"
+                ):
+                    audit_contract.validate_candidate_identity(
+                        identity, incomplete_cag_identity, "unit candidate"
+                    )
+
+        for field, drifted_value, message in (
+            (
+                "commit",
+                "e" * 40,
+                "unit candidate.source drifted from the CAG identity",
+            ),
+            (
+                "tree",
+                "e" * 40,
+                "unit candidate.source drifted from the CAG identity",
+            ),
+            (
+                "source_version",
+                "9.9.9",
+                "unit candidate.source drifted from the CAG identity",
+            ),
+            (
+                "so_name",
+                "other.so",
+                "unit candidate.so.name is not the selected CAG SO",
+            ),
+            (
+                "so_sha256",
+                "e" * 64,
+                "unit candidate.so SHA drifted from the CAG identity",
+            ),
+        ):
+            drifted_cag_identity = copy.deepcopy(cag_identity)
+            drifted_cag_identity[field] = drifted_value
+            with self.subTest(kind="drifted-cag-identity", field=field):
+                with self.assertRaisesRegex(ContractError, message):
+                    audit_contract.validate_candidate_identity(
+                        identity, drifted_cag_identity, "unit candidate"
+                    )
+
+    def test_candidate_manifest_tampering_and_hardlink_replacement_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config, candidate_path, _, candidate = candidate_bound_config(Path(directory))
+            tampered = copy.deepcopy(candidate)
+            tampered["run_attempt"] = "2"
+            candidate_path.write_bytes(canonical_bytes(tampered) + b"\n")
+            with self.assertRaisesRegex(ContractError, "drifted"):
+                validate_candidate_manifest_file(config)
+
+            candidate_path.write_bytes(canonical_bytes(candidate) + b"\n")
+            linked = candidate_path.with_name("candidate-manifest-hardlink.json")
+            os.link(candidate_path, linked)
+            with self.assertRaisesRegex(ContractError, "one hard link"):
+                validate_candidate_manifest_file(config)
+
+    def test_candidate_run_identity_and_selected_so_mismatch_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            config, _, so_path, _ = candidate_bound_config(Path(directory))
+            for key, value in (("run_id", "987654322"), ("run_attempt", "2")):
+                wrong = copy.deepcopy(config)
+                wrong["identities"]["candidate"][key] = value
+                with self.subTest(key=key), self.assertRaisesRegex(
+                    ContractError, "drifted"
+                ):
+                    validate_candidate_manifest_file(wrong)
+
+            so_path.write_bytes(b"same name, different SO")
+            with self.assertRaisesRegex(ContractError, "SO drifted"):
+                validate_candidate_manifest_file(config)
+
+    def test_sha256_file_rejects_same_inode_equal_length_overwrite_after_read(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "archive.zip"
+            original = b"A" * 4096
+            replacement = b"B" * len(original)
+            path.write_bytes(original)
+            self.assertEqual(
+                audit_contract.sha256_file(path, len(original)),
+                sha256_bytes(original),
+            )
+            initial = path.stat()
+            real_fstat = audit_contract.os.fstat
+            fstat_calls = 0
+
+            def overwrite_before_post_read_fstat(descriptor: int) -> os.stat_result:
+                nonlocal fstat_calls
+                fstat_calls += 1
+                if fstat_calls == 2:
+                    with path.open("r+b") as output:
+                        output.write(replacement)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    os.utime(
+                        path,
+                        ns=(initial.st_atime_ns, initial.st_mtime_ns + 10_000_000_000),
+                    )
+                    changed = path.stat()
+                    self.assertEqual(
+                        (changed.st_dev, changed.st_ino, changed.st_size),
+                        (initial.st_dev, initial.st_ino, initial.st_size),
+                    )
+                return real_fstat(descriptor)
+
+            with (
+                mock.patch.object(
+                    audit_contract.os,
+                    "fstat",
+                    side_effect=overwrite_before_post_read_fstat,
+                ),
+                self.assertRaisesRegex(ContractError, "content metadata changed"),
+            ):
+                audit_contract.sha256_file(
+                    path,
+                    len(original),
+                    require_single_link=True,
+                    expected_info=initial,
+                )
+
+    def test_supplemental_archive_rejects_post_hash_same_inode_overwrite(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            archive_path = root / "archive.zip"
+            policy_path = root / "policy.json"
+            manifest_path = root / "manifest.json"
+            original = b"stable supplemental archive" * 128
+            replacement = b"B" * len(original)
+            archive_path.write_bytes(original)
+            policy: dict[str, Any] = {}
+            policy_raw = canonical_bytes(policy) + b"\n"
+            policy_path.write_bytes(policy_raw)
+            supplemental = {
+                "archive_bytes": len(original),
+                "archive_sha256": sha256_bytes(original),
+                "manifest_sha256": "",
+                "policy_sha256": sha256_bytes(policy_raw),
+                "selected_entry_count": 0,
+                "unique_reviewed_cases": 0,
+            }
+            manifest = {
+                "archive": {
+                    "bytes": supplemental["archive_bytes"],
+                    "sha256": supplemental["archive_sha256"],
+                },
+                "policy_sha256": supplemental["policy_sha256"],
+                "selected_entry_count": supplemental["selected_entry_count"],
+                "unique_reviewed_cases": supplemental["unique_reviewed_cases"],
+            }
+            manifest_raw = canonical_bytes(manifest) + b"\n"
+            supplemental["manifest_sha256"] = sha256_bytes(manifest_raw)
+            manifest_path.write_bytes(manifest_raw)
+            config = {
+                "paths": {
+                    "supplemental_zip": str(archive_path),
+                    "supplemental_zip_manifest": str(manifest_path),
+                    "supplemental_zip_policy": str(policy_path),
+                },
+                "supplemental_zip": supplemental,
+            }
+
+            with (
+                mock.patch.object(
+                    audit_contract,
+                    "SUPPLEMENTAL_ZIP_POLICY_SHA256",
+                    supplemental["policy_sha256"],
+                ),
+                mock.patch.object(
+                    audit_contract,
+                    "validate_supplemental_policy",
+                    return_value=policy,
+                ),
+                mock.patch.object(
+                    audit_contract,
+                    "validate_supplemental_manifest",
+                    return_value=manifest,
+                ),
+            ):
+                validated = audit_contract.validate_supplemental_run_config_files(
+                    config
+                )
+                self.assertEqual(validated[0], manifest)
+                real_sha256_file = audit_contract.sha256_file
+
+                def overwrite_after_hash(path: Path, *args: object, **kwargs: object) -> str:
+                    digest_value = real_sha256_file(path, *args, **kwargs)
+                    before = path.stat()
+                    with path.open("r+b") as output:
+                        output.write(replacement)
+                        output.flush()
+                        os.fsync(output.fileno())
+                    os.utime(
+                        path,
+                        ns=(before.st_atime_ns, before.st_mtime_ns + 10_000_000_000),
+                    )
+                    changed = path.stat()
+                    self.assertEqual(
+                        (changed.st_dev, changed.st_ino, changed.st_size),
+                        (before.st_dev, before.st_ino, before.st_size),
+                    )
+                    return digest_value
+
+                with (
+                    mock.patch.object(
+                        audit_contract,
+                        "sha256_file",
+                        side_effect=overwrite_after_hash,
+                    ),
+                    self.assertRaisesRegex(ContractError, "content metadata changed"),
+                ):
+                    audit_contract.validate_supplemental_run_config_files(config)
+
+    def test_runner_preflight_revalidates_candidate_before_other_inputs(self) -> None:
+        harness = object.__new__(run.Harness)
+        harness.config = {"candidate": "sentinel"}
+        harness.corpus_root = Path("/private/acquisition")
+        with (
+            mock.patch.object(run, "validate_candidate_manifest_file") as candidate_check,
+            mock.patch.object(
+                run,
+                "require_private_directory",
+                side_effect=run.AuditFailure("stop after candidate preflight"),
+            ),
+            self.assertRaisesRegex(run.AuditFailure, "stop after candidate"),
+        ):
+            harness.verify_static_inputs()
+        candidate_check.assert_called_once_with(harness.config)
 
     def test_machine_evidence_rejects_execution_infra_and_sandbox_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -797,6 +1266,13 @@ class ClosedContractRegressionTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 validate_evidence_run_config(cpa_drift, cpa_config, cpa_raw)
 
+            artifact_drift = copy.deepcopy(baseline)
+            artifact_drift["identities"]["candidate"]["artifact"]["digest"] = (
+                "sha256:" + digest("different-artifact-admission")
+            )
+            with self.assertRaisesRegex(ContractError, "candidate provenance"):
+                validate_evidence_run_config(artifact_drift, config, config_raw)
+
     def test_evidence_cli_requires_the_run_config_argument(self) -> None:
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             validator_cli.parser().parse_args(
@@ -824,6 +1300,57 @@ class ClosedContractRegressionTests(unittest.TestCase):
             ]
         )
         self.assertEqual(parsed.run_config, Path("run-config.json"))
+
+    def test_evidence_cli_revalidates_the_bound_candidate_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_manifest, evidence, generated_results = evidence_files(root)
+            results = root / "transport-results.jsonl"
+            generated_results.replace(results)
+            corpus = root / "corpus-manifest.json"
+            corpus.write_bytes(canonical_bytes(source_manifest) + b"\n")
+            config, config_raw = config_bound_to_evidence(
+                evidence, evidence_directory=str(root.resolve())
+            )
+            run_config = root / "run-config.json"
+            run_config.write_bytes(config_raw)
+            evidence_path = root / "machine-evidence.json"
+            evidence_path.write_bytes(canonical_bytes(evidence) + b"\n")
+
+            with (
+                mock.patch.object(validator_cli, "bind_policy"),
+                mock.patch.object(
+                    validator_cli, "validate_run_config", return_value=config
+                ),
+                mock.patch.object(
+                    run, "runner_identities", return_value=evidence["identities"]["runner"]
+                ),
+                mock.patch.object(
+                    validator_cli, "validate_candidate_manifest_file"
+                ) as candidate_check,
+                mock.patch.object(
+                    validator_cli, "validate_supplemental_run_config_files"
+                ) as supplemental_check,
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                self.assertEqual(
+                    validator_cli.main(
+                        [
+                            "evidence",
+                            "--manifest",
+                            str(corpus),
+                            "--evidence",
+                            str(evidence_path),
+                            "--results",
+                            str(results),
+                            "--run-config",
+                            str(run_config),
+                        ]
+                    ),
+                    0,
+                )
+            candidate_check.assert_called_once_with(config)
+            supplemental_check.assert_called_once_with(config)
 
     def test_evidence_cli_rejects_non_object_without_traceback(self) -> None:
         cases = (
@@ -1089,7 +1616,10 @@ class RunnerFailureSafetyTests(unittest.TestCase):
         user_index = args.index("--user") + 1
         self.assertEqual(args[user_index], "1234:5678")
         self.assertNotEqual(args[user_index], "0:0")
-    def test_harness_finally_removes_validated_corpus_after_failure(self) -> None:
+    @unittest.skipUnless(os.name == "posix", "Linux evidence dir-fd contract")
+    def test_harness_execute_orders_lazy_and_csam_after_cleanup_and_removes_corpus_on_failure(
+        self,
+    ) -> None:
         source_manifest = manifest()
         canary = b"NERV_COMPLETE_TEXT_CANARY_MUST_NOT_PERSIST"
         with tempfile.TemporaryDirectory() as directory:
@@ -1162,6 +1692,212 @@ class RunnerFailureSafetyTests(unittest.TestCase):
             self.assertFalse(harness.cleanup.text_retained)
             self.assertNotIn(canary, canonical_bytes(source_manifest))
 
+        def execute_fixture(directory: str, *, fail_csam: bool) -> tuple[run.Harness, list[str]]:
+            root = Path(directory)
+            evidence_dir = root / "evidence"
+            evidence_dir.mkdir(mode=0o700)
+            source = root / "source"
+            source.mkdir()
+            harness = object.__new__(run.Harness)
+            harness.config = {"paths": {"cag_repository": str(source)}}
+            harness.config_raw = b"{}\n"
+            harness.manifest = {"semantic_cases": []}
+            harness.manifest_raw = b"{}\n"
+            harness.supplemental_policy_raw = b"{}\n"
+            harness.supplemental_manifest_raw = b"{}\n"
+            harness.evidence_dir = evidence_dir
+            harness.runtime_root = evidence_dir / ".runtime"
+            harness.results_path = evidence_dir / "transport-results.jsonl"
+            harness.supplemental_results_path = (
+                evidence_dir / "supplemental-zip-results.jsonl"
+            )
+            harness.run_id = "unit-run"
+            harness.cold_count = 1
+            harness.docker = object()
+            harness.cag_pre = ("head", "tree")
+            harness.failure_stage = "initialization"
+            harness.lazy_read = None
+            harness.lazy_read_finalized = False
+            harness.csam_text_validated = False
+            harness.corpus_validated = False
+            harness.corpus_cleanup_completed = True
+            harness.bound_corpus = None
+            harness.supplemental_texts = {"fixture": bytearray(b"temporary text")}
+            harness.supplemental_texts_zeroized = False
+            harness.supplemental_archive_preserved = False
+            harness.active_auth_dir = None
+            harness.cleanup = types.SimpleNamespace(
+                remove_network=mock.Mock(),
+                emergency=mock.Mock(),
+                text_retained=False,
+            )
+            harness.verify_static_inputs = mock.Mock()  # type: ignore[method-assign]
+            harness.open_results = mock.Mock()  # type: ignore[method-assign]
+            harness.close_results = mock.Mock()  # type: ignore[method-assign]
+            harness.create_network = mock.Mock()  # type: ignore[method-assign]
+            harness.run_cold_start = mock.Mock(return_value=(0, 0))  # type: ignore[method-assign]
+            harness.verify_supplemental_archive_identity = mock.Mock()  # type: ignore[method-assign]
+            calls: list[str] = []
+
+            def csam() -> None:
+                calls.append("csam")
+                self.assertFalse(harness.runtime_root.exists())
+                harness.cleanup.remove_network.assert_called_once_with()
+                self.assertTrue(harness.supplemental_texts_zeroized)
+                if fail_csam:
+                    raise run.AuditFailure("synthetic CSAM live-plane failure")
+                harness.csam_text_validated = True
+
+            def finalize_lazy() -> None:
+                calls.append("lazy")
+                self.assertTrue(harness.csam_text_validated)
+                self.assertIsInstance(harness.lazy_read, run.LazyReadRecorder)
+                assert harness.lazy_read is not None
+                harness.lazy_read.abort()
+                harness.lazy_read_finalized = True
+
+            harness.run_csam_text_evidence = csam  # type: ignore[method-assign]
+            harness.finalize_lazy_read = finalize_lazy  # type: ignore[method-assign]
+            harness.machine_evidence = mock.Mock(  # type: ignore[method-assign]
+                return_value={"schema": "unit"}
+            )
+            return harness, calls
+
+        with tempfile.TemporaryDirectory() as directory:
+            harness, calls = execute_fixture(directory, fail_csam=False)
+            with (
+                mock.patch.object(run, "business_snapshot", side_effect=[[], []]),
+                mock.patch.object(run, "git_identity", return_value=("head", "tree")),
+                mock.patch.object(run, "require_git_tracked_clean"),
+                mock.patch.object(run, "validate_machine_evidence"),
+            ):
+                evidence = harness.execute(STAMP)
+            self.assertEqual(evidence, {"schema": "unit"})
+            self.assertEqual(calls, ["csam", "lazy"])
+            self.assertTrue(harness.lazy_read_finalized)
+            self.assertTrue(harness.csam_text_validated)
+            self.assertTrue((harness.evidence_dir / "machine-evidence.json").is_file())
+
+        with tempfile.TemporaryDirectory() as directory:
+            harness, calls = execute_fixture(directory, fail_csam=True)
+            with (
+                mock.patch.object(run, "business_snapshot", side_effect=[[], []]),
+                mock.patch.object(run, "git_identity", return_value=("head", "tree")),
+                mock.patch.object(run, "require_git_tracked_clean"),
+                mock.patch.object(run, "validate_machine_evidence"),
+            ):
+                with self.assertRaises(run.CleanupFailure) as caught:
+                    harness.execute(STAMP)
+            self.assertEqual(
+                caught.exception.cleanup_error_id,
+                sha256_bytes(canonical_bytes(["csam_text:AuditFailure"]))[:16],
+            )
+            self.assertEqual(calls, ["csam"])
+            self.assertFalse(harness.lazy_read_finalized)
+            harness.machine_evidence.assert_not_called()
+            self.assertFalse((harness.evidence_dir / "machine-evidence.json").exists())
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_dir = root / "evidence"
+            evidence_dir.mkdir(mode=0o700)
+            hook = root / "hook"
+            hook.write_bytes(b"placeholder")
+            hook.chmod(0o700)
+            evidence_binding = run.BoundEvidenceDirectory(evidence_dir)
+            self.addCleanup(evidence_binding.close)
+            original_verify = evidence_binding.verify_path
+            evidence_binding.verify_path = mock.Mock(  # type: ignore[method-assign]
+                wraps=original_verify
+            )
+            harness = object.__new__(run.Harness)
+            harness.evidence_binding = evidence_binding
+            harness.evidence_dir = evidence_binding.bound_path
+            harness.host_evidence_dir = evidence_dir
+            harness.run_id = "unit-run"
+            harness.csam_text_validated = False
+            harness.cleanup = types.SimpleNamespace(emergency=mock.Mock())
+            absent = iter((False, True))
+            harness.owned_resources_absent = mock.Mock(  # type: ignore[method-assign]
+                side_effect=lambda: next(absent)
+            )
+
+            def failed_child(*args: object, **kwargs: object) -> object:
+                command = args[0]
+                self.assertIsInstance(command, list)
+                assert isinstance(command, list)
+                output_index = command.index("--output-dir") + 1
+                self.assertEqual(
+                    command[output_index], str(evidence_dir / "csam-text")
+                )
+                self.assertFalse(command[output_index].startswith("/proc/"))
+                runtime = evidence_dir / ".csam-runtime"
+                runtime.mkdir(mode=0o700)
+                (runtime / "secret").write_bytes(b"temporary")
+                return run.subprocess.CompletedProcess(
+                    args=["csam_text_runner.py"],
+                    returncode=1,
+                    stdout=b"",
+                    stderr=b"synthetic bounded diagnostic",
+                )
+
+            settings = {
+                "CAG_CSAM_TEXT_CPA_URL": "http://172.20.0.2:8317",
+                "CAG_CSAM_TEXT_MOCK_URL": "http://172.20.0.3:18080",
+                "CAG_CSAM_TEXT_COLD_START_HOOK": str(hook),
+                "CAG_CSAM_CLIENT_KEY": "c" * 32,
+                "CAG_CSAM_MANAGEMENT_KEY": "m" * 32,
+                "CAG_CSAM_MOCK_CONTROL_TOKEN": "t" * 32,
+                "CAG_CSAM_UPSTREAM_KEY": "u" * 32,
+            }
+            with mock.patch.dict(os.environ, settings, clear=True), mock.patch.object(
+                run.subprocess, "run", side_effect=failed_child
+            ), self.assertRaisesRegex(run.AuditFailure, "did not produce PASS"):
+                harness.run_csam_text_evidence()
+            self.assertFalse(os.path.lexists(evidence_dir / ".csam-runtime"))
+            harness.cleanup.emergency.assert_called_once_with()
+            self.assertFalse(harness.csam_text_validated)
+            self.assertGreaterEqual(evidence_binding.verify_path.call_count, 2)
+
+    @unittest.skipUnless(os.name == "posix", "Linux evidence dir-fd contract")
+    def test_csam_output_alias_requires_matching_private_host_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            evidence_dir = root / "evidence"
+            evidence_dir.mkdir(mode=0o700)
+            evidence_dir.chmod(0o700)
+            binding = run.BoundEvidenceDirectory(evidence_dir)
+            self.addCleanup(binding.close)
+            harness = object.__new__(run.Harness)
+            harness.evidence_binding = binding
+            harness.evidence_dir = binding.bound_path
+            harness.host_evidence_dir = evidence_dir
+            host_output = evidence_dir / "csam-text"
+            host_output.mkdir(mode=0o700)
+            host_output.chmod(0o700)
+
+            harness.verify_bound_host_directory_alias(
+                binding.bound_path / "csam-text",
+                host_output,
+                "CSAM evidence output",
+            )
+            bound_info = (binding.bound_path / "csam-text").stat()
+            host_info = host_output.stat()
+            self.assertEqual(
+                (bound_info.st_dev, bound_info.st_ino),
+                (host_info.st_dev, host_info.st_ino),
+            )
+
+            host_output.chmod(0o750)
+            with self.assertRaisesRegex(
+                run.AuditFailure, "descriptor-bound private directory"
+            ):
+                harness.verify_bound_host_directory_alias(
+                    binding.bound_path / "csam-text",
+                    host_output,
+                    "CSAM evidence output",
+                )
+
     def test_preexisting_evidence_directory_is_never_written(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1190,6 +1926,7 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                     ],
                 ),
                 mock.patch.object(run, "validate_run_config", return_value=config),
+                mock.patch.object(run, "validate_candidate_manifest_file"),
                 mock.patch.object(run, "require_private_directory"),
                 mock.patch.object(
                     run, "validate_corpus_manifest", return_value=source_manifest
@@ -1212,6 +1949,7 @@ class RunnerFailureSafetyTests(unittest.TestCase):
             self.assertEqual([path.name for path in existing.iterdir()], [marker.name])
             self.assertEqual(marker.read_text("utf-8"), "preserve")
 
+    @unittest.skipUnless(os.name == "posix", "Linux evidence dir-fd contract")
     def test_main_aggregates_harness_and_outer_cleanup_failures(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1250,6 +1988,7 @@ class RunnerFailureSafetyTests(unittest.TestCase):
                     ],
                 ),
                 mock.patch.object(run, "validate_run_config", return_value=config),
+                mock.patch.object(run, "validate_candidate_manifest_file"),
                 mock.patch.object(run, "require_private_directory"),
                 mock.patch.object(
                     run, "validate_corpus_manifest", return_value=source_manifest

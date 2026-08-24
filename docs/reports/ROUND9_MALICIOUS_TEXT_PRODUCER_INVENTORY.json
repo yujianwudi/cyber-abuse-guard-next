@@ -36,7 +36,7 @@
       "path": "internal/plugin/disposition.go",
       "function": "inspectionDisposition",
       "contract": "ineligible ActionBlock is downgraded before block_malicious_text",
-      "function_ast_sha256": "66a8f51b868f0dd29c9e948568ee690f126eef124fdb588b9cbfb4d44fedac5b"
+      "function_ast_sha256": "a389148bc3931e1a44564860f8b6539c54a1a471d4cb2d1d6cd9af8f23beaa83"
     },
     {
       "id": "plugin-management-transport-projection",

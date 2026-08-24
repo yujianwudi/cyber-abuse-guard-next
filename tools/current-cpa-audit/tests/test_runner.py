@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -13,11 +14,329 @@ sys.path.insert(0, str(TOOL))
 sys.path.insert(0, str(HERE))
 
 import run
-from audit_contract import canonical_bytes, sha256_bytes
-from fixtures import manifest
+import csam_text_runner as live
+from audit_contract import (
+    AUDIT_SCHEMA_VERSION,
+    CPA_COMMIT,
+    CPA_TAG,
+    build_execution_plan,
+    build_supplemental_execution_plan,
+    canonical_bytes,
+    sha256_bytes,
+)
+from fixtures import manifest, supplemental_manifest_fixture
 
 
 class RunnerPureTests(unittest.TestCase):
+    def test_binary_process_capture_preserves_bytes_and_enforces_stream_caps(self) -> None:
+        completed = run.run_process_bytes(
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                "import os; os.write(1, b'\\x00\\xffok'); os.write(2, b'err')",
+            ],
+            timeout=5,
+            max_stdout_bytes=16,
+            max_stderr_bytes=16,
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, b"\x00\xffok")
+        self.assertEqual(completed.stderr, b"err")
+
+        with self.assertRaisesRegex(run.AuditFailure, "stdout exceeded"):
+            run.run_process_bytes(
+                [
+                    sys.executable,
+                    "-I",
+                    "-c",
+                    "import os; os.write(1, b'x' * 1025)",
+                ],
+                timeout=5,
+                max_stdout_bytes=1024,
+                max_stderr_bytes=16,
+            )
+
+    def test_csam_text_runner_supports_isolated_script_launch(self) -> None:
+        script = TOOL / "csam_text_runner.py"
+        completed = subprocess.run(
+            [sys.executable, "-I", "-B", str(script), "--help"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("Round 14 CSAM evidence", completed.stdout)
+
+        executor = object.__new__(live.LiveCPAExecutor)
+        executor._requests_since_cold_start = 0
+        previous = {"id": "previous", "request_hash": "sha256:" + "a" * 64}
+        current = {"id": "current", "request_hash": "sha256:" + "b" * 64}
+        executor._event_head = mock.Mock(side_effect=[previous, current])
+        with mock.patch.object(
+            live.time, "monotonic", side_effect=[0.0, 0.0, 6.0]
+        ), mock.patch.object(live.time, "sleep"):
+            self.assertEqual(
+                executor._new_event("previous", current["request_hash"]), current
+            )
+
+        executor._requests_since_cold_start = 1
+        executor._event_head = mock.Mock(side_effect=[previous, previous])
+        with mock.patch.object(
+            live.time, "monotonic", side_effect=[0.0, 0.0, 6.0]
+        ), mock.patch.object(live.time, "sleep"), self.assertRaisesRegex(
+            live.LiveRunnerError, "did not persist a request-bound audit event"
+        ):
+            executor._new_event("previous", current["request_hash"])
+
+        executor._requests_since_cold_start = 1
+        executor._event_head = mock.Mock(return_value=previous)
+        stable = {
+            "dropped": 4,
+            "enqueued": 9,
+            "failed": 0,
+            "queue_depth": 0,
+            "rejected": 0,
+            "written": 9,
+        }
+        executor._audit_counter_snapshot = mock.Mock(return_value=stable)
+        with mock.patch.object(
+            live.time, "monotonic", side_effect=[0.0, 0.0, 0.0, 1.0]
+        ), mock.patch.object(live.time, "sleep"):
+            self.assertIsNone(
+                executor._event_or_idle_audit(
+                    "previous", current["request_hash"], stable
+                )
+            )
+
+        changed = dict(stable)
+        changed["enqueued"] += 1
+        changed["queue_depth"] = 1
+        executor._event_head = mock.Mock(return_value=previous)
+        executor._audit_counter_snapshot = mock.Mock(return_value=changed)
+        with mock.patch.object(
+            live.time, "monotonic", side_effect=[0.0, 0.0, 0.0, 6.0]
+        ), mock.patch.object(live.time, "sleep"), self.assertRaisesRegex(
+            live.LiveRunnerError, "audit activity did not yield a request-bound event"
+        ):
+            executor._event_or_idle_audit("previous", current["request_hash"], stable)
+
+    def test_supplemental_order_and_action_accounting_are_closed(self) -> None:
+        # The runner projection must retain category and classifier-winner as
+        # independent axes.  In particular, a wrapper-only META audit may have
+        # a winner without a top-level Cyber Abuse category, while transport
+        # findings such as scan limits have a category without a classifier
+        # winner.
+        cases = (
+            (
+                {
+                    "action": "audit",
+                    "category": "",
+                    "decision_explanation": {
+                        "winning_rule_id": "META-OVERRIDE-001"
+                    },
+                },
+                None,
+                "META-OVERRIDE-001",
+            ),
+            (
+                {
+                    "action": "block",
+                    "category": "defense_evasion",
+                    "decision_explanation": {
+                        "winning_rule_id": "META-OVERRIDE-001"
+                    },
+                },
+                "defense_evasion",
+                "META-OVERRIDE-001",
+            ),
+            (
+                {
+                    "action": "audit",
+                    "category": "scan_limit",
+                    "decision_explanation": None,
+                },
+                "scan_limit",
+                None,
+            ),
+        )
+        for event, want_category, want_rule in cases:
+            event.update(
+                {
+                    "coverage": "complete",
+                    "decision": "fixture",
+                    "decision_kind": "fixture",
+                    "explanation_schema": "decision-explanation-v2",
+                    "id": "fixture-event",
+                    "incomplete_reason": "",
+                    "mode": "strict",
+                    "request_hash": "sha256:" + "a" * 64,
+                }
+            )
+            with self.subTest(category=want_category, rule=want_rule):
+                summary = run.Harness.event_summary(event)
+                self.assertIsNotNone(summary)
+                self.assertEqual(summary["category"], want_category)
+                self.assertEqual(summary["winning_rule_id"], want_rule)
+        source_manifest = manifest()
+        supplemental_manifest, _, _ = supplemental_manifest_fixture()
+        core_plan = build_execution_plan(source_manifest, 1205, 3)
+        supplemental_plan = build_supplemental_execution_plan(
+            supplemental_manifest, 1205, 3
+        )
+
+        def one_run(zip_plan: list[object]) -> tuple[tuple[object, ...], list[str]]:
+            harness = object.__new__(run.Harness)
+            harness.plan = core_plan
+            harness.supplemental_plan = zip_plan
+            harness.runtime_hashes = []
+            harness.cold_evidence = []
+            harness.failure_stage = "initialization"
+            sequence: list[str] = []
+            captured: list[tuple[object, ...]] = []
+            harness.prepare_cold_runtime = lambda *_: (Path("cold-1"), "a" * 64)
+            harness.start_cold = lambda *_: None
+            harness.reconfigure = lambda *_: None
+            harness.verify_sandbox = lambda: None
+
+            def execute_core(entry: object, ordinal: int) -> bytes:
+                sequence.append("core")
+                return canonical_bytes(
+                    [
+                        ordinal,
+                        entry.mode,
+                        entry.semantic_case_id,
+                        entry.protocol,
+                        entry.stream,
+                    ]
+                ) + b"\n"
+
+            def execute_supplemental(entry: object, ordinal: int) -> bytes:
+                sequence.append("supplemental")
+                return canonical_bytes(
+                    [
+                        ordinal,
+                        entry.mode,
+                        entry.semantic_case_id,
+                        entry.protocol,
+                        entry.stream,
+                    ]
+                ) + b"\n"
+
+            harness.execute_entry = execute_core
+            harness.execute_supplemental_entry = execute_supplemental
+            harness.finish_cold = lambda *args: captured.append(args) or {"index": 1}
+            with mock.patch("builtins.print"):
+                counts = harness.run_cold_start(1, 0, 0)
+            self.assertEqual(counts, (228, 84))
+            self.assertEqual(sequence[:228], ["core"] * 228)
+            self.assertEqual(sequence[228:], ["supplemental"] * 84)
+            return captured[0], sequence
+
+        baseline, _ = one_run(supplemental_plan)
+        reordered, _ = one_run(list(reversed(supplemental_plan)))
+        self.assertEqual(baseline[2], reordered[2])
+        self.assertEqual(baseline[3], reordered[3])
+        self.assertEqual(baseline[4], reordered[4])
+        self.assertEqual(sha256_bytes(baseline[4]), sha256_bytes(reordered[4]))
+        self.assertNotEqual(baseline[6], reordered[6])
+
+        with tempfile.TemporaryDirectory() as directory:
+            harness = object.__new__(run.Harness)
+            harness.supplemental_results_count = 0
+            harness.supplemental_action_counts = {
+                "allow": 0,
+                "block_incomplete_inspection": 0,
+                "block_malicious_text": 0,
+                "transport_error": 0,
+            }
+            results_path = Path(directory) / "supplemental-results.jsonl"
+            with results_path.open("wb") as handle:
+                harness.supplemental_results_handle = handle
+                harness.append_supplemental_result(
+                    {"actual_action": "transport_error"}
+                )
+            self.assertEqual(harness.supplemental_results_count, 1)
+            self.assertEqual(
+                harness.supplemental_action_counts,
+                {
+                    "allow": 0,
+                    "block_incomplete_inspection": 0,
+                    "block_malicious_text": 0,
+                    "transport_error": 1,
+                },
+            )
+
+        owned_buffers = {
+            "one": bytearray(b"first-sensitive-buffer"),
+            "two": bytearray(b"second-sensitive-buffer"),
+        }
+        retained_views = [memoryview(raw) for raw in owned_buffers.values()]
+        self.assertTrue(run._zeroize_supplemental_texts(owned_buffers))
+        self.assertEqual(owned_buffers, {})
+        for retained in retained_views:
+            self.assertGreater(len(retained), 0)
+            self.assertTrue(all(value == 0 for value in retained))
+            retained.release()
+
+        class RetainingDictionary(dict[str, bytearray]):
+            def clear(self) -> None:
+                pass
+
+        retained_mapping = RetainingDictionary(one=bytearray(b"sensitive"))
+        self.assertFalse(run._zeroize_supplemental_texts(retained_mapping))
+        self.assertTrue(retained_mapping)
+        self.assertTrue(run._zeroize_supplemental_texts({}))
+
+        harness = object.__new__(run.Harness)
+        harness.supplemental_texts = {}
+        harness.supplemental_texts_zeroized = False
+        self.assertTrue(harness.supplemental_member_text_retained)
+        harness.supplemental_texts_zeroized = True
+        self.assertFalse(harness.supplemental_member_text_retained)
+
+    def test_supplemental_archive_verification_preserves_bytes_and_rejects_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "operator.zip"
+            original = b"operator-owned supplemental archive sentinel"
+            archive.write_bytes(original)
+            harness = object.__new__(run.Harness)
+            harness.config = {
+                "paths": {"supplemental_zip": str(archive.resolve())},
+                "supplemental_zip": {
+                    "archive_bytes": len(original),
+                    "archive_sha256": sha256_bytes(original),
+                },
+            }
+            initial = archive.lstat()
+            harness.supplemental_archive_identity = (
+                initial.st_dev,
+                initial.st_ino,
+                initial.st_nlink,
+                initial.st_size,
+            )
+            harness.verify_supplemental_archive_identity()
+            harness.verify_supplemental_archive_identity()
+            self.assertEqual(archive.read_bytes(), original)
+            self.assertEqual(
+                (archive.lstat().st_dev, archive.lstat().st_ino, archive.lstat().st_size),
+                (initial.st_dev, initial.st_ino, initial.st_size),
+            )
+
+            archive.write_bytes(b"X" * len(original))
+            with self.assertRaisesRegex(run.AuditFailure, "SHA-256"):
+                harness.verify_supplemental_archive_identity()
+
+            archive.write_bytes(original)
+            replacement = root / "replacement.zip"
+            replacement.write_bytes(original)
+            os.replace(replacement, archive)
+            with self.assertRaisesRegex(run.AuditFailure, "inode"):
+                harness.verify_supplemental_archive_identity()
+
     def test_runtime_config_has_only_counted_mock(self) -> None:
         raw = run.cpa_yaml("balanced", "client", "management", "upstream").decode("utf-8")
         self.assertIn('base-url: "http://mock:18080/v1"', raw)
@@ -63,6 +382,7 @@ class RunnerPureTests(unittest.TestCase):
             self.assertFalse(owned.exists())
             self.assertTrue(Path(parent).exists())
 
+    @unittest.skipUnless(os.name == "posix", "Linux evidence dir-fd contract")
     def test_evidence_directory_binding_rejects_path_replacement(self) -> None:
         with tempfile.TemporaryDirectory() as parent:
             root = Path(parent)
@@ -385,11 +705,13 @@ class RunnerPureTests(unittest.TestCase):
         harness.management_key = "management"
         harness.readiness_state_sha256 = None
         harness.config = {
-            "identities": {
-                "cag": {"commit": "1" * 40},
-                "cpa": {
-                    "commit": "a88197f845c979132c8978ea223c6af05cc81536",
-                    "tag": "v7.2.116",
+                "identities": {
+                    "cag": {"commit": "1" * 40},
+                    "cpa": {
+                        "c_abi": 1,
+                        "commit": CPA_COMMIT,
+                        "rpc_schema": 3,
+                        "tag": CPA_TAG,
                 },
             }
         }
@@ -417,14 +739,14 @@ class RunnerPureTests(unittest.TestCase):
             "audit": {
                 "healthy": True,
                 "degraded": False,
-                "schema_version": 6,
+                "schema_version": AUDIT_SCHEMA_VERSION,
                 "persistence_verified": True,
             },
             "raw_capture": {"enabled": False},
         }
         headers = {
-            "x-cpa-version": "v7.2.116",
-            "x-cpa-commit": "a88197f845c979132c8978ea223c6af05cc81536",
+            "x-cpa-version": CPA_TAG,
+            "x-cpa-commit": CPA_COMMIT,
         }
         with mock.patch.object(
             run,

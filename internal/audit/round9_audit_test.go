@@ -194,7 +194,7 @@ func TestRound9V5ToV6MigrationCreatesPreMigrationBackup(t *testing.T) {
 	if err := store.db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('audit_events') WHERE name = 'explanation_schema'`).Scan(&activeExplanationSchemaColumns); err != nil {
 		t.Fatal(err)
 	}
-	if activeVersion != 6 || activeDispositionColumns != 1 || activeExplanationSchemaColumns != 1 {
+	if activeVersion != currentSchemaVersion || activeDispositionColumns != 1 || activeExplanationSchemaColumns != 1 {
 		t.Fatalf("active database version=%d disposition_columns=%d explanation_schema_columns=%d", activeVersion, activeDispositionColumns, activeExplanationSchemaColumns)
 	}
 	captures, err := store.QueryRawCaptures(context.Background(), RawCaptureQuery{EventID: "round9-v5-event"})

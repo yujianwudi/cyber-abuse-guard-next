@@ -1,8 +1,8 @@
 # Round 9 operator-owned Balanced rollout, circuit breaker, and rollback
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
 > **Active-tree identity overlay refreshed 2026-08-04 (Asia/Shanghai).** The

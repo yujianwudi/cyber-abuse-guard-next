@@ -13,7 +13,7 @@ type pendingDecision struct {
 }
 
 // pendingCache is a bounded, time-limited string cache. The legacy
-// model.route -> executor bridge stores a coarse category, while the schema-v2
+// model.route -> executor bridge stores a coarse category, while the schema-v3
 // request-lifecycle wrapper stores a request-ID-bound HMAC-SHA256 fingerprint.
 // Neither use retains request text, header values, credentials, or other
 // prompt-derived material.

@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,15 +20,17 @@ import (
 )
 
 var (
-	ErrClosed                = errors.New("audit: store is closed")
-	ErrQueueFull             = errors.New("audit: async queue is full")
-	ErrInvalidEvent          = errors.New("audit: invalid event")
-	ErrUnavailable           = errors.New("audit: database is unavailable")
-	ErrStorageBlocked        = errors.New("audit: persistent storage access is blocked")
-	ErrRawCapturePurge       = errors.New("audit: raw request capture purge failed")
-	ErrCapacityExceeded      = errors.New("audit: database capacity exceeded")
-	ErrCapacityCheckFailed   = errors.New("audit: database capacity check failed")
-	ErrCapacityCleanupFailed = errors.New("audit: database capacity cleanup failed")
+	ErrClosed                     = errors.New("audit: store is closed")
+	ErrQueueFull                  = errors.New("audit: async queue is full")
+	ErrQueueLossUnrecovered       = errors.New("audit: async queue loss has not completed a durable recovery cycle")
+	ErrInvalidEvent               = errors.New("audit: invalid event")
+	ErrUnavailable                = errors.New("audit: database is unavailable")
+	ErrStorageBlocked             = errors.New("audit: persistent storage access is blocked")
+	ErrRawCapturePurge            = errors.New("audit: raw request capture purge failed")
+	ErrRawCapturePurgeUnrecovered = errors.New("audit: raw request capture purge compensation failed")
+	ErrCapacityExceeded           = errors.New("audit: database capacity exceeded")
+	ErrCapacityCheckFailed        = errors.New("audit: database capacity check failed")
+	ErrCapacityCleanupFailed      = errors.New("audit: database capacity cleanup failed")
 )
 
 const schema = `
@@ -85,13 +88,49 @@ type Config struct {
 	// Subject restore also uses this gate because loading state from a replaced
 	// volume is no safer than writing to it.
 	StorageAccessGate func() error
+	// StorageActivationGate is the activation-only, uncached storage probe. A
+	// deferred Store invokes it after its owner has published the candidate but
+	// before SQLite creates or opens any artifact. Runtime owners must not route
+	// this callback through a write-hot-path cache.
+	StorageActivationGate func() error
+	// StoragePostOpenBind runs immediately after SQLite has opened the database
+	// and established its WAL artifacts, before schema migration, TTL deletion,
+	// capacity eviction, or worker startup. It binds the opened DB/WAL/SHM set to
+	// the directory identity verified by the runtime owner.
+	StoragePostOpenBind func() error
+	// StoragePostMutationBind refreshes the same binding after trusted startup
+	// migration/TTL work has created previously absent WAL/SHM artifacts, but
+	// still before capacity maintenance, activation, or worker startup.
+	StoragePostMutationBind func() error
+	// StoragePostMaintenanceBind is the deferred-activation final identity gate.
+	// Activate invokes it only after startup maintenance and capacity measurement
+	// succeed, but before publishing admission or starting the worker. The
+	// callback must not call Quiesce, Close, or Discard because Activate holds
+	// activateMu.
+	StoragePostMaintenanceBind func() error
+	// StorageReadAccessGate is an independent uncached gate for sensitive reads.
+	// QueryRawCapturesPage invokes it from the same checked-out connection and
+	// read transaction that returns previews.
+	StorageReadAccessGate func() error
 	// SkipDisabledPurgeOnOpen is an internal lifecycle coordination switch.
 	// Direct callers and initial plugin registration leave it false. A hot
 	// reconfiguration defers destructive purge until every migration succeeds
 	// and the plugin holds its exclusive runtime swap lock.
 	SkipDisabledPurgeOnOpen bool
-	Now                     func() time.Time
-	OnError                 func(error)
+	// SkipAllStartupMutation prepares an existing current-schema Store without
+	// migrations, TTL deletion, capacity eviction, disabled-capture purge, or a
+	// background maintenance worker. The runtime owner must call Activate only
+	// after publishing the prepared configuration.
+	SkipAllStartupMutation bool
+	// AllowDeferredDatabaseCreate permits a mutation-free prepared Store when
+	// the database file does not exist yet. Activate performs the actual open
+	// and creation after the runtime swap.
+	AllowDeferredDatabaseCreate bool
+	Now                         func() time.Time
+	// OnError runs synchronously. While handling an Activate failure, it must not
+	// call Quiesce, Close, or Discard (including Context variants) on the same
+	// Store; those methods wait for Activate to release its lifecycle lock.
+	OnError func(error)
 }
 
 // Query is a parameterized event filter. An empty Query selects recent events;
@@ -197,67 +236,90 @@ type Stats struct {
 }
 
 type workItem struct {
-	event      *Event
-	rawCapture *RawRequestCapture
-	barrier    chan struct{}
+	event               *Event
+	rawCapture          *RawRequestCapture
+	barrier             chan struct{}
+	queueLossGeneration uint64
 }
 
 // Store owns SQLite and a bounded nonblocking writer. Database failures affect
 // only audit counters; callers can continue classification and enforcement.
 type Store struct {
-	cfg        Config
-	db         *sql.DB
-	queue      chan workItem
-	queueSlots chan struct{}
-	statsSlots chan struct{}
-	done       chan struct{}
-	abort      chan struct{}
-	closedDone chan struct{}
-	workerCtx  context.Context
-	cancelWork context.CancelFunc
-	wg         sync.WaitGroup
+	cfg          Config
+	db           *sql.DB
+	queue        chan workItem
+	queueSlots   chan struct{}
+	statsSlots   chan struct{}
+	done         chan struct{}
+	abort        chan struct{}
+	quiescedDone chan struct{}
+	closedDone   chan struct{}
+	workerCtx    context.Context
+	cancelWork   context.CancelFunc
+	wg           sync.WaitGroup
 
 	sendMu         sync.RWMutex
+	rawAdmissionMu sync.RWMutex
+	maintenanceMu  sync.Mutex
 	admissionMu    sync.Mutex
 	admissionCount int
 	admissionIdle  chan struct{}
 	closed         bool
+	quiesceOnce    sync.Once
 	closeOnce      sync.Once
 	abortOnce      sync.Once
 	closeErr       error
+	activateMu     sync.Mutex
+	workerStarted  bool
+	activated      atomic.Bool
+	databaseOpen   atomic.Bool
+	closedState    atomic.Bool
 
-	degraded               atomic.Bool
-	aborted                atomic.Bool
-	lastErr                atomic.Value // string
-	enqueued               atomic.Uint64
-	written                atomic.Uint64
-	dropped                atomic.Uint64
-	failed                 atomic.Uint64
-	rejected               atomic.Uint64
-	cleaned                atomic.Uint64
-	rawEnqueued            atomic.Uint64
-	rawWritten             atomic.Uint64
-	rawDropped             atomic.Uint64
-	rawFailed              atomic.Uint64
-	rawRejected            atomic.Uint64
-	rawDeduplicated        atomic.Uint64
-	rawQueueHighWater      atomic.Uint64
-	rawPrepareCount        atomic.Uint64
-	rawPrepareTotalUS      atomic.Uint64
-	rawPrepareLastUS       atomic.Uint64
-	rawPrepareMaxUS        atomic.Uint64
-	currentLiveBytes       atomic.Int64
-	capacityMeasured       atomic.Bool
-	overLimit              atomic.Bool
-	capacityCleanupRuns    atomic.Uint64
-	capacityCleanupDeleted atomic.Uint64
-	capacityRejected       atomic.Uint64
-	schemaVersion          atomic.Int64
-	migrationBackupMu      sync.Mutex
-	capacityMu             sync.Mutex
+	degraded                atomic.Bool
+	aborted                 atomic.Bool
+	lastErr                 atomic.Value // string
+	enqueued                atomic.Uint64
+	written                 atomic.Uint64
+	dropped                 atomic.Uint64
+	failed                  atomic.Uint64
+	rejected                atomic.Uint64
+	cleaned                 atomic.Uint64
+	rawEnqueued             atomic.Uint64
+	rawWritten              atomic.Uint64
+	rawDropped              atomic.Uint64
+	rawFailed               atomic.Uint64
+	rawRejected             atomic.Uint64
+	rawDeduplicated         atomic.Uint64
+	rawQueueHighWater       atomic.Uint64
+	rawPrepareCount         atomic.Uint64
+	rawPrepareTotalUS       atomic.Uint64
+	rawPrepareLastUS        atomic.Uint64
+	rawPrepareMaxUS         atomic.Uint64
+	rawCaptureWriteBlocked  atomic.Bool
+	queueLossGeneration     atomic.Uint64
+	queueWriteGeneration    atomic.Uint64
+	queueRecoveryGeneration atomic.Uint64
+	currentLiveBytes        atomic.Int64
+	capacityMeasured        atomic.Bool
+	overLimit               atomic.Bool
+	capacityCleanupRuns     atomic.Uint64
+	capacityCleanupDeleted  atomic.Uint64
+	capacityRejected        atomic.Uint64
+	schemaVersion           atomic.Int64
+	migrationBackupMu       sync.Mutex
+	capacityMu              sync.Mutex
 
 	reportMu   sync.Mutex
 	lastReport time.Time
+
+	// Tests use this hook to hold the successful activation publication boundary
+	// before the worker-start lifecycle decision. Production Stores leave it nil.
+	activationBeforeWorkerStartHook func()
+
+	// Tests use this per-Store hook to deterministically cross the otherwise
+	// tiny boundary between preflight and a post-commit gate. Production Stores
+	// leave it nil.
+	rawCapturePurgeHook func(rawCapturePurgeStage) error
 }
 
 // Open initializes the store. Even when SQLite cannot be opened, it returns a
@@ -267,42 +329,64 @@ func Open(cfg Config) (*Store, error) {
 	cfg = withDefaults(cfg)
 	workerCtx, cancelWork := context.WithCancel(context.Background())
 	store := &Store{
-		cfg:        cfg,
-		queue:      make(chan workItem, cfg.QueueSize),
-		queueSlots: make(chan struct{}, cfg.QueueSize),
-		statsSlots: make(chan struct{}, statsConcurrentLimit),
-		done:       make(chan struct{}),
-		abort:      make(chan struct{}),
-		closedDone: make(chan struct{}),
-		workerCtx:  workerCtx,
-		cancelWork: cancelWork,
+		cfg:          cfg,
+		queue:        make(chan workItem, cfg.QueueSize),
+		queueSlots:   make(chan struct{}, cfg.QueueSize),
+		statsSlots:   make(chan struct{}, statsConcurrentLimit),
+		done:         make(chan struct{}),
+		abort:        make(chan struct{}),
+		quiescedDone: make(chan struct{}),
+		closedDone:   make(chan struct{}),
+		workerCtx:    workerCtx,
+		cancelWork:   cancelWork,
 	}
 	store.admissionIdle = make(chan struct{})
 	close(store.admissionIdle)
 	store.lastErr.Store("")
 
-	db, err := openDatabase(cfg)
+	var db *sql.DB
+	var err error
+	deferDatabaseOpen := false
+	if cfg.SkipAllStartupMutation && cfg.AllowDeferredDatabaseCreate {
+		if strings.TrimSpace(cfg.Path) == "" {
+			err = errors.New("audit: deferred database path is empty")
+		} else if _, pathErr := filepath.Abs(cfg.Path); pathErr != nil {
+			err = fmt.Errorf("audit: resolve deferred database path: %w", pathErr)
+		} else {
+			// A hot candidate is a mutation-free placeholder regardless of whether
+			// the database already exists. Even a read-write Ping or journal-mode
+			// inspection can create WAL/SHM sidecars or update SQLite metadata.
+			deferDatabaseOpen = true
+		}
+	}
+	if err == nil && !deferDatabaseOpen {
+		db, err = openDatabase(cfg)
+	}
 	if err != nil {
 		store.degraded.Store(true)
 		store.lastErr.Store(err.Error())
-	} else {
+	} else if db != nil {
 		store.db = db
+		store.databaseOpen.Store(true)
 		store.schemaVersion.Store(currentSchemaVersion)
-		// A disabled capture setting is also a deletion instruction. Do an
-		// initial purge before the writer starts; plugin hot
-		// reconfiguration repeats it after the previous Store has fully closed so
-		// an older queue cannot repopulate the table after this point.
-		if !cfg.RawCapture.Enabled && !cfg.SkipDisabledPurgeOnOpen {
-			if _, purgeErr := store.purgeRawCaptures(context.Background()); purgeErr != nil {
-				err = fmt.Errorf("%w: %w", ErrRawCapturePurge, purgeErr)
+		if !cfg.SkipAllStartupMutation {
+			// A disabled capture setting is also a deletion instruction. Do an
+			// initial purge before the writer starts; plugin hot reconfiguration
+			// performs its final gate explicitly before activating a prepared Store.
+			if !cfg.RawCapture.Enabled && !cfg.SkipDisabledPurgeOnOpen {
+				if _, purgeErr := store.purgeRawCaptures(context.Background()); purgeErr != nil {
+					err = fmt.Errorf("%w: %w", ErrRawCapturePurge, purgeErr)
+				}
+			}
+			if err == nil {
+				_ = store.enforceCapacity(context.Background())
 			}
 		}
-		if err == nil {
-			_ = store.enforceCapacity(context.Background())
-		}
 	}
-	store.wg.Add(1)
-	go store.run()
+	if !cfg.SkipAllStartupMutation {
+		store.activated.Store(true)
+		store.startWorker()
+	}
 	if err != nil {
 		store.report(err)
 	}
@@ -311,6 +395,148 @@ func Open(cfg Config) (*Store, error) {
 
 // New is an alias for Open for callers that prefer constructor naming.
 func New(cfg Config) (*Store, error) { return Open(cfg) }
+
+// Activate publishes the deferred startup-mutation boundary for a Store opened
+// with SkipAllStartupMutation. The owner calls it only after the candidate
+// runtime has become current, while caller admission is still externally
+// excluded. Capacity state is measured from the post-purge database before the
+// background worker starts.
+func (s *Store) Activate(ctx context.Context) error {
+	if s == nil {
+		return ErrUnavailable
+	}
+	s.activateMu.Lock()
+	defer s.activateMu.Unlock()
+	if s.closedState.Load() {
+		return ErrClosed
+	}
+	if s.activated.Load() {
+		return nil
+	}
+	if err := s.checkStorageActivationAccess(); err != nil {
+		return s.finishActivation(err)
+	}
+	openedDuringActivation := false
+	if s.db == nil {
+		activationCfg := s.cfg
+		activationCfg.SkipAllStartupMutation = false
+		activationCfg.AllowDeferredDatabaseCreate = false
+		db, err := openDatabase(activationCfg)
+		if err != nil {
+			return s.finishActivation(err)
+		}
+		s.db = db
+		s.databaseOpen.Store(true)
+		s.schemaVersion.Store(currentSchemaVersion)
+		openedDuringActivation = true
+	}
+	if err := s.checkStorageAccess(); err != nil {
+		return s.finishActivation(err)
+	}
+
+	s.maintenanceMu.Lock()
+	var activationErr error
+	switch {
+	case s.cfg.RawCapture.Enabled:
+		// openDatabase already performs the enabled-capture TTL cleanup when
+		// activation had to open the database. A candidate that opened the
+		// database during prepare still needs that mutation here. In neither
+		// case may an enabled capture policy fall through to the disabled purge.
+		if !openedDuringActivation {
+			cutoff := s.cfg.Now().UTC().Add(-s.cfg.RawCapture.TTL).UnixNano()
+			if _, err := s.db.ExecContext(ctx, "DELETE FROM raw_request_captures WHERE timestamp_ns < ?", cutoff); err != nil {
+				activationErr = fmt.Errorf("audit: deferred startup raw capture TTL cleanup: %w", err)
+			}
+		}
+	case !s.cfg.SkipDisabledPurgeOnOpen:
+		if _, err := s.purgeRawCapturesLocked(ctx); err != nil {
+			activationErr = fmt.Errorf("%w: %w", ErrRawCapturePurge, err)
+		}
+	}
+	if activationErr == nil {
+		activationErr = s.enforceCapacityMaintenanceLocked(ctx)
+	}
+	s.maintenanceMu.Unlock()
+	if activationErr == nil && s.cfg.StoragePostMaintenanceBind != nil {
+		if err := s.cfg.StoragePostMaintenanceBind(); err != nil {
+			activationErr = fmt.Errorf("%w: bind SQLite storage identity after activation maintenance: %v", ErrStorageBlocked, err)
+		}
+	}
+
+	return s.finishActivation(activationErr)
+}
+
+func (s *Store) finishActivation(activationErr error) error {
+	if activationErr != nil {
+		return s.failActivation(activationErr)
+	}
+	s.activated.Store(true)
+	if hook := s.activationBeforeWorkerStartHook; hook != nil {
+		hook()
+	}
+	// CloseContext publishes the terminal state under sendMu before waiting for
+	// workers. Hold that same lock across the final check and wg.Add so close
+	// either wins without a worker or waits for the worker started here.
+	s.sendMu.Lock()
+	if s.closedState.Load() {
+		s.activated.Store(false)
+		s.sendMu.Unlock()
+		return s.failActivation(ErrClosed)
+	}
+	s.startWorker()
+	s.sendMu.Unlock()
+	return nil
+}
+
+func (s *Store) failActivation(activationErr error) error {
+	// A deferred runtime may publish admission and its bounded queue consumer only
+	// after every activation gate succeeds. Until a successful capacity
+	// measurement and final storage bind exist, accepting additional evidence
+	// would make the configured hard limit or storage identity unknowable. Latch
+	// the capacity admission gate closed while preserving a more specific
+	// activation error for Status and diagnostics.
+	if !s.overLimit.Load() {
+		s.capacityMu.Lock()
+		s.capacityFailure(ErrCapacityCheckFailed, false)
+		s.capacityMu.Unlock()
+	}
+	s.degraded.Store(true)
+	s.lastErr.Store(activationErr.Error())
+	s.report(activationErr)
+	// No queue work can have been admitted before activation. Keeping the Store
+	// unactivated is therefore the strongest bounded failure mode: raw reads and
+	// writes both return a storage block and no worker can mutate a database whose
+	// post-open identity or migration was rejected.
+	return activationErr
+}
+
+func (s *Store) startWorker() {
+	if s.workerStarted {
+		return
+	}
+	s.workerStarted = true
+	s.wg.Add(1)
+	go s.run()
+}
+
+// DatabaseAvailable reports whether a prepared Store has already opened the
+// SQLite database. Runtime owners use it only to defer post-open identity
+// binding until an activation-created database exists.
+func (s *Store) DatabaseAvailable() bool {
+	return s != nil && s.databaseOpen.Load()
+}
+
+// IsActive reports whether this Store can currently own a hot-reconfiguration
+// database. A non-nil pointer or an opened database alone is insufficient: an
+// activation failure can leave DB/WAL/SHM handles open while admission remains
+// permanently disabled. The predicate serializes with Activate and the close
+// flag so runtime owners can distinguish that recovery state from a live Store.
+func (s *Store) IsActive() bool {
+	if s == nil {
+		return false
+	}
+	return s.databaseOpen.Load() && s.activated.Load() && !s.closedState.Load()
+}
 
 func withDefaults(cfg Config) Config {
 	if cfg.Retention <= 0 {
@@ -357,18 +583,32 @@ func openDatabase(cfg Config) (*sql.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("audit: resolve database path: %w", err)
 	}
-	if err := prepareSQLitePath(absPath, !cfg.RequirePersistentStorage); err != nil {
+	// A mutation-free candidate must neither create a missing directory nor
+	// defer file-mode rejection until after SQLite has opened the path. Passing
+	// createDirectory=false makes prepareSQLitePath enforce the regular-file and
+	// private-mode contract for DB/WAL/SHM before any driver operation.
+	createDirectory := !cfg.RequirePersistentStorage && !cfg.SkipAllStartupMutation
+	if err := prepareSQLitePath(absPath, createDirectory); err != nil {
 		return nil, err
 	}
-	if cfg.RequirePersistentStorage {
-		if err := createSQLiteDatabaseFileIfMissing(absPath); err != nil {
+	if cfg.SkipAllStartupMutation {
+		if _, err := os.Lstat(absPath); err != nil {
+			return nil, fmt.Errorf("audit: deferred-mutation candidate requires an existing database: %w", err)
+		}
+	} else {
+		// Pre-create with a private mode for both production and development. This
+		// also gives the post-open identity binder a stable database object instead
+		// of relying on process umask while SQLite creates it lazily.
+		if err := createSQLiteDatabaseFileIfMissing(absPath, cfg.RequirePersistentStorage); err != nil {
 			return nil, err
 		}
 	}
 
 	parameters := url.Values{}
 	parameters.Set("_busy_timeout", strconv.FormatInt(cfg.BusyTimeout.Milliseconds(), 10))
-	parameters.Set("_journal_mode", "WAL")
+	if !cfg.SkipAllStartupMutation {
+		parameters.Set("_journal_mode", "WAL")
+	}
 	parameters.Set("_synchronous", "NORMAL")
 	parameters.Set("_foreign_keys", "on")
 	// A database can still contain captures written while the feature was
@@ -392,26 +632,64 @@ func openDatabase(cfg Config) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("audit: connect SQLite: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA auto_vacuum=INCREMENTAL"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("audit: configure auto_vacuum: %w", err)
+	if cfg.StoragePostOpenBind != nil {
+		if err := cfg.StoragePostOpenBind(); err != nil {
+			_ = db.Close()
+			return nil, fmt.Errorf("%w: bind opened SQLite storage identity: %v", ErrStorageBlocked, err)
+		}
 	}
-	if err := migrateDatabase(db, cfg, absPath); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if cfg.RawCapture.Enabled {
-		cutoff := cfg.Now().UTC().Add(-cfg.RawCapture.TTL).UnixNano()
-		if _, err := db.Exec("DELETE FROM raw_request_captures WHERE timestamp_ns < ?", cutoff); err != nil {
+	if cfg.SkipAllStartupMutation {
+		var journalMode string
+		if err := db.QueryRow("PRAGMA journal_mode").Scan(&journalMode); err != nil {
 			db.Close()
-			return nil, fmt.Errorf("audit: startup raw capture TTL cleanup: %w", err)
+			return nil, fmt.Errorf("audit: inspect prepared candidate journal mode: %w", err)
+		}
+		if !strings.EqualFold(journalMode, "wal") {
+			db.Close()
+			return nil, fmt.Errorf("audit: prepared candidate journal mode is %q, want WAL", journalMode)
+		}
+		version, err := detectSchemaVersion(db)
+		if err != nil {
+			db.Close()
+			return nil, fmt.Errorf("audit: detect prepared candidate schema version: %w", err)
+		}
+		if version != currentSchemaVersion {
+			db.Close()
+			return nil, fmt.Errorf("audit: prepared candidate schema version is %d, want current version %d", version, currentSchemaVersion)
+		}
+		if err := validateSchemaContract(db, currentSchemaVersion); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("audit: prepared candidate schema contract is invalid: %w", err)
+		}
+	} else {
+		if _, err := db.Exec("PRAGMA auto_vacuum=INCREMENTAL"); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("audit: configure auto_vacuum: %w", err)
+		}
+		if err := migrateDatabase(db, cfg, absPath); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if cfg.RawCapture.Enabled {
+			cutoff := cfg.Now().UTC().Add(-cfg.RawCapture.TTL).UnixNano()
+			if _, err := db.Exec("DELETE FROM raw_request_captures WHERE timestamp_ns < ?", cutoff); err != nil {
+				db.Close()
+				return nil, fmt.Errorf("audit: startup raw capture TTL cleanup: %w", err)
+			}
+		}
+	}
+	if !cfg.SkipAllStartupMutation && cfg.StoragePostMutationBind != nil {
+		if err := cfg.StoragePostMutationBind(); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("%w: bind SQLite storage identity after startup mutation: %v", ErrStorageBlocked, err)
 		}
 	}
 	if err := verifySQLiteQuickCheck(db); err != nil {
 		db.Close()
 		return nil, err
 	}
-	if err := secureSQLiteFiles(absPath, !cfg.RequirePersistentStorage); err != nil {
+	repairPermissions := !cfg.RequirePersistentStorage && !cfg.SkipAllStartupMutation
+	if err := secureSQLiteFiles(absPath, repairPermissions); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -438,7 +716,7 @@ func (s *Store) Record(event Event) bool { return s.Enqueue(event) == nil }
 
 // Enqueue is the diagnostic form of Record.
 func (s *Store) Enqueue(event Event) error {
-	if s == nil {
+	if s == nil || !s.activated.Load() {
 		return ErrUnavailable
 	}
 	if err := s.rejectCapacityAdmission(1, 0); err != nil {
@@ -473,6 +751,9 @@ func (s *Store) reserveAdmission() error {
 	if s.closed {
 		return ErrClosed
 	}
+	if !s.activated.Load() {
+		return ErrUnavailable
+	}
 	select {
 	case s.queueSlots <- struct{}{}:
 		s.admissionMu.Lock()
@@ -483,6 +764,7 @@ func (s *Store) reserveAdmission() error {
 		s.admissionMu.Unlock()
 		return nil
 	default:
+		s.noteQueueLoss()
 		return ErrQueueFull
 	}
 }
@@ -490,6 +772,7 @@ func (s *Store) reserveAdmission() error {
 func (s *Store) publishAdmission(item workItem) {
 	// Every publisher owns a queueSlots token, so this send cannot exceed the
 	// channel capacity even when other publishers are still preparing work.
+	item.queueLossGeneration = s.queueLossGeneration.Load()
 	s.queue <- item
 	s.finishAdmission()
 }
@@ -538,6 +821,15 @@ func (s *Store) Flush(ctx context.Context) error {
 	if s == nil {
 		return ErrUnavailable
 	}
+	// Once close has published its terminal lifecycle state, it takes
+	// precedence over an earlier activation failure. This keeps Flush stable
+	// while Close waits for an in-flight Activate to release activateMu.
+	if s.closedState.Load() {
+		return ErrClosed
+	}
+	if !s.activated.Load() {
+		return ErrUnavailable
+	}
 	barrier := make(chan struct{})
 	s.sendMu.Lock()
 	if s.closed {
@@ -556,7 +848,7 @@ func (s *Store) Flush(ctx context.Context) error {
 		s.sendMu.Unlock()
 		return ctx.Err()
 	}
-	s.queue <- workItem{barrier: barrier}
+	s.queue <- workItem{barrier: barrier, queueLossGeneration: s.queueLossGeneration.Load()}
 	s.sendMu.Unlock()
 	select {
 	case <-barrier:
@@ -571,6 +863,15 @@ func (s *Store) run() {
 	ticker := time.NewTicker(s.cfg.CleanupInterval)
 	defer ticker.Stop()
 	for {
+		// Once quiesce publishes done, do not let a simultaneously ready ticker
+		// start a new maintenance mutation. A tick already in progress finishes
+		// before this loop returns; accepted queue work is then drained below.
+		select {
+		case <-s.done:
+			s.drainQueuedOnStop()
+			return
+		default:
+		}
 		select {
 		case item := <-s.queue:
 			s.releaseQueueSlot()
@@ -581,22 +882,27 @@ func (s *Store) run() {
 				s.report(err)
 			}
 		case <-s.done:
-			for {
-				if s.aborted.Load() {
-					s.dropQueued()
-					return
-				}
-				select {
-				case <-s.abort:
-					s.dropQueued()
-					return
-				case item := <-s.queue:
-					s.releaseQueueSlot()
-					s.handleBatch(s.collectWriteBatch(item))
-				default:
-					return
-				}
-			}
+			s.drainQueuedOnStop()
+			return
+		}
+	}
+}
+
+func (s *Store) drainQueuedOnStop() {
+	for {
+		if s.aborted.Load() {
+			s.dropQueued()
+			return
+		}
+		select {
+		case <-s.abort:
+			s.dropQueued()
+			return
+		case item := <-s.queue:
+			s.releaseQueueSlot()
+			s.handleBatch(s.collectWriteBatch(item))
+		default:
+			return
 		}
 	}
 }
@@ -626,7 +932,8 @@ func (s *Store) handleBatch(batch []workItem) {
 	if len(batch) == 0 {
 		return
 	}
-	barrier := batch[len(batch)-1].barrier
+	barrierItem := batch[len(batch)-1]
+	barrier := barrierItem.barrier
 	dataItems := batch
 	if barrier != nil {
 		dataItems = batch[:len(batch)-1]
@@ -634,6 +941,7 @@ func (s *Store) handleBatch(batch []workItem) {
 
 	anySuccess := false
 	hadFailure := false
+	var successfulQueueGeneration uint64
 	for index := 0; index < len(dataItems); index++ {
 		item := dataItems[index]
 		if item.event == nil && item.rawCapture == nil {
@@ -677,11 +985,18 @@ func (s *Store) handleBatch(batch []workItem) {
 			eventWritten := s.finishWork(eventItem, eventErr)
 			captureWritten := s.finishWork(captureItem, captureErr)
 			anySuccess = anySuccess || eventWritten || captureWritten
+			if (eventWritten || captureWritten) && item.queueLossGeneration > successfulQueueGeneration {
+				successfulQueueGeneration = item.queueLossGeneration
+			}
 			hadFailure = hadFailure || eventErr != nil || captureErr != nil
 			continue
 		}
 		writeErr := s.writeWork(s.db, item)
-		anySuccess = s.finishWork(item, writeErr) || anySuccess
+		itemWritten := s.finishWork(item, writeErr)
+		anySuccess = itemWritten || anySuccess
+		if itemWritten && item.queueLossGeneration > successfulQueueGeneration {
+			successfulQueueGeneration = item.queueLossGeneration
+		}
 		hadFailure = hadFailure || writeErr != nil
 	}
 
@@ -699,12 +1014,48 @@ func (s *Store) handleBatch(batch []workItem) {
 			hadFailure = true
 		}
 	}
-	if anySuccess && !hadFailure && !s.overLimit.Load() {
+	if anySuccess && !hadFailure && !s.overLimit.Load() && !s.rawCaptureWriteBlocked.Load() {
+		s.noteQueueWrite(successfulQueueGeneration)
 		s.degraded.Store(false)
 		s.lastErr.Store("")
 	}
 	if barrier != nil {
+		s.recoverQueueLoss(barrierItem.queueLossGeneration)
 		close(barrier)
+	}
+}
+
+func (s *Store) noteQueueLoss() {
+	// Keep the saturated admission path allocation-free. Status derives the
+	// fixed low-cardinality error from the unrecovered generation, so neither an
+	// atomic.Value interface store nor the general error reporter belongs on
+	// this request hot path.
+	s.queueLossGeneration.Add(1)
+}
+
+func (s *Store) noteQueueWrite(generation uint64) {
+	for generation > s.queueWriteGeneration.Load() {
+		current := s.queueWriteGeneration.Load()
+		if generation <= current || s.queueWriteGeneration.CompareAndSwap(current, generation) {
+			return
+		}
+	}
+}
+
+// recoverQueueLoss clears only the loss generation covered by this Flush
+// barrier, and only after a write observed at least that generation. Counters
+// retain the historical loss. A newer concurrent saturation therefore cannot
+// be hidden by an older barrier, while a durable post-loss write plus Flush
+// provides an explicit, finite recovery path.
+func (s *Store) recoverQueueLoss(barrierGeneration uint64) {
+	if barrierGeneration == 0 || s.queueWriteGeneration.Load() < barrierGeneration {
+		return
+	}
+	for barrierGeneration > s.queueRecoveryGeneration.Load() {
+		current := s.queueRecoveryGeneration.Load()
+		if barrierGeneration <= current || s.queueRecoveryGeneration.CompareAndSwap(current, barrierGeneration) {
+			return
+		}
 	}
 }
 
@@ -716,6 +1067,40 @@ func (s *Store) checkStorageAccess() error {
 		return nil
 	}
 	if err := s.cfg.StorageAccessGate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrStorageBlocked, err)
+	}
+	return nil
+}
+
+func (s *Store) checkStorageActivationAccess() error {
+	if s == nil {
+		return ErrUnavailable
+	}
+	gate := s.cfg.StorageActivationGate
+	if gate == nil {
+		gate = s.cfg.StorageAccessGate
+	}
+	if gate == nil {
+		return nil
+	}
+	if err := gate(); err != nil {
+		return fmt.Errorf("%w: %v", ErrStorageBlocked, err)
+	}
+	return nil
+}
+
+func (s *Store) checkSensitiveReadStorageAccess() error {
+	if s == nil {
+		return ErrStorageBlocked
+	}
+	gate := s.cfg.StorageReadAccessGate
+	if gate == nil {
+		gate = s.cfg.StorageAccessGate
+	}
+	if gate == nil {
+		return nil
+	}
+	if err := gate(); err != nil {
 		return fmt.Errorf("%w: %v", ErrStorageBlocked, err)
 	}
 	return nil
@@ -755,6 +1140,9 @@ type contextExecer interface {
 
 func (s *Store) writeWork(execer contextExecer, item workItem) error {
 	if item.rawCapture != nil {
+		if s.rawCaptureWriteBlocked.Load() {
+			return ErrRawCapturePurgeUnrecovered
+		}
 		if err := validateRawRequestCapture(*item.rawCapture); err != nil {
 			return err
 		}
@@ -897,12 +1285,24 @@ func (s *Store) Status() Status {
 	s.capacityMu.Lock()
 	configuredMaxBytes := s.cfg.MaxBytes
 	s.capacityMu.Unlock()
-	degraded := s.degraded.Load() || backupErr != nil
+	rawCaptureWriteBlocked := s.rawCaptureWriteBlocked.Load()
+	activated := s.activated.Load()
+	queueLossUnrecovered := s.queueRecoveryGeneration.Load() < s.queueLossGeneration.Load()
+	degraded := s.degraded.Load() || backupErr != nil || rawCaptureWriteBlocked || queueLossUnrecovered || !activated
 	if backupErr != nil && lastError == "" {
 		lastError = MigrationBackupInventoryWarning
+	} else if rawCaptureWriteBlocked && lastError == "" {
+		lastError = ErrRawCapturePurgeUnrecovered.Error()
+	} else if queueLossUnrecovered {
+		// Queue loss is a readiness boundary, not merely another diagnostic.
+		// A writer can publish its Written counter before the remainder of its
+		// batch clears a stale SQLite error. Always expose the fixed loss reason
+		// while the generation is unrecovered so observers never mistake that
+		// transient ordering for a recoverable/ready store.
+		lastError = ErrQueueLossUnrecovered.Error()
 	}
 	return Status{
-		Healthy:                      !degraded && !closed && s.db != nil,
+		Healthy:                      !degraded && !closed && activated && s.databaseOpen.Load(),
 		Degraded:                     degraded,
 		Closed:                       closed,
 		SchemaVersion:                int(s.schemaVersion.Load()),
@@ -939,7 +1339,8 @@ func (s *Store) Status() Status {
 
 // SetErrorHandler replaces the optional rate-limited diagnostic callback.
 // Runtime shutdown clears it before a potentially asynchronous close so no
-// new host callback is started by the closing store.
+// new host callback is started by the closing store. Handlers have the same
+// reentrancy restrictions as Config.OnError.
 func (s *Store) SetErrorHandler(handler func(error)) {
 	if s == nil {
 		return
@@ -949,17 +1350,19 @@ func (s *Store) SetErrorHandler(handler func(error)) {
 	s.reportMu.Unlock()
 }
 
-// CloseContext starts an idempotent background drain and waits only until the
-// supplied context expires. A timed-out caller is never forced to wait for a
-// locked SQLite writer; the background finalizer still closes the database
-// after the bounded queue has drained.
-func (s *Store) CloseContext(ctx context.Context) error {
+// startQuiesce publishes the terminal admission state exactly once and drains
+// every reservation accepted before that boundary. The worker exits only after
+// its queue and maintenance loop are both stopped. SQLite deliberately remains
+// open: the runtime owner must perform its final uncached storage verification
+// before choosing CloseContext (checkpoint) or DiscardContext (no checkpoint).
+func (s *Store) startQuiesce() {
 	if s == nil {
-		return nil
+		return
 	}
-	s.closeOnce.Do(func() {
+	s.quiesceOnce.Do(func() {
 		s.sendMu.Lock()
 		s.closed = true
+		s.closedState.Store(true)
 		s.sendMu.Unlock()
 		go func() {
 			// Reservations begun before closed=true may still be redacting or
@@ -968,10 +1371,71 @@ func (s *Store) CloseContext(ctx context.Context) error {
 			_ = s.waitAdmissions(context.Background())
 			close(s.done)
 			s.wg.Wait()
+			// The worker owns all uses of workerCtx. Cancel only after wg confirms
+			// that queued writes and an in-flight maintenance tick have finished.
 			s.cancelWork()
+			// Activate may have passed its initial closed-state check before this
+			// quiesce began. Wait for its startup mutation and final publication
+			// boundary so a successful return is a truly mutation-free storage
+			// recheck surface. sendMu is not held, preserving the lifecycle lock
+			// order used by finishActivation.
+			s.activateMu.Lock()
+			s.activateMu.Unlock()
+			close(s.quiescedDone)
+		}()
+	})
+}
+
+// QuiesceContext atomically stops new admission and waits for every previously
+// accepted item plus any in-flight background maintenance tick to finish. It
+// never checkpoints or closes SQLite. A caller deadline only bounds the wait; the
+// idempotent background drain continues and a later call may resume waiting.
+func (s *Store) QuiesceContext(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.startQuiesce()
+	select {
+	case <-s.quiescedDone:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Quiesce is the unbounded form of QuiesceContext.
+func (s *Store) Quiesce() error {
+	return s.QuiesceContext(context.Background())
+}
+
+// startClose linearizes the finalization mode through closeOnce. If Close and
+// Discard race, the first terminal call decides whether the already-quiescing
+// Store may checkpoint; every caller then observes the same close result.
+func (s *Store) startClose(checkpoint bool) {
+	if s == nil {
+		return
+	}
+	s.closeOnce.Do(func() {
+		if !checkpoint && !s.closedState.Load() {
+			// A direct Discard that wins the terminal race preserves the historic
+			// no-more-queued-work boundary. When Quiesce already won admission
+			// closure, preserve its accepted-work drain instead.
+			s.abortOnce.Do(func() {
+				s.aborted.Store(true)
+				close(s.abort)
+				s.cancelWork()
+			})
+		}
+		s.startQuiesce()
+		go func() {
+			<-s.quiescedDone
+			// No sendMu is held while acquiring activateMu. This serializes the
+			// db pointer with Activate without introducing an activateMu/sendMu
+			// nesting order in either direction.
+			s.activateMu.Lock()
 			if s.db != nil {
 				var checkpointErr error
-				if !s.aborted.Load() {
+				if checkpoint && !s.aborted.Load() && s.activated.Load() {
 					checkpointErr = checkpointWAL(s.db)
 					if checkpointErr != nil {
 						s.degraded.Store(true)
@@ -979,37 +1443,45 @@ func (s *Store) CloseContext(ctx context.Context) error {
 					}
 				}
 				s.closeErr = errors.Join(checkpointErr, s.db.Close())
+				s.databaseOpen.Store(false)
 			}
+			s.activateMu.Unlock()
 			close(s.closedDone)
 		}()
 	})
+}
+
+// CloseContext starts an idempotent two-phase background finalizer and waits
+// only until the supplied context expires. The quiesce phase drains accepted
+// work and stops maintenance before the final checkpoint and database close.
+func (s *Store) CloseContext(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	s.startClose(true)
+	return s.waitClosed(ctx)
+}
+
+func (s *Store) waitClosed(ctx context.Context) error {
 	select {
 	case <-s.closedDone:
 		return s.closeErr
 	case <-ctx.Done():
-		s.abortOnce.Do(func() {
-			s.aborted.Store(true)
-			close(s.abort)
-			s.cancelWork()
-		})
 		return ctx.Err()
 	}
 }
 
-// DiscardContext closes the Store without attempting any further SQLite
-// checkpoint or queued write. Runtime owners use it after a verified storage
-// identity/permission/capacity failure, when even a normal close-time WAL
-// checkpoint would violate the latched no-write boundary.
+// DiscardContext closes the Store without a final SQLite checkpoint. Before an
+// explicit quiesce it aborts queued work immediately; after quiesce has begun it
+// preserves that phase's accepted-work drain while suppressing only the final
+// checkpoint. Runtime owners use it after a verified storage failure, when a
+// normal close-time WAL checkpoint would violate the latched no-write boundary.
 func (s *Store) DiscardContext(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	s.abortOnce.Do(func() {
-		s.aborted.Store(true)
-		close(s.abort)
-		s.cancelWork()
-	})
-	return s.CloseContext(ctx)
+	s.startClose(false)
+	return s.waitClosed(ctx)
 }
 
 // Discard is the unbounded form of DiscardContext.
@@ -1046,6 +1518,32 @@ func checkpointWAL(db *sql.DB) error {
 func isSQLiteBusy(err error) bool {
 	var sqliteErr sqlite3.Error
 	return errors.As(err, &sqliteErr) && sqliteErr.Code == sqlite3.ErrBusy
+}
+
+func sqliteConnectionAutoCommit(conn *sql.Conn) (bool, error) {
+	if conn == nil {
+		return false, errors.New("audit: inspect autocommit on nil SQLite connection")
+	}
+	var autoCommit bool
+	err := conn.Raw(func(driverConn any) error {
+		sqliteConn, ok := driverConn.(*sqlite3.SQLiteConn)
+		if !ok {
+			return fmt.Errorf("audit: unexpected SQLite connection driver %T", driverConn)
+		}
+		autoCommit = sqliteConn.AutoCommit()
+		return nil
+	})
+	return autoCommit, err
+}
+
+func discardSQLiteConnection(conn *sql.Conn) {
+	if conn == nil {
+		return
+	}
+	// ErrBadConn prevents a connection with an unresolved transaction from
+	// returning to the pool. database/sql closes the underlying SQLite handle,
+	// which rolls back any uncommitted transaction.
+	_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 }
 
 // Close drains the queue without a deadline. Runtime owners that have a
@@ -1183,14 +1681,14 @@ func prepareSQLitePath(absPath string, createDirectory bool) error {
 	return nil
 }
 
-func createSQLiteDatabaseFileIfMissing(path string) error {
+func createSQLiteDatabaseFileIfMissing(path string, requirePrivate bool) error {
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		info, statErr := os.Lstat(path)
 		if statErr != nil {
 			return fmt.Errorf("audit: recheck concurrently created SQLite database: %w", statErr)
 		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || requirePrivate && info.Mode().Perm()&0o077 != 0 {
 			return errors.New("audit: concurrently created SQLite database is unsafe")
 		}
 		return nil

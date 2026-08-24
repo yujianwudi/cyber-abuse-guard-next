@@ -2,7 +2,15 @@
 # CYBER_ABUSE_GUARD_HMAC_KEY_FILE=/run/secrets/cyber-abuse-guard-hmac.key
 # Never commit the secret or put it in this YAML.
 
-# CPA v7.2.116 production request-log privacy baseline. commercial-mode is the
+# Round 14 active CPA v7.2.137 compatibility target (commit
+# 85d2faddd17e6f4f8675a84ee28b131f702e8eaa, C ABI 1 / RPC schema 3).
+# Round 13 v7.2.125/schema 2 results remain historical and transfer no PASS.
+# Every /v1/realtime* route currently bypasses CAG RequestInterceptor,
+# ModelRouter, and request lifecycle: OUT_OF_SCOPE / UNPROTECTED. This example
+# protects only registered callback paths such as chat and Responses and makes
+# no all-traffic coverage claim. The controls below retain the conservative
+# request-log privacy baseline established on historical v7.2.116 evidence and
+# require fresh exact-v7.2.137 Host validation. commercial-mode is the
 # critical startup control that omits the request-logging middleware, including
 # its HTTP 403 error-only raw request-body log path. request-log: false alone is
 # not sufficient. After changing the on-disk CPA configuration, recreate or
@@ -16,6 +24,12 @@ commercial-mode: true
 request-log: false
 logging-to-file: false
 
+# Keep the v7.2.137 rewrite disabled in the conservative example until the
+# exact candidate passes the native Linux Host matrix. The integration suite
+# separately forces true to exercise the pre-RequestInterceptor path.
+codex:
+  optimize-multi-agent-v2: false
+
 plugins:
   enabled: true
   dir: plugins
@@ -23,6 +37,10 @@ plugins:
     cyber-abuse-guard:
       enabled: true
       priority: 300
+      # CPA v7.2.137 Multi-Agent v2 rewrites /v1/responses tool definitions
+      # before RequestInterceptor. Do not promote this configuration from
+      # historical v7.2.116 CI, second-machine, or five-repository results;
+      # first pass the exact-v7.2.137 rewritten-tool regression.
       # Sandbox/candidate default only. Production rollout remains prohibited
       # until the documented Host, audit, evaluation, and formal-release gates pass.
       mode: observe
@@ -84,6 +102,9 @@ plugins:
         enabled: true
         # Production must mount this directory from a dedicated writable Linux
         # volume. Do not place it on CPA's auth tmpfs or the container layer.
+        # The path is immutable during plugin hot reconfiguration; changing it
+        # requires a controlled CPA/plugin restart so an uncommitted candidate
+        # cannot migrate a different SQLite database.
         data_dir: /plugin-data/cyber-abuse-guard
         # Keeps enforcement available on storage failure, but sets
         # operational_ready=false so deployment promotion fails closed.
@@ -128,20 +149,20 @@ plugins:
           max_bytes: 8192
           # 1..87600 hours; when enabled, no longer than retention_days * 24.
           ttl_hours: 72
-        # The current durable audit schema is v6. Opening a supported v1-v5
+        # The current durable audit schema is v7. Opening a supported v1-v6
         # database creates a mandatory exact SQLite Online Backup plus a
-        # SHA-256/quick_check manifest before the atomic v6 migration.
+        # SHA-256/quick_check manifest before the atomic v7 migration.
         backup_before_migration: true
         max_migration_backups: 3
 
       trusted_proxy:
-        # CPA v7.2.116 request interception lacks a trustworthy direct-peer address;
-        # v0.16 therefore rejects enabled: true instead of trusting spoofable headers.
+        # CPA v7.2.137 request interception lacks a trustworthy direct-peer address;
+        # v1.0.0 therefore rejects enabled: true instead of trusting spoofable headers.
         enabled: false
         header: X-Forwarded-For
         cidrs: []
 
-      # Reserved for a future local-only classifier; v0.16 rejects enabled: true.
+      # Reserved for a future local-only classifier; v1.0.0 rejects enabled: true.
       classifier:
         enabled: false
         endpoint: ""

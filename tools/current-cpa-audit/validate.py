@@ -16,11 +16,13 @@ from audit_contract import (
     load_json_file,
     read_regular_bytes,
     sha256_bytes,
+    validate_candidate_manifest_file,
     validate_corpus_manifest,
     validate_evidence_run_config,
     validate_machine_evidence,
     validate_manifest_policy,
     validate_run_config,
+    validate_supplemental_run_config_files,
 )
 
 
@@ -68,7 +70,7 @@ def parser() -> argparse.ArgumentParser:
     evidence.add_argument("--results", type=Path, required=True)
     evidence.add_argument("--run-config", type=Path, required=True)
     performance = commands.add_parser(
-        "host-performance", help="validate RT12-06 CPA-only/CPA+CAG Host evidence"
+        "host-performance", help="validate RT13-06 CPA-only/CPA+CAG Host evidence"
     )
     performance.add_argument("--run-config", type=Path, required=True)
     performance.add_argument("--candidate-manifest", type=Path, required=True)
@@ -76,6 +78,32 @@ def parser() -> argparse.ArgumentParser:
     performance.add_argument("--config", type=Path, required=True)
     performance.add_argument("--measurements", type=Path, required=True)
     performance.add_argument("--evidence", type=Path, required=True)
+    host = commands.add_parser(
+        "host-admission", help="validate Round 14 300s/3600s Host admission evidence"
+    )
+    host.add_argument("--evidence", type=Path, required=True)
+    host.add_argument("--samples-300s", type=Path, required=True)
+    host.add_argument("--samples-3600s", type=Path, required=True)
+    host.add_argument("--realtime-routes", type=Path, required=True)
+    host.add_argument("--expected-candidate", type=Path, required=True)
+    lazy = commands.add_parser(
+        "lazy-read", help="validate Round 14 lazy-read phase and request bindings"
+    )
+    lazy.add_argument("--phase-boundary", type=Path, required=True)
+    lazy.add_argument("--runtime-read-trace", type=Path, required=True)
+    lazy.add_argument("--runtime-read-summary", type=Path, required=True)
+    lazy.add_argument("--manifest", type=Path, required=True)
+    lazy.add_argument("--results", type=Path, required=True)
+    lazy.add_argument("--supplemental-manifest", type=Path, required=True)
+    lazy.add_argument("--supplemental-results", type=Path, required=True)
+    csam = commands.add_parser(
+        "csam-text", help="validate the synthetic Round 14 CSAM-text evidence plane"
+    )
+    csam.add_argument("--fixture-manifest", type=Path, required=True)
+    csam.add_argument("--results", type=Path, required=True)
+    csam.add_argument("--summary", type=Path, required=True)
+    csam.add_argument("--privacy-cleanup", type=Path, required=True)
+    csam.add_argument("--run-id")
     return root
 
 
@@ -117,6 +145,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             if manifest["policy_sha256"] != policy_sha256:
                 raise ContractError("corpus candidate was not acquired with this approved policy")
             validate_manifest_policy(manifest, policy, require_approved=True)
+            validate_candidate_manifest_file(config)
+            validate_supplemental_run_config_files(config)
             output = {"policy_review_status": "approved", "valid": True}
         elif args.command == "evidence":
             manifest = load_json_file(args.manifest, "corpus manifest")
@@ -134,26 +164,144 @@ def main(argv: Sequence[str] | None = None) -> int:
             validated = validate_machine_evidence(manifest, evidence, args.results)
             declared_manifest = args.evidence.parent / validated["corpus"]["manifest_path"]
             declared_results = args.evidence.parent / validated["transport"]["results_path"]
+            declared_supplemental_manifest = (
+                args.evidence.parent
+                / validated["supplemental_zip_manifest"]["manifest_path"]
+            )
+            declared_supplemental_policy = (
+                args.evidence.parent
+                / validated["supplemental_zip_manifest"]["policy_path"]
+            )
+            declared_supplemental_results = (
+                args.evidence.parent
+                / validated["supplemental_zip_results"]["results_path"]
+            )
             if declared_manifest.resolve(strict=True) != args.manifest.resolve(strict=True):
                 raise ContractError("supplied manifest path does not match evidence.corpus.manifest_path")
             if declared_results.resolve(strict=True) != args.results.resolve(strict=True):
                 raise ContractError("supplied results path does not match evidence.transport.results_path")
+            for path, label in (
+                (declared_supplemental_manifest, "supplemental ZIP manifest"),
+                (declared_supplemental_policy, "supplemental ZIP policy"),
+                (declared_supplemental_results, "supplemental ZIP results"),
+            ):
+                if path.resolve(strict=True).parent != args.evidence.parent.resolve(
+                    strict=True
+                ):
+                    raise ContractError(
+                        f"evidence {label} path escaped the supplied evidence directory"
+                    )
             config_raw = read_regular_bytes(args.run_config, "run config", 2 * 1024 * 1024)
             config = validate_run_config(load_json_bytes(config_raw, "run config"))
             if config_raw != canonical_bytes(config) + b"\n":
                 raise ContractError("run config is not canonical JSON with one terminal newline")
+            validate_candidate_manifest_file(config)
+            validate_supplemental_run_config_files(config)
             if Path(config["paths"]["evidence_directory"]).resolve(strict=True) != args.evidence.parent.resolve(strict=True):
                 raise ContractError("run config evidence directory does not match the supplied evidence")
             validate_evidence_run_config(validated, config, config_raw)
             output = {
                 "cold_start_count": validated["run"]["cold_start_count"],
                 "third_party_code_executions": validated["third_party_code_executions"],
+                "supplemental_executions": validated["supplemental_zip_results"][
+                    "supplemental_executions"
+                ],
                 "transport_executions": validated["transport"]["transport_executions"],
                 "valid": True,
             }
+        elif args.command == "host-admission":
+            import host_admission as host
+
+            evidence_raw = read_regular_bytes(
+                args.evidence, "Host admission evidence", host.MAX_EVIDENCE_BYTES
+            )
+            expected_raw = read_regular_bytes(
+                args.expected_candidate, "trusted Host candidate identity", 2 * 1024 * 1024
+            )
+            expected_candidate = load_json_bytes(
+                expected_raw, "trusted Host candidate identity"
+            )
+            if expected_raw != canonical_bytes(expected_candidate) + b"\n":
+                raise ContractError(
+                    "trusted Host candidate identity is not canonical JSON with one terminal newline"
+                )
+            validated_host = host.parse_host_admission(
+                evidence_raw,
+                read_regular_bytes(
+                    args.samples_300s, "Host admission 300-second samples",
+                    301 * host.MAX_SAMPLE_LINE_BYTES,
+                ),
+                read_regular_bytes(
+                    args.samples_3600s, "Host admission 3600-second samples",
+                    3_601 * host.MAX_SAMPLE_LINE_BYTES,
+                ),
+                read_regular_bytes(
+                    args.realtime_routes, "Host admission Realtime routes",
+                    len(host.REALTIME_ROUTE_CONTRACT) * host.MAX_SAMPLE_LINE_BYTES,
+                ),
+                expected_candidate,
+            )
+            output = {
+                "host_300s_samples": validated_host["windows"][0]["sample_count"],
+                "host_3600s_samples": validated_host["windows"][1]["sample_count"],
+                "realtime_routes": validated_host["tail_verification"]["realtime"]["route_count"],
+                "status": validated_host["status"],
+                "valid": True,
+            }
+        elif args.command == "lazy-read":
+            from second_machine_release_admission import (
+                validate_lazy_read_bindings,
+                validate_lazy_read_evidence,
+            )
+
+            phase = load_json_file(args.phase_boundary, "lazy-read phase boundary")
+            summary = load_json_file(args.runtime_read_summary, "lazy-read runtime summary")
+            trace_raw = read_regular_bytes(
+                args.runtime_read_trace,
+                "lazy-read runtime trace",
+                64 * 1024 * 1024,
+                require_single_link=True,
+            )
+            projection = validate_lazy_read_evidence(phase, trace_raw, summary)
+            manifest = load_json_file(args.manifest, "lazy-read corpus manifest")
+            supplemental_manifest = load_json_file(
+                args.supplemental_manifest, "lazy-read supplemental manifest"
+            )
+            results_raw = read_regular_bytes(
+                args.results, "lazy-read transport results", 128 * 1024 * 1024,
+                require_single_link=True,
+            )
+            supplemental_results_raw = read_regular_bytes(
+                args.supplemental_results,
+                "lazy-read supplemental results",
+                128 * 1024 * 1024,
+                require_single_link=True,
+            )
+            validate_lazy_read_bindings(
+                trace_raw,
+                manifest,
+                results_raw,
+                supplemental_manifest,
+                supplemental_results_raw,
+            )
+            output = {**projection, "bindings": "PASS", "valid": True}
+        elif args.command == "csam-text":
+            from second_machine_release_admission import validate_csam_text_evidence
+
+            fixture = load_json_file(args.fixture_manifest, "CSAM text fixture manifest")
+            results = load_json_file(args.results, "CSAM text results")
+            summary = load_json_file(args.summary, "CSAM text summary")
+            cleanup = load_json_file(args.privacy_cleanup, "CSAM text privacy cleanup")
+            projection = validate_csam_text_evidence(
+                fixture,
+                results,
+                summary,
+                cleanup,
+                expected_run_id=args.run_id,
+            )
+            output = {**projection, "valid": True}
         else:
             from host_performance import (
-                validate_candidate_manifest,
                 validate_config as validate_performance_config,
                 validate_evidence_bundle,
                 validate_measurements,
@@ -170,13 +318,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ContractError(
                     "run config is not canonical JSON with one terminal newline"
                 )
-            candidate_raw = read_regular_bytes(
-                args.candidate_manifest, "candidate manifest", 2 * 1024 * 1024
-            )
-            candidate = validate_candidate_manifest(
-                load_json_bytes(candidate_raw, "candidate manifest"),
-                run_config["identities"]["cag"],
-            )
+            candidate, candidate_raw = validate_candidate_manifest_file(run_config)
+            if args.candidate_manifest.resolve(strict=True) != Path(
+                run_config["paths"]["candidate_manifest"]
+            ).resolve(strict=True):
+                raise ContractError(
+                    "supplied candidate manifest path does not match the run config"
+                )
             workload_raw = read_regular_bytes(
                 args.workload_manifest,
                 "performance workload manifest",

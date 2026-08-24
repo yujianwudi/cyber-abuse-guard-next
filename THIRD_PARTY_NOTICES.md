@@ -2,7 +2,10 @@
 
 ## Direct build dependencies
 
-- CLIProxyAPI SDK v7.2.116 — MIT license.
+- CLIProxyAPI SDK v7.2.137 — MIT license. Active pin:
+  `85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, module sum
+  `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`, go.mod sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 - `github.com/mattn/go-sqlite3` — MIT license.
 - `golang.org/x/sys` — BSD-3-Clause license.
 - `golang.org/x/text` — BSD-3-Clause license.
@@ -12,6 +15,12 @@ Release automation must retain dependency license information and re-run
 `go-licenses` or an equivalent review before publishing a public binary.
 The embedded default rule terms are original project data and do not import a
 third-party signature/rule library.
+
+This dependency identity is the Round 14 C ABI 1 / RPC schema 3 target. Round
+13 v7.2.125/schema 2 notices and PASS evidence remain historical and do not
+transfer. CPA v7.2.137 `/v1/realtime*` bypasses CAG `RequestInterceptor`,
+`ModelRouter`, and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED**;
+only registered callback paths such as chat and Responses are covered.
 
 ## Public adversarial development corpus
 

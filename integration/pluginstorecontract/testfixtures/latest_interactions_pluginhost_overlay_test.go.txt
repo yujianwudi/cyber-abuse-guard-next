@@ -13,11 +13,11 @@ import (
 )
 
 func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T) {
-	if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 2 {
-		t.Fatalf("CPA plugin versions = ABI %d schema %d, want 1/2", pluginabi.ABIVersion, pluginabi.SchemaVersion)
+	if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 3 {
+		t.Fatalf("CPA plugin versions = ABI %d schema %d, want 1/3", pluginabi.ABIVersion, pluginabi.SchemaVersion)
 	}
 
-	body := []byte(`{"model":"gemini-3.5-flash","input":"INTERACTIONS_SCHEMA2_CANARY"}`)
+	body := []byte(`{"model":"gemini-3.5-flash","input":"INTERACTIONS_SCHEMA3_CANARY"}`)
 	headers := make(http.Header)
 	headers.Set("X-CAG-Visibility", "header-canary")
 	completions := make(chan pluginapi.RequestCompletion, 1)
@@ -30,7 +30,7 @@ func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T)
 		return pluginapi.ModelRouteResponse{Handled: false}, nil
 	})
 	plugin.Capabilities.RequestInterceptor = requestInterceptorFunc(func(_ context.Context, request pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
-		if request.RequestID != "interactions-schema2-request" || request.SourceFormat != sdktranslator.FormatInteractions.String() ||
+		if request.RequestID != "interactions-schema3-request" || request.SourceFormat != sdktranslator.FormatInteractions.String() ||
 			request.Model != "gemini-3.5-flash" || request.RequestedModel != "gemini-3.5-flash" || request.Stream {
 			t.Fatalf("request identity = id %q format %q model %q requested %q stream %v",
 				request.RequestID, request.SourceFormat, request.Model, request.RequestedModel, request.Stream)
@@ -52,16 +52,16 @@ func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T)
 
 	registered, errRegister := registerRPCPlugin(context.Background(), nil, "cyber-abuse-guard", lookup, pluginabi.MethodPluginRegister, []byte("mode: enforce"))
 	if errRegister != nil {
-		t.Fatalf("register schema-2 interactions Guard: %v", errRegister)
+		t.Fatalf("register schema-3 interactions Guard: %v", errRegister)
 	}
-	if lookup.lastLifecycle.SchemaVersion != 2 {
-		t.Fatalf("Guard lifecycle schema_version = %d, want 2", lookup.lastLifecycle.SchemaVersion)
+	if lookup.lastLifecycle.SchemaVersion != 3 {
+		t.Fatalf("Guard lifecycle schema_version = %d, want 3", lookup.lastLifecycle.SchemaVersion)
 	}
 	if registered.Capabilities.RequestInterceptor == nil || registered.Capabilities.RequestLifecyclePlugin == nil {
 		t.Fatalf("registered Guard capabilities = %#v, want request_interceptor and request_lifecycle_plugin", registered.Capabilities)
 	}
 	if registered.Capabilities.ModelRouter == nil {
-		t.Fatal("current schema-2 Guard fixture omitted the Alpha Search compatibility ModelRouter")
+		t.Fatal("current schema-3 Guard fixture omitted the Alpha Search compatibility ModelRouter")
 	}
 
 	host := newHostWithRecords(capabilityRecord{
@@ -70,7 +70,7 @@ func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T)
 		plugin:   registered,
 	})
 	response := host.InterceptRequestBeforeAuth(context.Background(), pluginapi.RequestInterceptRequest{
-		RequestID:      "interactions-schema2-request",
+		RequestID:      "interactions-schema3-request",
 		SourceFormat:   sdktranslator.FormatInteractions.String(),
 		Model:          "gemini-3.5-flash",
 		RequestedModel: "gemini-3.5-flash",
@@ -79,11 +79,11 @@ func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T)
 	})
 	if !response.Terminate || response.StatusCode != http.StatusUnavailableForLegalReasons ||
 		response.ResponseHeaders.Get("X-CAG-Policy") != "blocked" || string(response.ResponseBody) != `{"blocked":true}` {
-		t.Fatalf("schema-2 Guard termination response = %#v", response)
+		t.Fatalf("schema-3 Guard termination response = %#v", response)
 	}
 
 	host.CompleteRequest(context.Background(), pluginapi.RequestCompletion{
-		RequestID:      "interactions-schema2-request",
+		RequestID:      "interactions-schema3-request",
 		SourceFormat:   sdktranslator.FormatInteractions.String(),
 		Model:          "gemini-3.5-flash",
 		RequestedModel: "gemini-3.5-flash",
@@ -92,13 +92,13 @@ func TestCyberAbuseGuardInteractionsRequestLifecycleFormatContract(t *testing.T)
 	})
 	select {
 	case completion := <-completions:
-		if completion.RequestID != "interactions-schema2-request" ||
+		if completion.RequestID != "interactions-schema3-request" ||
 			completion.SourceFormat != sdktranslator.FormatInteractions.String() ||
 			completion.Outcome != pluginapi.RequestCompletionRejected ||
 			completion.StatusCode != http.StatusUnavailableForLegalReasons {
-			t.Fatalf("schema-2 Guard completion = %#v", completion)
+			t.Fatalf("schema-3 Guard completion = %#v", completion)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("timed out waiting for schema-2 Guard completion")
+		t.Fatal("timed out waiting for schema-3 Guard completion")
 	}
 }

@@ -81,6 +81,7 @@ func TestRawCaptureQueueFullWinsBeforeBodyPreparation(t *testing.T) {
 		queueSlots: make(chan struct{}, 1),
 	}
 	store.lastErr.Store("")
+	store.activated.Store(true)
 	store.queueSlots <- struct{}{}
 
 	input := RawCaptureInput{
@@ -289,10 +290,10 @@ func TestFlushAndCloseObserveUnpublishedAdmission(t *testing.T) {
 	}
 }
 
-func TestCloseTimeoutAccountsForAdmissionPublishedAfterAbort(t *testing.T) {
+func TestCloseTimeoutAccountsForAdmissionPublishedAfterDeadline(t *testing.T) {
 	now := time.Date(2026, 7, 21, 18, 50, 0, 0, time.UTC)
 	store, err := Open(Config{
-		Path:      filepath.Join(t.TempDir(), "admission-abort.db"),
+		Path:      filepath.Join(t.TempDir(), "admission-deadline.db"),
 		QueueSize: 2,
 		Now:       func() time.Time { return now },
 		RawCapture: RawCaptureConfig{
@@ -304,9 +305,9 @@ func TestCloseTimeoutAccountsForAdmissionPublishedAfterAbort(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	raw := []byte(`{"messages":[{"role":"user","content":"publish after abort"}]}`)
+	raw := []byte(`{"messages":[{"role":"user","content":"publish after deadline"}]}`)
 	event, err := prepareEvent(rawCaptureEvent(
-		"publish-after-abort", now, "block", "block_malicious_text", raw,
+		"publish-after-deadline", now, "block", "block_malicious_text", raw,
 	), now)
 	if err != nil {
 		t.Fatal(err)
@@ -346,7 +347,11 @@ func TestCloseTimeoutAccountsForAdmissionPublishedAfterAbort(t *testing.T) {
 	}
 	status := store.Status()
 	if status.QueueDepth != 0 {
-		t.Fatalf("queue depth after aborted close = %d, want 0", status.QueueDepth)
+		t.Fatalf("queue depth after resumed close = %d, want 0", status.QueueDepth)
+	}
+	if status.Dropped != 0 || status.RawCaptureDropped != 0 {
+		t.Fatalf("deadline silently dropped accepted work: dropped=%d raw_dropped=%d",
+			status.Dropped, status.RawCaptureDropped)
 	}
 	if accounted := status.Written + status.Failed + status.Dropped; accounted != status.Enqueued {
 		t.Fatalf("logical work accounting: written=%d failed=%d dropped=%d enqueued=%d",

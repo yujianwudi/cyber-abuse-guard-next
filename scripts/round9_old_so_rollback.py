@@ -51,6 +51,11 @@ HISTORICAL_SOURCE_CAPSULE_SHA256 = (
 )
 HISTORICAL_SOURCE_FILE_COUNT = 76
 HISTORICAL_SOURCE_DATE_EPOCH = 1_784_752_111
+# The current source migrates the synthetic v5 fixture through the historical
+# v5/v6 rollback boundary and on to the current schema. Keep this identity
+# explicit so a schema bump cannot silently make the rollback gate green with
+# stale expectations.
+CURRENT_SCHEMA_VERSION = 7
 SENTINEL_EVENT_ID = "round9-old-so-rollback-event"
 SENTINEL_CAPTURE_ID = "round9-old-so-rollback-capture"
 SENTINEL_PREVIEW = "synthetic rollback preview; no provider or customer content"
@@ -190,7 +195,7 @@ def inspect_database(path: Path, expected_version: int) -> dict[str, Any]:
             str(row[1]) for row in connection.execute("PRAGMA table_info(audit_events)")
         }
         has_v6_columns = {"disposition", "explanation_schema"}.issubset(columns)
-        if has_v6_columns != (expected_version == 6):
+        if has_v6_columns != (expected_version >= 6):
             raise GateError("SQLite audit_events columns do not match the schema identity")
     return {
         "schema_version": version,
@@ -344,7 +349,7 @@ def invoke_old_so(
     if init(None, ctypes.byref(api)) != 0 or api.abi_version != 1:
         raise GateError("historical SO ABI initialization failed")
 
-    raw_capture_enabled = expectation != "reject-v6"
+    raw_capture_enabled = expectation != "reject-current"
     request = json.dumps(
         {
             "schema_version": 1,
@@ -399,26 +404,39 @@ def invoke_old_so(
         }
 
     error = envelope.get("error")
-    expected_message = "database schema version 6 is newer than supported version 5"
+    with sqlite_read_only(database) as connection:
+        observed_schema_version = sqlite_schema_version(connection)
+    if observed_schema_version < 6:
+        raise GateError(
+            f"historical-SO rejection probe schema is {observed_schema_version}, expected at least 6"
+        )
+    expected_message = (
+        f"database schema version {observed_schema_version} is newer than supported version 5"
+    )
     if (
-        expectation != "reject-v6"
+        expectation != "reject-current"
         or envelope.get("ok") is not False
         or type(error) is not dict
         or error.get("code") != "invalid_config"
         or expected_message not in str(error.get("message", ""))
     ):
-        raise GateError("historical SO did not fail closed on schema v6")
+        raise GateError(
+            f"historical SO did not fail closed on schema {observed_schema_version}"
+        )
     after_hash = file_sha256(database)
     after_sidecars = {
         suffix: (Path(str(database) + suffix).exists()) for suffix in ("-wal", "-shm")
     }
     if before_hash != after_hash or before_sidecars != after_sidecars:
-        raise GateError("historical SO changed the isolated schema-v6 probe database")
+        raise GateError(
+            f"historical SO changed the isolated schema-{observed_schema_version} probe database"
+        )
     return {
         "expectation": expectation,
         "accepted": False,
         "error_code": "invalid_config",
         "schema_gate": expected_message,
+        "schema_version": observed_schema_version,
         "database_sha256_unchanged": True,
         "sqlite_sidecars_unchanged": True,
         "rpc_methods": ["plugin.register"],
@@ -571,7 +589,7 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
 
 def assemble_report(args: argparse.Namespace) -> dict[str, Any]:
     create = read_json_object(args.create_result, "historical create result")
-    migration = read_json_object(args.migration_result, "v6 migration result")
+    migration = read_json_object(args.migration_result, "current-schema migration result")
     manifest = read_json_object(args.manifest_result, "manifest result")
     rejection = read_json_object(args.rejection_result, "historical rejection result")
     restore = read_json_object(args.restore_result, "restore result")
@@ -581,11 +599,13 @@ def assemble_report(args: argparse.Namespace) -> dict[str, Any]:
     if rejection.get("accepted") is not False or rejection.get(
         "database_sha256_unchanged"
     ) is not True:
-        raise GateError("historical SO v6 rejection result is not passing")
+        raise GateError("historical SO current-schema rejection result is not passing")
     if migration.get("source_schema_version") != 5 or migration.get(
         "target_schema_version"
-    ) != 6:
-        raise GateError("current-source migration result is not v5 to v6")
+    ) != CURRENT_SCHEMA_VERSION:
+        raise GateError(
+            f"current-source migration result is not v5 to v{CURRENT_SCHEMA_VERSION}"
+        )
     if manifest.get("sha256") != restore.get("restored_sha256"):
         raise GateError("restored database identity differs from the migration manifest")
     if args.repository != HISTORICAL_REPOSITORY:
@@ -599,7 +619,7 @@ def assemble_report(args: argparse.Namespace) -> dict[str, Any]:
     if args.source_date_epoch != HISTORICAL_SOURCE_DATE_EPOCH:
         raise GateError("historical source timestamp differs from the reviewed fixture")
     report = {
-        "schema": "round9-old-so-rollback-gate/v2",
+        "schema": "round9-old-so-rollback-gate/v3",
         "platform": "linux/amd64",
         "go_runtime": args.go_runtime,
         "historical_source": {
@@ -630,9 +650,10 @@ def assemble_report(args: argparse.Namespace) -> dict[str, Any]:
         "restoration": restore,
         "compatibility": {
             "old_so_created_schema_v5": True,
-            "old_so_rejected_schema_v6": True,
-            "old_so_v6_probe_database_unchanged": True,
+            "old_so_rejected_current_schema": True,
+            "old_so_current_schema_probe_database_unchanged": True,
             "old_so_accepted_exact_restored_v5": True,
+            "current_schema_version": CURRENT_SCHEMA_VERSION,
             "schema_gate": rejection.get("schema_gate"),
             "rpc_methods": ["plugin.register"],
             "provider_contacted": False,
@@ -665,7 +686,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     old_so.add_argument("--so", type=Path, required=True)
     old_so.add_argument("--data-dir", type=Path, required=True)
     old_so.add_argument(
-        "--expect", choices=("create-v5", "accept-v5", "reject-v6"), required=True
+        "--expect", choices=("create-v5", "accept-v5", "reject-current"), required=True
     )
     old_so.add_argument("--expected-version", required=True)
     old_so.add_argument("--output", type=Path)
@@ -676,7 +697,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
     inspect = subparsers.add_parser("inspect")
     inspect.add_argument("--database", type=Path, required=True)
-    inspect.add_argument("--expected-version", type=int, choices=(5, 6), required=True)
+    inspect.add_argument(
+        "--expected-version", type=int, choices=(5, 6, CURRENT_SCHEMA_VERSION), required=True
+    )
     inspect.add_argument("--output", type=Path)
 
     verify = subparsers.add_parser("verify-backup")

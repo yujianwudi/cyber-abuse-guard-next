@@ -12,12 +12,15 @@ import (
 
 const (
 	cpaModulePath        = "github.com/router-for-me/CLIProxyAPI/v7"
-	cpaPinnedVersion     = "v7.2.116"
-	cpaPinnedCommit      = "a88197f845c979132c8978ea223c6af05cc81536"
-	cpaPinnedModuleSum   = "h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU="
+	cpaPinnedVersion     = "v7.2.137"
+	cpaPinnedCommit      = "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
+	cpaPinnedModuleSum   = "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w="
 	cpaPinnedGoModSum    = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 	cpaPluginHostPackage = cpaModulePath + "/internal/pluginhost"
 	cpaHandlersPackage   = cpaModulePath + "/sdk/api/handlers"
+
+	cpaCompatibilityOriginEnv = "CPA_COMPAT_ORIGIN_FILE"
+	cpaOfficialOriginURL      = "https://github.com/router-for-me/CLIProxyAPI"
 )
 
 var criticalCPAHostTests = []string{
@@ -37,6 +40,7 @@ var criticalCPAHostTests = []string{
 	"TestRPCCapabilitiesAndAdapterIncludeRequestLifecycle",
 	"TestRPCInterceptorsIncludeHostCallbackID",
 	"TestSanitizePluginRequestRemovesNonJSONMetadata",
+	"TestStreamChunkRequestBodyPolicyBySchemaVersion",
 	"TestServeManagementHTMLEscapesJSONResponseStrings",
 	"TestHostRouteModelAllowsExplicitExecutorPluginTarget",
 	"TestHostRouteModelClonesPluginMetadata",
@@ -62,12 +66,19 @@ var criticalCPAHostTests = []string{
 	"TestHostShutdownAllRetainsBlockedLoadTokenUntilCleanup",
 	"TestHostUnloadPluginContextDetachesBlockedCall",
 	"TestOwnsExecutorDistinguishesHostAdapters",
+	"TestPluginRefreshCompatExecutorDelegatesExecuteAndRefresh",
+	"TestPluginRefreshCompatExecutorErrorsWhenRefreshUnavailable",
+	"TestPluginRefreshCompatExecutorNoOpForAPIKeyAuth",
 	"TestSortRecordsPriorityDescendingAndIDTieBreak",
 }
 
 var criticalCPAHandlerTests = []string{
 	"TestHandlerRequestInterceptorTerminatesBeforeAuth",
 	"TestHandlerRequestInterceptorTerminatesAfterAuth",
+	"TestHandlerStreamInterceptorRewritesAndDropsChunks",
+	"TestHandlerStreamInterceptorLegacySchemaClonesRequestBodiesOnPayloadChunks",
+	"TestHandlerStreamInterceptorInitializesHeadersBeforeReturn",
+	"TestHandlerStreamInterceptorInitializesHeadersWithoutPayload",
 }
 
 type resolvedCPAModule struct {
@@ -146,7 +157,7 @@ func TestCPAHostFailOpenFixtureContract(t *testing.T) {
 	if _, errFixtureStat := os.Stat(fixturePath); errFixtureStat != nil {
 		t.Fatalf("stat Host fixture: %v", errFixtureStat)
 	}
-	moduleCopy := filepath.Join(t.TempDir(), "cpa-v7.2.116")
+	moduleCopy := filepath.Join(t.TempDir(), "cpa-"+cpaPinnedVersion)
 	if errCopyModule := os.CopyFS(moduleCopy, os.DirFS(module.Dir)); errCopyModule != nil {
 		t.Fatalf("copy pinned CPA module for Host fixture: %v", errCopyModule)
 	}
@@ -175,6 +186,36 @@ func TestCPAHostFailOpenFixtureContract(t *testing.T) {
 	runGoCommandInDir(t, moduleCopy, goBinary,
 		"test", "-mod=mod", "-count=1", "-v",
 		"-run", "^"+fixtureTestName+"$", "./internal/pluginhost",
+	)
+}
+
+func TestCPAReleaseCandidatePluginStoreInstallContract(t *testing.T) {
+	goBinary, _, module := preparePinnedCPAModule(t)
+	fixturePath, errFixtureAbs := filepath.Abs(filepath.Join("testfixtures", "release_rc_install_overlay_test.go.txt"))
+	if errFixtureAbs != nil {
+		t.Fatalf("resolve RC Plugin Store fixture path: %v", errFixtureAbs)
+	}
+	fixtureData, errReadFixture := os.ReadFile(fixturePath)
+	if errReadFixture != nil {
+		t.Fatalf("read RC Plugin Store fixture: %v", errReadFixture)
+	}
+	moduleCopy := filepath.Join(t.TempDir(), "cpa-"+cpaPinnedVersion)
+	if errCopyModule := os.CopyFS(moduleCopy, os.DirFS(module.Dir)); errCopyModule != nil {
+		t.Fatalf("copy pinned CPA module for RC Plugin Store fixture: %v", errCopyModule)
+	}
+	targetPath := filepath.Join(moduleCopy, "internal", "pluginstore", "cyber_abuse_guard_rc_install_test.go")
+	if errWriteFixture := os.WriteFile(targetPath, fixtureData, 0o600); errWriteFixture != nil {
+		t.Fatalf("write ephemeral RC Plugin Store fixture: %v", errWriteFixture)
+	}
+	const fixtureTestName = "TestCyberAbuseGuardRCPluginStoreContract"
+	listed := runGoCommandInDir(t, moduleCopy, goBinary,
+		"test", "-mod=mod", "-list", "^"+fixtureTestName+"$", "./internal/pluginstore",
+	)
+	if !linePresent(listed, fixtureTestName) {
+		t.Fatalf("ephemeral CPA Plugin Store overlay does not list %q", fixtureTestName)
+	}
+	runGoCommandInDir(t, moduleCopy, goBinary,
+		"test", "-mod=mod", "-count=1", "-v", "-run", "^"+fixtureTestName+"$", "./internal/pluginstore",
 	)
 }
 
@@ -234,20 +275,33 @@ func preparePinnedCPAModule(t *testing.T) (string, []string, resolvedCPAModule) 
 			downloaded.Path, downloaded.Version, downloaded.Sum, downloaded.GoModSum,
 			cpaModulePath, cpaPinnedVersion, cpaPinnedModuleSum, cpaPinnedGoModSum)
 	}
-	if downloaded.Origin != nil {
-		if downloaded.Origin.VCS != "git" || downloaded.Origin.Hash != cpaPinnedCommit ||
-			downloaded.Origin.Ref != "refs/tags/"+cpaPinnedVersion {
-			t.Fatalf("resolved CPA origin = %#v, want git commit %s at refs/tags/%s",
-				downloaded.Origin, cpaPinnedCommit, cpaPinnedVersion)
+	if downloaded.Origin == nil {
+		originFile := strings.TrimSpace(os.Getenv(cpaCompatibilityOriginEnv))
+		if originFile != "" {
+			originData, errReadOrigin := os.ReadFile(originFile)
+			if errReadOrigin != nil {
+				t.Fatalf("read isolated CPA Origin metadata: %v", errReadOrigin)
+			}
+			var isolated resolvedCPAModule
+			if errUnmarshalOrigin := json.Unmarshal(originData, &isolated); errUnmarshalOrigin != nil {
+				t.Fatalf("decode isolated CPA Origin metadata: %v", errUnmarshalOrigin)
+			}
+			if isolated.Path != downloaded.Path || isolated.Version != downloaded.Version ||
+				isolated.Sum != downloaded.Sum || isolated.GoModSum != downloaded.GoModSum {
+				t.Fatal("isolated CPA Origin identity differs from active module download")
+			}
+			downloaded.Origin = isolated.Origin
 		}
-	} else {
-		// Go may omit Origin after serving identical checksum-verified module
-		// bytes from a warm cache. This Store test owns source and packaging
-		// behavior, while scripts/cpa-latest-compat.sh separately enforces the
-		// official Git URL/tag/commit (refreshing an isolated direct cache when
-		// necessary). Do not turn harmless cache metadata loss into a package
-		// failure after both pinned module checksums have already matched.
-		t.Log("pinned CPA Origin omitted by warm module cache; exact checksums matched and remote Origin remains a separate compatibility gate")
+	}
+	if downloaded.Origin == nil {
+		t.Fatal("downloaded CPA module metadata omits Origin")
+	}
+	wantOriginRef := "refs/tags/" + cpaPinnedVersion
+	if downloaded.Origin.VCS != "git" || downloaded.Origin.URL != cpaOfficialOriginURL ||
+		downloaded.Origin.Hash != cpaPinnedCommit || downloaded.Origin.Ref != wantOriginRef {
+		t.Fatalf("downloaded CPA Origin = vcs=%q url=%q hash=%q ref=%q, want git %q %q %q",
+			downloaded.Origin.VCS, downloaded.Origin.URL, downloaded.Origin.Hash, downloaded.Origin.Ref,
+			cpaOfficialOriginURL, cpaPinnedCommit, wantOriginRef)
 	}
 	t.Logf("pinned CPA module: %s@%s commit=%s sum=%s go_mod_sum=%s",
 		module.Path, module.Version, cpaPinnedCommit, module.Sum, module.GoModSum)

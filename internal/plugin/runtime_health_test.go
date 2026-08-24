@@ -15,6 +15,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/buildinfo"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/classifier"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/csamtext"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/subject"
 )
@@ -47,6 +48,11 @@ func TestProductionStatusExposesThreadSafeReadinessSignals(t *testing.T) {
 	policyIdentity := classifier.CurrentPolicyIdentity()
 	if status["classifier_policy_version"] != policyIdentity.Version || status["classifier_policy_sha256"] != policyIdentity.SHA256 {
 		t.Fatalf("status classifier policy identity does not match the compiled identity")
+	}
+	csamTextPolicyIdentity := csamtext.CurrentPolicyIdentity()
+	if status["csam_text_policy_version"] != csamTextPolicyIdentity.Version ||
+		status["csam_text_policy_sha256"] != csamTextPolicyIdentity.SHA256 {
+		t.Fatalf("status CSAM text policy identity does not match the compiled identity")
 	}
 	classifierStatus, ok := status["classifier"].(map[string]any)
 	if !ok {

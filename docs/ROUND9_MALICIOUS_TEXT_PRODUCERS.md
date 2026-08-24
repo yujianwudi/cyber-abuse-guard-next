@@ -8,6 +8,10 @@ The contract parses every production Go source below `cmd/` and `internal/`
 without reading corpus data. It inventories direct `ActionBlock` and
 `decisionBlockMaliciousText` producers plus every call to the two functions
 that can return a classifier block, `actionFor` and `candidateActionFor`.
+The independent `internal/csamtext` taxonomy is excluded only by its exact
+package path from this legacy Round 9 inventory and is checked by its own
+static producer-closure contract; this prevents same-named typed actions from
+being conflated while retaining fail-closed coverage on both taxonomies.
 Locations are bound by package-relative path, enclosing function, AST
 occurrence order, canonical AST SHA-256, and reviewed gate relationship; source
 line numbers are deliberately not part of the identity. Package-level

@@ -293,6 +293,16 @@ func scanMaliciousTextProducerSources(
 		if err != nil {
 			return producerSourceScan{}, fmt.Errorf("parse producer source %s: %w", path, err)
 		}
+		// The CSAM text side-car owns a separate typed action/category contract,
+		// eligibility proof, audit branch, and producer-closure test. Its local
+		// actionFor/ActionBlock identifiers are intentionally not producers for
+		// the legacy cyber-abuse malicious-text taxonomy tracked by this Round 9
+		// inventory. Package qualification is unavailable with
+		// parser.SkipObjectResolution, so exclude only this exact package path;
+		// all other cmd/internal production sources remain fail-closed here.
+		if file.Name.Name == "csamtext" && strings.HasPrefix(path, "internal/csamtext/") {
+			continue
+		}
 		packageEntry := &producerFunction{
 			path:     path,
 			identity: "<package-init>",

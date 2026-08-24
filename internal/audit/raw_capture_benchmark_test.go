@@ -204,6 +204,7 @@ func benchmarkRawCaptureStore(queueSize int) *Store {
 		queueSlots: make(chan struct{}, queueSize),
 	}
 	store.lastErr.Store("")
+	store.activated.Store(true)
 	return store
 }
 

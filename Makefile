@@ -3,7 +3,7 @@ SHELL := /bin/bash
 GO ?= go
 GOFMT ?= gofmt
 CC ?= cc
-VERSION ?= 0.16
+VERSION ?= 1.0.0
 CYCLONEDX_GOMOD ?= cyclonedx-gomod
 CYCLONEDX_GOMOD_VERSION ?= v1.9.0
 GOVULNCHECK ?= govulncheck
@@ -23,6 +23,10 @@ AUDIT_BUNDLE := $(DIST_DIR)/$(PLUGIN_ID)-v$(ARTIFACT_VERSION)-audit-bundle.zip
 TEST_TAGS := sqlite_omit_load_extension
 ROUND9_FUZZTIME ?= 5s
 ROUND10_PERFORMANCE_OUTPUT ?= $(if $(TMPDIR),$(TMPDIR),/tmp)/cyber-abuse-guard-round10-performance.json
+# Python contract tests launch independent interpreters. Keep all Make-driven
+# Python imports bytecode-free so receipt validation never has to delete a
+# caller-owned cache from the source tree.
+export PYTHONDONTWRITEBYTECODE := 1
 ROUND6_SAFE_PACKAGES := \
 	./cmd/cyber-abuse-guard \
 	./cmd/development-adversarial-v11-prep-validator \
@@ -182,7 +186,7 @@ round9-fuzz:
 		[[ "$$(uname -s)" == Linux ]] || { echo 'round9-fuzz requires a Linux host' >&2; exit 1; }; \
 		case "$$(uname -m)" in x86_64|amd64) ;; *) echo 'round9-fuzz requires linux/amd64' >&2; exit 1 ;; esac; \
 		[[ "$$($(GO) env GOOS)" == linux && "$$($(GO) env GOARCH)" == amd64 ]] || { echo 'round9-fuzz requires GOOS=linux GOARCH=amd64' >&2; exit 1; }; \
-		[[ "$$($(GO) version | awk '{print $$3}')" == go1.26.4 ]] || { echo 'round9-fuzz requires Go 1.26.4' >&2; exit 1; }; \
+		[[ "$$($(GO) version | awk '{print $$3}')" == go1.26.6 ]] || { echo 'round9-fuzz requires Go 1.26.6' >&2; exit 1; }; \
 		case "$(ROUND9_FUZZTIME)" in 1s|2s|3s|4s|5s|6s|7s|8s|9s|10s) ;; *) echo 'ROUND9_FUZZTIME must be an integer duration from 1s through 10s' >&2; exit 1 ;; esac
 	GOMAXPROCS=2 $(GO) test -tags=$(TEST_TAGS) ./internal/classifier -run='^$$' -fuzz='^FuzzClassifier$$' -fuzztime='$(ROUND9_FUZZTIME)' -parallel=1
 	GOMAXPROCS=2 $(GO) test -tags=$(TEST_TAGS) ./internal/extract -run='^$$' -fuzz='^FuzzExtractRequestContentType$$' -fuzztime='$(ROUND9_FUZZTIME)' -parallel=1
@@ -197,7 +201,8 @@ workflow-lint:
 	$(GO) run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) \
 		.github/workflows/ci.yml \
 		.github/workflows/codeql.yml \
-		.github/workflows/policy-gate.yml
+		.github/workflows/policy-gate.yml \
+		.github/workflows/release-rc.yml
 
 shellcheck-lint:
 	@set -euo pipefail; \
@@ -262,6 +267,9 @@ script-test: repository-secret-scan
 	python3 -B ./tools/round9-eval/cag_round9_eval_broker_test.py
 	python3 -B -m unittest discover -s ./tools/current-cpa-audit/tests -p 'test_*.py'
 	./scripts/release-candidate-contract-test.sh
+	bash -n ./scripts/release-rc.sh
+	python3 -B ./scripts/release_rc_github_admission_test.py
+	./scripts/release-rc-contract-test.sh
 	bash -n ./scripts/verify-external-release-attestation.sh
 	./scripts/verify-external-release-attestation-test.sh
 	bash -n ./scripts/source-release-exclusion-contract-test.sh
@@ -423,7 +431,7 @@ round10-performance:
 		[[ "$$(uname -s)" == Linux ]] || { echo 'round10-performance requires a Linux host' >&2; exit 1; }; \
 		case "$$(uname -m)" in x86_64|amd64) ;; *) echo 'round10-performance requires linux/amd64' >&2; exit 1 ;; esac; \
 		[[ "$$($(GO) env GOOS)" == linux && "$$($(GO) env GOARCH)" == amd64 ]] || { echo 'round10-performance requires GOOS=linux GOARCH=amd64' >&2; exit 1; }; \
-		[[ "$$($(GO) version | awk '{print $$3}')" == go1.26.4 ]] || { echo 'round10-performance requires Go 1.26.4' >&2; exit 1; }
+		[[ "$$($(GO) version | awk '{print $$3}')" == go1.26.6 ]] || { echo 'round10-performance requires Go 1.26.6' >&2; exit 1; }
 	@$(GO) test -tags=$(TEST_TAGS) ./internal/plugin -list='^TestRound10LinuxPerformanceGate$$' | \
 		grep -Fxq 'TestRound10LinuxPerformanceGate' || { \
 		echo 'required Round10 performance gate is missing' >&2; exit 1; \
@@ -785,9 +793,15 @@ sbom:
 		CYCLONEDX_GOMOD_VERSION=$(CYCLONEDX_GOMOD_VERSION) ./scripts/release-sbom.sh
 
 vulncheck:
+	@toolchain="$$($(GO) env GOVERSION)"; scanner="$$($(GOVULNCHECK) -version | awk '/^Go: / { print $$2 }')"; \
+		[[ "$$toolchain" == go1.26.6 && "$$scanner" == "$$toolchain" ]] || { \
+		printf 'vulncheck requires govulncheck and GO to use go1.26.6 (GO=%s scanner=%s)\n' "$$toolchain" "$$scanner" >&2; exit 1; }
 	$(GOVULNCHECK) ./...
 
 round6-vulncheck:
+	@toolchain="$$($(GO) env GOVERSION)"; scanner="$$($(GOVULNCHECK) -version | awk '/^Go: / { print $$2 }')"; \
+		[[ "$$toolchain" == go1.26.6 && "$$scanner" == "$$toolchain" ]] || { \
+		printf 'round6-vulncheck requires govulncheck and GO to use go1.26.6 (GO=%s scanner=%s)\n' "$$toolchain" "$$scanner" >&2; exit 1; }
 	$(GOVULNCHECK) $(ROUND6_SAFE_PACKAGES)
 
 round6-cpa-store-contract:

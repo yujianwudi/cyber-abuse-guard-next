@@ -12,6 +12,8 @@ old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce
 stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
+round14_classifier_policy_version="classifier-policy-v20"
+round14_classifier_policy_sha256="1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -20,43 +22,17 @@ if ! python3_bin="$(command -v python3)" || [[ ! -x "$python3_bin" ]]; then
   exit 127
 fi
 
-audit_tool_root="$root/tools/current-cpa-audit"
+audit_receipt_tool="$root/scripts/current_cpa_audit_unit_receipt.py"
+audit_receipt="$root/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
 audit_identity_output=""
-if ! audit_identity_output="$(python3 -B - "$audit_tool_root" <<'PY'
-import sys
-import unittest
-from pathlib import Path
-
-
-tool = Path(sys.argv[1]).resolve(strict=True)
-sys.path.insert(0, str(tool))
-sys.path.insert(0, str(tool / "tests"))
-import run
-
-
-identities = run.runner_identities()
-loader = unittest.TestLoader()
-suite = loader.discover(str(tool / "tests"), pattern="test_*.py")
-if loader.errors:
-    for error in loader.errors:
-        print(error, file=sys.stderr)
-    raise SystemExit("CPA audit unittest discovery reported loader errors")
-for key in (
-    "bundle_sha256",
-    "audit_contract_sha256",
-    "run_source_sha256",
-    "machine_schema_sha256",
-):
-    print(identities[key])
-print(suite.countTestCases())
-PY
-)"; then
+if ! audit_identity_output="$(/usr/bin/python3 -I -B "$audit_receipt_tool" validate \
+  --receipt "$audit_receipt" --output-lines)"; then
   printf 'cannot determine current CPA audit runner fixture identities\n' >&2
   exit 1
 fi
 audit_identity_values=()
 mapfile -t audit_identity_values <<<"$audit_identity_output"
-[[ "${#audit_identity_values[@]}" == 5 ]] || {
+[[ "${#audit_identity_values[@]}" == 15 ]] || {
   printf 'cannot determine current CPA audit runner fixture identities\n' >&2
   exit 1
 }
@@ -104,11 +80,61 @@ documents=(
   docs/reports/ROUND8_RELEASE_READINESS.md
   docs/reports/ROUND9_EXECUTION_RECORD.md
   docs/reports/TEST_REPORT.md
+  docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json
   docs/reports/CORPUS_REPORT.md
 )
 
-# Historical RELEASE_POLICY and ROUND8_CALIBRATION snapshots remain required
-# above, but intentionally do not use the fixed current-document prologue.
+round14_documents=(
+  README.md
+  README_CN.md
+  CHANGELOG.md
+  SECURITY.md
+  docs/AUDIT_HANDOFF.md
+  docs/DESIGN.md
+  docs/INSTALL_DOCKER.md
+  docs/LIMITATIONS.md
+  docs/RAW_CAPTURE.md
+  docs/README.md
+  docs/RELEASE_POLICY.md
+  docs/ROUND6_DEVELOPMENT_HANDOFF.md
+  docs/ROUND6_LIMITATIONS.md
+  docs/ROUND6_RELEASE_GATE.md
+  docs/ROUND6_CONFIG_MIGRATION.md
+  docs/ROUND6_STREAMING_SCANNER_DESIGN.md
+  docs/ROUND8_HOST_RUNNER.md
+  docs/ROUND9_AUDIT_SCHEMA_V6.md
+  docs/ROUND9_HOST_RUNNER.md
+  docs/ROUND9_OPERATOR_ROLLOUT.md
+  docs/ROUND11_RUNTIME_ASSURANCE_TASK_BOOK.md
+  docs/ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md
+  docs/ROUND12_STATUS.md
+  docs/RULES.md
+  docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md
+  docs/ROUND13_STATUS.md
+  docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md
+  docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md
+  docs/ROUND14_STATUS.md
+  docs/THREAT_MODEL.md
+  docs/reports/CPA_INTEGRATION.md
+  docs/reports/PHASE0_CPA_CONTRACT.md
+  docs/reports/PROMPT_INJECTION_REVIEW.md
+  docs/reports/RELEASE_EVIDENCE.md
+  docs/reports/ROUND8_RELEASE_READINESS.md
+  docs/reports/PERFORMANCE.md
+  docs/reports/PRIVACY.md
+  docs/reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md
+  docs/reports/ROUND8_CALIBRATION.md
+  docs/reports/ROUND9_EXECUTION_RECORD.md
+  docs/reports/TEST_REPORT.md
+  docs/reports/CORPUS_REPORT.md
+  docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json
+  integration/cpalatestcontract/README.md
+  integration/pluginstorecontract/README.md
+  tools/current-cpa-audit/README.md
+)
+
+# Historical RELEASE_POLICY remains required above but intentionally does not
+# use the fixed current-document prologue. ROUND8_CALIBRATION now does use it.
 classifier_identity_documents=(
   README.md
   README_CN.md
@@ -148,7 +174,7 @@ classifier_identity_documents=(
 make_fixture() {
   local fixture="$1" relative
   mkdir -p "$fixture/docs/reports" "$fixture/.github/workflows"
-  for relative in ci.yml codeql.yml policy-gate.yml; do
+  for relative in ci.yml codeql.yml policy-gate.yml release-rc.yml; do
     printf 'name: fixture\n' >"$fixture/.github/workflows/$relative"
   done
   printf '%s\n' \
@@ -159,6 +185,7 @@ make_fixture() {
     '| `ci.yml` |' \
     '| `codeql.yml` |' \
     '| `policy-gate.yml` |' \
+    '| `release-rc.yml` |' \
     >"$fixture/.github/workflows/README.md"
   for relative in "${documents[@]}"; do
     mkdir -p "$(dirname "$fixture/$relative")"
@@ -168,6 +195,7 @@ make_fixture() {
       printf '%s\n' \
         '# Release policy' \
         '' \
+        'current_go_toolchain: go1.26.6' \
         'current_round: 9' \
         'current_source_version: 0.16' \
         'current_formal_tag_reserved: v0.16' \
@@ -398,7 +426,7 @@ make_fixture() {
     >>"$fixture/docs/ROUND12_STATUS.md"
   printf '%s\n' \
     '' \
-    '## Round 12 working-tree pre-final Linux validation' \
+    '## Frozen Round 12 working-tree pre-final Linux validation' \
     '' \
     '```text' \
     "runner_bundle_sha256: $audit_runner_bundle_sha256" \
@@ -429,6 +457,45 @@ run_gate() {
   env "${environment[@]}" "$gate"
 }
 
+make_round14_fixture() {
+  local fixture="$1" relative
+  mkdir -p "$fixture/.github/workflows"
+  for relative in ci.yml codeql.yml policy-gate.yml release-rc.yml; do
+    cp -a -- "$root/.github/workflows/$relative" "$fixture/.github/workflows/$relative"
+  done
+  cp -a -- "$root/.github/workflows/README.md" "$fixture/.github/workflows/README.md"
+  for relative in "${round14_documents[@]}"; do
+    mkdir -p "$(dirname "$fixture/$relative")"
+    cp -a -- "$root/$relative" "$fixture/$relative"
+  done
+}
+
+run_round14_gate() {
+  local fixture="$1"
+  local environment=(
+    "RELEASE_DOC_ROOT=$fixture"
+    "RELEASE_DOC_FIXTURE_MODE=1"
+    "CURRENT_RELEASE_VERSION=1.0.0"
+    "CURRENT_RULESET_SHA256=$ruleset_sha256"
+    "CURRENT_CLASSIFIER_POLICY_VERSION=$round14_classifier_policy_version"
+    "CURRENT_CLASSIFIER_POLICY_SHA256=$round14_classifier_policy_sha256"
+  )
+  env "${environment[@]}" "$gate"
+}
+
+round14_must_fail() {
+  local name="$1" fixture="$2" expected_diagnostic="$3"
+  if run_round14_gate "$fixture" >"$work/$name.log" 2>&1; then
+    printf 'Round 14 release document consistency fixture unexpectedly passed: %s\n' "$name" >&2
+    exit 1
+  fi
+  if ! grep -Fq -- "$expected_diagnostic" "$work/$name.log"; then
+    printf 'Round 14 release document consistency fixture emitted the wrong diagnostic: %s\n' "$name" >&2
+    exit 1
+  fi
+  printf 'Round 14 release document consistency fixture rejected as expected: %s\n' "$name"
+}
+
 must_fail() {
   local name="$1" fixture="$2" expected_diagnostic="$3"
   if run_gate "$fixture" >"$work/$name.log" 2>&1; then
@@ -445,6 +512,252 @@ must_fail() {
 make_fixture "$work/pass"
 run_gate "$work/pass"
 
+make_round14_fixture "$work/round14-pass"
+run_round14_gate "$work/round14-pass"
+
+cp -a "$work/round14-pass" "$work/round14-missing-release-workflow"
+rm -- "$work/round14-missing-release-workflow/.github/workflows/release-rc.yml"
+round14_must_fail round14-missing-release-workflow \
+  "$work/round14-missing-release-workflow" \
+  'required Round 14 active workflow must be a regular non-symlink file: .github/workflows/release-rc.yml'
+
+cp -a "$work/round14-pass" "$work/round13-unreviewed-workflow"
+printf 'name: unreviewed\n' >"$work/round13-unreviewed-workflow/.github/workflows/unreviewed.yml"
+round14_must_fail round13-unreviewed-workflow \
+  "$work/round13-unreviewed-workflow" \
+  'workflow directory contains an unreviewed Round 14 active workflow: .github/workflows/unreviewed.yml'
+
+cp -a "$work/round14-pass" "$work/round14-stale-release-boundary"
+sed -i 's/The active workflow directory contains exactly four workflows:/The active workflow directory contains three workflows:/' \
+  "$work/round14-stale-release-boundary/docs/README.md"
+round14_must_fail round14-stale-release-boundary \
+  "$work/round14-stale-release-boundary" \
+  'documentation index lost the exact four-workflow Round 14 boundary'
+
+cp -a "$work/round14-pass" "$work/round14-release-schema-drift"
+sed -i 's/cyber-abuse-guard\.second-machine-release-admission\.v3/cyber-abuse-guard.second-machine-release-admission.v2/' \
+  "$work/round14-release-schema-drift/.github/workflows/release-rc.yml"
+round14_must_fail round14-release-schema-drift \
+  "$work/round14-release-schema-drift" \
+  'release-rc.yml lost second-machine admission schema v3'
+
+for mutation in \
+  'README.md:readme-current' \
+  'README_CN.md:readme-cn-current' \
+  'docs/RULES.md:rules-active' \
+  'docs/reports/CPA_INTEGRATION.md:cpa-integration-overlay' \
+  'docs/reports/PRIVACY.md:privacy-overlay' \
+  'docs/reports/ROUND8_CALIBRATION.md:round8-calibration'; do
+  relative="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/round13-classifier-$name"
+  cp -a "$work/round14-pass" "$fixture"
+  sed -i '0,/current_classifier_policy_version: classifier-policy-v20/s//current_classifier_policy_version: classifier-policy-v12/' \
+    "$fixture/$relative"
+  round14_must_fail "round13-classifier-$name" "$fixture" \
+    "$relative lost the exact current classifier identity in its first 20 lines"
+done
+
+cp -a "$work/round14-pass" "$work/round14-stale-active-navigation"
+sed -i \
+  's/Active v7\.2\.137 CPA integration overlay/Active v7.2.125 CPA integration overlay/' \
+  "$work/round14-stale-active-navigation/docs/README.md"
+round14_must_fail round14-stale-active-navigation \
+  "$work/round14-stale-active-navigation" \
+  'Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim'
+
+cp -a "$work/round14-pass" "$work/round13-stale-active-overlay"
+printf '\n> current_formal_cpa: v7.2.124@197f520426374e514218ed155933ac546c98d345\n' \
+  >>"$work/round13-stale-active-overlay/docs/ROUND6_LIMITATIONS.md"
+round14_must_fail round13-stale-active-overlay \
+  "$work/round13-stale-active-overlay" \
+  'Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim'
+
+for mutation in \
+  'docs/DESIGN.md|## Frozen historical Round 12 design body|round13-stale-design-before-freeze' \
+  'docs/INSTALL_DOCKER.md|## Frozen historical Round 12 installation body|round13-stale-install-before-freeze' \
+  'docs/THREAT_MODEL.md|## Frozen historical Round 12 threat-model body|round13-stale-threat-model-before-freeze'; do
+  IFS='|' read -r relative marker name <<<"$mutation"
+  fixture="$work/$name"
+  cp -a "$work/round14-pass" "$fixture"
+  sed -i \
+    "0,/^${marker}$/s//Current CPA identity: v7.2.124 with an unfrozen active claim\\n\\n&/" \
+    "$fixture/$relative"
+  round14_must_fail "$name" "$fixture" \
+    'Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim'
+done
+
+cp -a "$work/round14-pass" "$work/round13-frozen-history"
+printf '\nThe then-current target was v7.2.124 in this explicitly frozen historical section.\n' \
+  >>"$work/round13-frozen-history/docs/LIMITATIONS.md"
+run_round14_gate "$work/round13-frozen-history"
+printf 'Round 13 release document consistency allowed explicit frozen v7.2.124 history\n'
+
+cp -a "$work/round14-pass" "$work/round14-binary-sha"
+sed -i \
+  's/aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  "$work/round14-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
+round14_must_fail round14-binary-sha "$work/round14-binary-sha" \
+  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.137 binary SHA-256'
+
+cp -a "$work/round14-pass" "$work/round13-cag-version"
+sed -i 's/cyber-abuse-guard-v1\.0\.0\.so/cyber-abuse-guard-v0.16.so/g' \
+  "$work/round13-cag-version/tools/current-cpa-audit/README.md"
+round14_must_fail round13-cag-version "$work/round13-cag-version" \
+  'current CPA audit README lost the closed CAG 1.0.0 SO name'
+
+for mutation in \
+  'docs/reports/CPA_INTEGRATION.md:round13-cpa-integration-audit-count' \
+  'docs/reports/TEST_REPORT.md:round13-test-report-audit-count'; do
+  relative="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/$name"
+  cp -a "$work/round14-pass" "$fixture"
+  sed -i '0,/315\/315 PASS/s//223\/223 PASS/' "$fixture/$relative"
+  round14_must_fail "$name" "$fixture" \
+    "$relative: active Round 14 overlay must contain exactly one 315/315 PASS result"
+done
+
+cp -a "$work/round14-pass" "$work/round14-missing-audit-receipt"
+rm -- "$work/round14-missing-audit-receipt/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
+round14_must_fail round14-missing-audit-receipt \
+  "$work/round14-missing-audit-receipt" \
+  'Round 14 CPA audit unit receipt is missing or unsafe: docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json'
+
+cp -a "$work/round14-pass" "$work/round14-tampered-audit-receipt"
+sed -i 's/"tests_run":315/"tests_run":296/' \
+  "$work/round14-tampered-audit-receipt/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
+round14_must_fail round14-tampered-audit-receipt \
+  "$work/round14-tampered-audit-receipt" \
+  'Round 14 CPA audit unit receipt validation failed'
+
+receipt_closure_fixture="$work/round14-receipt-closure"
+mkdir -p \
+  "$receipt_closure_fixture/scripts" \
+  "$receipt_closure_fixture/docs/reports" \
+  "$receipt_closure_fixture/.github/workflows" \
+  "$receipt_closure_fixture/integration" \
+  "$receipt_closure_fixture/tools" \
+  "$receipt_closure_fixture/testdata/development-public-jailbreak-patterns-v1"
+cp -a -- "$root/scripts/current_cpa_audit_unit_receipt.py" \
+  "$receipt_closure_fixture/scripts/"
+cp -a -- "$root/tools/current-cpa-audit" "$receipt_closure_fixture/tools/"
+cp -a -- "$root/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  "$receipt_closure_fixture/docs/reports/"
+cp -a -- "$root/.github/workflows/ci.yml" \
+  "$receipt_closure_fixture/.github/workflows/"
+cp -a -- "$root/integration/host_integration_test.go" \
+  "$receipt_closure_fixture/integration/"
+cp -a -- "$root/testdata/development-public-jailbreak-patterns-v1/cases.jsonl" \
+  "$receipt_closure_fixture/testdata/development-public-jailbreak-patterns-v1/"
+/usr/bin/python3 -I -B \
+  "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
+  --receipt "$receipt_closure_fixture/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  >/dev/null
+printf '\n# receipt drift mutation\n' \
+  >>"$receipt_closure_fixture/tools/current-cpa-audit/host_performance.py"
+if /usr/bin/python3 -I -B \
+  "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
+  --receipt "$receipt_closure_fixture/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  >"$work/round14-receipt-implementation-drift.log" 2>&1; then
+  printf 'Round 14 receipt accepted tested implementation drift\n' >&2
+  exit 1
+fi
+grep -Fq 'receipt.closure.test_sources_sha256 differs from the current source closure' \
+  "$work/round14-receipt-implementation-drift.log" || {
+  printf 'Round 14 receipt emitted the wrong implementation-drift diagnostic\n' >&2
+  exit 1
+}
+printf 'Round 14 receipt rejected tested implementation drift as expected\n'
+
+cp -a -- "$root/tools/current-cpa-audit/host_performance.py" \
+  "$receipt_closure_fixture/tools/current-cpa-audit/host_performance.py"
+printf '\n// receipt repository-input drift mutation\n' \
+  >>"$receipt_closure_fixture/integration/host_integration_test.go"
+if /usr/bin/python3 -I -B \
+  "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
+  --receipt "$receipt_closure_fixture/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  >"$work/round14-receipt-repository-input-drift.log" 2>&1; then
+  printf 'Round 14 receipt accepted tested repository-input drift\n' >&2
+  exit 1
+fi
+grep -Fq 'receipt.closure.test_sources_sha256 differs from the current source closure' \
+  "$work/round14-receipt-repository-input-drift.log" || {
+  printf 'Round 14 receipt emitted the wrong repository-input-drift diagnostic\n' >&2
+  exit 1
+}
+printf 'Round 14 receipt rejected tested repository-input drift as expected\n'
+
+for mutation in \
+  'docs/ROUND14_STATUS.md|round14_audit_runner_bundle_sha256|round14-status-audit-bundle' \
+  'docs/reports/TEST_REPORT.md|round14_audit_contract_sha256|round14-test-report-audit-contract'; do
+  IFS='|' read -r relative key name <<<"$mutation"
+  fixture="$work/$name"
+  cp -a "$work/round14-pass" "$fixture"
+  sed -i "s|^${key}: .*$|${key}: $(printf '0%.0s' {1..64})|" "$fixture/$relative"
+  round14_must_fail "$name" "$fixture" \
+    "$relative must bind the exact current Round 14 audit identity: $key"
+done
+
+cp -a "$work/round14-pass" "$work/round14-release-evidence-audit-run-source"
+sed -i \
+  "s|^round14_audit_run_source_sha256: .*$|round14_audit_run_source_sha256: $(printf '0%.0s' {1..64})|" \
+  "$work/round14-release-evidence-audit-run-source/docs/reports/RELEASE_EVIDENCE.md"
+round14_must_fail round14-release-evidence-audit-run-source \
+  "$work/round14-release-evidence-audit-run-source" \
+  'docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: round14_audit_run_source_sha256'
+
+cp -a "$work/round14-pass" "$work/round14-duplicate-active-cpa-target"
+sed -i '/^round14_cpa_target:/a round14_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa' \
+  "$work/round14-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round14_must_fail round14-duplicate-active-cpa-target \
+  "$work/round14-duplicate-active-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.137 round14_cpa_target'
+
+cp -a "$work/round14-pass" "$work/round14-conflicting-active-cpa-target"
+sed -i \
+  's|^round14_cpa_target: v7\.2\.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa$|round14_cpa_target: v7.2.137 / 197f520426374e514218ed155933ac546c98d345|' \
+  "$work/round14-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round14_must_fail round14-conflicting-active-cpa-target \
+  "$work/round14-conflicting-active-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.137 round14_cpa_target'
+
+cp -a "$work/round14-pass" "$work/round12-active-key-in-frozen-block"
+printf '\nactive_cpa_remote_latest: PASS\n' \
+  >>"$work/round12-active-key-in-frozen-block/docs/reports/RELEASE_EVIDENCE.md"
+round14_must_fail round12-active-key-in-frozen-block \
+  "$work/round12-active-key-in-frozen-block" \
+  'docs/reports/RELEASE_EVIDENCE.md: frozen release history contains active_cpa_* keys: active_cpa_remote_latest'
+
+cp -a "$work/round14-pass" "$work/round13-active-key-in-frozen-block"
+sed -i \
+  '/^Everything below is frozen v0\.16 \/ Round 12 history/i active_cpa_remote_latest: PASS' \
+  "$work/round13-active-key-in-frozen-block/docs/reports/RELEASE_EVIDENCE.md"
+round14_must_fail round13-active-key-in-frozen-block \
+  "$work/round13-active-key-in-frozen-block" \
+  'docs/reports/RELEASE_EVIDENCE.md: frozen release history contains active_cpa_* keys: active_cpa_remote_latest'
+
+cp -a "$work/round14-pass" "$work/round13-missing-historical-cpa-target"
+sed -i '/^historical_round12_cpa_target:/d' \
+  "$work/round13-missing-historical-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round14_must_fail round13-missing-historical-cpa-target \
+  "$work/round13-missing-historical-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: frozen history must contain exactly one historical_round12_cpa_target'
+
+for mutation in \
+  'historical_round13_cpa_store_rc_asset:round13-missing-rc-store-asset-marker' \
+  'historical_round13_cpa_store_checksum_contract:round13-missing-rc-store-checksum-marker' \
+  'derived-container relationship explicitly:round13-missing-derived-container-marker'; do
+  marker="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/$name"
+  cp -a "$work/round14-pass" "$fixture"
+  sed -i "0,/${marker//\//\\/}/s//BROKEN_ROUND13_STORE_MARKER/" \
+    "$fixture/docs/reports/RELEASE_EVIDENCE.md"
+  round14_must_fail "$name" "$fixture" \
+    'docs/reports/RELEASE_EVIDENCE.md: frozen Round 13 boundary must retain exactly one RC Store marker:'
+done
+
 mkdir -p "$work/python-exit-after-output"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
@@ -454,53 +767,34 @@ printf '%s\n' \
   >"$work/python-exit-after-output/python3"
 chmod 0700 "$work/python-exit-after-output/python3"
 if PATH="$work/python-exit-after-output:$PATH" \
-  run_gate "$work/pass" >"$work/python-exit-after-output.log" 2>&1; then
-  printf 'release document consistency accepted failed CPA identity computation\n' >&2
+  run_round14_gate "$work/round14-pass" \
+  >"$work/python-exit-after-output.log" 2>&1; then
+  :
+else
+  printf 'release document consistency trusted a failing PATH python3 wrapper\n' >&2
   exit 1
 fi
-grep -Fq -- \
-  'cannot determine the current CPA audit runner identity closure' \
+grep -Fq -- 'release document consistency passed:' \
   "$work/python-exit-after-output.log" || {
-  printf 'release document consistency emitted the wrong Python failure diagnostic\n' >&2
+  printf 'release document consistency did not ignore a failing PATH python3 wrapper\n' >&2
   exit 1
 }
-printf 'release document consistency rejected failed CPA identity computation as expected\n'
+printf 'release document consistency ignored a failing PATH python3 wrapper as expected\n'
 
-mkdir -p \
-  "$work/python-loader-error-bin" \
-  "$work/python-loader-error-module"
-printf '%s\n' \
-  'class _Suite:' \
-  '    def countTestCases(self):' \
-  '        return 144' \
-  '' \
-  'class TestLoader:' \
-  '    def __init__(self):' \
-  '        self.errors = []' \
-  '' \
-  '    def discover(self, *args, **kwargs):' \
-  '        self.errors.append("synthetic loader error")' \
-  '        return _Suite()' \
-  >"$work/python-loader-error-module/unittest.py"
+mkdir -p "$work/python-path-shim"
 printf '%s\n' \
   '#!/usr/bin/env bash' \
-  'set -euo pipefail' \
-  "export PYTHONPATH=\"$work/python-loader-error-module\${PYTHONPATH:+:\$PYTHONPATH}\"" \
-  "exec \"$python3_bin\" \"\$@\"" \
-  >"$work/python-loader-error-bin/python3"
-chmod 0700 "$work/python-loader-error-bin/python3"
-if PATH="$work/python-loader-error-bin:$PATH" \
-  run_gate "$work/pass" >"$work/python-loader-error.log" 2>&1; then
-  printf 'release document consistency accepted unittest loader errors\n' >&2
-  exit 1
-fi
-grep -Fq -- \
-  'cannot determine the current CPA audit runner identity closure' \
-  "$work/python-loader-error.log" || {
-  printf 'release document consistency emitted the wrong loader-error diagnostic\n' >&2
+  'printf "%s\\n" forged-validator-output' \
+  'exit 0' \
+  >"$work/python-path-shim/python3"
+chmod 0700 "$work/python-path-shim/python3"
+PATH="$work/python-path-shim:$PATH" run_round14_gate "$work/round14-pass" \
+  >"$work/python-path-shim.log" 2>&1
+grep -Fq 'release document consistency passed:' "$work/python-path-shim.log" || {
+  printf 'release document consistency did not ignore a forged PATH python3 shim\n' >&2
   exit 1
 }
-printf 'release document consistency rejected unittest loader errors as expected\n'
+printf 'release document consistency ignored a forged PATH python3 shim as expected\n'
 
 cp -a "$work/pass" "$work/stale-round12-task-book-classifier"
 sed -i "s/$classifier_policy_sha256/$old_classifier_policy_sha256/" \
@@ -515,7 +809,7 @@ sed -i \
   "$work/stale-round12-status-classifier/docs/ROUND12_STATUS.md"
 must_fail stale-round12-status-classifier \
   "$work/stale-round12-status-classifier" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
+  'current release documents must not contain stale active classifier identities'
 
 cp -a "$work/pass" "$work/duplicate-round12-status-classifier"
 printf '\nround12_classifier_policy: %s / %s\n' \
@@ -523,71 +817,7 @@ printf '\nround12_classifier_policy: %s / %s\n' \
   >>"$work/duplicate-round12-status-classifier/docs/ROUND12_STATUS.md"
 must_fail duplicate-round12-status-classifier \
   "$work/duplicate-round12-status-classifier" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
-
-cp -a "$work/pass" "$work/backtick-round12-status-classifier"
-printf '\n`round12_classifier_policy: %s / %s`\n' \
-  "$old_classifier_policy_version" "$old_classifier_policy_sha256" \
-  >>"$work/backtick-round12-status-classifier/docs/ROUND12_STATUS.md"
-must_fail backtick-round12-status-classifier \
-  "$work/backtick-round12-status-classifier" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
-
-cp -a "$work/pass" "$work/json-round12-status-classifier"
-printf '\n{"round12_classifier_policy": "%s / %s"}\n' \
-  "$old_classifier_policy_version" "$old_classifier_policy_sha256" \
-  >>"$work/json-round12-status-classifier/docs/ROUND12_STATUS.md"
-must_fail json-round12-status-classifier \
-  "$work/json-round12-status-classifier" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
-
-cp -a "$work/pass" "$work/bulleted-round12-status-classifier"
-printf '\n- round12_classifier_policy: %s / %s\n' \
-  "$old_classifier_policy_version" "$old_classifier_policy_sha256" \
-  >>"$work/bulleted-round12-status-classifier/docs/ROUND12_STATUS.md"
-must_fail bulleted-round12-status-classifier \
-  "$work/bulleted-round12-status-classifier" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 classifier policy identity'
-
-cp -a "$work/pass" "$work/stale-round12-audit-runner-bundle"
-sed -i "s/$audit_runner_bundle_sha256/$old_classifier_policy_sha256/" \
-  "$work/stale-round12-audit-runner-bundle/docs/ROUND12_STATUS.md"
-must_fail stale-round12-audit-runner-bundle \
-  "$work/stale-round12-audit-runner-bundle" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 CPA audit identity: round12_audit_runner_bundle'
-
-cp -a "$work/pass" "$work/stale-round12-audit-contract-report"
-sed -i "s/$audit_contract_sha256/$old_classifier_policy_sha256/" \
-  "$work/stale-round12-audit-contract-report/docs/reports/TEST_REPORT.md"
-must_fail stale-round12-audit-contract-report \
-  "$work/stale-round12-audit-contract-report" \
-  'docs/reports/TEST_REPORT.md Round 12 section must bind the current CPA audit identity: audit_contract_sha256'
-
-cp -a "$work/pass" "$work/stale-round12-audit-run-changelog"
-sed -i "s/$audit_run_source_sha256/$old_classifier_policy_sha256/" \
-  "$work/stale-round12-audit-run-changelog/CHANGELOG.md"
-must_fail stale-round12-audit-run-changelog \
-  "$work/stale-round12-audit-run-changelog" \
-  'CHANGELOG.md Unreleased section must bind the current CPA audit identity:'
-
-cp -a "$work/pass" "$work/swapped-round12-audit-changelog"
-sed -i \
-  "s|current_audit_contract_sha256: $audit_contract_sha256|current_audit_contract_sha256: $audit_run_source_sha256|" \
-  "$work/swapped-round12-audit-changelog/CHANGELOG.md"
-sed -i \
-  "s|current_audit_run_source_sha256: $audit_run_source_sha256|current_audit_run_source_sha256: $audit_contract_sha256|" \
-  "$work/swapped-round12-audit-changelog/CHANGELOG.md"
-must_fail swapped-round12-audit-changelog \
-  "$work/swapped-round12-audit-changelog" \
-  'CHANGELOG.md Unreleased section must bind the current CPA audit identity:'
-
-cp -a "$work/pass" "$work/stale-round12-audit-test-count"
-sed -i \
-  "s/PASS \/ LINUX \/ ${audit_tool_test_count}_OF_${audit_tool_test_count}/PASS \/ LINUX \/ 1_OF_1/" \
-  "$work/stale-round12-audit-test-count/docs/ROUND12_STATUS.md"
-must_fail stale-round12-audit-test-count \
-  "$work/stale-round12-audit-test-count" \
-  'docs/ROUND12_STATUS.md must contain exactly one exact Round 12 CPA audit identity: round12_local_audit_tool_tests'
+  'current release documents must not contain stale active classifier identities'
 
 cp -a "$work/pass" "$work/symlinked-github-parent"
 mv -- "$work/symlinked-github-parent/.github" "$work/escaped-github-parent"

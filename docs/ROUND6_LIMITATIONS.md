@@ -1,23 +1,32 @@
 # Round 6 known limitations and release blockers
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
-> **Frozen historical snapshot.** Except for the current classifier identity
+> **Frozen historical snapshot.** Except for the active-tree classifier identity
 > above and this notice, the body below preserves the Round 6 / v0.15 release
 > posture. References to CPA v7.2.95 as "current" or as the current CI/Host
 > target are scoped only to that frozen Round 6 snapshot and are not the active
 > repository release identity.
 >
-> The current formal CPA identity is:
+> The current Round 14 active-tree overlay is CAG source `1.0.0`, planned
+> `v1.0.0-rc.1` on Linux amd64, and:
 >
 > ```text
-> current_formal_cpa: v7.2.113@bc71c77f5cc42f3fbe1bf040cf14d4f166894835
-> current_module_sum: h1:Aj3J7zI5VxyKpsHbG6+ChVpeW4QGkcJ+ZwWWnWmuChA=
+> current_formal_cpa: v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+> current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
+> current_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
+>
+> Round 13 v7.2.125/schema 2 evidence is historical and transfers no PASS.
+> Every `/v1/realtime*` route currently bypasses CAG `RequestInterceptor`,
+> `ModelRouter`, and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED /
+> CAG_NOT_VISIBLE**. Only registered callback paths such as chat and Responses
+> are protected; there is no all-traffic coverage claim. See
+> [Round 14 status](ROUND14_STATUS.md).
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**; a candidate-bound
 `evaluation-v11` or later first-and-only `CONSUMED / PASS` attestation is also

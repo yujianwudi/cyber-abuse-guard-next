@@ -17,8 +17,8 @@ if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
   exit 1
 fi
 go_version="$($go_bin env GOVERSION)"
-if [[ "$go_version" != go1.26.4 ]]; then
-  printf 'build-linux-amd64.sh requires Go go1.26.4, got %s\n' "$go_version" >&2
+if [[ "$go_version" != go1.26.6 ]]; then
+  printf 'build-linux-amd64.sh requires Go go1.26.6, got %s\n' "$go_version" >&2
   exit 1
 fi
 

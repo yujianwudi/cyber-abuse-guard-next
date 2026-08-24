@@ -1,8 +1,8 @@
 # Privacy Verification Report — post-v10 development handoff
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
 > **Active-tree identity overlay refreshed 2026-08-04 (Asia/Shanghai).** The
@@ -89,6 +89,13 @@ boolean; it never retains the evicted carrier or directive text. These bytes are
 never persisted, logged, or returned, but Go heap storage is managed
 by the garbage collector and is not promised to be immediately zeroized after
 the references are cleared.
+
+The isolated Python audit Harness keeps the four reviewed supplemental ZIP
+texts in caller-owned mutable buffers and overwrites those buffers before it
+clears its references. This is best-effort hygiene for the Harness-owned
+long-lived copies only. Archive reads, decompression, normalization, UTF-8/JSON
+construction, sockets, CPA, Docker, and interpreter/runtime internals may hold
+other transient copies that Python cannot prove were zeroized.
 
 ## Implemented controls
 

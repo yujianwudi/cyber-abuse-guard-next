@@ -6,8 +6,8 @@
   ],
   "max_blob_bytes": 2097152,
   "reviewer": {
-    "identity": "Codex Round 12 exact-source review",
-    "reviewed_at": "2026-08-06T01:19:51.256Z",
+    "identity": "Codex Round 14 byte-identical Keysmith HEAD refresh",
+    "reviewed_at": "2026-08-24T05:26:01.910Z",
     "status": "approved"
   },
   "repositories": [
@@ -22,10 +22,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "dee05f309e305373d7c9ebb478c632a0c4b99c35",
-            "commit": "628b47581291ec0b1220a7ad930f6937a187ac48",
+            "commit": "2cb7f382ea8a08e9af5a6d9c16580b45f639891a",
             "source_sha256": "2c2c9f0e008c492bfc9487170a7a08daedeb8b0625af1f85617ab2d1bd3f35c0",
             "text_sha256": "2c2c9f0e008c492bfc9487170a7a08daedeb8b0625af1f85617ab2d1bd3f35c0",
-            "tree": "e6bfb3dee872300049eadcd3e81a0022a338f55c"
+            "tree": "0d46f7e9ffe6907b2483d9955a6f40a8f75800dd"
           },
           "semantic_cases": [
             {
@@ -63,11 +63,11 @@
           "kind": "text",
           "archive_member": null,
           "reviewed_source": {
-            "blob_sha1": "6b0f4c1a080ac5da73ab8fdaa94facca66f296a7",
-            "commit": "628b47581291ec0b1220a7ad930f6937a187ac48",
-            "source_sha256": "d2f05fdb5f91da5cb7be31f5dd723e9d7e6a3f2168ef5de17c9f7d4260a78a36",
-            "text_sha256": "d2f05fdb5f91da5cb7be31f5dd723e9d7e6a3f2168ef5de17c9f7d4260a78a36",
-            "tree": "e6bfb3dee872300049eadcd3e81a0022a338f55c"
+            "blob_sha1": "866401a756f07afc2fc14dcdee23347f73c4762a",
+            "commit": "2cb7f382ea8a08e9af5a6d9c16580b45f639891a",
+            "source_sha256": "ca645e063499b238999b5652f2eaa932d4f1b1e896b0866bb1584c0c5ac0a778",
+            "text_sha256": "ca645e063499b238999b5652f2eaa932d4f1b1e896b0866bb1584c0c5ac0a778",
+            "tree": "0d46f7e9ffe6907b2483d9955a6f40a8f75800dd"
           },
           "semantic_cases": [
             {
@@ -148,10 +148,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "12393726d723a002e0ac0972396f4745f8d8b39c",
-            "commit": "762ff36131a701c7ed279961650cb7877f4bcd90",
+            "commit": "d7610f9b12276e074c40cacf9940db3b9bdc67ff",
             "source_sha256": "5867af4e6d039fb331e2368ec13499b01c8e93d189e072631f31a226108becf7",
             "text_sha256": "5867af4e6d039fb331e2368ec13499b01c8e93d189e072631f31a226108becf7",
-            "tree": "e1b9401008cafeb4037e6ca475d4ecb8a01f8dcc"
+            "tree": "d05dfcc40e96dcde4755067acf543de683a1246e"
           },
           "semantic_cases": [
             {
@@ -190,10 +190,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "f8c1b09f9b3cc3cb3135dec59741b4e0a42afa87",
-            "commit": "762ff36131a701c7ed279961650cb7877f4bcd90",
+            "commit": "d7610f9b12276e074c40cacf9940db3b9bdc67ff",
             "source_sha256": "f68aea9afd065eefd9486e6fb14b7f93ef94aaab3634063bd65d115e43e06388",
             "text_sha256": "f68aea9afd065eefd9486e6fb14b7f93ef94aaab3634063bd65d115e43e06388",
-            "tree": "e1b9401008cafeb4037e6ca475d4ecb8a01f8dcc"
+            "tree": "d05dfcc40e96dcde4755067acf543de683a1246e"
           },
           "semantic_cases": [
             {
@@ -232,10 +232,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "7a36b6ee23c356758b80a4aaaa8c3996364d71a4",
-            "commit": "762ff36131a701c7ed279961650cb7877f4bcd90",
+            "commit": "d7610f9b12276e074c40cacf9940db3b9bdc67ff",
             "source_sha256": "b6f7475f1675fb616f5cc699fad40e58d9aa9d31e1a8b0cf3160972bd8a05cf0",
             "text_sha256": "b6f7475f1675fb616f5cc699fad40e58d9aa9d31e1a8b0cf3160972bd8a05cf0",
-            "tree": "e1b9401008cafeb4037e6ca475d4ecb8a01f8dcc"
+            "tree": "d05dfcc40e96dcde4755067acf543de683a1246e"
           },
           "semantic_cases": [
             {

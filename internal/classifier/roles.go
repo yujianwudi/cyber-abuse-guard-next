@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/yujianwudi/cyber-abuse-guard-next/internal/extract"
+	"github.com/yujianwudi/cyber-abuse-guard-next/internal/rules"
 )
 
 const maxRoleClassifierSegments = 64
@@ -194,10 +195,16 @@ func (c *Classifier) ClassifySegmentsWithPolicy(segments []extract.Segment, mode
 				[]string{segment.Text}, mode, thresholds, policy,
 				segment.Provenance == extract.ProvenanceToolPayload,
 			)
-			candidate = withRoleAwareFindingOrigin(candidate, findingOriginForSegment(segment), mode, thresholds)
-			truncated = truncated || candidate.Truncated
-			if roleResultBetter(candidate, best) {
-				best = candidate
+			if c.nonUserSafetySuppressionProven(
+				segment.Role, segment.Provenance, segment.Text, candidate, mode, thresholds, policy,
+			) {
+				classifySegment = false
+			} else {
+				candidate = withRoleAwareFindingOrigin(candidate, findingOriginForSegment(segment), mode, thresholds)
+				truncated = truncated || candidate.Truncated
+				if roleResultBetter(candidate, best) {
+					best = candidate
+				}
 			}
 		}
 		if segment.Role != extract.RoleUser || segment.Provenance != extract.ProvenanceContent {
@@ -797,10 +804,437 @@ func (c *Classifier) classifyProfiledGroupWithPolicy(
 	thresholds Thresholds,
 	policy Policy,
 ) Result {
+	var result Result
 	if profiledGroupAllowsExtendedGeneratedAgentWindow(group) {
-		return c.classifyTrustedCurrentUserWithPolicy(group.parts, mode, thresholds, policy)
+		result = c.classifyTrustedCurrentUserWithPolicy(group.parts, mode, thresholds, policy)
+	} else {
+		result = c.classifyWithPolicy(group.parts, mode, thresholds, policy, group.structuredTool)
 	}
-	return c.classifyWithPolicy(group.parts, mode, thresholds, policy, group.structuredTool)
+	if reconstructed, ok := c.boundedProfiledLexicalPartReconstructionForPolicy(
+		group.parts, group.refs, policy,
+	); ok {
+		var candidate Result
+		if profiledGroupAllowsExtendedGeneratedAgentWindow(group) {
+			candidate = c.classifyTrustedCurrentUserWithPolicy([]string{reconstructed}, mode, thresholds, policy)
+		} else {
+			candidate = c.classifyWithPolicy([]string{reconstructed}, mode, thresholds, policy, group.structuredTool)
+		}
+		if roleResultBetter(candidate, result) || profiledReconstructionSuppressesRawMultipartCandidate(candidate) {
+			// A complete reconstructed quote/inert proof is authoritative even when
+			// it lowers the raw multipart signal union. Other candidates retain normal
+			// ranking so an unrelated lexical-looking boundary cannot hide an
+			// independently complete original finding.
+			profiledCarrierRunClearOccurrenceOffsets(&candidate)
+			result = candidate
+		}
+	}
+	return result
+}
+
+func profiledReconstructionSuppressesRawMultipartCandidate(candidate Result) bool {
+	return candidate.DecisionExplanation != nil &&
+		candidate.DecisionExplanation.QuotedOrInertSuppressed
+}
+
+const maxCompactPartReconstructionBytes = maxClassifierInputBytes
+
+const compactPartHardSeparator = "\n.\n"
+
+const compactPartSoftSeparator = " "
+
+type compactLexicalPartEdges struct {
+	prefixClass  compactLexicalClass
+	suffixClass  compactLexicalClass
+	prefixRunes  int
+	suffixRunes  int
+	prefixLinker bool
+	suffixLinker bool
+	wholeLexical bool
+	singleLeet   bool
+	nonEmpty     bool
+}
+
+func boundedLexicalPartReconstruction(parts []string) (string, bool) {
+	return boundedLexicalPartReconstructionWithBoundaries(parts, nil)
+}
+
+func boundedProfiledLexicalPartReconstruction(
+	parts []string,
+	refs []profiledSegmentRef,
+) (string, bool) {
+	if len(parts) != len(refs) || len(parts) < 2 {
+		return "", false
+	}
+	boundaries := make([]bool, len(parts)-1)
+	for index := range boundaries {
+		boundaries[index] = profiledLexicalPartBoundaryEligible(refs[index], refs[index+1])
+	}
+	return boundedLexicalPartReconstructionWithBoundaries(parts, boundaries)
+}
+
+func (c *Classifier) boundedProfiledLexicalPartReconstructionForPolicy(
+	parts []string,
+	refs []profiledSegmentRef,
+	policy Policy,
+) (string, bool) {
+	reconstructed, ok := boundedProfiledLexicalPartReconstruction(parts, refs)
+	if !ok || !c.profiledLexicalReconstructionCrossesSignal(parts, refs, reconstructed, policy) {
+		return "", false
+	}
+	return reconstructed, true
+}
+
+func (c *Classifier) profiledLexicalReconstructionCrossesSignal(
+	parts []string,
+	refs []profiledSegmentRef,
+	reconstructed string,
+	policy Policy,
+) bool {
+	if c == nil || len(parts) != len(refs) || len(parts) < 2 {
+		return false
+	}
+	edges := make([]compactLexicalPartEdges, len(parts))
+	normalizedLengths := make([]int, len(parts))
+	boundaries := make([]bool, len(parts)-1)
+	var normalizerScratch normalizationScratch
+	var runeBuffer []rune
+	for index, part := range parts {
+		if index > 0 {
+			boundaries[index-1] = profiledLexicalPartBoundaryEligible(refs[index-1], refs[index])
+		}
+		views := normalizePartsInto([]string{part}, runeBuffer, &normalizerScratch)
+		runeBuffer = views.standardRunes
+		if views.truncated || len(views.standardRunes) == 0 {
+			continue
+		}
+		edges[index] = compactLexicalEdgesForRunes(views.standardRunes)
+		normalizedLengths[index] = len(views.standardRunes)
+	}
+
+	acceptedBoundaries := make([]bool, len(boundaries))
+	for boundary := range boundaries {
+		acceptedBoundaries[boundary] = boundedLexicalPartBoundaryWithBoundaries(
+			edges, boundaries, boundary,
+		)
+	}
+	boundaryOffsets := make([]int, 0, len(acceptedBoundaries))
+	normalizedOffset := 0
+	for index := range parts {
+		normalizedOffset += normalizedLengths[index]
+		if index == len(acceptedBoundaries) {
+			continue
+		}
+		if acceptedBoundaries[index] {
+			boundaryOffsets = append(boundaryOffsets, normalizedOffset)
+			continue
+		}
+		normalizedOffset += utf8.RuneCountInString(compactLexicalPartSeparator(
+			edges, boundaries, acceptedBoundaries, index,
+		))
+	}
+	if len(boundaryOffsets) == 0 {
+		return false
+	}
+
+	joined := normalizeParts([]string{reconstructed})
+	if joined.truncated || normalizedOffset != len(joined.standardRunes) {
+		return false
+	}
+	analysis := c.analyzeDirectives(joined.standardRunes, policy)
+	clauseSpans, complete := profiledAnalysisClauseSpans(joined.standardRunes, analysis)
+	if !complete {
+		return false
+	}
+	crosses := func(clause analyzedDirectiveClause) bool {
+		span, found := profiledClauseSpanByID(clauseSpans, clauseIDForOccurrence(clause))
+		if !found {
+			return false
+		}
+		for _, occurrence := range clause.occurrences {
+			start := span.start + int(occurrence.start)
+			end := span.start + int(occurrence.end)
+			for _, boundaryOffset := range boundaryOffsets {
+				if start < boundaryOffset && end > boundaryOffset {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, clause := range analysis.clauses {
+		if crosses(clause) {
+			return true
+		}
+	}
+	for _, clause := range analysis.overflowTail {
+		if crosses(clause) {
+			return true
+		}
+	}
+	return false
+}
+
+func profiledLexicalPartBoundaryEligible(left, right profiledSegmentRef) bool {
+	return profiledSegmentRefsPhysicallyAdjacent(left, right) &&
+		profiledSegmentsShareOwnerScope(left.segment, right.segment) &&
+		left.segment.ContentKind == extract.ContentKindNaturalLanguageDirective &&
+		right.segment.ContentKind == extract.ContentKindNaturalLanguageDirective
+}
+
+func boundedLexicalPartReconstructionWithBoundaries(
+	parts []string,
+	boundaries []bool,
+) (string, bool) {
+	if len(parts) < 2 || len(parts) > maxClassifierParts {
+		return "", false
+	}
+	if boundaries != nil && len(boundaries) != len(parts)-1 {
+		return "", false
+	}
+
+	// Bound the raw provider group before normalizing any part. The extractor
+	// defaults to 512 blocks and can be configured up to maxClassifierParts, so
+	// the lexical-run limit must apply to adjacent fragments rather than to the
+	// number of otherwise unrelated provider blocks.
+	rawGroupBytes := 0
+	for _, part := range parts {
+		if len(part) > maxCompactPartReconstructionBytes-rawGroupBytes {
+			return "", false
+		}
+		rawGroupBytes += len(part)
+	}
+
+	edges := make([]compactLexicalPartEdges, len(parts))
+	var normalizerScratch normalizationScratch
+	var runeBuffer []rune
+	for index, part := range parts {
+		views := normalizePartsInto([]string{part}, runeBuffer, &normalizerScratch)
+		runeBuffer = views.standardRunes
+		if views.truncated || len(views.standardRunes) == 0 {
+			// An unrelated empty or normalization-overflow block is a hard
+			// reconstruction barrier; it must not disable a later bounded pair.
+			continue
+		}
+		edges[index] = compactLexicalEdgesForRunes(views.standardRunes)
+	}
+
+	acceptedBoundaries := make([]bool, len(parts)-1)
+	hasSpan := false
+	for boundary := 0; boundary+1 < len(edges); boundary++ {
+		_, _, ok := boundedLexicalPartBoundarySpan(edges, boundaries, boundary)
+		if !ok {
+			continue
+		}
+		hasSpan = true
+		acceptedBoundaries[boundary] = true
+	}
+	if !hasSpan {
+		return "", false
+	}
+
+	candidateBytes := rawGroupBytes
+	for boundary := range acceptedBoundaries {
+		separatorBytes := len(compactLexicalPartSeparator(edges, boundaries, acceptedBoundaries, boundary))
+		if separatorBytes > maxCompactPartReconstructionBytes-candidateBytes {
+			return "", false
+		}
+		candidateBytes += separatorBytes
+	}
+
+	var joined strings.Builder
+	joined.Grow(candidateBytes)
+	for index, part := range parts {
+		if index > 0 {
+			joined.WriteString(compactLexicalPartSeparator(edges, boundaries, acceptedBoundaries, index-1))
+		}
+		joined.WriteString(part)
+	}
+	return joined.String(), true
+}
+
+func compactLexicalPartSeparator(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	acceptedBoundaries []bool,
+	boundary int,
+) string {
+	if boundary >= 0 && boundary < len(acceptedBoundaries) && acceptedBoundaries[boundary] {
+		if edges[boundary].singleLeet || edges[boundary+1].singleLeet {
+			// Keep a provider-isolated leet rune adjacent to the one-rune lexical
+			// fragments that proved its ownership. A newline here would make the
+			// normalizer treat `!` as punctuation and would hide `@`/`$` from the
+			// ordinary in-token leet lookaround.
+			return ""
+		}
+		return "\n"
+	}
+	if !compactLexicalBoundaryEnabled(boundaries, boundary) {
+		return compactPartHardSeparator
+	}
+	if boundary >= 0 && boundary+1 < len(edges) &&
+		(edges[boundary].nonEmpty && edges[boundary].suffixClass == compactLexicalNone ||
+			edges[boundary+1].nonEmpty && edges[boundary+1].prefixClass == compactLexicalNone) {
+		// Existing punctuation is already a lexical barrier. Do not inject a
+		// sentence break that would discard an enclosing quote or negation frame.
+		return ""
+	}
+	return compactPartSoftSeparator
+}
+
+func compactLexicalBoundaryEnabled(boundaries []bool, boundary int) bool {
+	return boundaries == nil || boundary >= 0 && boundary < len(boundaries) && boundaries[boundary]
+}
+
+func compactLexicalEdgesForRunes(runes []rune) compactLexicalPartEdges {
+	if len(runes) == 0 {
+		return compactLexicalPartEdges{}
+	}
+	if len(runes) == 1 {
+		if _, ok := leetReplacement(runes[0]); ok {
+			return compactLexicalPartEdges{
+				prefixClass: compactLexicalASCII, suffixClass: compactLexicalASCII,
+				prefixRunes: 1, suffixRunes: 1, wholeLexical: true,
+				singleLeet: true, nonEmpty: true,
+			}
+		}
+	}
+	prefixClass := compactLexicalClassOf(runes[0])
+	prefixRunes := 0
+	if prefixClass != compactLexicalNone {
+		for prefixRunes < len(runes) && compactLexicalClassOf(runes[prefixRunes]) == prefixClass {
+			prefixRunes++
+		}
+		if prefixRunes == len(runes) {
+			linker := prefixClass == compactLexicalASCII && compactFragmentIsIndependentLexeme(runes)
+			return compactLexicalPartEdges{
+				prefixClass: prefixClass, suffixClass: prefixClass,
+				prefixRunes: prefixRunes, suffixRunes: prefixRunes,
+				prefixLinker: linker, suffixLinker: linker, wholeLexical: true, nonEmpty: true,
+			}
+		}
+	}
+
+	suffixClass := compactLexicalClassOf(runes[len(runes)-1])
+	suffixRunes := 0
+	if suffixClass != compactLexicalNone {
+		for index := len(runes) - 1; index >= 0 && compactLexicalClassOf(runes[index]) == suffixClass; index-- {
+			suffixRunes++
+		}
+	}
+	return compactLexicalPartEdges{
+		prefixClass: prefixClass, suffixClass: suffixClass,
+		prefixRunes: prefixRunes, suffixRunes: suffixRunes,
+		prefixLinker: prefixClass == compactLexicalASCII &&
+			compactFragmentIsIndependentLexeme(runes[:prefixRunes]),
+		suffixLinker: suffixClass == compactLexicalASCII &&
+			compactFragmentIsIndependentLexeme(runes[len(runes)-suffixRunes:]),
+		nonEmpty: true,
+	}
+}
+
+func boundedLexicalPartBoundary(edges []compactLexicalPartEdges, boundary int) bool {
+	return boundedLexicalPartBoundaryWithBoundaries(edges, nil, boundary)
+}
+
+func boundedLexicalPartBoundaryWithBoundaries(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	boundary int,
+) bool {
+	_, _, ok := boundedLexicalPartBoundarySpan(edges, boundaries, boundary)
+	return ok
+}
+
+func boundedLexicalPartBoundarySpan(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	boundary int,
+) (start, end int, ok bool) {
+	if boundary < 0 || boundary+1 >= len(edges) {
+		return 0, 0, false
+	}
+	if !compactLexicalBoundaryEnabled(boundaries, boundary) {
+		return 0, 0, false
+	}
+	left := edges[boundary]
+	right := edges[boundary+1]
+	class := left.suffixClass
+	if class == compactLexicalNone || right.prefixClass != class ||
+		left.suffixRunes == 0 || right.prefixRunes == 0 ||
+		left.suffixLinker || right.prefixLinker ||
+		left.suffixRunes > maxCompactReconstructionFragmentRunes ||
+		right.prefixRunes > maxCompactReconstructionFragmentRunes ||
+		!compactFragmentPairLengthsAllowed(left.suffixRunes, right.prefixRunes) {
+		return 0, 0, false
+	}
+
+	start = boundary
+	end = boundary + 2
+	fragments := 2
+	totalRunes := left.suffixRunes + right.prefixRunes
+	for index := boundary; index > 0 && edges[index].wholeLexical; index-- {
+		if !compactLexicalBoundaryEnabled(boundaries, index-1) {
+			break
+		}
+		fragment := edges[index-1]
+		if fragment.suffixClass != class || fragment.suffixRunes == 0 ||
+			fragment.suffixRunes > maxCompactReconstructionFragmentRunes {
+			return 0, 0, false
+		}
+		fragments++
+		totalRunes += fragment.suffixRunes
+		if fragments > maxCompactReconstructionFragments || totalRunes > maxCompactReconstructionRunes {
+			return 0, 0, false
+		}
+		start = index - 1
+	}
+	for index := boundary + 1; index+1 < len(edges) && edges[index].wholeLexical; index++ {
+		if !compactLexicalBoundaryEnabled(boundaries, index) {
+			break
+		}
+		fragment := edges[index+1]
+		if fragment.prefixClass != class || fragment.prefixRunes == 0 ||
+			fragment.prefixRunes > maxCompactReconstructionFragmentRunes {
+			return 0, 0, false
+		}
+		fragments++
+		totalRunes += fragment.prefixRunes
+		if fragments > maxCompactReconstructionFragments || totalRunes > maxCompactReconstructionRunes {
+			return 0, 0, false
+		}
+		end = index + 2
+	}
+	if fragments > maxCompactReconstructionFragments || totalRunes > maxCompactReconstructionRunes ||
+		!compactLexicalLeetPartsAreIsolated(edges, boundaries, start, end) {
+		return 0, 0, false
+	}
+	return start, end, true
+}
+
+func compactLexicalLeetPartsAreIsolated(
+	edges []compactLexicalPartEdges,
+	boundaries []bool,
+	start, end int,
+) bool {
+	for index := start; index < end; index++ {
+		if !edges[index].singleLeet {
+			continue
+		}
+		if index == start || index+1 == end ||
+			!compactLexicalBoundaryEnabled(boundaries, index-1) ||
+			!compactLexicalBoundaryEnabled(boundaries, index) {
+			return false
+		}
+		left := edges[index-1]
+		right := edges[index+1]
+		if left.singleLeet || right.singleLeet ||
+			left.suffixClass != compactLexicalASCII ||
+			right.prefixClass != compactLexicalASCII ||
+			!compactFragmentPairLengthsAllowed(left.suffixRunes, right.prefixRunes) {
+			return false
+		}
+	}
+	return true
 }
 
 func hasProfiledSegmentMetadata(segments []extract.Segment) bool {
@@ -1157,6 +1591,15 @@ func (c *Classifier) classifyProfiledSegmentsWithPolicy(
 			continue
 		}
 		candidate := c.classifyProfiledGroupWithPolicy(group, mode, thresholds, policy)
+		if len(group.refs) == 1 && c.profiledNonUserSafetySuppressionProven(
+			group.refs[0].segment, candidate, mode, thresholds, policy,
+		) {
+			// The complete physical field, rather than a prefix heuristic, proved
+			// that every classifier occurrence remained inside a genuine refusal or
+			// safety-policy scope. Do not publish its policy vocabulary as an audit.
+			quotedOrInertSuppressed = true
+			continue
+		}
 		origin := findingOriginForSegment(group.refs[0].segment)
 		roleOwnedWrapper := profiledRoleOwnedWrapper(candidate, origin)
 		if !group.activeDirective && !roleOwnedWrapper &&
@@ -1570,11 +2013,12 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 				ref.index > recoveredActivationAt &&
 				profiledEmbeddedMaterialCancellation(c, strings.ToLower(segment.Text)) {
 				for cancelledField := range activeRecoveredFields {
-					proof := groupRecoveryProofs[cancelledField]
-					proof.cancelled = true
-					groupRecoveryProofs[cancelledField] = proof
-					if activationProofs != nil && *activationProofs != nil {
-						(*activationProofs)[cancelledField] = proof
+					if proof, hasProof := groupRecoveryProofs[cancelledField]; hasProof {
+						proof.cancelled = true
+						groupRecoveryProofs[cancelledField] = proof
+						if activationProofs != nil && *activationProofs != nil {
+							(*activationProofs)[cancelledField] = proof
+						}
 					}
 				}
 				clear(activeRecoveredFields)
@@ -1582,6 +2026,37 @@ func (c *Classifier) bestProfiledCurrentNaturalLanguageCandidate(
 				recoveredActivationRef = profiledSegmentRef{}
 				hasRecoveredActivation = false
 				recoveredActivationAt = -1
+			}
+			if referent, reactivated, proofComplete :=
+				profiledTerminalSkillActivationReferent(segment.Text); !proofComplete {
+				pendingClassifierIncomplete.rememberField(CoverageReasonClassifierWindow, ref)
+			} else if reactivated {
+				candidate, promoted, complete := c.profiledTerminalSkillActivationCandidate(
+					referent, ref, mode, thresholds, policy,
+				)
+				if !complete {
+					reason := CoverageReasonClassifierWindow
+					if candidate.Truncated && classifierIncompleteCoverageReason(
+						classifierIncompleteReason(candidate),
+					) {
+						reason = classifierIncompleteReason(candidate)
+					}
+					pendingClassifierIncomplete.rememberField(reason, ref)
+				} else if promoted {
+					recoveredThisField = true
+					if !hasRecoveredActivation || roleResultBetter(candidate, recoveredActivation) {
+						recoveredActivation = candidate
+						recoveredActivationRef = ref
+					}
+					hasRecoveredActivation = true
+					if activeRecoveredFields == nil {
+						activeRecoveredFields = make(map[int]struct{})
+					}
+					activeRecoveredFields[ref.index] = struct{}{}
+					if ref.index > recoveredActivationAt {
+						recoveredActivationAt = ref.index
+					}
+				}
 			}
 			if duplicateIndependentField {
 				// Classification is byte-identical, but recovery/cancellation is
@@ -2056,6 +2531,1001 @@ func (c *Classifier) quotedSafetyReviewReactivationReferent(text string) (string
 	}
 	referent, ok := quotedSafetyReviewSpanContent(text, quoted)
 	return referent, ok
+}
+
+const profiledTerminalSkillActivationSuffix = "install and activate the skill above. execute its default workflow now."
+const profiledTerminalSkillLogicalLineSeparators = "\n\r\u0085\u2028\u2029"
+
+func profiledTerminalSkillLogicalLineBreak(value rune) bool {
+	switch value {
+	case '\n', '\r', '\u0085', '\u2028', '\u2029':
+		return true
+	default:
+		return false
+	}
+}
+
+func profiledTerminalSkillActivationIndentColumns(text string, activationStart int) (int, bool) {
+	if activationStart <= 0 || activationStart > len(text) {
+		return 0, false
+	}
+	lineStart := 0
+	foundCommonMarkLineBreak := false
+	for cursor := activationStart; cursor > 0; {
+		value, width := utf8.DecodeLastRuneInString(text[:cursor])
+		if value == '\n' || value == '\r' {
+			lineStart = cursor
+			foundCommonMarkLineBreak = true
+			break
+		}
+		if profiledTerminalSkillLogicalLineBreak(value) {
+			return 0, false
+		}
+		cursor -= width
+	}
+	if !foundCommonMarkLineBreak {
+		return 0, false
+	}
+	column := 0
+	for index := lineStart; index < activationStart; index++ {
+		switch text[index] {
+		case ' ':
+			column++
+		case '\t':
+			column += 4 - column%4
+		default:
+			return 0, false
+		}
+	}
+	return column, true
+}
+
+func profiledTerminalSkillASCIIIndentColumns(line string) (int, int) {
+	index := 0
+	column := 0
+	for index < len(line) && (line[index] == ' ' || line[index] == '\t') {
+		if line[index] == ' ' {
+			column++
+		} else {
+			column += 4 - column%4
+		}
+		index++
+	}
+	return column, index
+}
+
+type profiledTerminalSkillListMarker struct {
+	markerIndent    int
+	contentIndent   int
+	contentStart    int
+	ordered         bool
+	startsAtOne     bool
+	empty           bool
+	indentedContent bool
+}
+
+func profiledTerminalSkillListMarkerIndents(
+	line string,
+) (profiledTerminalSkillListMarker, bool) {
+	marker := profiledTerminalSkillListMarker{}
+	markerIndent, index := profiledTerminalSkillASCIIIndentColumns(line)
+	marker.markerIndent = markerIndent
+	markerStart := index
+	if index < len(line) && (line[index] == '-' || line[index] == '+' || line[index] == '*') {
+		index++
+	} else {
+		marker.ordered = true
+		orderedValue := 0
+		digits := 0
+		for index < len(line) && line[index] >= '0' && line[index] <= '9' && digits < 9 {
+			orderedValue = orderedValue*10 + int(line[index]-'0')
+			index++
+			digits++
+		}
+		if digits == 0 || index >= len(line) ||
+			(line[index] != '.' && line[index] != ')') {
+			return profiledTerminalSkillListMarker{}, false
+		}
+		marker.startsAtOne = orderedValue == 1
+		index++
+	}
+	column := markerIndent + index - markerStart
+	markerColumn := column
+	if index == len(line) {
+		marker.contentIndent = markerColumn + 1
+		marker.contentStart = index
+		marker.empty = true
+		return marker, true
+	}
+	if line[index] != ' ' && line[index] != '\t' {
+		return profiledTerminalSkillListMarker{}, false
+	}
+	for index < len(line) && (line[index] == ' ' || line[index] == '\t') {
+		if line[index] == ' ' {
+			column++
+		} else {
+			column += 4 - column%4
+		}
+		index++
+	}
+	if index == len(line) {
+		marker.contentIndent = markerColumn + 1
+		marker.contentStart = index
+		marker.empty = true
+		return marker, true
+	}
+	if column-markerColumn > 4 {
+		marker.contentIndent = markerColumn + 1
+		marker.contentStart = index
+		marker.indentedContent = true
+	} else {
+		marker.contentIndent = column
+		marker.contentStart = index
+	}
+	return marker, true
+}
+
+func profiledTerminalSkillHTMLBlockInterrupt(rest string) bool {
+	lower := strings.ToLower(rest)
+	for _, prefix := range []string{"<!--", "<?"} {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	if strings.HasPrefix(rest, "<![CDATA[") {
+		return true
+	}
+	if len(rest) >= 2 && rest[0] == '<' && rest[1] == '!' {
+		return rest[1] == '!' && len(rest) >= 3 && rest[2] >= 'A' && rest[2] <= 'Z'
+	}
+	for _, tag := range []string{"script", "pre", "style", "textarea"} {
+		prefix := "<" + tag
+		if strings.HasPrefix(lower, prefix) &&
+			(len(lower) == len(prefix) || lower[len(prefix)] == ' ' ||
+				lower[len(prefix)] == '\t' || lower[len(prefix)] == '>') {
+			return true
+		}
+	}
+	index := 1
+	if index < len(lower) && lower[index] == '/' {
+		index++
+	}
+	start := index
+	for index < len(lower) && lower[index] >= 'a' && lower[index] <= 'z' ||
+		index < len(lower) && lower[index] >= '0' && lower[index] <= '9' {
+		index++
+	}
+	if index == start {
+		return false
+	}
+	tag := lower[start:index]
+	blockTag := false
+	for _, candidate := range []string{
+		"address", "article", "aside", "base", "basefont", "blockquote", "body",
+		"caption", "center", "col", "colgroup", "dd", "details", "dialog", "dir",
+		"div", "dl", "dt", "fieldset", "figcaption", "figure", "footer", "form",
+		"frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head",
+		"header", "hr", "html", "iframe", "legend", "li", "link", "main", "menu",
+		"menuitem", "nav", "noframes", "ol", "optgroup", "option", "p", "param",
+		"search", "section", "summary", "table", "tbody", "td", "tfoot", "th",
+		"thead", "title", "tr", "track", "ul",
+	} {
+		if tag == candidate {
+			blockTag = true
+			break
+		}
+	}
+	if !blockTag {
+		return false
+	}
+	if index == len(lower) {
+		return true
+	}
+	return lower[index] == ' ' || lower[index] == '\t' || lower[index] == '>' ||
+		lower[index] == '/' && index+1 < len(lower) && lower[index+1] == '>'
+}
+
+func profiledTerminalSkillCommonMarkBlockInterrupt(line string, indent int) bool {
+	if indent > 3 {
+		return false
+	}
+	_, index := profiledTerminalSkillASCIIIndentColumns(line)
+	if index >= len(line) {
+		return false
+	}
+	rest := line[index:]
+	switch rest[0] {
+	case '#':
+		run := 0
+		for run < len(rest) && rest[run] == '#' {
+			run++
+		}
+		return run <= 6 && (run == len(rest) || rest[run] == ' ' || rest[run] == '\t')
+	case '>':
+		return true
+	case '`', '~':
+		_, _, _, _, opening := profiledStructuredMarkdownFenceOpening(line, index)
+		return opening
+	case '<':
+		return profiledTerminalSkillHTMLBlockInterrupt(rest)
+	case '-', '*', '_':
+		markers := 0
+		for index := 0; index < len(rest); index++ {
+			if rest[index] == rest[0] {
+				markers++
+				continue
+			}
+			if rest[index] != ' ' && rest[index] != '\t' {
+				return false
+			}
+		}
+		return markers >= 3
+	default:
+		return false
+	}
+}
+
+func profiledTerminalSkillCommonMarkSetextUnderline(line string) bool {
+	indent, index := profiledTerminalSkillASCIIIndentColumns(line)
+	if indent > 3 || index >= len(line) || line[index] != '=' && line[index] != '-' {
+		return false
+	}
+	marker := line[index]
+	markers := 0
+	for index < len(line) && line[index] == marker {
+		markers++
+		index++
+	}
+	if markers == 0 {
+		return false
+	}
+	for index < len(line) {
+		if line[index] != ' ' && line[index] != '\t' {
+			return false
+		}
+		index++
+	}
+	return true
+}
+
+func profiledTerminalSkillByteOffsetAtIndent(line string, target int) (int, bool) {
+	if target < 0 {
+		return 0, false
+	}
+	column := 0
+	index := 0
+	for index < len(line) && column < target {
+		switch line[index] {
+		case ' ':
+			column++
+		case '\t':
+			column += 4 - column%4
+		default:
+			return 0, false
+		}
+		index++
+	}
+	return index, column == target
+}
+
+func profiledTerminalSkillCommonMarkFenceOpening(line string) (int, bool) {
+	indent, index := profiledTerminalSkillASCIIIndentColumns(line)
+	if indent > 3 || index >= len(line) {
+		return 0, false
+	}
+	_, _, _, _, opening := profiledStructuredMarkdownFenceOpening(line, index)
+	return index, opening
+}
+
+func profiledTerminalSkillCommonMarkBlockquote(line string, indent int) bool {
+	if indent > 3 {
+		return false
+	}
+	_, index := profiledTerminalSkillASCIIIndentColumns(line)
+	return index < len(line) && line[index] == '>'
+}
+
+type profiledTerminalSkillParagraphState uint8
+
+const (
+	profiledTerminalSkillParagraphClosed profiledTerminalSkillParagraphState = iota
+	profiledTerminalSkillParagraphOpen
+	profiledTerminalSkillParagraphUnknown
+)
+
+func profiledTerminalSkillPreviousParagraphListIndent(text string) (int, bool, bool) {
+	var listItems [64]struct {
+		indent     int
+		hasContent bool
+	}
+	listDepth := 0
+	paragraphState := profiledTerminalSkillParagraphClosed
+	inIndentedCode := false
+	indentedCodeBase := 0
+
+	containedDepth := func(indent int) int {
+		depth := listDepth
+		for depth > 0 && indent < listItems[depth-1].indent {
+			depth--
+		}
+		return depth
+	}
+	containerLineAtDepth := func(line string, depth int) (string, int, int, bool) {
+		base := 0
+		if depth > 0 {
+			base = listItems[depth-1].indent
+		}
+		offset, complete := profiledTerminalSkillByteOffsetAtIndent(line, base)
+		if !complete {
+			return "", 0, 0, false
+		}
+		containerLine := line[offset:]
+		indent, _ := profiledTerminalSkillASCIIIndentColumns(containerLine)
+		return containerLine, indent, offset, true
+	}
+	setListContentState := func(
+		line string,
+		baseIndent int,
+	) (profiledTerminalSkillParagraphState, bool, bool) {
+		indent, marker := profiledTerminalSkillASCIIIndentColumns(line)
+		if marker >= len(line) {
+			return profiledTerminalSkillParagraphClosed, false, true
+		}
+		if indent >= 4 {
+			indentedCodeBase = baseIndent
+			return profiledTerminalSkillParagraphClosed, true, true
+		}
+		if line[marker] == '<' &&
+			profiledTerminalSkillHTMLBlockInterrupt(line[marker:]) {
+			return profiledTerminalSkillParagraphUnknown, false, false
+		}
+		if _, opening := profiledTerminalSkillCommonMarkFenceOpening(line); opening {
+			return profiledTerminalSkillParagraphUnknown, false, false
+		}
+		if profiledTerminalSkillCommonMarkBlockInterrupt(line, indent) {
+			if profiledTerminalSkillCommonMarkBlockquote(line, indent) {
+				return profiledTerminalSkillParagraphUnknown, false, true
+			}
+			return profiledTerminalSkillParagraphClosed, false, true
+		}
+		return profiledTerminalSkillParagraphOpen, false, true
+	}
+
+	for lineStart := 0; lineStart < len(text); {
+		lineEnd, nextLine := profiledStructuredLineEnd(text, lineStart)
+		line := text[lineStart:lineEnd]
+		if profiledStructuredASCIIWhitespaceLine(line) {
+			for listDepth > 0 && !listItems[listDepth-1].hasContent {
+				listDepth--
+			}
+			paragraphState = profiledTerminalSkillParagraphClosed
+		} else {
+			lineIndent, _ := profiledTerminalSkillASCIIIndentColumns(line)
+			if listDepth > 0 && lineIndent >= listItems[listDepth-1].indent {
+				listItems[listDepth-1].hasContent = true
+			}
+			if inIndentedCode {
+				if lineIndent >= indentedCodeBase+4 {
+					paragraphState = profiledTerminalSkillParagraphClosed
+					if nextLine <= lineStart {
+						break
+					}
+					lineStart = nextLine
+					continue
+				}
+				inIndentedCode = false
+				paragraphState = profiledTerminalSkillParagraphClosed
+			}
+
+			depthAtIndent := containedDepth(lineIndent)
+			if paragraphState == profiledTerminalSkillParagraphClosed {
+				listDepth = depthAtIndent
+			}
+			inspectionDepth := listDepth
+			if depthAtIndent < inspectionDepth {
+				inspectionDepth = depthAtIndent
+			}
+			containerLine, containerIndent, containerOffset, offsetComplete :=
+				containerLineAtDepth(line, inspectionDepth)
+			if !offsetComplete {
+				return 0, false, false
+			}
+			_, containerMarker := profiledTerminalSkillASCIIIndentColumns(containerLine)
+
+			if paragraphState == profiledTerminalSkillParagraphClosed &&
+				containerIndent >= 4 {
+				inIndentedCode = true
+				indentedCodeBase = 0
+				if listDepth > 0 {
+					indentedCodeBase = listItems[listDepth-1].indent
+				}
+				if nextLine <= lineStart {
+					break
+				}
+				lineStart = nextLine
+				continue
+			}
+
+			if containerIndent <= 3 && containerMarker < len(containerLine) &&
+				containerLine[containerMarker] == '<' &&
+				profiledTerminalSkillHTMLBlockInterrupt(containerLine[containerMarker:]) {
+				return 0, false, false
+			}
+			if fenceMarker, fenceOpening :=
+				profiledTerminalSkillCommonMarkFenceOpening(containerLine); fenceOpening {
+				if inspectionDepth > 0 {
+					return 0, false, false
+				}
+				absoluteMarker := lineStart + containerOffset + fenceMarker
+				listDepth = inspectionDepth
+				spanEnd, spanComplete := profiledStructuredMarkdownFenceSpanEnd(
+					text, absoluteMarker,
+				)
+				if !spanComplete {
+					return 0, false, false
+				}
+				_, followingLine := profiledStructuredLineEnd(text, spanEnd)
+				lineStart = followingLine
+				paragraphState = profiledTerminalSkillParagraphClosed
+				inIndentedCode = false
+				continue
+			}
+
+			blockInterrupt := profiledTerminalSkillCommonMarkBlockInterrupt(
+				containerLine, containerIndent,
+			)
+			setextUnderline := paragraphState == profiledTerminalSkillParagraphOpen &&
+				profiledTerminalSkillCommonMarkSetextUnderline(containerLine)
+			if setextUnderline && inspectionDepth < listDepth {
+				return 0, false, false
+			}
+			if blockInterrupt || setextUnderline {
+				listDepth = inspectionDepth
+				if blockInterrupt &&
+					profiledTerminalSkillCommonMarkBlockquote(containerLine, containerIndent) {
+					paragraphState = profiledTerminalSkillParagraphUnknown
+				} else {
+					paragraphState = profiledTerminalSkillParagraphClosed
+				}
+				if nextLine <= lineStart {
+					break
+				}
+				lineStart = nextLine
+				continue
+			}
+
+			marker, hasMarker := profiledTerminalSkillListMarkerIndents(line)
+			if hasMarker {
+				markerDepth := listDepth
+				for markerDepth > 0 && marker.markerIndent < listItems[markerDepth-1].indent {
+					markerDepth--
+				}
+				validMarker := markerDepth == 0 && marker.markerIndent <= 3 ||
+					markerDepth > 0 && marker.markerIndent >= listItems[markerDepth-1].indent &&
+						marker.markerIndent <= listItems[markerDepth-1].indent+3
+				requiresInterruptDecision := marker.empty ||
+					marker.ordered && !marker.startsAtOne
+				if validMarker && markerDepth == listDepth && requiresInterruptDecision {
+					switch paragraphState {
+					case profiledTerminalSkillParagraphOpen:
+						validMarker = false
+					case profiledTerminalSkillParagraphUnknown:
+						return 0, false, false
+					case profiledTerminalSkillParagraphClosed:
+						// This marker can begin a new list block.
+					default:
+						return 0, false, false
+					}
+				}
+				if validMarker {
+					listDepth = markerDepth
+					contentOffset := marker.contentStart
+					contentIndent := marker.contentIndent
+					empty := marker.empty
+					indentedContent := marker.indentedContent
+					for {
+						if listDepth == len(listItems) {
+							return 0, false, false
+						}
+						listItems[listDepth] = struct {
+							indent     int
+							hasContent bool
+						}{indent: contentIndent, hasContent: !empty}
+						listDepth++
+						if empty {
+							paragraphState = profiledTerminalSkillParagraphClosed
+							inIndentedCode = false
+							break
+						}
+						if indentedContent {
+							paragraphState = profiledTerminalSkillParagraphClosed
+							inIndentedCode = true
+							indentedCodeBase = contentIndent
+							break
+						}
+
+						contentLine := line[contentOffset:]
+						lineContentIndent, contentMarker :=
+							profiledTerminalSkillASCIIIndentColumns(contentLine)
+						if lineContentIndent <= 3 && contentMarker < len(contentLine) &&
+							contentLine[contentMarker] == '<' &&
+							profiledTerminalSkillHTMLBlockInterrupt(contentLine[contentMarker:]) {
+							return 0, false, false
+						}
+						if _, opening := profiledTerminalSkillCommonMarkFenceOpening(contentLine); opening {
+							return 0, false, false
+						}
+						nested, nestedMarker := profiledTerminalSkillListMarkerIndents(contentLine)
+						if !nestedMarker || nested.markerIndent > 3 ||
+							profiledTerminalSkillCommonMarkBlockInterrupt(
+								contentLine, lineContentIndent,
+							) {
+							var stateComplete bool
+							paragraphState, inIndentedCode, stateComplete =
+								setListContentState(contentLine, contentIndent)
+							if !stateComplete {
+								return 0, false, false
+							}
+							break
+						}
+						contentOffset += nested.contentStart
+						contentIndent += nested.contentIndent
+						empty = nested.empty
+						indentedContent = nested.indentedContent
+					}
+					if nextLine <= lineStart {
+						break
+					}
+					lineStart = nextLine
+					continue
+				}
+			}
+
+			if paragraphState == profiledTerminalSkillParagraphUnknown &&
+				depthAtIndent < listDepth {
+				return 0, false, false
+			}
+			switch paragraphState {
+			case profiledTerminalSkillParagraphOpen:
+				// Ordinary under-indented text is a lazy continuation of the
+				// currently open list-item paragraph.
+			case profiledTerminalSkillParagraphUnknown:
+				// Lazy blockquote ownership remains unknown until a blank or a
+				// proven block boundary.
+			case profiledTerminalSkillParagraphClosed:
+				listDepth = depthAtIndent
+				_, _, _, ordinaryComplete := containerLineAtDepth(line, listDepth)
+				if !ordinaryComplete {
+					return 0, false, false
+				}
+				paragraphState = profiledTerminalSkillParagraphOpen
+			default:
+				return 0, false, false
+			}
+		}
+		if nextLine <= lineStart {
+			break
+		}
+		lineStart = nextLine
+	}
+	if listDepth == 0 {
+		return 0, false, true
+	}
+	return listItems[listDepth-1].indent, true, true
+}
+
+func profiledTerminalSkillActivationIndentedCodeLine(
+	text string,
+	previousParagraphEnd int,
+	activationStart int,
+) (bool, bool) {
+	indent, valid := profiledTerminalSkillActivationIndentColumns(text, activationStart)
+	if !valid || indent < 4 {
+		return false, true
+	}
+	if previousParagraphEnd > 0 && previousParagraphEnd <= activationStart &&
+		activationStart <= len(text) {
+		listIndent, listItem, complete := profiledTerminalSkillPreviousParagraphListIndent(
+			text[:activationStart],
+		)
+		if !complete {
+			return false, false
+		}
+		if listItem && indent >= listIndent && indent < listIndent+4 {
+			return false, true
+		}
+	}
+	return true, true
+}
+
+// profiledTerminalSkillActivationReferent recognizes one deliberately narrow
+// same-field transition used by long pasted skill/prompt carriers. The exact,
+// terminal, blank-line-delimited current-user speech act is kept separate from
+// the earlier carrier:
+// it may supply referent ownership and execution authority, but never a score,
+// category, harmful core, or malicious axis. Short fields remain on the normal
+// classifier path, while over-budget or structurally unprovable lookalikes are
+// reported as incomplete by the callers rather than guessed into a block.
+func profiledTerminalSkillActivationReferent(text string) (string, bool, bool) {
+	referentEnd, trimmedEnd, matched := profiledTerminalSkillActivationBounds(text)
+	if !matched {
+		return "", false, true
+	}
+	if referentEnd <= 0 {
+		return "", false, true
+	}
+	separatorStart := referentEnd
+	for separatorStart > 0 {
+		separator, width := utf8.DecodeLastRuneInString(text[:separatorStart])
+		if !unicode.IsSpace(separator) {
+			break
+		}
+		separatorStart -= width
+	}
+	if separatorStart == referentEnd || separatorStart == 0 {
+		return "", false, true
+	}
+	lineBreaks := 0
+	for index := separatorStart; index < referentEnd; {
+		separator, width := utf8.DecodeRuneInString(text[index:referentEnd])
+		if separator == '\r' {
+			if index+width >= referentEnd || text[index+width] != '\n' {
+				lineBreaks++
+			}
+		} else if profiledTerminalSkillLogicalLineBreak(separator) {
+			lineBreaks++
+		}
+		index += width
+	}
+	if lineBreaks < 2 {
+		return "", false, true
+	}
+	// A top-level blank line followed by four indentation columns is a
+	// CommonMark indented code block, not an independent current-user execution
+	// sentence. Inside a list item the threshold is four columns beyond that
+	// item's content indent; keep ordinary list-continuation paragraphs active.
+	indentedCode, indentationComplete := profiledTerminalSkillActivationIndentedCodeLine(
+		text, separatorStart, referentEnd,
+	)
+	if !indentationComplete {
+		return "", false, false
+	}
+	if indentedCode {
+		return "", false, true
+	}
+	referent := strings.TrimSpace(text[:referentEnd])
+	if len(referent) <= maxProfiledIndependentWindowBytes {
+		return "", false, true
+	}
+	if len(referent) > maxInertQuotedReviewReferentBytes {
+		return "", false, false
+	}
+	if profiledTerminalSkillActivationHasExplanatoryGovernor(text[:separatorStart]) {
+		return "", false, true
+	}
+	trimmed := text[:trimmedEnd]
+	spans, complete := profiledStructuredQuoteSpans(trimmed)
+	if !complete {
+		return "", false, false
+	}
+	if !profiledRangeOutsideStructuredQuoteSpans(
+		spans, referentEnd, len(trimmed),
+	) {
+		return "", false, true
+	}
+	return referent, true, true
+}
+
+func profiledTerminalSkillActivationHasExplanatoryGovernor(prefix string) bool {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return false
+	}
+	if index := strings.LastIndexAny(prefix, profiledTerminalSkillLogicalLineSeparators); index >= 0 {
+		_, width := utf8.DecodeRuneInString(prefix[index:])
+		prefix = strings.TrimSpace(prefix[index+width:])
+	}
+	line := strings.ToLower(strings.Join(strings.Fields(prefix), " "))
+	if line == "" {
+		return false
+	}
+	return profiledTerminalSkillActivationExplicitExplanationGovernor(line)
+}
+
+// profiledTerminalSkillActivationExplicitExplanationGovernor accepts only an
+// ordered, forward-looking explanation grammar. Keeping the action at the
+// sentence head and the referenced object immediately after it prevents
+// unrelated carrier endings such as "End of sample" or "reference text" from
+// laundering the separate terminal execution speech act.
+func profiledTerminalSkillActivationExplicitExplanationGovernor(line string) bool {
+	for pass := 0; pass < 2; pass++ {
+		before := line
+		for _, prefix := range []string{
+			"for defensive review only, ", "for security review only, ", "for safety review only, ",
+			"for defensive analysis only, ", "for security analysis only, ", "for safety analysis only, ",
+			"for defensive review, ", "for security review, ", "for safety review, ",
+			"for defensive analysis, ", "for security analysis, ", "for safety analysis, ",
+			"for review only, ", "for analysis only, ", "for review, ", "for analysis, ",
+			"can you please ", "could you please ", "would you please ", "will you please ",
+			"can you kindly ", "could you kindly ", "would you kindly ", "will you kindly ",
+			"can you ", "could you ", "would you ", "will you ", "please ", "kindly ",
+		} {
+			if strings.HasPrefix(line, prefix) {
+				line = strings.TrimSpace(line[len(prefix):])
+				break
+			}
+		}
+		if line == before {
+			break
+		}
+	}
+	rest := ""
+	repeatAction := false
+	for _, action := range []string{
+		"explain ", "analyze ", "analyse ", "review ", "inspect ",
+		"assess ", "evaluate ", "audit ", "classify ", "describe ",
+		"quote ", "cite ", "repeat ", "transcribe ", "summarize ",
+		"summarise ", "document ", "perform a security review of ",
+		"perform a safety review of ", "perform a risk assessment of ",
+		"conduct a security review of ", "conduct a safety review of ",
+		"conduct a risk assessment of ",
+	} {
+		if strings.HasPrefix(line, action) {
+			rest = strings.TrimSpace(line[len(action):])
+			repeatAction = action == "repeat "
+			break
+		}
+	}
+	if rest == "" {
+		return false
+	}
+	if repeatAction && !profiledTerminalSkillActivationRepeatExplanationObject(rest) {
+		return false
+	}
+	return profiledTerminalSkillActivationForwardExplanationObject(rest)
+}
+
+func profiledTerminalSkillActivationRepeatExplanationObject(rest string) bool {
+	for _, object := range []string{"this sentence", "this phrase", "this text"} {
+		if strings.HasPrefix(rest, object) && strings.TrimSpace(rest[len(object):]) == ":" {
+			return true
+		}
+	}
+	for _, object := range []string{
+		"this sentence below", "this phrase below", "this text below",
+		"the sentence below", "the phrase below", "the text below",
+		"sentence below", "phrase below", "text below",
+		"the following sentence", "the following phrase", "the following text",
+		"following sentence", "following phrase", "following text",
+	} {
+		if !strings.HasPrefix(rest, object) {
+			continue
+		}
+		tail := strings.TrimSpace(rest[len(object):])
+		if tail == "" || strings.Trim(tail, ":;,.!?") == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func profiledTerminalSkillActivationForwardExplanationObject(rest string) bool {
+	for _, object := range []string{
+		"this command", "this sentence", "this phrase", "this text",
+		"this request", "this prompt", "this instruction", "this workflow",
+	} {
+		if strings.HasPrefix(rest, object) && strings.TrimSpace(rest[len(object):]) == ":" {
+			return true
+		}
+	}
+	for _, object := range []string{
+		"this command below", "this sentence below", "this phrase below", "this text below",
+		"this request below", "this prompt below", "this instruction below", "this workflow below",
+		"the command below", "the sentence below", "the phrase below", "the text below",
+		"the request below", "the prompt below", "the instruction below", "the workflow below",
+		"command below", "sentence below", "phrase below", "text below",
+		"request below", "prompt below", "instruction below", "workflow below",
+		"the following command", "the following sentence", "the following phrase",
+		"the following text", "the following request", "the following prompt",
+		"the following instruction", "the following workflow",
+		"following command", "following sentence", "following phrase", "following text",
+		"following request", "following prompt", "following instruction", "following workflow",
+	} {
+		if !strings.HasPrefix(rest, object) {
+			continue
+		}
+		tail := strings.TrimSpace(rest[len(object):])
+		if tail == "" || strings.Trim(tail, ":;,.!?") == "" {
+			return true
+		}
+	}
+	return false
+}
+
+func profiledTerminalSkillActivationBounds(text string) (int, int, bool) {
+	trimmed := strings.TrimRightFunc(text, unicode.IsSpace)
+	if len(trimmed) < len(profiledTerminalSkillActivationSuffix) {
+		return 0, len(trimmed), false
+	}
+	start := len(trimmed) - len(profiledTerminalSkillActivationSuffix)
+	if !strings.EqualFold(
+		trimmed[start:], profiledTerminalSkillActivationSuffix,
+	) {
+		return 0, len(trimmed), false
+	}
+	return start, len(trimmed), true
+}
+
+func profiledTerminalSkillActivationBytesMayMatch(text []byte) bool {
+	end := len(text)
+	for end > 0 {
+		value, width := utf8.DecodeLastRune(text[:end])
+		if !unicode.IsSpace(value) {
+			break
+		}
+		end -= width
+	}
+	if end < len(profiledTerminalSkillActivationSuffix) {
+		return false
+	}
+	start := end - len(profiledTerminalSkillActivationSuffix)
+	for index := range len(profiledTerminalSkillActivationSuffix) {
+		value := text[start+index]
+		if value >= 'A' && value <= 'Z' {
+			value += 'a' - 'A'
+		}
+		if value != profiledTerminalSkillActivationSuffix[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func profiledTerminalSkillActivationMayPromote(
+	result Result,
+	thresholds Thresholds,
+) bool {
+	if result.Truncated || result.Category == "" ||
+		result.Coverage.State != "" && result.Coverage.State != CoverageComplete ||
+		result.Score < validThresholdsOrDefault(thresholds).BalancedBlock ||
+		result.BlockEligibility == nil || result.DecisionExplanation == nil ||
+		len(result.EvidenceOccurrences) == 0 {
+		return false
+	}
+	eligibility := *result.BlockEligibility
+	const allowedReasons = EligibilityReasonNoCurrentDirective |
+		EligibilityReasonQuotedOrAnalytical |
+		EligibilityReasonDefensivePurpose
+	if !eligibility.InspectionComplete || !eligibility.EvidenceOwnedByCurrentUser ||
+		eligibility.EnforcementScope != EnforcementScopeCurrentUser ||
+		eligibility.CurrentExecutionActProven || !eligibility.HarmfulCoreComplete ||
+		!eligibility.OperationallyActionable ||
+		eligibility.AuthorizationClaim != AuthorizationConflicting ||
+		!candidateEligibilityHasPositiveMaliceAxis(eligibility) ||
+		eligibility.CrossScopeComposition || !eligibility.ReferentProofComplete ||
+		eligibility.EvidenceAmbiguous || eligibility.Eligible ||
+		eligibility.ReasonFlags&^allowedReasons != 0 ||
+		eligibility.ReasonFlags&EligibilityReasonNoCurrentDirective == 0 ||
+		eligibility.ReasonFlags&(EligibilityReasonQuotedOrAnalytical|
+			EligibilityReasonDefensivePurpose) == 0 {
+		return false
+	}
+	explanation := result.DecisionExplanation
+	return explanation.WinningRuleID != "" &&
+		explanation.WinningCategory == string(result.Category) &&
+		explanation.CorePredicateComplete &&
+		explanation.EvidenceOccurrenceCount == len(result.EvidenceOccurrences)
+}
+
+func profiledTerminalSkillActivatedMetaCandidate(
+	result Result,
+	thresholds Thresholds,
+) bool {
+	thresholds = validThresholdsOrDefault(thresholds)
+	if result.Truncated ||
+		result.Coverage.State != "" && result.Coverage.State != CoverageComplete ||
+		result.Category != rules.CategoryEvasion ||
+		result.Score < thresholds.HardBlock || result.BlockEligibility == nil ||
+		result.DecisionExplanation == nil || len(result.EvidenceOccurrences) == 0 ||
+		!resultContainsRuleID(result, metaOverrideRuleID) {
+		return false
+	}
+	eligibility := *result.BlockEligibility
+	if !eligibility.Eligible || !eligibility.InspectionComplete ||
+		!eligibility.EvidenceOwnedByCurrentUser ||
+		eligibility.EnforcementScope != EnforcementScopeCurrentUser ||
+		!eligibility.CurrentExecutionActProven || !eligibility.HarmfulCoreComplete ||
+		!eligibility.OperationallyActionable ||
+		eligibility.AuthorizationClaim != AuthorizationAbsent ||
+		!eligibility.SecurityControlEvasion || eligibility.ExplicitVictimOrNonConsent ||
+		eligibility.CovertAcquisition || eligibility.ExfiltrationOrTakeover ||
+		eligibility.MaliciousPersistence || eligibility.DestructiveOutcome ||
+		eligibility.DefensiveScopeConflict || eligibility.QuotedOrAnalyticalScope ||
+		eligibility.CrossScopeComposition || !eligibility.ReferentProofComplete ||
+		eligibility.EvidenceAmbiguous {
+		return false
+	}
+	explanation := result.DecisionExplanation
+	if explanation.WinningRuleID != metaOverrideRuleID ||
+		explanation.WinningCategory != string(rules.CategoryEvasion) ||
+		!explanation.CorePredicateComplete ||
+		explanation.EvidenceOccurrenceCount != len(result.EvidenceOccurrences) {
+		return false
+	}
+	for _, evidence := range result.Evidence {
+		if evidence.ID == metaOverrideTerminalSkillControlCarrierEvidenceID &&
+			evidence.Kind == "meta_override" {
+			return resultHasEligibleMaliciousWinner(result, thresholds)
+		}
+	}
+	return false
+}
+
+func (c *Classifier) profiledTerminalSkillActivationCandidate(
+	referent string,
+	ref profiledSegmentRef,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) (Result, bool, bool) {
+	if c == nil || referent == "" ||
+		!profiledTrustedCurrentUserNaturalLanguageDirective(ref.segment) ||
+		ref.segment.ScopeID == 0 || ref.segment.FieldPathHash == "" {
+		return Result{}, false, true
+	}
+	ownerState, complete := c.profiledCarrierExplicitActivationOwnerState(ref.segment)
+	if !complete {
+		return Result{}, false, false
+	}
+	if ownerState.disposition(profiledCarrierActivationPrevious) !=
+		quotedReviewContinuationActive {
+		return Result{}, false, true
+	}
+	candidate := c.classifyWithPolicy(
+		[]string{referent}, mode, thresholds, policy, false,
+	)
+	if candidate.Truncated ||
+		candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete {
+		return candidate, false, false
+	}
+	candidate = withRoleAwareFindingOrigin(
+		candidate, FindingOriginUserContent, mode, thresholds,
+	)
+	c.annotateProfiledResult(
+		&candidate, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
+	)
+	if !profiledTerminalSkillActivationMayPromote(candidate, thresholds) {
+		if candidate.Category != "" {
+			return candidate, false, true
+		}
+		activatedMeta := c.classifyActivatedTerminalSkillMetaReferentWithPolicy(
+			referent, mode, thresholds, policy,
+		)
+		if activatedMeta.Truncated ||
+			activatedMeta.Coverage.State != "" && activatedMeta.Coverage.State != CoverageComplete {
+			return activatedMeta, false, false
+		}
+		activatedMeta = withRoleAwareFindingOrigin(
+			activatedMeta, FindingOriginUserContent, mode, thresholds,
+		)
+		c.annotateProfiledResult(
+			&activatedMeta, []profiledSegmentRef{ref}, false, policy, mode, thresholds,
+		)
+		if !profiledTerminalSkillActivatedMetaCandidate(activatedMeta, thresholds) {
+			return candidate, false, true
+		}
+		candidate = activatedMeta
+	}
+	markResultReferentActivated(&candidate, true, true, mode, thresholds)
+	bindResultCandidateReferentAnchor(&candidate, ref, true, mode, thresholds)
+	if candidate.DecisionExplanation != nil {
+		candidate.DecisionExplanation.CurrentTurnEvidence = true
+		candidate.DecisionExplanation.ReferentLinkUsed = true
+		candidate.DecisionExplanation.EvidenceSegmentCount = 1
+	}
+	promoted := resultHasEligibleMaliciousWinner(candidate, thresholds) &&
+		candidate.CandidateIdentityBlockingProofComplete()
+	return candidate, promoted, true
 }
 
 func (c *Classifier) profiledProofUnavailableResult(
@@ -3059,6 +4529,688 @@ func profiledRequestLocalSystemDirective(segment extract.Segment) bool {
 	return enforcementScopeForSegment(segment) == EnforcementScopeRequestLocalSystem
 }
 
+// profiledClearNonUserSafetySegment is only the cheap structural and linguistic
+// admission gate for a possible whole-field suppression. It is never sufficient
+// on its own: the complete field must first be classified and
+// profiledNonUserSafetySuppressionProven must prove that no eligible malicious
+// occurrence survived. This prevents an attacker from escaping classification
+// by choosing an unenumerated negation-reversal governor.
+func profiledClearNonUserSafetySegment(segment extract.Segment) bool {
+	return profiledNonUserSafetyCandidate(segment) &&
+		isClearNonUserSafetyContent(segment.Role, segment.Text)
+}
+
+func (c *Classifier) profiledNonUserSafetySuppressionProven(
+	segment extract.Segment,
+	candidate Result,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if !profiledNonUserSafetyCandidate(segment) {
+		return false
+	}
+	return c.nonUserSafetySuppressionProven(
+		segment.Role, segment.Provenance, segment.Text, candidate, mode, thresholds, policy,
+	)
+}
+
+func (c *Classifier) nonUserSafetySuppressionProven(
+	role extract.Role,
+	provenance extract.SegmentProvenance,
+	value string,
+	candidate Result,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	// Keep the ordinary user/tool hot path allocation-free. Role ownership is a
+	// structural fact and must be checked before lowercasing or punctuation
+	// normalization.
+	if provenance != extract.ProvenanceContent {
+		return false
+	}
+	switch role {
+	case extract.RoleAssistant, extract.RoleSystem:
+	default:
+		return false
+	}
+	if !isClearNonUserSafetyContent(role, value) || candidate.Truncated ||
+		(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
+		return false
+	}
+	if !resultHasEligibleMaliciousOccurrence(candidate) {
+		return true
+	}
+	if c.systemPolicyDefensiveRequestResidualIsBenign(
+		role, value, mode, thresholds, policy,
+	) {
+		return true
+	}
+	return c.explicitScopedSafetyResidualIsBenign(
+		role, value, mode, thresholds, policy,
+	)
+}
+
+// explicitScopedSafetyResidualIsBenign masks only the bounded payload owned by
+// one explicit refusal/policy restatement. It never removes the whole clause:
+// unconsumed object bytes and every later continuation remain in the residual
+// and are classified again. This preserves benign provider refusals without
+// letting a caller-controlled role label hide a second speech act.
+func (c *Classifier) explicitScopedSafetyResidualIsBenign(
+	role extract.Role,
+	value string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil || len(value) > maxDefensiveRequestObjectProofBytes {
+		return false
+	}
+	text, complete := normalizedNonUserSafetyProofText(value)
+	if !complete || !isClearNonUserSafetyContent(role, text) ||
+		role == extract.RoleSystem && hasNegationReversalFraming(text) {
+		return false
+	}
+	objectStart, found := explicitScopedSafetyObjectStart(role, text)
+	if !found {
+		return false
+	}
+	if objectEnd, quoted := explicitQuotedSafetyObjectEnd(text, objectStart); quoted {
+		return c.nonUserSafetyResidualIsBenign(
+			strings.TrimSpace(text[:objectStart]+" "+text[objectEnd:]),
+			mode,
+			thresholds,
+			policy,
+		)
+	}
+	return c.nonUserSafetyRequestObjectResidualIsBenign(
+		text, objectStart, mode, thresholds, policy,
+	)
+}
+
+func normalizedNonUserSafetyProofText(value string) (string, bool) {
+	var scratch normalizationScratch
+	views := normalizePartsInto([]string{value}, nil, &scratch)
+	defer putNormalizedRuneBuffer(views.standardRunes, views.storageUsed)
+	if views.truncated || len(views.standardRunes) == 0 {
+		return "", false
+	}
+	return strings.TrimSpace(roleSafetyPunctuation.Replace(string(views.standardRunes))), true
+}
+
+func explicitScopedSafetyObjectStart(role extract.Role, text string) (int, bool) {
+	var prefixes []string
+	switch role {
+	case extract.RoleAssistant:
+		prefixes = []string{
+			"the request was", "the forbidden request was", "the blocked request was",
+			"the quoted request was", "the request says", "that request was", "this request was",
+			"the blocked prompt was", "the forbidden prompt was", "the quoted prompt was",
+			"the blocked prompt said", "the forbidden prompt said", "the quoted prompt said",
+			"the user asked", "you asked",
+			"被禁止的请求是", "被拦截的请求是", "引用的请求是", "引用提示词是",
+			"该请求是", "这个请求是", "用户要求", "你要求",
+		}
+	case extract.RoleSystem:
+		prefixes = []string{
+			"the request was", "the forbidden request was", "the blocked request was",
+			"the quoted request was", "the blocked prompt was", "the forbidden prompt was",
+			"the quoted prompt was", "the blocked prompt said", "the forbidden prompt said",
+			"the quoted prompt said", "被禁止的请求是", "被拦截的请求是",
+			"引用的请求是", "引用提示词是", "该请求是", "这个请求是",
+		}
+	default:
+		return 0, false
+	}
+
+	objectStart := -1
+	for _, prefix := range prefixes {
+		searchFrom := 0
+		for searchFrom < len(text) {
+			index := strings.Index(text[searchFrom:], prefix)
+			if index < 0 {
+				break
+			}
+			index += searchFrom
+			searchFrom = index + len(prefix)
+			if !scopedSafetyPrefixAtClauseStart(text, index) {
+				continue
+			}
+			start := skipSafetyObjectDelimiters(text, searchFrom)
+			if start >= len(text) || objectStart >= 0 {
+				return 0, false
+			}
+			objectStart = start
+		}
+	}
+	return objectStart, objectStart >= 0
+}
+
+func scopedSafetyPrefixAtClauseStart(text string, index int) bool {
+	if index <= 0 {
+		return index == 0
+	}
+	prefix := strings.TrimRightFunc(text[:index], unicode.IsSpace)
+	if prefix == "" {
+		return true
+	}
+	last, _ := utf8.DecodeLastRuneInString(prefix)
+	return last == compactHardBoundary || unicode.IsPunct(last) || unicode.IsSymbol(last)
+}
+
+func skipSafetyObjectDelimiters(text string, start int) int {
+	for start < len(text) {
+		current, width := utf8.DecodeRuneInString(text[start:])
+		if unicode.IsSpace(current) || strings.ContainsRune(":：=-", current) {
+			start += width
+			continue
+		}
+		break
+	}
+	return start
+}
+
+func explicitQuotedSafetyObjectEnd(text string, objectStart int) (int, bool) {
+	if objectStart < 0 || objectStart >= len(text) {
+		return 0, false
+	}
+	quote, width := utf8.DecodeRuneInString(text[objectStart:])
+	if quote != '"' && quote != '`' {
+		return 0, false
+	}
+	contentStart := objectStart + width
+	closeIndex := strings.Index(text[contentStart:], string(quote))
+	if closeIndex < 0 {
+		return 0, false
+	}
+	return contentStart + closeIndex + width, true
+}
+
+const (
+	maxDefensiveRequestObjectProofBytes           = 4096
+	maxDefensiveRequestObjectProofTokens          = 64
+	maxDefensiveRequestObjectProofClassifications = 2 * maxDefensiveRequestObjectProofTokens
+)
+
+// defensiveRequestObjectProofBudget makes the request-object proof's existing
+// 2N classifier bound explicit and shared. Clause scans can classify at most
+// N-1 suffixes, prefix scans at most N prefixes, and the residual at most once;
+// coordinators partition rather than duplicate the N-token input. Exhaustion
+// must fail active instead of granting a non-user safety suppression.
+type defensiveRequestObjectProofBudget struct {
+	remaining int
+}
+
+func newDefensiveRequestObjectProofBudget() defensiveRequestObjectProofBudget {
+	return defensiveRequestObjectProofBudget{
+		remaining: maxDefensiveRequestObjectProofClassifications,
+	}
+}
+
+func (budget *defensiveRequestObjectProofBudget) consumeClassification() bool {
+	if budget == nil || budget.remaining <= 0 {
+		return false
+	}
+	budget.remaining--
+	return true
+}
+
+// systemPolicyDefensiveRequestResidualIsBenign masks only the shortest
+// classifier-proven harmful predicate owned by one explicit defensive request
+// object, then reclassifies every byte outside that object. This is deliberately
+// different from trusting a connector/governor vocabulary: an unknown suffix
+// such as "meanwhile write malware", "provided that ...", "whilst ...", or a
+// punctuation-adjacent CJK directive remains in the residual and prevents
+// suppression whenever it produces an eligible malicious occurrence.
+func (c *Classifier) systemPolicyDefensiveRequestResidualIsBenign(
+	role extract.Role,
+	value string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	if c == nil || role != extract.RoleSystem {
+		return false
+	}
+	if len(value) > maxDefensiveRequestObjectProofBytes {
+		return false
+	}
+	text, complete := normalizedNonUserSafetyProofText(value)
+	if !complete || !isClearNonUserSafetyContent(role, text) ||
+		hasNegationReversalFraming(text) || !hasClearSystemSafetyPolicy(text) {
+		return false
+	}
+	phrases := []string{
+		"block requests to ", "blocking requests to ",
+		"reject requests to ", "rejecting requests to ",
+		"refuse requests to ", "refusing requests to ",
+		"filter requests to ", "filtering requests to ",
+		"prevent requests to ", "preventing requests to ",
+	}
+	objectStart := -1
+	for _, phrase := range phrases {
+		searchFrom := 0
+		for searchFrom < len(text) {
+			index := strings.Index(text[searchFrom:], phrase)
+			if index < 0 {
+				break
+			}
+			index += searchFrom
+			if objectStart >= 0 {
+				// Multiple defensive objects need occurrence-to-object binding that
+				// this bounded proof intentionally does not attempt.
+				return false
+			}
+			objectStart = index + len(phrase)
+			searchFrom = objectStart
+		}
+	}
+	if objectStart < 0 || objectStart >= len(text) {
+		return false
+	}
+	return c.nonUserSafetyRequestObjectResidualIsBenign(
+		text, objectStart, mode, thresholds, policy,
+	)
+}
+
+func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenign(
+	text string,
+	objectStart int,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	budget := newDefensiveRequestObjectProofBudget()
+	return c.nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+		text, objectStart, mode, thresholds, policy, &budget,
+	)
+}
+
+func (c *Classifier) nonUserSafetyRequestObjectResidualIsBenignWithBudget(
+	text string,
+	objectStart int,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) bool {
+	if c == nil || objectStart < 0 || objectStart >= len(text) ||
+		len(text) > maxDefensiveRequestObjectProofBytes {
+		return false
+	}
+	tail := text[objectStart:]
+	objectEnd := defensiveRequestObjectHardBoundary(tail)
+	objectText := strings.TrimSpace(tail[:objectEnd])
+	tokens := strings.Fields(objectText)
+	if len(tokens) == 0 || len(tokens) > maxDefensiveRequestObjectProofTokens {
+		return false
+	}
+	if !c.defensiveRequestObjectStartsWithRuleIntent(tokens) {
+		return false
+	}
+	consumed, ok := c.shortestEligibleDefensiveObjectPrefix(
+		tokens, mode, thresholds, policy, budget,
+	)
+	if !ok {
+		return false
+	}
+	for consumed < len(tokens) && defensiveRequestObjectCoordinator(tokens[consumed]) {
+		if !c.defensiveRequestObjectStartsWithRuleIntent(tokens[consumed+1:]) {
+			break
+		}
+		additional, found := c.shortestEligibleDefensiveObjectPrefix(
+			tokens[consumed+1:], mode, thresholds, policy, budget,
+		)
+		if !found {
+			break
+		}
+		consumed += 1 + additional
+	}
+	residual := strings.TrimSpace(
+		text[:objectStart] + " " + strings.Join(tokens[consumed:], " ") + " " + tail[objectEnd:],
+	)
+	return c.nonUserSafetyResidualIsBenignWithBudget(
+		residual, mode, thresholds, policy, budget,
+	)
+}
+
+func (c *Classifier) nonUserSafetyResidualIsBenign(
+	residual string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) bool {
+	budget := newDefensiveRequestObjectProofBudget()
+	return c.nonUserSafetyResidualIsBenignWithBudget(
+		residual, mode, thresholds, policy, &budget,
+	)
+}
+
+func (c *Classifier) nonUserSafetyResidualIsBenignWithBudget(
+	residual string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) bool {
+	if c == nil {
+		return false
+	}
+	if residual == "" {
+		return true
+	}
+	if !budget.consumeClassification() {
+		return false
+	}
+	residualCandidate := c.classifyWithPolicy(
+		[]string{residual}, mode, thresholds, policy, false,
+	)
+	return !residualCandidate.Truncated &&
+		(residualCandidate.Coverage.State == "" || residualCandidate.Coverage.State == CoverageComplete) &&
+		!resultHasEligibleMaliciousOccurrence(residualCandidate)
+}
+
+func defensiveRequestObjectHardBoundary(value string) int {
+	for index, current := range value {
+		if current == compactHardBoundary {
+			return index
+		}
+		if unicode.IsSpace(current) {
+			if current == '\n' || current == '\r' {
+				return index
+			}
+			continue
+		}
+		// The special proof owns only one plain request-object clause. Any
+		// punctuation or symbol (including paired brackets, quotes, and a dash)
+		// terminates that object before residual reclassification. Failing active
+		// on punctuation inside a rare object is safer than masking a new clause.
+		if unicode.IsPunct(current) || unicode.IsSymbol(current) {
+			return index
+		}
+	}
+	return len(value)
+}
+
+func (c *Classifier) defensiveRequestObjectStartsWithRuleIntent(tokens []string) bool {
+	if c == nil || len(tokens) == 0 {
+		return false
+	}
+	return directiveSuffixStartsRuleIntent(
+		[]rune(strings.Join(tokens, " ")), &c.directiveIntentStarts,
+	)
+}
+
+func (c *Classifier) shortestEligibleDefensiveObjectPrefix(
+	tokens []string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) (int, bool) {
+	limit, budgetAvailable := c.defensiveRequestObjectClauseLimit(
+		tokens, mode, thresholds, policy, budget,
+	)
+	if !budgetAvailable {
+		return 0, false
+	}
+	for end := 1; end <= limit; end++ {
+		if !budget.consumeClassification() {
+			return 0, false
+		}
+		candidate := c.classifyWithPolicy(
+			[]string{strings.Join(tokens[:end], " ")}, mode, thresholds, policy, false,
+		)
+		if candidate.Truncated ||
+			(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
+			return 0, false
+		}
+		if resultHasEligibleMaliciousOccurrence(candidate) {
+			return end, true
+		}
+	}
+	return 0, false
+}
+
+// defensiveRequestObjectClauseLimit is a fail-active grammar boundary. The
+// request object may be a bounded direct predicate, but proof must stop before a
+// subordinate/discourse clause or a newly introduced actor. This prevents a
+// benign object from borrowing an eligible occurrence in later unpunctuated
+// prose. These are clause classes, not negation-governor synonyms.
+func (c *Classifier) defensiveRequestObjectClauseLimit(
+	tokens []string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) (int, bool) {
+	for index, token := range tokens {
+		normalized := strings.ToLower(strings.TrimSpace(token))
+		// The proof consumes whole whitespace-delimited tokens. A Han/ASCII
+		// transition inside one token has no trustworthy byte boundary here, so
+		// consuming the token could also erase an attached operational clause
+		// (for example, "poetry\u7ee7\u800cdeploy ransomware"). Fail active instead
+		// of trying to enumerate every possible CJK discourse connector.
+		if defensiveRequestObjectMixedScriptToken(normalized) {
+			return index, true
+		}
+		if defensiveRequestObjectClauseMarker(normalized) {
+			return index, true
+		}
+		if index > 0 && defensiveRequestObjectCoordinator(normalized) {
+			return index, true
+		}
+		if index > 0 {
+			explicitActor, budgetAvailable := c.defensiveRequestObjectExplicitActor(
+				tokens, index, mode, thresholds, policy, budget,
+			)
+			if !budgetAvailable {
+				return 0, false
+			}
+			if explicitActor {
+				return index, true
+			}
+		}
+	}
+	return len(tokens), true
+}
+
+func defensiveRequestObjectMixedScriptToken(value string) bool {
+	containsHan := false
+	containsASCIIWord := false
+	for _, current := range value {
+		if unicode.Is(unicode.Han, current) {
+			containsHan = true
+		}
+		if current <= unicode.MaxASCII &&
+			((current >= 'a' && current <= 'z') ||
+				(current >= 'A' && current <= 'Z') ||
+				(current >= '0' && current <= '9')) {
+			containsASCIIWord = true
+		}
+		if containsHan && containsASCIIWord {
+			return true
+		}
+	}
+	return false
+}
+
+func defensiveRequestObjectClauseMarker(value string) bool {
+	switch value {
+	case "after", "although", "as", "assuming", "because", "before", "despite", "except",
+		"for", "given", "if", "lest", "meanwhile", "now", "once", "otherwise", "provided",
+		"providing", "since", "though", "unless", "until", "when", "whenever",
+		"where", "whereas", "wherever", "whether", "while", "whilst", "with", "without",
+		"additionally", "accordingly", "but", "consequently", "conversely", "else",
+		"hence", "however", "likewise", "moreover", "nevertheless", "nonetheless",
+		"nor", "plus", "separately", "so", "then", "thereafter", "therefore",
+		"thus", "whereupon", "yet", "afterward", "afterwards", "later":
+		return true
+	}
+	for _, marker := range []string{
+		"同时", "随后", "随即", "接着", "届时", "因为", "由于", "如果", "若", "假如", "除非", "否则", "然后",
+		"然而", "不过", "但是", "并由", "且由", "而由", "当", "虽然", "尽管",
+		"系统必须", "你必须", "您必须", "模型必须", "助手必须", "平台必须", "网关必须",
+		"服务必须", "请立即", "请现在",
+	} {
+		// CJK clauses are commonly written without spaces. A marker anywhere in
+		// one field token is therefore a hard proof boundary; returning the token
+		// index may conservatively retain some benign bytes, but can never mask the
+		// attached continuation.
+		if strings.Contains(value, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Classifier) defensiveRequestObjectExplicitActor(
+	tokens []string,
+	index int,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+	budget *defensiveRequestObjectProofBudget,
+) (bool, bool) {
+	if c == nil || index < 0 || index >= len(tokens) {
+		return false, false
+	}
+	current := strings.ToLower(strings.TrimSpace(tokens[index]))
+	actorHead := false
+	finiteIntentOnly := false
+	switch current {
+	case "i", "we", "you", "it", "they", "he", "she":
+		actorHead = true
+	case "the", "a", "an":
+		actorHead = index+2 < len(tokens)
+	case "to", "that", "which", "who", "whom", "whose":
+		// Infinitive and relative predicates remain part of the leading request
+		// object. They still must reach eligibility before any later boundary.
+		return false, true
+	default:
+		if defensiveRequestObjectEmbeddedModifier(current) || defensiveRequestObjectEmbeddedArtifact(current) {
+			return false, true
+		}
+		if c.defensiveRequestObjectStartsWithRuleIntent(tokens[index:]) {
+			// A directly introduced secondary predicate (for example "to steal")
+			// remains part of the defensive object. Actor detection is only needed
+			// when a separate subject precedes that predicate.
+			return false, true
+		}
+		if index+1 < len(tokens) {
+			next := strings.ToLower(strings.TrimSpace(tokens[index+1]))
+			structuredVerb := defensiveRequestObjectActorModal(next) ||
+				defensiveRequestObjectActorAuxiliary(next)
+			finiteIntentOnly = !structuredVerb && c.defensiveRequestObjectFiniteIntentToken(next)
+			actorHead = structuredVerb || finiteIntentOnly
+		}
+	}
+	if !actorHead {
+		return false, true
+	}
+	if !budget.consumeClassification() {
+		return false, false
+	}
+	candidate := c.classifyWithPolicy(
+		[]string{strings.Join(tokens[index:], " ")}, mode, thresholds, policy, false,
+	)
+	if candidate.Truncated ||
+		(candidate.Coverage.State != "" && candidate.Coverage.State != CoverageComplete) {
+		return false, true
+	}
+	if !resultHasEligibleMaliciousOccurrence(candidate) {
+		return false, true
+	}
+	// Inflected intent lookup is deliberately broader than an English verb
+	// parser and can also see plural object nouns (for example "browser
+	// cookies"). Require an independently hard malicious suffix before treating
+	// that coarse form as a new finite predicate. Explicit modal/auxiliary actor
+	// clauses retain threshold-free occurrence ownership.
+	return !finiteIntentOnly || candidate.Score >= validThresholdsOrDefault(thresholds).HardBlock, true
+}
+
+func defensiveRequestObjectEmbeddedModifier(value string) bool {
+	return strings.HasSuffix(value, "ing") || strings.HasSuffix(value, "ed")
+}
+
+func defensiveRequestObjectEmbeddedArtifact(value string) bool {
+	switch value {
+	case "code", "malware", "program", "script", "software", "tool", "payload":
+		return true
+	default:
+		return false
+	}
+}
+
+func (c *Classifier) defensiveRequestObjectFiniteIntentToken(value string) bool {
+	if c == nil || value == "" {
+		return false
+	}
+	stems := []string{value}
+	if strings.HasSuffix(value, "ies") && len(value) > 3 {
+		stems = append(stems, value[:len(value)-3]+"y")
+	}
+	for _, suffix := range []string{"s", "es", "ed", "ing"} {
+		if strings.HasSuffix(value, suffix) && len(value) > len(suffix) {
+			stems = append(stems, value[:len(value)-len(suffix)])
+		}
+	}
+	for _, stem := range stems {
+		if directiveSuffixStartsRuleIntent([]rune(stem), &c.directiveIntentStarts) {
+			return true
+		}
+	}
+	return false
+}
+
+func defensiveRequestObjectActorAuxiliary(value string) bool {
+	switch value {
+	case "am", "is", "are", "was", "were", "be", "been", "being",
+		"have", "has", "had", "do", "does", "did":
+		return true
+	default:
+		return false
+	}
+}
+
+func defensiveRequestObjectActorModal(value string) bool {
+	switch value {
+	case "must", "should", "shall", "will", "would", "can", "could", "may", "might",
+		"need", "needs", "needed", "ought":
+		return true
+	default:
+		return false
+	}
+}
+
+func defensiveRequestObjectCoordinator(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "or", "and", "and/or", "或", "或者", "以及":
+		return true
+	default:
+		return false
+	}
+}
+
+// profiledNonUserSafetyCandidate is the zero-allocation structural gate for the
+// expensive refusal/policy predicate. Provider tool schemas may contain safety
+// language, override examples, and repeated adversarial clauses, but they are
+// declarations rather than assistant/system natural-language turns. They remain
+// independently classified as audit-only and must not enter refusal suppression.
+func profiledNonUserSafetyCandidate(segment extract.Segment) bool {
+	if segment.Provenance != extract.ProvenanceContent ||
+		segment.ContentKind != extract.ContentKindNaturalLanguageDirective {
+		return false
+	}
+	switch segment.Role {
+	case extract.RoleAssistant, extract.RoleSystem:
+		return true
+	default:
+		return false
+	}
+}
+
 func profiledRequestLocalSystemCarrier(segment extract.Segment) bool {
 	return segment.Role == extract.RoleSystem &&
 		segment.Provenance == extract.ProvenanceContent &&
@@ -3706,6 +5858,68 @@ func profiledClauseSpans(text []rune, clauses []analyzedDirectiveClause) ([]prof
 		cursor = start + len(clause.runes)
 	}
 	return spans, len(spans) != 0
+}
+
+func profiledAnalysisClauseSpans(
+	text []rune,
+	analysis analyzedDirectives,
+) ([]profiledClauseSpan, bool) {
+	spans, ok := profiledClauseSpans(text, analysis.clauses)
+	if !ok {
+		return nil, false
+	}
+	if len(analysis.overflowTail) == 0 {
+		return spans, true
+	}
+
+	byClauseID := make(map[int32]profiledClauseSpan, len(spans)+len(analysis.overflowTail))
+	for _, span := range spans {
+		byClauseID[span.clauseID] = span
+	}
+	cursor := len(text)
+	for index := len(analysis.overflowTail) - 1; index >= 0; index-- {
+		clause := analysis.overflowTail[index]
+		clauseID := clauseIDForOccurrence(clause)
+		if existing, found := byClauseID[clauseID]; found {
+			cursor = existing.start
+			continue
+		}
+		start := profiledRuneSliceLastIndex(text, clause.runes, cursor)
+		if start < 0 {
+			return nil, false
+		}
+		span := profiledClauseSpan{
+			clauseID: clauseID,
+			start:    start,
+			end:      start + len(clause.runes),
+		}
+		spans = append(spans, span)
+		byClauseID[clauseID] = span
+		cursor = start
+	}
+	return spans, true
+}
+
+func profiledRuneSliceLastIndex(text, target []rune, end int) int {
+	if len(target) == 0 || len(target) > len(text) {
+		return -1
+	}
+	if end > len(text) {
+		end = len(text)
+	}
+	for start := end - len(target); start >= 0; start-- {
+		matched := true
+		for offset := range target {
+			if text[start+offset] != target[offset] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return start
+		}
+	}
+	return -1
 }
 
 func profiledRuneSliceIndex(text, target []rune, start int) int {
@@ -5472,6 +7686,135 @@ func (c *Classifier) profiledOccurrenceSourcesWithOptions(
 		}
 	}
 
+	// A provider may encode one natural-language message as consecutive content
+	// blocks. Replay only a physically adjacent, extractor-proven owner run whose
+	// lexical chain is bounded by the same fragment/rune limits as classification.
+	// Each analyzed run contains at most maxCompactReconstructionFragments parts;
+	// the surrounding provider group remains bounded by maxClassifierParts.
+	if len(refs) >= 2 && len(refs) <= maxClassifierParts {
+		parts := make([]string, len(refs))
+		edges := make([]compactLexicalPartEdges, len(refs))
+		normalizedLengths := make([]int, len(refs))
+		boundaries := make([]bool, len(refs)-1)
+		for index, ref := range refs {
+			parts[index] = ref.segment.Text
+			if index > 0 {
+				boundaries[index-1] = profiledLexicalPartBoundaryEligible(refs[index-1], ref)
+			}
+			views := normalizePartsInto([]string{ref.segment.Text}, runeBuffer, &normalizerScratch)
+			runeBuffer = views.standardRunes
+			if views.storageUsed > maxRuneStorage {
+				maxRuneStorage = views.storageUsed
+			}
+			if views.truncated || len(views.standardRunes) == 0 {
+				continue
+			}
+			edges[index] = compactLexicalEdgesForRunes(views.standardRunes)
+			normalizedLengths[index] = len(views.standardRunes)
+		}
+
+		type lexicalRunSpan struct{ start, end int }
+		seenRuns := make(map[lexicalRunSpan]struct{})
+		for boundary := len(refs) - 2; boundary >= 0; boundary-- {
+			start, end, reconstruct := boundedLexicalPartBoundarySpan(edges, boundaries, boundary)
+			span := lexicalRunSpan{start: start, end: end}
+			if !reconstruct {
+				continue
+			}
+			if _, duplicate := seenRuns[span]; duplicate {
+				continue
+			}
+			seenRuns[span] = struct{}{}
+
+			reconstructed, ok := boundedLexicalPartReconstructionWithBoundaries(
+				parts[start:end], boundaries[start:end-1],
+			)
+			if !ok {
+				continue
+			}
+			joined := normalizeParts([]string{reconstructed})
+			if joined.truncated || len(joined.standardRunes) == 0 {
+				continue
+			}
+			type lexicalRunBoundary struct {
+				offset      int
+				sourceIndex int
+			}
+			joinedBoundaries := make([]lexicalRunBoundary, 0, end-start-1)
+			normalizedOffset := 0
+			for index := start; index < end; index++ {
+				normalizedOffset += normalizedLengths[index]
+				if index+1 == end {
+					continue
+				}
+				if boundedLexicalPartBoundaryWithBoundaries(edges, boundaries, index) {
+					joinedBoundaries = append(joinedBoundaries, lexicalRunBoundary{
+						offset: normalizedOffset, sourceIndex: index + 1,
+					})
+				} else {
+					normalizedOffset += utf8.RuneCountInString(compactLexicalPartSeparator(
+						edges, boundaries, nil, index,
+					))
+				}
+			}
+			if normalizedOffset != len(joined.standardRunes) || len(joinedBoundaries) == 0 {
+				continue
+			}
+
+			analysis := c.analyzeDirectives(joined.standardRunes, policy)
+			clauseSpans, spansComplete := profiledAnalysisClauseSpans(joined.standardRunes, analysis)
+			if !spansComplete {
+				continue
+			}
+			visitCrossing := func(clause analyzedDirectiveClause) {
+				clauseSpan, found := profiledClauseSpanByID(clauseSpans, clauseIDForOccurrence(clause))
+				if !found {
+					return
+				}
+				for _, matched := range clause.occurrences {
+					sourceIndex := -1
+					for _, runBoundary := range joinedBoundaries {
+						clauseOffset := runBoundary.offset - clauseSpan.start
+						if clauseOffset > 0 && clauseOffset < len(clause.runes) &&
+							int(matched.start) < clauseOffset && int(matched.end) > clauseOffset {
+							sourceIndex = runBoundary.sourceIndex
+						}
+					}
+					if sourceIndex < 0 {
+						continue
+					}
+					key := profiledOccurrenceKey{
+						refIndex: sourceIndex, clauseID: matched.clauseID,
+						start: matched.start, end: matched.end,
+					}
+					physical[key] = profiledOccurrenceSource{
+						valid: true, ref: refs[sourceIndex], occurrence: matched,
+					}
+					for evidenceIndex := range evidence {
+						if evidence[evidenceIndex].ClauseID >= 0 &&
+							evidence[evidenceIndex].ClauseID != int(matched.clauseID) ||
+							!c.signalSupportsProfiledEvidence(int(matched.signalID), evidence[evidenceIndex]) ||
+							profiledOccurrenceCandidateExists(candidates[evidenceIndex], key) {
+							continue
+						}
+						candidates[evidenceIndex] = append(candidates[evidenceIndex], key)
+					}
+				}
+			}
+			for _, clause := range analysis.clauses {
+				visitCrossing(clause)
+			}
+			for _, clause := range analysis.overflowTail {
+				visitCrossing(clause)
+			}
+			if profiledOccurrenceCandidatesComplete(candidates) {
+				if _, complete := profiledOccurrenceAssignment(candidates); complete {
+					break
+				}
+			}
+		}
+	}
+
 	assigned, _ := profiledOccurrenceAssignment(candidates)
 	for key, evidenceIndex := range assigned {
 		sources[evidenceIndex] = physical[key]
@@ -6082,7 +8425,9 @@ func shouldClassifyRoleSegment(segment extract.Segment) bool {
 	case extract.RoleUser, extract.RoleTool:
 		return true
 	case extract.RoleAssistant, extract.RoleSystem:
-		return !isClearNonUserSafetyContent(segment.Role, segment.Text)
+		// A complete classifier result, rather than this structural dispatch gate,
+		// decides whether a legacy refusal/policy field may be suppressed.
+		return true
 	default:
 		// This branch is reachable only if this helper is used independently;
 		// ClassifySegmentsWithPolicy sends unknown provenance through its more
@@ -6099,7 +8444,8 @@ func isClearNonUserSafetyContent(role extract.Role, value string) bool {
 	text := strings.ToLower(strings.TrimSpace(value))
 	text = roleSafetyPunctuation.Replace(text)
 	text = strings.TrimLeft(text, " \t\r\n-*#>")
-	if text == "" || hasUnscopedNonUserSafetyOverride(role, text) || hasUnscopedSafetyContinuation(role, text) {
+	if text == "" || hasUnscopedNonUserSafetyOverride(role, text) ||
+		hasUnscopedSafetyContinuation(role, text) {
 		return false
 	}
 
@@ -6203,6 +8549,8 @@ func hasNonUserSafetyOverride(text string) bool {
 		"ignore the policy", "disregard the policy", "bypass the policy", "bypass safety", "policy is irrelevant",
 		"must not be denied", "must not deny", "do not deny", "don't deny", "must not be blocked", "must not block",
 		"do not block", "don't block", "must not be filtered", "do not filter", "disable guardrails", "remove guardrails",
+		"stop blocking", "cease blocking", "avoid blocking", "end blocking", "unblock requests", "stop filtering",
+		"cease filtering", "avoid filtering", "stop refusing", "cease refusing", "avoid refusing",
 		"disable safety checks", "skip safety checks", "must not enforce the policy", "must not apply safety",
 		"but here is the code", "however, here is the code", "instead, here is the code", "here's the working code",
 		"use the following code", "run the following code", "execute the following code", "nevertheless", "nonetheless",
@@ -6421,6 +8769,9 @@ func splitStrongSafetyClauses(text string) []string {
 }
 
 func isStrongSafetyBoundary(current, previous, next rune) bool {
+	if current == compactHardBoundary {
+		return true
+	}
 	if unicode.IsSpace(current) {
 		return current != ' '
 	}
@@ -6452,8 +8803,9 @@ func isSafetyWordRune(value rune) bool {
 }
 
 func lastSafetyClause(value string) string {
-	if index := strings.LastIndexAny(value, ".!?;\n\r。！？；"); index >= 0 {
-		value = value[index+1:]
+	if index := strings.LastIndexAny(value, ".!?;\n\r。！？；"+compactHardBoundaryText); index >= 0 {
+		_, width := utf8.DecodeRuneInString(value[index:])
+		value = value[index+width:]
 	}
 	return strings.TrimSpace(value)
 }
@@ -6519,12 +8871,14 @@ func reconstructedIsolatedPartRuns(parts []string) []string {
 	runs := make([]string, 0, 2)
 	var builder strings.Builder
 	runeCount := 0
+	var previous rune
 	flush := func() {
 		if runeCount >= minIsolatedRuneRun {
 			runs = append(runs, builder.String())
 		}
 		builder.Reset()
 		runeCount = 0
+		previous = 0
 	}
 	for _, part := range parts {
 		r, ok := isolatedCompactRune(part)
@@ -6535,14 +8889,21 @@ func reconstructedIsolatedPartRuns(parts []string) []string {
 		if runeCount == maxIsolatedRuneRun {
 			flush()
 		}
-		if runeCount > 0 {
+		if runeCount > 0 && isolatedRuneRunNeedsSpace(previous, r) {
 			builder.WriteByte(' ')
 		}
 		builder.WriteRune(r)
+		previous = r
 		runeCount++
 	}
 	flush()
 	return runs
+}
+
+func isolatedRuneRunNeedsSpace(left, right rune) bool {
+	_, leftLeet := leetReplacement(left)
+	_, rightLeet := leetReplacement(right)
+	return !leftLeet && !rightLeet
 }
 
 type reconstructedUserRun struct {
@@ -6580,10 +8941,16 @@ func reconstructedIsolatedUserRuns(segments []extract.Segment) []reconstructedUs
 func isolatedCompactRune(value string) (rune, bool) {
 	trimmed := strings.TrimSpace(value)
 	runes := []rune(trimmed)
-	if len(runes) != 1 || !isCompactRune(runes[0]) {
+	if len(runes) != 1 {
 		return 0, false
 	}
-	return runes[0], true
+	if isCompactRune(runes[0]) {
+		return runes[0], true
+	}
+	if _, ok := leetReplacement(runes[0]); ok {
+		return runes[0], true
+	}
+	return 0, false
 }
 
 func roleResultBetter(candidate, current Result) bool {

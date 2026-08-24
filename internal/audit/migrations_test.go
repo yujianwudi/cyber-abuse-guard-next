@@ -201,7 +201,7 @@ func TestMigrationBackupPublishCollisionBlocksMigrationWithoutChangingSchema(t *
 		t.Fatal(err)
 	}
 	stamp := fixedMigrationTime().UTC().Format("20060102T150405.000000000Z")
-	backupPath := fmt.Sprintf("%s.pre-v%d-%s.bak", path, currentSchemaVersion, stamp)
+	backupPath := fmt.Sprintf("%s.pre-v6-%s.bak", path, stamp)
 	const sentinel = "operator-owned collision sentinel"
 	if err := os.WriteFile(backupPath, []byte(sentinel), 0o400); err != nil {
 		t.Fatal(err)
@@ -1388,6 +1388,47 @@ func TestMigrationBackupRetentionTreatsDatabaseNameLiterally(t *testing.T) {
 	for _, candidate := range []string{newBackup, newManifest, unrelated} {
 		if _, err := os.Stat(candidate); err != nil {
 			t.Fatalf("expected file %q to remain: %v", candidate, err)
+		}
+	}
+}
+
+func TestMigrationBackupRetentionKeepsEachMigrationBoundary(t *testing.T) {
+	t.Parallel()
+	directory := t.TempDir()
+	path := filepath.Join(directory, "audit.db")
+	preV6Old := path + ".pre-v6-20260712T000000.000000000Z.bak"
+	preV6New := path + ".pre-v6-20260712T000001.000000000Z.bak"
+	preV7Old := path + ".pre-v7-20260712T000002.000000000Z.bak"
+	preV7New := path + ".pre-v7-20260712T000003.000000000Z.bak"
+	for index, candidate := range []string{preV6Old, preV6New, preV7Old, preV7New} {
+		if err := os.WriteFile(candidate, []byte("backup"), 0o400); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(candidate+".manifest.json", []byte("{}"), 0o400); err != nil {
+			t.Fatal(err)
+		}
+		stamp := fixedMigrationTime().Add(time.Duration(index) * time.Second)
+		if err := os.Chtimes(candidate, stamp, stamp); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := pruneMigrationBackups(path, 1); err != nil {
+		t.Fatal(err)
+	}
+	for _, retained := range []string{preV6New, preV7New} {
+		if _, err := os.Stat(retained); err != nil {
+			t.Fatalf("migration boundary backup %q was not retained: %v", retained, err)
+		}
+		if _, err := os.Stat(retained + ".manifest.json"); err != nil {
+			t.Fatalf("migration boundary manifest %q was not retained: %v", retained, err)
+		}
+	}
+	for _, pruned := range []string{preV6Old, preV7Old} {
+		if _, err := os.Stat(pruned); !os.IsNotExist(err) {
+			t.Fatalf("superseded migration boundary backup %q remains: %v", pruned, err)
+		}
+		if _, err := os.Stat(pruned + ".manifest.json"); !os.IsNotExist(err) {
+			t.Fatalf("superseded migration boundary manifest %q remains: %v", pruned, err)
 		}
 	}
 }

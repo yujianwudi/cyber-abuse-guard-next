@@ -205,9 +205,10 @@ type classificationSignalFacts struct {
 }
 
 type quotedReviewFollowUpProof struct {
-	active   bool
-	inert    bool
-	complete bool
+	active                             bool
+	inert                              bool
+	complete                           bool
+	activatedTerminalSkillMetaReferent bool
 }
 
 type compiledRule struct {
@@ -565,14 +566,35 @@ func (c *Classifier) classifyTrustedCurrentUserWithPolicy(parts []string, mode M
 	return c.classifyWithPolicyCaptured(parts, mode, thresholds, policy, false, nil, true, nil)
 }
 
+// classifyActivatedTerminalSkillMetaReferentWithPolicy is intentionally private
+// to the role-aware terminal-skill path. The input is still classified as one
+// carrier-only part; the separately proved terminal sentence may activate a
+// narrow descriptive META carrier, but it cannot donate matcher signals,
+// occurrences, a cyber category, or any other harmful predicate.
+func (c *Classifier) classifyActivatedTerminalSkillMetaReferentWithPolicy(
+	referent string,
+	mode Mode,
+	thresholds Thresholds,
+	policy Policy,
+) Result {
+	activation := &quotedReviewFollowUpProof{activatedTerminalSkillMetaReferent: true}
+	return c.classifyWithPolicyCaptured(
+		[]string{referent}, mode, thresholds, policy, false, nil, true, nil,
+		activation,
+	)
+}
+
 func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thresholds Thresholds, policy Policy, structuredToolPayload bool, capture *classificationSignalFacts, allowExtendedGeneratedAgentWindow bool, defensiveQuoteFrameSignals *inertQuotedSafetyReviewFrameSignals, quotedReviewFollowUpProofs ...*quotedReviewFollowUpProof) Result {
 	if defensiveQuoteFrameSignals != nil {
 		*defensiveQuoteFrameSignals = 0
 	}
+	activatedTerminalSkillMetaReferent := false
 	var quotedReviewFollowUp *quotedReviewFollowUpProof
 	if len(quotedReviewFollowUpProofs) != 0 {
 		quotedReviewFollowUp = quotedReviewFollowUpProofs[0]
 		if quotedReviewFollowUp != nil {
+			activatedTerminalSkillMetaReferent =
+				quotedReviewFollowUp.activatedTerminalSkillMetaReferent
 			*quotedReviewFollowUp = quotedReviewFollowUpProof{}
 		}
 	}
@@ -754,6 +776,15 @@ func (c *Classifier) classifyWithPolicyCaptured(parts []string, mode Mode, thres
 			allowExtendedGeneratedAgentWindow,
 			metaOverrideV45Validation{},
 		)
+		if activatedTerminalSkillMetaReferent {
+			var terminalMetaProofComplete bool
+			assessment, terminalMetaProofComplete = c.assessActivatedTerminalSkillMetaReferent(
+				metaTailSignals, metaTailText, assessment,
+			)
+			if !terminalMetaProofComplete {
+				explicitRelationProofBudgetExceeded = true
+			}
+		}
 		if (assessment.controlPlaneBlock && !bestMeta.controlPlaneBlock) ||
 			(assessment.controlPlaneBlock == bestMeta.controlPlaneBlock &&
 				(assessment.score > bestMeta.score ||
@@ -7720,7 +7751,7 @@ func parseNegationReversalGovernor(text string) (actionIndex, fieldCount int, ok
 		}
 	}
 	for _, governor := range []string{
-		"拒绝", "犹豫", "避免", "未能", "忘记", "疏忽", "停止", "克制",
+		"拒绝", "阻止", "拦截", "过滤", "犹豫", "避免", "未能", "忘记", "疏忽", "停止", "克制",
 	} {
 		if strings.HasPrefix(text, governor) {
 			rest := strings.TrimSpace(text[len(governor):])
@@ -7761,6 +7792,13 @@ func parseNegationReversalGovernor(text string) (actionIndex, fieldCount int, ok
 
 	governor := fields[governorIndex]
 	switch governor {
+	case "block", "decline", "deny", "filter", "prevent", "refuse", "reject":
+		// Negating an enforcement governor reverses its safety ownership. The
+		// risky request object may follow through ordinary bridge words (for
+		// example "never block requests to deploy ransomware"), so the governor
+		// itself is sufficient to revoke defensive credit; ordinary downstream
+		// classification still decides whether any malicious intent exists.
+		return governorIndex + 1, fieldCount, true
 	case "avoid", "stop":
 		actionIndex = governorIndex + 1
 		for actionIndex < fieldCount && actionIndex <= governorIndex+5 && negationReversalModifier(fields[actionIndex]) {
@@ -7770,7 +7808,7 @@ func parseNegationReversalGovernor(text string) (actionIndex, fieldCount int, ok
 			actionIndex++
 		}
 		return actionIndex, fieldCount, true
-	case "refuse", "hesitate", "decline", "fail", "forget", "neglect", "refrain":
+	case "hesitate", "fail", "forget", "neglect", "refrain":
 		connector := "to"
 		if governor == "refrain" {
 			connector = "from"
@@ -8793,7 +8831,11 @@ func directiveBoundaryAt(text []rune, index int) (int, directiveBoundaryKind) {
 	r := text[index]
 	if r == compactHardBoundary {
 		// The valid internal sentinel survives rune-to-string round trips without
-		// conflating a literal U+FFFD in user content with a strong boundary.
+		// conflating a literal U+FFFD in user content with a strong boundary. A
+		// bounded lexical split is one token, not a new directive clause.
+		if boundedLexicalFragmentsAround(text, index) {
+			return 0, directiveBoundaryNone
+		}
 		return 1, directiveBoundaryStrong
 	}
 	switch r {

@@ -16,9 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GOTOOLCHAIN: go1.26.4
+  GOTOOLCHAIN: go1.26.6
   GOFLAGS: -mod=readonly
-  GO_VERSION: '1.26.4'
+  GO_VERSION: '1.26.6'
   ROUND9_BENIGN_MANIFEST_SHA256: d33e4ff8954741a2fe9c24c0d34b239c649c7e0a6d31463cddba84dc6b6580b8
   ROUND9_BENIGN_CASES_SHA256: 36d7f4dd635710f7ee81d02f9f62502c6276e554c80fc852f3d40acbfa70688d
   ROUND9_PAIRED_MANIFEST_SHA256: 29d84900edeec8fceceee9ccd2640571f1e962643931f388dcc842b058c6a2c2
@@ -71,6 +71,21 @@ jobs:
         run: python3 -B scripts/round6_safe_gate_contract.py --root .
       - name: Verify external evaluator and protected-ledger contracts
         run: |
+          set -euo pipefail
+          required_contract_files=(
+            scripts/round9_external_evaluation_contract_test.py
+            tools/round9-eval/round9_eval_core_test.py
+            tools/round9-eval/cag_round9_external_evaluator_test.py
+            tools/round9-eval/cag_round9_cpa_sandbox_adapter_test.py
+            tools/round9-eval/cag_round9_eval_broker_test.py
+            tools/round9-eval/install.sh
+          )
+          for path in "${required_contract_files[@]}"; do
+            test -f "$path" || {
+              echo "required external-evaluation contract file is missing: $path" >&2
+              exit 1
+            }
+          done
           python3 -B scripts/round9_external_evaluation_contract_test.py
           python3 -B tools/round9-eval/round9_eval_core_test.py
           python3 -B tools/round9-eval/cag_round9_external_evaluator_test.py
@@ -91,7 +106,7 @@ jobs:
           test "$(uname -m)" = x86_64
           test "$(go env GOOS)" = linux
           test "$(go env GOARCH)" = amd64
-          test "$(go env GOVERSION)" = go1.26.4
+          test "$(go env GOVERSION)" = go1.26.6
           test "$(go env GOFLAGS)" = -mod=readonly
       - name: Freeze visible development corpus identities as read-only inputs
         run: |
@@ -110,9 +125,17 @@ jobs:
             testdata/round9-development-paired-malicious-v3
       - name: Verify task-facing policy identities
         run: |
-          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v12"' internal/classifier/policy_identity.go
+          set -euo pipefail
+          grep -Fx 'const ClassifierPolicyVersion = "classifier-policy-v20"' internal/classifier/policy_identity.go
           grep -Fx 'version: "1.0.10"' rules/manifest.yaml
           grep -F '"internal/classifier/eligibility.go"' internal/classifier/policy_identity_test.go
+          classifier_test_list="$(go test ./internal/classifier -list '^Test' -count=1)"
+          for test_name in TestClassifierPolicyIdentity TestClassifierPolicySourceInventoryClosure; do
+            grep -Fxq "$test_name" <<<"$classifier_test_list" || {
+              echo "required classifier test is missing from go test -list: $test_name" >&2
+              exit 1
+            }
+          done
           go test ./internal/classifier \
             -run '^(TestClassifierPolicyIdentity|TestClassifierPolicySourceInventoryClosure)$' \
             -count=1 -v
@@ -120,8 +143,48 @@ jobs:
         run: make unit-test
       - name: Candidate performance contracts
         run: make round6-benchmark
-      - name: Audit schema v6 contract
-        run: go test -tags=sqlite_omit_load_extension ./internal/audit -run '^(TestRound9|Test.*V6|Test.*SchemaV6)' -count=1 -v
+      - name: Audit schema v7 and historical v6 contract
+        run: |
+          set -euo pipefail
+          audit_test_list="$(go test -tags=sqlite_omit_load_extension ./internal/audit -list '^Test' -count=1)"
+          required_audit_tests=(
+            TestRound10V6ToV7MigrationPreservesEventsAndCaptures
+            TestRound10V6ToV7MigrationFailureRollsBackExactly
+            TestRound10V6ToV7MigrationRejectsNonContractRawCaptureSchemaObjects
+            TestRound10V6ToV7MigrationRejectsRawCaptureViewsAndForeignKeys
+            TestRound10CSAMTextEventsQueryStatsAndExports
+            TestRound10RawCaptureDDLRejectsCSAMAndForgedKinds
+            TestRound10CSAMTextEventRejectsUnregisteredRuleID
+            TestRound10RawCaptureAPIsRejectCSAMDecisionKinds
+            TestRound10SchemaContractRejectsNonUniqueEventCaptureIndex
+            TestRound10CurrentV7ReopenKeepsRowsAndDoesNotCreateMigrationBackup
+            TestRound9V5ToV6MigrationIsAtomic
+            TestRound9V5ToV6MigrationCreatesPreMigrationBackup
+            TestRound9V6ReadsV5RowsAsLegacyUnspecified
+            TestRound9WALRestartQuickCheckAndOldSOSchemaGate
+          )
+          for test_name in "${required_audit_tests[@]}"; do
+            grep -Fxq "$test_name" <<<"$audit_test_list" || {
+              echo "required audit test is missing from go test -list: $test_name" >&2
+              exit 1
+            }
+          done
+          go test -tags=sqlite_omit_load_extension ./internal/audit \
+            -run '^(TestRound9|TestRound10|Test.*V6|Test.*V7|Test.*SchemaV6|Test.*SchemaV7)' \
+            -count=1 -v
+          csam_test_list="$(go test ./internal/csamtext -list '^Test' -count=1)"
+          required_csam_tests=(
+            TestStructuralSeparatorsResetExclusionContext
+            TestFormatControlsPreserveSafeWordBoundaries
+            TestCSAMTextPolicyIdentity
+          )
+          for test_name in "${required_csam_tests[@]}"; do
+            grep -Fxq "$test_name" <<<"$csam_test_list" || {
+              echo "required CSAM test is missing from go test -list: $test_name" >&2
+              exit 1
+            }
+          done
+          go test ./internal/csamtext -count=1 -v
       - name: Historical old-SO rollback gate
         run: |
           ROUND9_OLD_SO_ROLLBACK_REPORT=round9-gate-output/old-so-rollback.json \
@@ -180,7 +243,7 @@ jobs:
 
           require(benign["schema"], "round9-development-benign-corpus-report/v1", "benign schema")
           require(benign["corpus"], "round9-development-benign-v1", "benign corpus")
-          require(benign["runtime"], "go1.26.4", "benign Go runtime")
+          require(benign["runtime"], "go1.26.6", "benign Go runtime")
           require(benign["platform"], "linux/amd64", "benign platform")
           require(benign["metrics"]["unique_semantic_samples"], 1200, "benign semantic samples")
           require(benign["metrics"]["serialized_route_executions"], 7200, "benign route executions")
@@ -251,7 +314,7 @@ jobs:
 
           require(malicious["schema"], "round9-development-paired-malicious-report/v3", "malicious schema")
           require(malicious["corpus"], "round9-development-paired-malicious-v3", "malicious corpus")
-          require(malicious["runtime"], "go1.26.4", "malicious Go runtime")
+          require(malicious["runtime"], "go1.26.6", "malicious Go runtime")
           require(malicious["platform"], "linux/amd64", "malicious platform")
           require(malicious["pair_counts"]["total"], 120, "malicious manifest total")
           require(malicious["metrics"]["unique_semantic_samples"], 120, "malicious semantic samples")
@@ -335,7 +398,7 @@ jobs:
           classifier_policy_sha256="$(sed -nE \
             's/^const ClassifierPolicySHA256 = "([0-9a-f]{64})"$/\1/p' \
             internal/classifier/policy_identity.go)"
-          [[ "$classifier_policy_version" == "classifier-policy-v12" ]]
+          [[ "$classifier_policy_version" == "classifier-policy-v20" ]]
           [[ "$classifier_policy_sha256" =~ ^[0-9a-f]{64}$ ]]
           printf '%s\n' \
             'schema=round9-policy-gate/v1' \

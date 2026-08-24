@@ -150,8 +150,8 @@ func TestRound10LinuxPerformanceGate(t *testing.T) {
 	if os.Getenv(round10PerformanceEnabledEnvironment) != "1" {
 		t.Skip("run with make round10-performance")
 	}
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" || runtime.Version() != "go1.26.4" {
-		t.Fatalf("Round10 performance requires linux/amd64 go1.26.4, got %s/%s %s", runtime.GOOS, runtime.GOARCH, runtime.Version())
+	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" || runtime.Version() != "go1.26.6" {
+		t.Fatalf("Round10 performance requires linux/amd64 go1.26.6, got %s/%s %s", runtime.GOOS, runtime.GOARCH, runtime.Version())
 	}
 	output := os.Getenv(round10PerformanceOutputEnvironment)
 	if output == "" || !filepath.IsAbs(output) {

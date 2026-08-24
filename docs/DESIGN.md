@@ -1,9 +1,27 @@
-# CPA Cyber Abuse Guard v0.16 Round 12 Design
+# Cyber Abuse Guard Next design
+
+> [!IMPORTANT]
+> The active Round 14 source is `1.0.0`, targets CPA
+> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` on Linux amd64 with C ABI 1
+> and RPC schema 3. The detailed Round 12/13 text below is frozen historical
+> design; [Round 14](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md) supersedes its
+> version, release, compatibility, and evidence-status claims.
 
 ```text
-current_classifier_policy_version: classifier-policy-v12
-current_classifier_policy_sha256: 795dbcf90f94bdebdc1c66abbeeb6c9d92cb82e84b56b602832f89014cd7593c
+current_classifier_policy_version: classifier-policy-v20
+current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
+
+## Active Round 14 route boundary
+
+The registered CAG request callbacks protect routes such as chat and Responses.
+CPA v7.2.137 sends all `/v1/realtime*` traffic through an independent path that
+bypasses `RequestInterceptor`, `ModelRouter`, and request lifecycle. Realtime is
+therefore **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE**, and the design makes
+no all-traffic coverage claim. Round 13 v7.2.125/schema 2 and every older PASS
+remain bound to their original identities and do not transfer.
+
+## Frozen historical Round 12 design body
 
 ## Scope, release state, and invariants
 
@@ -17,16 +35,28 @@ be overwritten, relabeled, repaired, or republished as Round 12 output.
 
 The fixed CPA source/compile target is:
 
-- CPA `v7.2.116` at
-  `a88197f845c979132c8978ea223c6af05cc81536`, module sum
-  `h1:dGGI/CeEQTyKkFNeeqMoIyK/mWx5hVaQlZLDiHPoBTU=`, and `go.mod` sum
-  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
+- CPA `v7.2.124` at
+  `197f520426374e514218ed155933ac546c98d345`, module sum
+  `h1:ozPCuG4uOPBDre5LEF68eZYwPOYttcOe5L6flkW5boM=`, and `go.mod` sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. Its standard Linux amd64
+  asset SHA-256 is
+  `bb1597e5faa19bd67f4cecb88e14d6306f7f54bffdeedf2d0b973d7cfb5dc176`.
 
 The root module, `integration/cpalatestcontract`, and
 `integration/pluginstorecontract` bind this same identity. A later CPA tag is
 not followed automatically.
 Source/compile contracts are not counted-Mock Host evidence, and neither is a
 substitute for independent review of the exact candidate bytes.
+
+C ABI 1 and RPC schema 2 are unchanged from v7.2.116, but that does not transfer
+runtime evidence. CPA v7.2.124 Multi-Agent v2 rewrites `/v1/responses` tool
+definitions before `RequestInterceptor`, so CAG observes the rewritten tool
+representation rather than assuming byte identity with the client-wire request.
+The active lane must freshly regress recognized and unknown tool definitions,
+tool-schema inertness, tool-call arguments, terminal tool results, budget and
+provenance boundaries, and allow/block parity through the exact v7.2.124 Host.
+Historical v7.2.116 CI, second-machine, and five-repository data cannot close
+that gate.
 
 Round 9 introduced the candidate-level Balanced false-positive boundary that
 Round 12 retains and hardens. The classifier does not treat a request as a bag
@@ -70,8 +100,8 @@ audit-migration, and operator-owned rollback designs are documented in
 [ROUND9_HOST_RUNNER.md](ROUND9_HOST_RUNNER.md),
 [ROUND9_AUDIT_SCHEMA_V6.md](ROUND9_AUDIT_SCHEMA_V6.md), and
 [ROUND9_OPERATOR_ROLLOUT.md](ROUND9_OPERATOR_ROLLOUT.md). Those records remain
-bound to their historical CPA v7.2.113 lane and are not rebound to v7.2.116.
-The active v7.2.116 source line still requires its own exact-commit CI,
+bound to their historical CPA v7.2.113 lane and are not rebound to v7.2.124.
+The active v7.2.124 source line still requires its own exact-commit CI,
 counted-Mock Host validation, second-machine review, and independent audit;
 self-tests do not authorize production Balanced mode.
 
@@ -94,7 +124,7 @@ Its JSON RPC registration uses schema version 2 and declares:
   has no untrusted mutator that runs after Guard at the final interceptor stage;
 - `request_lifecycle_plugin`: remove the bounded, TTL-limited opaque RequestID
   and fingerprint entry for succeeded, failed, rejected, or canceled requests;
-- `model_router: true`: only the CPA v7.2.116 `codex-alpha-search` compatibility
+- `model_router: true`: only the CPA v7.2.124 `codex-alpha-search` compatibility
   entry is handled because those two HTTP routes do not invoke
   RequestInterceptor. Host-originated Router callbacks for every other format
   return `Handled:false` without classification; ordinary enforcement remains
@@ -116,7 +146,7 @@ executor: a malicious self-route is rejected by CPA's Alpha handler as HTTP 503
 before Codex auth or upstream because that handler currently accepts only a
 `provider=codex` target.
 
-CPA v7.2.116, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
+CPA v7.2.124, like the frozen v7.2.104 baseline, exposes `ModelRouter` as a
 global capability rather than a source-format-scoped capability. Once CAG
 registers it for Alpha Search, an
 ordinary routed request still incurs CPA's body clone, JSON/Base64
@@ -702,7 +732,11 @@ fixed low-cardinality messages. This live-page contract is distinct from the
 physical database/WAL file allocation reported by the filesystem.
 
 A database open/write/capacity failure degrades to in-memory counters and
-rate-limited host-error diagnostics; classification continues. Shutdown has a
+rate-limited host-error diagnostics; classification continues. Queue admission
+loss also makes audit readiness non-operational immediately. It recovers only
+after a post-loss event is durably written and an explicit Flush barrier covers
+that loss generation; an older barrier or a historical dropped counter cannot
+produce a transient healthy state. Shutdown has a
 five-second runtime budget so a locked SQLite writer cannot indefinitely stall
 plugin reconfiguration or shutdown.
 
@@ -724,7 +758,7 @@ symlinks are rejected; runtime permission failures make audit status visibly
 degraded. Operator-selected ancestor paths remain part of the deployment trust
 boundary.
 
-Before any upgrade that crosses into audit schema v6, the plugin creates a
+Before any upgrade that crosses into audit schema v6 or v7, the plugin creates a
 mandatory SQLite online snapshot even when the legacy
 `audit.backup_before_migration` switch is false. The database and its JSON
 manifest are first built below a same-filesystem mode-0700 staging directory,
@@ -748,6 +782,11 @@ separately stored, mandatory-redacted preview bounded
 by `max_bytes` and `ttl_hours`. Allowed, observed, and audit-only requests never
 enter that table. Request correlation uses SHA-256 of the raw body. Subject
 correlation uses HMAC-SHA256.
+CSAM candidate, positive, structurally incomplete, or private-budget-exhausted
+requests carry an irreversible content-free privacy taint. If any policy later
+blocks such a request, only the ordinary audit event is written; Raw Capture is
+forbidden even when a stronger legacy or incomplete winner determines the final
+disposition.
 Requested models use a separate `cyber-abuse-guard/audit/model/v1` hash domain
 and `sha256-model-v1:` prefix. Source format is restricted to the canonical
 `openai`, `openai-response`, `interactions`, `openai-image`, `openai-video`,
@@ -763,9 +802,11 @@ v4 adds the separate `raw_request_captures` table, its event foreign key with
 Round 8 explanation and raw-capture deduplication metadata; schema v6 splits
 the original disposition from the canonical Round 9 `decision_kind`, adds the
 explicit explanation schema identity, and carries those identities into Raw
-Capture. Migrations run inside one writer transaction. On failure, the old
-schema remains intact and the already-published pre-v6 snapshot remains
-available for recovery. Backups are capped by
+Capture; schema v7 closes the CSAM-text decision-kind set in Raw Capture by
+rebuilding that table transactionally while preserving all v6 rows. Migrations
+run inside one writer transaction. On failure, the old schema remains intact
+and the already-published pre-v6 or pre-v7 snapshot remains available for
+recovery. Backups are capped by
 `audit.max_migration_backups`, paired with their manifests, and are never
 placed in a release archive.
 
@@ -780,17 +821,23 @@ or disposition text. The four v2 explanation variants are `malicious`,
 `incomplete`, `opaque_media`, and `subject_risk`. Non-malicious variants cannot
 carry classifier rule IDs, categories, score components, or eligibility state.
 
-Schema v6 cannot be opened by an older SO whose supported schema is v5. An
+Schema v7 cannot be opened by an older SO whose supported schema is v6; schema
+v6 likewise cannot be opened by an older SO whose supported schema is v5. An
 operator rollback must stop CPA, verify the `.bak.manifest.json`, preserve the
-v6 database for incident review, and restore the matching
-`.pre-v6-*.bak` database before loading the older SO. The old SO must never be
-started against the v6 database or its WAL/SHM sidecars. The complete procedure
+v7 database for incident review, and restore the matching `.pre-v7-*.bak`
+database before loading the older SO (or the historical `.pre-v6-*.bak` across
+the v5/v6 boundary). The old SO must never be started against the v7 database or
+its WAL/SHM sidecars. The complete historical v5/v6 procedure
 and verification commands are in [Round 9 audit schema v6](ROUND9_AUDIT_SCHEMA_V6.md).
 
 Existing schema objects are accepted only after exact column name/order/type/
 nullability/primary-key, required CHECK fragment, index column/direction,
 singleton version-row, and contiguous migration-history validation. This is a
 structural contract, not a keyed proof that no otherwise valid row was deleted.
+Before v6-to-v7 backup or DDL, the migration also enumerates Raw Capture indexes
+and related triggers. Any object outside the four reviewed indexes and SQLite's
+primary-key autoindex fails closed with the v6 database unchanged; operators
+must explicitly remove or migrate custom objects before retrying.
 
 `audit.log_original_text` remains in the compatibility schema only to reject
 unsafe input. A value of `true` prevents activation or reconfiguration. There
@@ -895,7 +942,7 @@ The authenticated status exposes `loaded`, `enforcement_ready`,
 failures), `panics_recovered`, audit/HMAC/persistence degradation,
 reconfigure error, build/ruleset identity, and the classifier-policy
 version/hash. The loopback-only production watchdog checks those fields, runs
-built-in local probes, and actively proves the CPA v7.2.116 startup logging
+built-in local probes, and actively proves the CPA v7.2.124 startup logging
 boundary with one temporary root-bound marker plus two one-time, same-process
 CAG resource challenges over the direct CPA listener. The complete and partial
 lowercase-`get` probes are source-pinned to traverse CPA request logging without
@@ -929,7 +976,7 @@ The safe broad Go gate uses `scripts/go-safe-development-test.sh` in `test`,
 `race`, and `boundary` modes so routine development verification does not open
 consumed v4-v9 fixtures. Broad `go test ./...` is not an acceptable substitute.
 
-Both v7.2.116 compatibility contract modules first prove that the named critical
+Both v7.2.124 compatibility contract modules first prove that the named critical
 upstream Host tests still exist and then each executes the complete upstream
 `internal/pluginhost` package for the current platform. Their CI coverage is
 intentionally overlapping; it is neither an exact-name-only run nor a pair of
@@ -938,9 +985,15 @@ non-duplicative contracts. The plugin-store module also calls the official
 real build artifact. These checks cover store naming, root-only library layout,
 checksum, installed path/bytes, repeat installation, tamper repair, priority
 ordering, and documented Host fallback. They remain source/installer
-compatibility evidence. Current admission requires a newly versioned v7.2.116
+compatibility evidence. Current admission requires a newly versioned v7.2.124
 counted-Mock Host run on the same candidate and independent verification; the
 frozen Round 9 v7.2.113 evidence protocol cannot be relabelled or reused.
+
+The v7.2.124 Host run must additionally exercise Multi-Agent v2 on
+`/v1/responses` and bind the pre-interceptor tool-definition rewrite to the
+observed schema-2 envelope. A green v7.2.116 lane, including its CI,
+second-machine diagnostic, or five-repository data, is historical-only and is
+not accepted as this regression.
 
 The integration harness builds the `.so`, builds CPA at the pinned commit,
 starts a local mock OpenAI-compatible upstream, and starts CPA with the plugin.
@@ -998,8 +1051,10 @@ Missing `.so`, Store ZIP, metadata, checksums, or candidate manifest must fail;
 synthetic fallback cannot satisfy Host evidence.
 
 Whether the authorized sandbox and independent auditor ran the suite against the
-exact candidate is an evidence field, not an architectural property; consult
-the Round 12 status boundary for current claims. The Round 9 execution record,
+exact candidate is an evidence field, not an architectural property. The active
+v7.2.124 claims are stated in this design, the root README, and the active
+Round 12 status file. Historical v7.2.116 results inside that overlay do not
+transfer. The Round 9 execution record,
 Round 8 readiness report, and Round 6 handoff remain historical evidence only.
 Release verification inspects the ELF and rejects a binary whose imported glibc
 symbol version exceeds `GLIBC_2.34`. The published artifact therefore requires

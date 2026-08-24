@@ -10,7 +10,7 @@ release_init
 release_assert_tag
 release_assert_formal_build
 go_version="$($go_bin env GOVERSION)"
-[[ "$go_version" == go1.26.4 ]] || release_die "release requires Go go1.26.4, got $go_version"
+[[ "$go_version" == go1.26.6 ]] || release_die "release requires Go go1.26.6, got $go_version"
 
 mapfile -t tracked_scripts < <(git -C "$root" ls-files -- 'scripts/*.sh')
 ((${#tracked_scripts[@]} > 0)) || release_die "no tracked release scripts found"
