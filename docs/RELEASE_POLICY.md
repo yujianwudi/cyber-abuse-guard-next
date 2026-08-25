@@ -13,7 +13,7 @@ current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
 current_platform: linux-amd64
 current_go_toolchain: go1.26.6
-current_release_gate: ROUND14_ADMISSION_INCOMPLETE / RELEASE_ONLY_AFTER_ALL_GATES
+current_release_gate: ROUND14_ADMISSION_INCOMPLETE / RELEASE_AFTER_REQUIRED_CHECKS_OR_EXPLICIT_MAINTAINER_WAIVER
 ```
 
 The active compatibility identity is CPA v7.2.137/schema 3. Its official
@@ -27,6 +27,14 @@ fixed `v1.0.0-rc.1` prerelease only after every applicable acceptance gate and
 the reviewed RC workflow admission pass; see the
 [execution contract](ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md) and
 [status](ROUND14_STATUS.md).
+
+The second-machine execution requirement has an explicit maintainer waiver
+path. It is disabled by default and can continue only when the manual RC
+workflow receives `second_machine_waiver=true`, the exact acknowledgment
+`I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded one-line reason, and actor
+`yujianwudi`. The resulting evidence status is
+`SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED`; it records no remote test and
+does not claim an independent Host audit or production approval.
 
 Every `/v1/realtime*` route bypasses CAG `RequestInterceptor`, `ModelRouter`,
 and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED**. Release claims may

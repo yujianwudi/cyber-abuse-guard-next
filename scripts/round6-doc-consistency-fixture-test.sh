@@ -5,7 +5,7 @@ root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 fixture="$root/scripts/release-doc-consistency-test.sh"
 gate="$root/scripts/release-doc-consistency.sh"
 expected_fixture_sha256='11e02f5d3ebf3a7bf98a950338f1175624b98f84e9a0cd30e6f5302d3e368e05'
-expected_gate_sha256='8ba2643198b4ecff49bec904b58db911dae6f7f37ebb52cee876fa85910f1a3c'
+expected_gate_sha256='3b861bcc075cfc67806f1ccb92bc80a544d505d3fc5f88a4dfbe860541692037'
 
 for required in sha256sum awk; do
   command -v "$required" >/dev/null 2>&1 || {

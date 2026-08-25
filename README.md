@@ -21,7 +21,7 @@ current_audit_sqlite_schema: 7
 current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
-current_status: MAIN_MERGED / ENGINEERING_CI_PASS / SECOND_MACHINE_CANCELLED / RC_BLOCKED
+current_status: MAIN_MERGED / ENGINEERING_CI_PASS / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next (CAG) is a native, deterministic, pre-routing policy and
@@ -32,10 +32,16 @@ The active source line is `main`. CPA `v7.2.137` with RPC schema 3 is the only
 supported compatibility target in this tree.
 
 The code is merged on `main` and its exact post-merge Linux CI passed. The
-`v1.0.0-rc.1` Release is intentionally not published: the reviewed release
-contract requires a separate second-machine admission report, and that test was
-canceled by the operator. No release claim is inferred from an old candidate or
+`v1.0.0-rc.1` Release is intentionally not published yet. The reviewed workflow
+accepts either a real second-machine admission report or the explicit maintainer
+waiver described below. No release claim is inferred from an old candidate or
 from local self-checks.
+
+The RC workflow now supports an explicit maintainer waiver for the canceled
+second-machine lane. It requires `second_machine_waiver=true`,
+`I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded reason and the `yujianwudi` actor. A
+waived Release is clearly marked as having no second-machine execution; it is
+not an independent Host attestation or production approval.
 
 ## What the plugin does
 
