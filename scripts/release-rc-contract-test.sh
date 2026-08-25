@@ -94,6 +94,11 @@ for marker in (
     "bash scripts/release-rc.sh seal-candidate",
     "EXACT_PROTECTED_MAIN_CHECKS_PASS",
     "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS",
+    "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
+    "I_ACK_SECOND_MACHINE_NOT_RUN",
+    "second_machine_waiver:",
+    "second_machine_waiver_acknowledgment:",
+    "second_machine_waiver_reason:",
     "SUPPLEMENTAL_ARCHIVE_PASS",
     "NATIVE_HOST_SPECIAL_PATHS_PASS",
     "RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3",
@@ -146,6 +151,23 @@ top_level_triggers = re.findall(r"(?m)^  ([a-z_]+):\s*$", trigger_block)
 require(top_level_triggers == ["workflow_dispatch"],
         f"RC workflow trigger set changed: {top_level_triggers!r}")
 
+dispatch_inputs = re.findall(r"(?m)^      ([a-z0-9_]+):\s*$", trigger_block)
+require(
+    dispatch_inputs == [
+        "ci_run_id",
+        "codeql_run_id",
+        "policy_run_id",
+        "second_machine_release_id",
+        "second_machine_asset_id",
+        "second_machine_asset_sha256",
+        "authorize_prerelease",
+        "second_machine_waiver",
+        "second_machine_waiver_acknowledgment",
+        "second_machine_waiver_reason",
+    ],
+    f"RC dispatch input trust boundary changed: {dispatch_inputs!r}",
+)
+
 latest_function = workflow.split("latest_release_id() {", 1)[1].split(
     "revalidate_second_machine()", 1
 )[0]
@@ -191,11 +213,14 @@ require(
         "second_machine_asset_id",
         "second_machine_asset_sha256",
         "authorize_prerelease",
+        "second_machine_waiver",
+        "second_machine_waiver_acknowledgment",
+        "second_machine_waiver_reason",
     ],
     f"dispatch input trust boundary changed: {inputs!r}",
 )
-require(len(re.findall(r"(?m)^        type:\s+(?:string|boolean)\s*$", input_block)) == 7,
-        "RC dispatch must expose exactly seven typed inputs")
+require(len(re.findall(r"(?m)^        type:\s+(?:string|boolean)\s*$", input_block)) == 10,
+        "RC dispatch must expose exactly ten typed inputs")
 for forbidden in (
     "second_machine_status:",
     "second_machine_report_sha256:",
@@ -350,9 +375,9 @@ uses = uses_pattern.findall(workflow)
 expected_uses = Counter(
     {
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0": 3,
-        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131": 2,
+        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131": 3,
         "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373": 1,
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": 1,
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": 2,
     }
 )
 require(Counter(uses) == expected_uses, f"GitHub action allowlist changed: {Counter(uses)!r}")

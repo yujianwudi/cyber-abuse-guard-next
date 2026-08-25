@@ -10,27 +10,30 @@ here.
 | `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.137 / C ABI 1 / RPC schema 3 compatibility, tests, fuzzing, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Linux Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
-| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.1` annotated tag | Revalidate protected-main checks and second-machine admission, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
+| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.1` annotated tag | Revalidate protected-main checks, real second-machine admission or an explicit maintainer waiver, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
 
 ## RC publication boundary
 
 `release-rc.yml` is an executable publication path, but it is deliberately not
 a build path and it cannot run on a push or pull request. Publication is
-allowed only after all Round 14 acceptance gates have passed. In particular:
+allowed only after all required Round 14 checks have passed. In particular:
 
 - dispatch must target the existing GitHub-verified signed annotated
   `v1.0.0-rc.1` tag, peeled to the exact protected `main` commit;
 - the exact CI, CodeQL and Policy and Corpus Gate push runs and all five
   required checks must already be successful;
-- the exact nine-file CI candidate and a non-expired second-machine admission
-  v3 report must close before assets are sealed;
+- the exact nine-file CI candidate must close before assets are sealed; either a
+  non-expired second-machine v3 report must be admitted, or the maintainer must
+  set `second_machine_waiver=true`, enter `I_ACK_SECOND_MACHINE_NOT_RUN`, and
+  provide a bounded reason;
 - the workflow reuses the audited SO bytes and only derives the deterministic
   CPA Store RC ZIP; it does not recompile or move the tag;
 - write permissions exist only on the attestation and final publication jobs;
   the admission job is read-only, and no workflow grants `packages: write`;
 - the resulting GitHub Release must be non-draft, prerelease, and not latest.
 
-Any missing identity, signature, required check, artifact, second-machine gate,
+Any missing identity, signature, required check, artifact, real second-machine
+report or waiver acknowledgment,
 asset digest, or final release-state assertion fails closed. A failed fixed RC
 tag is never deleted, moved, or replaced; a later attempt requires a new RC
 version and a separately reviewed workflow change.

@@ -21,7 +21,7 @@ current_audit_sqlite_schema: 7
 current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
-current_status: MAIN_MERGED / ENGINEERING_CI_PASS / SECOND_MACHINE_CANCELLED / RC_BLOCKED
+current_status: MAIN_MERGED / ENGINEERING_CI_PASS / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next（CAG）是面向
@@ -31,8 +31,13 @@ Cyber-Abuse-Guard Next（CAG）是面向
 `main`，唯一兼容目标是 CPA `v7.2.137` / RPC schema 3。
 
 当前源码已经合并到 `main`，合并后的 Linux CI 也已通过。`v1.0.0-rc.1` 尚未发布：
-发行合同要求独立的二号机准入报告，而本轮二号机测试已由操作者取消。不能用旧候选、
-本地回执或历史 PASS 替代该证据。
+当前发行合同支持真实二号机准入报告，也支持下方明确的维护者豁免路径。不能用旧候选、
+本地回执或历史 PASS 替代当前候选身份。
+
+RC workflow 现在支持由维护者明确豁免已取消的二号机环节。必须设置
+`second_machine_waiver=true`、填写 `I_ACK_SECOND_MACHINE_NOT_RUN`、提供有界原因，
+且执行者必须是 `yujianwudi`。豁免发行版会明确标注未执行二号机，不代表独立 Host
+证明或生产批准。
 
 ## 请求处理链路
 

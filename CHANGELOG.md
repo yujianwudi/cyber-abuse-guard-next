@@ -137,6 +137,11 @@ Source-tree status updated: 2026-08-24 (Asia/Shanghai)
   started and no remote evidence exists. The mandatory second-machine release
   gates remain unsatisfied; the release workflow's fail-closed admission
   contract is unchanged.
+- Add an explicit maintainer-only second-machine waiver path to the fixed RC
+  workflow. It requires `second_machine_waiver=true`, the exact acknowledgment
+  `I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded reason and the `yujianwudi` actor.
+  The resulting status is `SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED`; it
+  never claims a Host, independent-audit or production PASS.
 - Declare CPA v7.2.137 `/v1/realtime*` explicitly
   `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE` because it bypasses CAG. Freeze
   all Round 13 v7.2.125 and Round 12 or earlier results as historical,

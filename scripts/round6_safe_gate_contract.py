@@ -1163,14 +1163,14 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "f136b3549e1210674d6e2324c991c32e66482b737513c51cc59c3139fe7f952a"
+ACTIVE_RC_WORKFLOW_SHA256 = "8bc9f73be43aac79b7878846e901e0b3c9de8c22db073fa48b2fec4d5427a2bf"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
-    "b92bf2546f231ebb749871b1668de28af735d79970ae4639a2bb1b64b9434649"
+    "f685d382d0019993def8be0f5bd86e7761306932e32ac832d193d8d4c060b42a"
 )
 ROUND13_RC_CONTRACT_TEST_SCRIPT = "scripts/release-rc-contract-test.sh"
 ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256 = (
-    "7ace50ab5244a9e9d56b284249ad5d92f50b95321783393975cdbf9dca57163a"
+    "bc8fd705dfa4f1ef46ff163c128a206fd436faa130f5f44a2a9ceaf0ed457983"
 )
 ROUND13_RC_CPA_STORE_SCRIPT = "scripts/release_rc_cpa_store.py"
 ROUND13_RC_CPA_STORE_SCRIPT_SHA256 = "514a434e33c8be7d0cdbd4e5a612b6ad7de446d07eb3d99f98931820ad4e14ae"
@@ -1191,9 +1191,9 @@ ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT_SHA256 = (
     "d9174bbfff63073deff3fffdcc9069d293f2b789a7d9eadfed4dec1abd766602"
 )
 ROUND13_RC_GITHUB_ADMISSION_SCRIPT = "scripts/release_rc_github_admission.py"
-ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "7b740ac42a00db7edfc247229ec24494e351f432646ed686f619b6274c3079c9"
+ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "b2df62a89150c962ca345c306d741c8ebf9fb0ee093b5fef0b57d390cad71f83"
 ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT = "scripts/release_rc_github_admission_test.py"
-ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "66d3f21e6cb9bb1d56fecaa2fd4949ea29e251b3e50e28e81472145425467ad7"
+ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "6b4d5c06b20d710eb006698dc96108afc592b95c84c080ac53b69625c6933f3f"
 ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT = "tools/current-cpa-audit/second_machine_release_admission.py"
 ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "aec77e979acd147b7447f7fe57f4b7ddd66dccc83d7c6dc4c0ceb73b2806f341"
 ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT = "tools/current-cpa-audit/tests/test_second_machine_release_admission.py"
@@ -1270,10 +1270,13 @@ ROUND13_RC_INPUT_ORDER = (
     "second_machine_asset_id",
     "second_machine_asset_sha256",
     "authorize_prerelease",
+    "second_machine_waiver",
+    "second_machine_waiver_acknowledgment",
+    "second_machine_waiver_reason",
 )
 ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS = {
     "jobs.admission.steps[1].env.GH_TOKEN",
-    "jobs.admission.steps[2].env.GH_TOKEN",
+    "jobs.admission.steps[4].env.GH_TOKEN",
     "jobs.seal_candidate.steps[3].with.github-token",
     "jobs.seal_candidate.steps[4].env.GH_TOKEN",
     "jobs.seal_candidate.steps[5].env.GH_TOKEN",
@@ -7872,6 +7875,8 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("RC_SUPPLEMENTAL_REQUIRED_STATUS", "SUPPLEMENTAL_ARCHIVE_PASS"),
         ("RC_NATIVE_HOST_REQUIRED_STATUS", "NATIVE_HOST_SPECIAL_PATHS_PASS"),
         ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.1-second-machine-admission"),
+        ("RC_SECOND_MACHINE_WAIVER_SCHEMA", "cyber-abuse-guard.second-machine-release-admission-waiver.v1"),
+        ("RC_SECOND_MACHINE_WAIVER_STATUS", "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED"),
         ("RC_PUBLISH_TIMEOUT_SECONDS", "1200"),
         ("RC_CLOCK_MARGIN_SECONDS", "300"),
         ("RC_BUILDER_IMAGE", RC_BUILDER_IMAGE),
@@ -7940,7 +7945,13 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     # future genuinely conditional step requires a reviewed expression here rather
     # than silently accepting arbitrary conditions, failure overrides, shells,
     # or dangerous execution-context environment mutations.
-    allowed_step_if: dict[tuple[str, int], str] = {}
+    allowed_step_if: dict[tuple[str, int], str] = {
+        ("admission", 2): "${{ inputs.second_machine_waiver == 'true' }}",
+        ("admission", 3): "${{ inputs.second_machine_waiver == 'true' }}",
+        ("admission", 4): "${{ inputs.second_machine_waiver != 'true' }}",
+        ("seal_candidate", 5): "${{ inputs.second_machine_waiver != 'true' }}",
+        ("seal_candidate", 6): "${{ inputs.second_machine_waiver == 'true' }}",
+    }
     for job_name, job in parsed_jobs.items():
         steps = yaml_sequence(job["steps"], source, f"jobs.{job_name}.steps")
         for index, step_node in enumerate(steps):
@@ -8024,9 +8035,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
         "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373",
         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
         "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
     )
     if sorted(uses) != sorted(expected_uses):

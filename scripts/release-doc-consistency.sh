@@ -428,7 +428,7 @@ if [[
   grep -Fq 'round14_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml' \
     "$doc_root/docs/ROUND14_STATUS.md" ||
     fail "ROUND14_STATUS.md lost the exact four-workflow inventory"
-  grep -Fq 'ALLOWED_ONLY_AFTER_ALL_ACCEPTANCE_GATES_PASS / RELEASE_RC_WORKFLOW_ONLY' \
+  grep -Fq 'ALLOWED_AFTER_REQUIRED_CHECKS_AND_EXPLICIT_MAINTAINER_WAIVER / RELEASE_RC_WORKFLOW_ONLY' \
     "$doc_root/docs/ROUND14_STATUS.md" ||
     fail "ROUND14_STATUS.md lost the gated RC publication contract"
   grep -Fq 'round13_rc_tag: v1.0.0-rc.1' "$doc_root/docs/ROUND13_STATUS.md" || \

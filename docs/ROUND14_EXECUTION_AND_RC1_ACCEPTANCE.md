@@ -2,6 +2,17 @@
 
 状态：`EXECUTION CONTRACT / NO PASS TRANSFER / NO MERGE UNTIL ACCEPTANCE / RC PUBLICATION GATED`
 
+## Maintainer waiver overlay
+
+The second-machine execution gate is normally required. For this release, the
+repository maintainer may explicitly waive that execution through the manual RC
+workflow by setting `second_machine_waiver=true`, entering
+`I_ACK_SECOND_MACHINE_NOT_RUN`, and providing a one-line reason. The actor must
+be `yujianwudi`; any other actor or missing acknowledgment fails closed. A
+waived run records `SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED`, preserves
+all exact-main CI, artifact, provenance and CPA checks, and explicitly does not
+claim independent Host evidence or production approval.
+
 本文件补充
 [`ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md`](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)
 和 [`ROUND14_STATUS.md`](ROUND14_STATUS.md)。状态页仍是事实入口；本任务书只定义
