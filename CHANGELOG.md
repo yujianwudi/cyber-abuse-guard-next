@@ -16,6 +16,12 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   two GitHub platform paths `dynamic/dependabot/dependabot-updates` and
   `dynamic/dependabot/update-graph`; any other active repository or platform
   workflow still fails admission and the same check is repeated at publication.
+- Accept only the exact Go pseudo-version derived from the nearest annotated,
+  same-source-version RC ancestor tag when CycloneDX v1.9.0 describes a later
+  clean candidate. The tag must peel to a distinct strict ancestor and its
+  generated timestamp/SHA suffix must match that commit exactly; the normalized
+  SBOM still binds the current candidate commit/tree and rejects all other
+  ancestor, lightweight-tag and arbitrary-version identities.
 
 - Preserve ordinary Host-performance sampler failure IDs on the fail-closed
   exception and emit only allowlisted internal identifiers such as

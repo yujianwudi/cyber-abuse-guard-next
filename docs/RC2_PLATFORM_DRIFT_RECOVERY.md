@@ -48,6 +48,9 @@ RC2 is accepted only when all of the following are true:
    Linux amd64 and Go 1.26.6.
 2. Workflow lint, ShellCheck, the Round 6 safe-gate contract, release-document
    mutation suite, RC contract suite and GitHub admission unit tests pass.
+   Candidate SBOM normalization must also accept only the exact pseudo-version
+   derived from the immutable annotated RC1 ancestor and bind the resulting
+   normalized component to the current RC2 candidate commit/tree.
 3. Tests reject an unknown active repository or platform workflow path while
    accepting zero, one or both known GitHub Dependabot dynamic paths.
 4. A signed PR commit passes `quality-and-artifacts`, `fuzz-long`,

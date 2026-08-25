@@ -73,6 +73,12 @@ git -C "$fixture" config user.email 'candidate-contract@example.invalid'
 git -C "$fixture" add .
 GIT_AUTHOR_DATE='2026-07-17T00:00:00Z' GIT_COMMITTER_DATE='2026-07-17T00:00:00Z' \
   git -C "$fixture" commit -q -m baseline
+GIT_COMMITTER_DATE='2026-07-17T00:00:00Z' \
+  git -C "$fixture" tag -a v1.0.0-rc.1 -m 'retired ancestor RC1'
+printf '%s\n' '# RC2 candidate after retired RC1' >"$fixture/docs/RC2.md"
+git -C "$fixture" add docs/RC2.md
+GIT_AUTHOR_DATE='2026-07-18T00:00:00Z' GIT_COMMITTER_DATE='2026-07-18T00:00:00Z' \
+  git -C "$fixture" commit -q -m 'rc2 candidate'
 
 commit="$(git -C "$fixture" rev-parse HEAD)"
 tree="$(git -C "$fixture" rev-parse 'HEAD^{tree}')"
@@ -464,7 +470,8 @@ candidate_sbom_identity_contract() {
   old_ref="$(jq -r '.metadata.component["bom-ref"]' "$unversioned")"
   expected_version="$(release_cyclonedx_component_version)"
   expected_ref="pkg:golang/github.com/yujianwudi/cyber-abuse-guard-next@${expected_version}?type=module"
-  ancestor_version="v0.14.1-0.20260716010203-${RELEASE_GIT_COMMIT:0:12}"
+  ancestor_version="$(release_cyclonedx_ancestor_tag_version)"
+  [[ -n "$ancestor_version" ]]
   write_sbom_fixture "$ancestor_versioned" versioned "$ancestor_version"
   jq --arg old_ref "$old_ref" \
     '.dependencies[1].dependsOn = [$old_ref]' \
@@ -493,6 +500,16 @@ candidate_sbom_rejects_mutation() {
   if [[ "$mutation" == pseudo-suffix ]]; then
     write_sbom_fixture "$raw" versioned \
       'v0.14.1-0.20260716010203-000000000000'
+  elif [[ "$mutation" == ancestor-version ]]; then
+    local ancestor_version wrong_ancestor
+    ancestor_version="$(release_cyclonedx_ancestor_tag_version)"
+    [[ -n "$ancestor_version" ]]
+    if [[ "${ancestor_version: -1}" == 0 ]]; then
+      wrong_ancestor="${ancestor_version%?}1"
+    else
+      wrong_ancestor="${ancestor_version%?}0"
+    fi
+    write_sbom_fixture "$raw" versioned "$wrong_ancestor"
   else
     write_sbom_fixture "$raw" versioned
   fi
@@ -516,7 +533,7 @@ candidate_sbom_rejects_mutation() {
     depends-on)
       jq '.dependencies[0].dependsOn = "not-an-array"' "$raw" >"$mutated"
       ;;
-    pseudo-suffix)
+    pseudo-suffix|ancestor-version)
       jq '.' "$raw" >"$mutated"
       ;;
     *)
@@ -571,7 +588,7 @@ development_sbom_identity_contract() {
 
 run_must_pass clean-exact-candidate candidate_success
 run_must_pass candidate-versioned-and-unversioned-sbom candidate_sbom_identity_contract
-for sbom_mutation in module duplicate purl version property depends-on pseudo-suffix; do
+for sbom_mutation in module duplicate purl version property depends-on pseudo-suffix ancestor-version; do
   run_must_fail "candidate-sbom-${sbom_mutation}" \
     candidate_sbom_rejects_mutation "$sbom_mutation"
 done

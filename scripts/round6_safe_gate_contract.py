@@ -1058,7 +1058,7 @@ CANDIDATE_ARTIFACTS = (
 )
 CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
-    "release-candidate-contract-test.sh": "2f0a591d988583d8215b93ca00968865d18d33664ab2d3971b544328a3125019",
+    "release-candidate-contract-test.sh": "5729bb62a955083d46caa9bd5e652ae849ebdcbe149ac280c62b987bde421840",
 }
 RC_RELEASE_SCRIPT_SHA256 = "2d5e680dad7e4edfbe42c806df534da4de8561e421e846bf530f6a28c898cc48"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
