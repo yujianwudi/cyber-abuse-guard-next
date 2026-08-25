@@ -10,7 +10,7 @@ are the shortest current-status entry points. The previously documented old
 repository and `v0.15` Release both returned GitHub API `404` on 2026-08-04;
 legacy availability is `UNAVAILABLE` and security support is `SUSPENDED`.
 The current project target is source `1.0.0` and planned prerelease
-`v1.0.0-rc.1`, pinned to CPA v7.2.137 at
+`v1.0.0-rc.2`, pinned to CPA v7.2.137 at
 `85d2faddd17e6f4f8675a84ee28b131f702e8eaa`; C ABI 1 and RPC schema 3 are the
 active contract. The module sum is
 `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=` and the go.mod sum is
@@ -20,9 +20,11 @@ archive SHA-256 is
 (21,072,175 bytes); its
 binary SHA-256 is
 `aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
-The active workflow directory contains exactly four workflows: `ci.yml`,
-`codeql.yml`, `policy-gate.yml`, and the gated `release-rc.yml`. RC publication
-is allowed only after every applicable Round 14 acceptance gate passes; before
+The active workflow directory contains exactly four repository workflows:
+`ci.yml`, `codeql.yml`, `policy-gate.yml`, and the gated `release-rc.yml`.
+GitHub-owned Dependabot `dynamic/` entries are separately bounded by an exact
+platform allowlist and are not repository YAML files. RC publication is allowed
+only after every applicable Round 14 acceptance gate passes; before
 that point tags, prereleases, GitHub Releases, provenance attestations, and
 release-asset uploads remain forbidden.
 Owner-run server diagnostics are not independent evidence; production approval
@@ -55,6 +57,7 @@ references remain stable.
 
 ## Current Round 14 navigation
 
+- [RC2 platform-workflow drift recovery and acceptance](RC2_PLATFORM_DRIFT_RECOVERY.md)
 - [Active Round 14 status and evidence boundary](ROUND14_STATUS.md)
 - [Active Round 14 CPA v7.2.137 / RPC schema 3 task book](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)

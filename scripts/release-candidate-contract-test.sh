@@ -73,6 +73,12 @@ git -C "$fixture" config user.email 'candidate-contract@example.invalid'
 git -C "$fixture" add .
 GIT_AUTHOR_DATE='2026-07-17T00:00:00Z' GIT_COMMITTER_DATE='2026-07-17T00:00:00Z' \
   git -C "$fixture" commit -q -m baseline
+GIT_COMMITTER_DATE='2026-07-17T00:00:00Z' \
+  git -C "$fixture" tag -a v1.0.0-rc.1 -m 'retired ancestor RC1'
+printf '%s\n' '# RC2 candidate after retired RC1' >"$fixture/docs/RC2.md"
+git -C "$fixture" add docs/RC2.md
+GIT_AUTHOR_DATE='2026-07-18T00:00:00Z' GIT_COMMITTER_DATE='2026-07-18T00:00:00Z' \
+  git -C "$fixture" commit -q -m 'rc2 candidate'
 
 commit="$(git -C "$fixture" rev-parse HEAD)"
 tree="$(git -C "$fixture" rev-parse 'HEAD^{tree}')"
@@ -170,7 +176,7 @@ rc_case() {
   RELEASE_ROOT="$fixture"
   RELEASE_CANDIDATE_BUILD="${RELEASE_CANDIDATE_BUILD:-0}"
   RELEASE_RC_BUILD="${RELEASE_RC_BUILD:-1}"
-  RELEASE_RC_TAG="${RELEASE_RC_TAG:-v1.0.0-rc.1}"
+  RELEASE_RC_TAG="${RELEASE_RC_TAG:-v1.0.0-rc.2}"
   RELEASE_RC_EXPECTED_COMMIT="${RELEASE_RC_EXPECTED_COMMIT:-$commit}"
   RELEASE_RC_EXPECTED_TREE="${RELEASE_RC_EXPECTED_TREE:-$tree}"
   ALLOW_DIRTY_BUILD="${ALLOW_DIRTY_BUILD:-0}"
@@ -190,7 +196,7 @@ rc_success() {
   release_assert_tag
   release_assert_rc_build
   [[ "$RELEASE_BUILD_KIND" == rc ]]
-  [[ "$RELEASE_ARTIFACT_VERSION" == 1.0.0-rc.1 ]]
+  [[ "$RELEASE_ARTIFACT_VERSION" == 1.0.0-rc.2 ]]
   [[ "$RELEASE_DIRTY" == false ]]
 }
 
@@ -464,7 +470,8 @@ candidate_sbom_identity_contract() {
   old_ref="$(jq -r '.metadata.component["bom-ref"]' "$unversioned")"
   expected_version="$(release_cyclonedx_component_version)"
   expected_ref="pkg:golang/github.com/yujianwudi/cyber-abuse-guard-next@${expected_version}?type=module"
-  ancestor_version="v0.14.1-0.20260716010203-${RELEASE_GIT_COMMIT:0:12}"
+  ancestor_version="$(release_cyclonedx_ancestor_tag_version)"
+  [[ -n "$ancestor_version" ]]
   write_sbom_fixture "$ancestor_versioned" versioned "$ancestor_version"
   jq --arg old_ref "$old_ref" \
     '.dependencies[1].dependsOn = [$old_ref]' \
@@ -493,6 +500,16 @@ candidate_sbom_rejects_mutation() {
   if [[ "$mutation" == pseudo-suffix ]]; then
     write_sbom_fixture "$raw" versioned \
       'v0.14.1-0.20260716010203-000000000000'
+  elif [[ "$mutation" == ancestor-version ]]; then
+    local ancestor_version wrong_ancestor
+    ancestor_version="$(release_cyclonedx_ancestor_tag_version)"
+    [[ -n "$ancestor_version" ]]
+    if [[ "${ancestor_version: -1}" == 0 ]]; then
+      wrong_ancestor="${ancestor_version%?}1"
+    else
+      wrong_ancestor="${ancestor_version%?}0"
+    fi
+    write_sbom_fixture "$raw" versioned "$wrong_ancestor"
   else
     write_sbom_fixture "$raw" versioned
   fi
@@ -516,7 +533,7 @@ candidate_sbom_rejects_mutation() {
     depends-on)
       jq '.dependencies[0].dependsOn = "not-an-array"' "$raw" >"$mutated"
       ;;
-    pseudo-suffix)
+    pseudo-suffix|ancestor-version)
       jq '.' "$raw" >"$mutated"
       ;;
     *)
@@ -539,7 +556,7 @@ rc_sbom_identity_contract() {
   normalize_sbom_fixture "$raw" "$normalized"
   normalize_sbom_fixture "$unversioned" "$normalized_unversioned"
   cmp -s "$normalized" "$normalized_unversioned"
-  assert_normalized_sbom_identity "$normalized" v1.0.0-rc.1 rc
+  assert_normalized_sbom_identity "$normalized" v1.0.0-rc.2 rc
 }
 
 formal_sbom_identity_contract() {
@@ -571,7 +588,7 @@ development_sbom_identity_contract() {
 
 run_must_pass clean-exact-candidate candidate_success
 run_must_pass candidate-versioned-and-unversioned-sbom candidate_sbom_identity_contract
-for sbom_mutation in module duplicate purl version property depends-on pseudo-suffix; do
+for sbom_mutation in module duplicate purl version property depends-on pseudo-suffix ancestor-version; do
   run_must_fail "candidate-sbom-${sbom_mutation}" \
     candidate_sbom_rejects_mutation "$sbom_mutation"
 done
@@ -606,11 +623,11 @@ run_must_fail formal-build-with-lightweight-tag formal_without_tag
 run_must_fail candidate-after-lightweight-formal-tag candidate_success
 git -C "$fixture" tag -d v1.0.0 >/dev/null
 
-git -C "$fixture" tag v1.0.0-rc.1
+git -C "$fixture" tag v1.0.0-rc.2
 run_must_fail rc-build-with-lightweight-tag rc_success
-git -C "$fixture" tag -d v1.0.0-rc.1 >/dev/null
+git -C "$fixture" tag -d v1.0.0-rc.2 >/dev/null
 
-git -C "$fixture" tag -a v1.0.0-rc.1 -m 'sandbox v1.0.0-rc.1'
+git -C "$fixture" tag -a v1.0.0-rc.2 -m 'sandbox v1.0.0-rc.2'
 run_must_pass rc-build-with-annotated-tag rc_success
 run_must_pass rc-sbom-exact-tag-identity rc_sbom_identity_contract
 run_must_fail rc-cannot-run-formal-operation rc_cannot_run_formal_operation
@@ -622,7 +639,7 @@ run_must_pass formal-sbom-exact-tag-identity formal_sbom_identity_contract
 run_must_fail candidate-after-formal-tag candidate_success
 run_must_fail rc-after-formal-tag rc_success
 git -C "$fixture" tag -d v1.0.0 >/dev/null
-git -C "$fixture" tag -d v1.0.0-rc.1 >/dev/null
+git -C "$fixture" tag -d v1.0.0-rc.2 >/dev/null
 run_must_pass development-sbom-cannot-claim-formal development_sbom_identity_contract
 
 sed -i 's/Version = "1\.0\.0"/Version = "1.0"/' "$fixture/internal/buildinfo/buildinfo.go"

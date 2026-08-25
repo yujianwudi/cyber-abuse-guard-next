@@ -18,6 +18,12 @@ exactly these four repository-owned workflow files:
 | `.github/workflows/policy-gate.yml` | `Policy and Corpus Gate` | `round9-policy-and-corpus` |
 | `.github/workflows/release-rc.yml` | `RC Release` | Manual post-acceptance publication lane; not a required PR context |
 
+GitHub's Actions API may also expose platform-owned records at
+`dynamic/dependabot/dependabot-updates` and
+`dynamic/dependabot/update-graph`. They are not repository YAML files. RC
+admission keeps the four paths above exact, permits only a subset of those two
+GitHub dynamic paths, and fails closed on every other active path.
+
 Only `.github/workflows/release-rc.yml` may obtain the narrowly scoped write
 permissions or run tag, Release, attestation, and Release-asset operations, and
 only in its post-admission publication jobs. Manual `gh release`, altered job
@@ -129,10 +135,11 @@ gh api 'repos/yujianwudi/cyber-abuse-guard-next/actions/runners?per_page=100'
 
 The expected branch result is strict required checks, the five exact contexts
 above, zero approvals, conversations/admin/signatures enabled, and force
-pushes/deletion disabled. Compare the Actions workflows response against an
-exact allowlist of the four repository-owned workflow paths; verify Dependency
-Graph separately through its own repository settings/API surface rather than
-treating it as an Actions workflow record.
+pushes/deletion disabled. Compare the Actions workflows response against the
+exact four repository-owned paths and the separate two-path GitHub Dependabot
+dynamic allowlist. Verify Dependency Graph enablement through its repository
+settings/API surface; its dynamic Actions record is platform metadata, not a
+fifth repository workflow.
 
 Run the checked-in local governance contracts with:
 

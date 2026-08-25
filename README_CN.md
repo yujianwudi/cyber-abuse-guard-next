@@ -11,7 +11,7 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 
 ```text
 current_source_version: 1.0.0
-current_rc_tag: v1.0.0-rc.1
+current_rc_tag: v1.0.0-rc.2
 current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
 current_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
@@ -20,8 +20,8 @@ current_platform: linux-amd64
 current_audit_sqlite_schema: 7
 current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
-current_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
-current_status: MAIN_MERGED / ENGINEERING_CI_PASS / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
+current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
+current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next（CAG）是面向
@@ -30,8 +30,10 @@ Cyber-Abuse-Guard Next（CAG）是面向
 防御性安全、事件响应、合规和授权运维请求不被关键词误伤。当前唯一维护分支是
 `main`，唯一兼容目标是 CPA `v7.2.137` / RPC schema 3。
 
-当前源码已经合并到 `main`，合并后的 Linux CI 也已通过。`v1.0.0-rc.1` 尚未发布：
-当前发行合同支持真实二号机准入报告，也支持下方明确的维护者豁免路径。不能用旧候选、
+RC1 基线已经合并到 `main`，合并后的 Linux CI 也已通过。GitHub 开始在 Actions
+库存中暴露平台自有 Dependabot workflow 后，不可变的 `v1.0.0-rc.1` tag 未产生
+Release；`v1.0.0-rc.2` 在不放宽四个仓库 YAML 白名单的前提下修正该准入合同，
+目前仍未发布。发行合同支持真实二号机准入报告，也支持下方明确的维护者豁免路径。不能用旧候选、
 本地回执或历史 PASS 替代当前候选身份。
 
 RC workflow 现在支持由维护者明确豁免已取消的二号机环节。必须设置

@@ -10,7 +10,7 @@ here.
 | `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.137 / C ABI 1 / RPC schema 3 compatibility, tests, fuzzing, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Linux Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
-| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.1` annotated tag | Revalidate protected-main checks, real second-machine admission or an explicit maintainer waiver, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
+| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.2` annotated tag | Revalidate protected-main checks, real second-machine admission or an explicit maintainer waiver, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
 
 ## RC publication boundary
 
@@ -19,7 +19,7 @@ a build path and it cannot run on a push or pull request. Publication is
 allowed only after all required Round 14 checks have passed. In particular:
 
 - dispatch must target the existing GitHub-verified signed annotated
-  `v1.0.0-rc.1` tag, peeled to the exact protected `main` commit;
+  `v1.0.0-rc.2` tag, peeled to the exact protected `main` commit;
 - the exact CI, CodeQL and Policy and Corpus Gate push runs and all five
   required checks must already be successful;
 - the exact nine-file CI candidate must close before assets are sealed; either a
@@ -31,6 +31,16 @@ allowed only after all required Round 14 checks have passed. In particular:
 - write permissions exist only on the attestation and final publication jobs;
   the admission job is read-only, and no workflow grants `packages: write`;
 - the resulting GitHub Release must be non-draft, prerelease, and not latest.
+
+GitHub may expose platform-owned Dependabot workflows under `dynamic/` even
+though no additional YAML exists in this directory. Admission keeps the four
+repository-owned `.github/workflows/*.yml` paths exact and uses this closed
+platform list:
+
+- `dynamic/dependabot/dependabot-updates`
+- `dynamic/dependabot/update-graph`
+
+Any other active path fails closed.
 
 Any missing identity, signature, required check, artifact, real second-machine
 report or waiver acknowledgment,

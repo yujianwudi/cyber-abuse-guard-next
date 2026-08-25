@@ -1,7 +1,7 @@
 # Security Policy
 
 The actively reviewed candidate is source `1.0.0`, planned tag
-`v1.0.0-rc.1`, against CLIProxyAPI
+`v1.0.0-rc.2`, against CLIProxyAPI
 `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` on Linux amd64, C ABI 1 /
 RPC schema 3. It remains a prerelease until the Round 14 exact-candidate gates
 pass; Round 13 v7.2.125/schema 2 and older results are historical only and no
@@ -21,7 +21,7 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 
 | Version | Status | Security support |
 |---|---|---|
-| Planned `v1.0.0-rc.1` | Active Linux amd64 candidate pinned to CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3; exact-candidate gates are still open | Prerelease reports accepted; not stable production support |
+| Planned `v1.0.0-rc.2` | Active Linux amd64 candidate pinned to CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3; RC1 is an immutable unpublished admission-failure tag | Prerelease reports accepted; not stable production support |
 | `v0.15` | **UNAVAILABLE**. The previously documented repository and Release returned GitHub API `404` on 2026-08-04; original bytes and digests are not currently reachable from the documented URLs | **SUPPORT SUSPENDED** until a verifiable read-only repository or signed immutable archive is restored |
 | Source `0.16` / Round 12 working tree | Linux amd64 development source pinned to Go 1.26.4 and CPA v7.2.124 at `197f520426374e514218ed155933ac546c98d345`. C ABI 1 / RPC schema 2 are unchanged. Exact baseline `main@21267e742b624b29a75bd3683fd6914f76c764b5` CI, the supplied second-machine diagnostic, and five-repository data are historical v7.2.116 evidence only; exact v7.2.124 final-candidate CI, Multi-Agent v2 Responses-tool regression, and second-machine run remain pending, while protected Host, independent attestation, production approval, and release readiness are `NOT_PROVIDED` | Reports are accepted, but source development is not a supported release or production authorization |
 | `v0.16-rc.1` / `v0.16-rc.2` / failed `v0.16-rc.3` / uncreated `v0.16-rc.4` identities | Immutable historical candidate and incident evidence; they are not current Round 12 output and must not be overwritten or republished | Historical only; not production-supported |

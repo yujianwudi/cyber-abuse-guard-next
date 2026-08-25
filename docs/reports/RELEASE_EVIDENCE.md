@@ -1,4 +1,4 @@
-# v1.0.0-rc.1 evidence — CPA v7.2.137 active target; gated RC publication
+# v1.0.0-rc.2 evidence — CPA v7.2.137 active target; gated RC publication
 
 ## Round 14 active release boundary
 
@@ -13,18 +13,18 @@ round14_cpa_linux_binary: 63738088_BYTES / SHA256_aac02193aee085542f2452e02606a0
 round14_classifier_policy: classifier-policy-v20 / 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
 round14_audit_expected_test_count: 315 / EXECUTED
-round14_audit_runner_bundle_sha256: 5c3e6af865cd2197245ee44b5fa1cf71e83deaed780408e55f92fc1e162472ec
+round14_audit_runner_bundle_sha256: 49512adde24e013e8c79cac0ef33dcbd51b975144cb20eb4542c582905af4e3c
 round14_audit_contract_sha256: 7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642
 round14_audit_run_source_sha256: 434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665
 round14_audit_machine_schema_sha256: 3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e
 round14_audit_tool_tests: PASS / LINUX / 315_OF_315
 round14_audit_tool_skips: 0
-round14_audit_test_sources_sha256: cc6c1e0468d519ea83d4bf5003768ce46ed9f2078c6e234f311d9c95831a936c
+round14_audit_test_sources_sha256: 94c47cb2e1dac34dfdf8a5a7f8d1777f00c93537a7e12f8850cbb6dcd1a373a1
 round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round14_audit_unit_receipt_sha256: 1fb557487fa5571ee3cc4d37b697911e807750e89375eb8efc3af79e984e68c5
-round14_audit_unit_started_at: 2026-08-24T15:02:16.052Z
-round14_audit_unit_finished_at: 2026-08-24T15:02:52.193Z
-round14_audit_unit_elapsed_ms: 36141
+round14_audit_unit_receipt_sha256: b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c
+round14_audit_unit_started_at: 2026-08-25T10:18:13.842Z
+round14_audit_unit_finished_at: 2026-08-25T10:18:49.358Z
+round14_audit_unit_elapsed_ms: 35516
 round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
 round14_targeted_schema3_host_fixture: PASS / 5_TESTS
 round14_targeted_cag_rpc_schema: PASS / WSL
@@ -34,7 +34,7 @@ round14_exact_candidate_ci: NOT_RUN / PENDING
 round14_second_machine_and_five_repository_zip_fp: EXACT_FIX_NOT_RUN / PARENT_20D6268_PASS_DOES_NOT_TRANSFER
 round14_host_performance_and_soak: EXACT_FIX_NOT_RUN / V1.44_ONE_SHOT_COLLECTOR_LOCAL_TEST_PASS
 round14_realtime_protection: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
-round14_tag_and_release: NOT_CREATED / ALLOWED_ONLY_AFTER_ALL_ACCEPTANCE_GATES_PASS / RELEASE_RC_WORKFLOW_ONLY
+round14_tag_and_release: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC1_RELEASE_NOT_CREATED / RC2_NOT_CREATED / ALLOWED_AFTER_REQUIRED_CHECKS_AND_EXPLICIT_MAINTAINER_WAIVER / RELEASE_RC_WORKFLOW_ONLY
 round14_cpa_remote_tag_commit_recheck: PASS / GITHUB_API_TAG_REF_AND_COMMIT_VERIFIED / 2026-08-21
 round14_official_asset_and_binary_recheck: PASS / LINUX_DOWNLOAD_AND_CHECKSUMS_RECHECKED / 2026-08-21
 ```

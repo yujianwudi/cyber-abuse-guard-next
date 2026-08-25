@@ -264,6 +264,29 @@ release_cyclonedx_component_version() {
   esac
 }
 
+release_cyclonedx_ancestor_tag_version() {
+  local tag tag_type tag_commit tag_epoch tag_timestamp
+  [[ "$RELEASE_BUILD_KIND" == candidate ]] || return 0
+  tag="$(git -C "$RELEASE_ROOT" describe --tags \
+    --match "v${RELEASE_SOURCE_VERSION}-rc.*" --abbrev=0 HEAD 2>/dev/null || true)"
+  [[ -n "$tag" ]] || return 0
+  [[ "$tag" =~ ^v${RELEASE_SOURCE_VERSION//./\.}-rc\.[1-9][0-9]*$ ]] || \
+    release_die "nearest candidate ancestor tag has an invalid RC identity"
+  tag_type="$(git -C "$RELEASE_ROOT" cat-file -t "refs/tags/$tag")"
+  [[ "$tag_type" == tag ]] || \
+    release_die "candidate ancestor RC tag must be annotated"
+  tag_commit="$(git -C "$RELEASE_ROOT" rev-parse --verify "refs/tags/$tag^{commit}")"
+  [[ "$tag_commit" =~ ^[0-9a-f]{40}$ && "$tag_commit" != "$RELEASE_GIT_COMMIT" ]] || \
+    release_die "candidate ancestor RC tag must peel to a distinct full commit"
+  git -C "$RELEASE_ROOT" merge-base --is-ancestor "$tag_commit" "$RELEASE_GIT_COMMIT" || \
+    release_die "candidate ancestor RC tag does not belong to the current history"
+  tag_epoch="$(git -C "$RELEASE_ROOT" show -s --format=%ct "$tag_commit")"
+  [[ "$tag_epoch" =~ ^[0-9]+$ ]] || \
+    release_die "candidate ancestor RC tag commit time is invalid"
+  tag_timestamp="$(date -u -d "@$tag_epoch" '+%Y%m%d%H%M%S')"
+  printf '%s.0.%s-%s\n' "$tag" "$tag_timestamp" "${tag_commit:0:12}"
+}
+
 # cyclonedx-gomod v1.9.0 treats main-module version discovery as optional and
 # silently omits it when go-git cannot traverse a linked-worktree common object
 # directory. Canonicalize the generated main component from release_init's
@@ -276,7 +299,7 @@ release_normalize_cyclonedx_sbom() {
   local timestamp="$3"
   local module="$RELEASE_CYCLONEDX_MAIN_MODULE"
   local component_version component_base component_ref component_purl
-  local generated_git_version_pattern old_ref allow_other_version=false
+  local generated_git_version_pattern generated_ancestor_version old_ref allow_other_version=false
   local commit_property="cag:source:git-commit"
   local tree_property="cag:source:git-tree"
   local kind_property="cag:build:kind"
@@ -288,6 +311,7 @@ release_normalize_cyclonedx_sbom() {
     release_die "CycloneDX normalization timestamp is invalid"
 
   component_version="$(release_cyclonedx_component_version)"
+  generated_ancestor_version="$(release_cyclonedx_ancestor_tag_version)"
   # cyclonedx-gomod may derive its pseudo-version from an older formal tag and
   # uses Git author time rather than release_init's committer epoch. Accept
   # only the pinned Go pseudo-version shape whose terminal revision is the
@@ -309,6 +333,7 @@ release_normalize_cyclonedx_sbom() {
     --arg base "$component_base" \
     --arg version "$component_version" \
     --arg generated_git_version_pattern "$generated_git_version_pattern" \
+    --arg generated_ancestor_version "$generated_ancestor_version" \
     --arg ref "$component_ref" \
     --arg purl "$component_purl" \
     --arg commit "$RELEASE_GIT_COMMIT" \
@@ -335,8 +360,10 @@ release_normalize_cyclonedx_sbom() {
            $old_version != null and ($old_version | type) == "string" and
            ($old_version | length) > 0 and
            (
-             $old_version == $version or
-             ($old_version | test($generated_git_version_pattern)) or
+              $old_version == $version or
+              ($old_version | test($generated_git_version_pattern)) or
+              ($generated_ancestor_version != "" and
+                $old_version == $generated_ancestor_version) or
              ($allow_other_version and
                ($old_version | test("^v[0-9]+[.][0-9]+([.][0-9]+)?([-+][0-9A-Za-z.-]+)?$")))
            ) and

@@ -33,7 +33,7 @@ It contains source-level contract suites and checksum-pinned overlays:
   ModelRouter without changing CPA production source. Its separately named
   legacy Router subtest is explicitly a schema-1 compatibility fixture.
 - `testfixtures/release_rc_install_overlay_test.go.txt` binds the exact
-  `v1.0.0-rc.1` tag/version/archive name, rejects stable-only assets and
+  `v1.0.0-rc.2` tag/version/archive name, rejects stable-only assets and
   candidate-style root names for an RC install, proves both the unversioned
   root and exact RC-versioned root forms accepted by CPA, and performs a
   checksum-verified mocked `InstallVersion` whose installed bytes equal the

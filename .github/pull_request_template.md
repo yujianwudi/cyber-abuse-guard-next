@@ -26,4 +26,4 @@ Describe the change, why it is needed, and the affected trust boundary.
 ## Release boundary
 
 - [ ] This pull request does not claim deployment, independent attestation, or stable production authorization.
-- [ ] Any `v1.0.0-rc.1` action has explicit maintainer authorization and preserves the Round 13 exact-main, Linux, second-machine, provenance, and prerelease gates.
+- [ ] Any `v1.0.0-rc.2` action has explicit maintainer authorization and preserves the exact-main, Linux, second-machine-or-waiver, provenance, and prerelease gates.

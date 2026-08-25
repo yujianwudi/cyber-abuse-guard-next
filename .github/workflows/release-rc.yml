@@ -1,6 +1,6 @@
 name: RC Release
 
-run-name: RC v1.0.0-rc.1 from ${{ github.ref_name }}
+run-name: RC v1.0.0-rc.2 from ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ on:
         required: true
         type: string
       authorize_prerelease:
-        description: Seal the audited candidate and publish the fixed v1.0.0-rc.1 prerelease
+        description: Seal the audited candidate and publish the fixed v1.0.0-rc.2 prerelease
         required: true
         type: boolean
         default: false
@@ -54,18 +54,18 @@ defaults:
     shell: bash
 
 concurrency:
-  group: rc-release-v1.0.0-rc.1
+  group: rc-release-v1.0.0-rc.2
   cancel-in-progress: false
 
 env:
-  RC_TAG: v1.0.0-rc.1
+  RC_TAG: v1.0.0-rc.2
   # Tag admission is intentionally based on GitHub's immutable verification
   # record.  The policy is also written into the release evidence so a
   # successful boolean alone cannot be mistaken for a signer authorization.
   RC_TAG_SIGNER_POLICY: github-verification-verified-valid-annotated-tag-and-commit
   RC_SOURCE_VERSION: '1.0.0'
   RC_BINARY_VERSION: '1.0.0'
-  RC_ARTIFACT_VERSION: 1.0.0-rc.1
+  RC_ARTIFACT_VERSION: 1.0.0-rc.2
   RC_CPA_VERSION: v7.2.137
   RC_CPA_COMMIT: 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
   RC_CPA_C_ABI: '1'
@@ -77,7 +77,7 @@ env:
   RC_SUPPLEMENTAL_ARCHIVE_SHA256: 23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c
   RC_SUPPLEMENTAL_REQUIRED_STATUS: SUPPLEMENTAL_ARCHIVE_PASS
   RC_NATIVE_HOST_REQUIRED_STATUS: NATIVE_HOST_SPECIAL_PATHS_PASS
-  RC_SECOND_MACHINE_STAGING_TAG: v1.0.0-rc.1-second-machine-admission
+  RC_SECOND_MACHINE_STAGING_TAG: v1.0.0-rc.2-second-machine-admission
   RC_SECOND_MACHINE_WAIVER_SCHEMA: cyber-abuse-guard.second-machine-release-admission-waiver.v1
   RC_SECOND_MACHINE_WAIVER_STATUS: SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED
   RC_PUBLISH_TIMEOUT_SECONDS: '1200'
@@ -285,18 +285,7 @@ jobs:
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "repos/${GITHUB_REPOSITORY}/actions/workflows?per_page=100" >"$active_workflows"
-          if ! jq -e '
-            ([.[] | .workflows[] | select(.state == "active") | .path] | sort) ==
-              [
-                ".github/workflows/ci.yml",
-                ".github/workflows/codeql.yml",
-                ".github/workflows/policy-gate.yml",
-                ".github/workflows/release-rc.yml"
-              ]
-          ' "$active_workflows" >/dev/null; then
-            printf 'active workflow inventory is not the reviewed four-workflow set\n' >&2
-            exit 1
-          fi
+          python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"
 
           branch_pages="$RUNNER_TEMP/repository-branches.json"
           gh api --paginate --slurp \
@@ -526,7 +515,7 @@ jobs:
         if: ${{ inputs.second_machine_waiver == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cyber-abuse-guard-v1.0.0-rc.1-second-machine-waiver
+          name: cyber-abuse-guard-v1.0.0-rc.2-second-machine-waiver
           path: ${{ runner.temp }}/second-machine-release-admission.json
           if-no-files-found: error
           retention-days: 7
@@ -727,7 +716,7 @@ jobs:
         if: ${{ inputs.second_machine_waiver == 'true' }}
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: cyber-abuse-guard-v1.0.0-rc.1-second-machine-waiver
+          name: cyber-abuse-guard-v1.0.0-rc.2-second-machine-waiver
           path: ${{ runner.temp }}
 
       - name: Recheck fixed release and CPA contracts
@@ -826,7 +815,7 @@ jobs:
           compression-level: 0
           if-no-files-found: error
           include-hidden-files: false
-          name: cyber-abuse-guard-v1.0.0-rc.1-linux-amd64-release-assets
+          name: cyber-abuse-guard-v1.0.0-rc.2-linux-amd64-release-assets
           overwrite: false
           path: ${{ runner.temp }}/release-dist/*
           retention-days: 7
@@ -853,7 +842,7 @@ jobs:
       - name: Download exact sealed transfer
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: cyber-abuse-guard-v1.0.0-rc.1-linux-amd64-release-assets
+          name: cyber-abuse-guard-v1.0.0-rc.2-linux-amd64-release-assets
           path: ${{ runner.temp }}/release-dist
 
       - name: Verify exact transfer and final asset contract
@@ -904,7 +893,7 @@ jobs:
             --argjson run_id "$GITHUB_RUN_ID" \
             --arg digest "$ARTIFACT_DIGEST" '
               .id == $artifact_id and
-              .name == "cyber-abuse-guard-v1.0.0-rc.1-linux-amd64-release-assets" and
+              .name == "cyber-abuse-guard-v1.0.0-rc.2-linux-amd64-release-assets" and
               .digest == $digest and .expired == false and
               .workflow_run.id == $run_id
             ' <<<"$transfer" >/dev/null
@@ -1221,18 +1210,7 @@ jobs:
               --header 'Accept: application/vnd.github+json' \
               --header 'X-GitHub-Api-Version: 2022-11-28' \
               "repos/${GITHUB_REPOSITORY}/actions/workflows?per_page=100" >"$active_workflows"
-            if ! jq -e '
-              ([.[] | .workflows[] | select(.state == "active") | .path] | sort) ==
-                [
-                  ".github/workflows/ci.yml",
-                  ".github/workflows/codeql.yml",
-                  ".github/workflows/policy-gate.yml",
-                  ".github/workflows/release-rc.yml"
-                ]
-            ' "$active_workflows" >/dev/null; then
-              printf 'active workflow inventory changed during publication\n' >&2
-              return 1
-            fi
+            python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"
             branch_pages="$RUNNER_TEMP/publish-branches.json"
             gh api --paginate --slurp \
               --header 'Accept: application/vnd.github+json' \
@@ -1336,7 +1314,7 @@ jobs:
             "repos/${GITHUB_REPOSITORY}/releases/${release_id}")"
           jq -e --argjson release_id "$release_id" --arg tag "$RC_TAG" --arg commit "$COMMIT" '
             .id == $release_id and .draft == false and .prerelease == true and
-            .immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.1" and
+            .immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.2" and
             .tag_name == $tag and .target_commitish == $commit
           ' <<<"$published" >/dev/null
           published_body="$RUNNER_TEMP/published-release-body.md"
@@ -1354,7 +1332,7 @@ jobs:
             .data.repository.release.isDraft == false and
             .data.repository.release.isLatest == false and
             .data.repository.release.isPrerelease == true and
-            .data.repository.release.name == "Cyber Abuse Guard v1.0.0-rc.1" and
+            .data.repository.release.name == "Cyber Abuse Guard v1.0.0-rc.2" and
             .data.repository.release.tagName == $tag
           ' <<<"$graphql_release" >/dev/null
           verify_tag_unchanged

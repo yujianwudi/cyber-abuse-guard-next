@@ -7,8 +7,8 @@ source "$root/scripts/release-common.sh"
 
 readonly rc_source_version='1.0.0'
 readonly rc_binary_version='1.0.0'
-readonly rc_artifact_version='1.0.0-rc.1'
-readonly rc_tag='v1.0.0-rc.1'
+readonly rc_artifact_version='1.0.0-rc.2'
+readonly rc_tag='v1.0.0-rc.2'
 readonly rc_cpa_version='v7.2.137'
 readonly rc_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'
 readonly rc_cpa_c_abi='1'
@@ -82,7 +82,7 @@ usage: release-rc.sh seal-candidate CANDIDATE_DIRECTORY SECOND_MACHINE_REPORT
        release-rc.sh verify
        release-rc.sh attach-attestation BUNDLE_PATH
 
-This fixed v1.0.0-rc.1 entry point seals the exact CI-audited v1.0.0 bytes.
+This fixed v1.0.0-rc.2 entry point seals the exact CI-audited v1.0.0 bytes.
 It never recompiles or renames the standalone audited Linux amd64 shared object.
 It deterministically derives only the CPA-compatible RC ZIP container.
 EOF
@@ -762,7 +762,7 @@ verify_assets() {
      .second_machine_owner_admission.asset_id == $second_asset_id and
      .second_machine_owner_admission.asset_digest == $second_digest and
      .second_machine_owner_admission.independent_proof == false and
-     .derived_artifacts == [{name: "cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip",
+     .derived_artifacts == [{name: "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip",
        relationship: "cpa-plugin-store-container",
        derived_from: {name: "cyber-abuse-guard-v1.0.0.so", sha256: $so_sha},
        archive_entry: "cyber-abuse-guard.so", payload_sha256: $so_sha,
@@ -790,7 +790,7 @@ verify_assets() {
       c_abi: $cpa_abi, rpc_schema: $cpa_rpc_schema,
       version_policy: "fixed-no-latest-follow"} and
     .cpa_plugin_store == {
-      release_version: $version, archive: "cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip",
+      release_version: $version, archive: "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip",
       archive_entry: "cyber-abuse-guard.so", payload_sha256: $so_sha,
       derived_from: {name: $so, sha256: $so_sha},
       audited_candidate_archive: "cyber-abuse-guard_1.0.0_linux_amd64.zip",

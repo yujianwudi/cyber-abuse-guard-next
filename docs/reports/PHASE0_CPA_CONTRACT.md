@@ -34,7 +34,7 @@ The owner-operated isolated CPA v7.2.137 Host + Mock-upstream record remains a
 separate release requirement; source or CI compile checks do not authorize
 production deployment.
 
-The active CAG source is `1.0.0`, with planned prerelease tag `v1.0.0-rc.1` on
+The active CAG source is `1.0.0`, with planned prerelease tag `v1.0.0-rc.2` on
 Linux amd64. This release line does not automatically follow later upstream CPA versions.
 Host evidence uses prerelease attestation schema v2 fields `cpa_version`,
 `cpa_commit`, and `cpa_host_sha256`.

@@ -11,7 +11,7 @@ English | [简体中文](README_CN.md)
 
 ```text
 current_source_version: 1.0.0
-current_rc_tag: v1.0.0-rc.1
+current_rc_tag: v1.0.0-rc.2
 current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
 current_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
@@ -20,8 +20,8 @@ current_platform: linux-amd64
 current_audit_sqlite_schema: 7
 current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
-current_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
-current_status: MAIN_MERGED / ENGINEERING_CI_PASS / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
+current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
+current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next (CAG) is a native, deterministic, pre-routing policy and
@@ -31,8 +31,11 @@ defensive security, incident-response, compliance and authorized operations.
 The active source line is `main`. CPA `v7.2.137` with RPC schema 3 is the only
 supported compatibility target in this tree.
 
-The code is merged on `main` and its exact post-merge Linux CI passed. The
-`v1.0.0-rc.1` Release is intentionally not published yet. The reviewed workflow
+The RC1 base code is merged on `main` and its exact post-merge Linux CI passed.
+The immutable `v1.0.0-rc.1` tag produced no Release after GitHub began exposing
+platform-owned Dependabot workflows in the Actions inventory. `v1.0.0-rc.2`
+updates that admission contract without weakening the four repository-owned
+workflow allowlist and is intentionally not published yet. The reviewed workflow
 accepts either a real second-machine admission report or the explicit maintainer
 waiver described below. No release claim is inferred from an old candidate or
 from local self-checks.

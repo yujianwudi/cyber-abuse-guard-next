@@ -1,10 +1,10 @@
-# Current v1.0.0-rc.1 release admission overlay
+# Current v1.0.0-rc.2 release admission overlay
 
 ```text
 current_source_version: 1.0.0
 current_binary_version: 1.0.0
-current_rc_tag: v1.0.0-rc.1
-current_release_artifact_version: 1.0.0-rc.1
+current_rc_tag: v1.0.0-rc.2
+current_release_artifact_version: 1.0.0-rc.2
 current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 current_rc_prerelease: true
@@ -23,10 +23,19 @@ the contained binary SHA-256 is
 `aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
 Round 13 v7.2.125/schema 2 and every older PASS remain immutable historical
 evidence and cannot authorize or transfer to this lane. Round 14 permits the
-fixed `v1.0.0-rc.1` prerelease only after every applicable acceptance gate and
+fixed `v1.0.0-rc.2` prerelease only after every applicable acceptance gate and
 the reviewed RC workflow admission pass; see the
-[execution contract](ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md) and
+[RC2 recovery contract](RC2_PLATFORM_DRIFT_RECOVERY.md), the historical
+[Round 14 RC1 execution contract](ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md), and
 [status](ROUND14_STATUS.md).
+
+The signed `v1.0.0-rc.1` tag is immutable and intentionally has no Release or
+release assets. Its admission failed closed after GitHub began returning
+platform-owned Dependabot entries from the Actions workflow inventory. RC2
+keeps the four repository YAML paths exact and separately allows only
+`dynamic/dependabot/dependabot-updates` and
+`dynamic/dependabot/update-graph`; any other active path still fails closed,
+and the same inventory check is repeated immediately before publication.
 
 The second-machine execution requirement has an explicit maintainer waiver
 path. It is disabled by default and can continue only when the manual RC

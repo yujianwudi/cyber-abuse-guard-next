@@ -259,8 +259,17 @@ verify_round14_repository_contracts() {
     grep -Fq "| \`$workflow_name\` |" "$workflow_index" ||
       fail "workflow index lost the Round 14 active workflow: $relative"
   done
-  grep -Fq 'The active workflow directory contains exactly four workflows:' "$doc_root/docs/README.md" ||
+  grep -Fq 'The active workflow directory contains exactly four repository workflows:' "$doc_root/docs/README.md" ||
     fail "documentation index lost the exact four-workflow Round 14 boundary"
+  for platform_workflow in \
+    dynamic/dependabot/dependabot-updates \
+    dynamic/dependabot/update-graph; do
+    grep -Fqx -- "- \`$platform_workflow\`" "$workflow_index" ||
+      fail "workflow index lost the bounded platform workflow: $platform_workflow"
+  done
+  grep -Fqx 'round14_platform_dynamic_workflows: ALLOWLIST_ONLY / dynamic/dependabot/dependabot-updates / dynamic/dependabot/update-graph / ZERO_OTHER_ACTIVE_PATHS' \
+    "$doc_root/docs/ROUND14_STATUS.md" ||
+    fail "ROUND14_STATUS.md lost the exact bounded platform workflow line"
   grep -Fq 'RC publication' "$doc_root/docs/README.md" ||
     fail "documentation index lost the gated RC publication boundary"
   grep -Fqx "  RC_CPA_VERSION: $round14_cpa_version" "$doc_root/.github/workflows/release-rc.yml" ||
@@ -311,6 +320,7 @@ if [[
     docs/INSTALL_DOCKER.md
     docs/LIMITATIONS.md
     docs/RAW_CAPTURE.md
+    docs/RC2_PLATFORM_DRIFT_RECOVERY.md
     docs/README.md
     docs/RELEASE_POLICY.md
     docs/ROUND6_DEVELOPMENT_HANDOFF.md
@@ -389,26 +399,26 @@ if [[
 
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README.md" || \
     fail "README.md lost the current 1.0.0 source identity"
-  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/README.md" || \
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.2' "$doc_root/README.md" || \
     fail "README.md lost the current RC tag identity"
   grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README.md" || \
     fail "README.md lost the CPA $round14_cpa_version identity"
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the current 1.0.0 source identity"
-  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/README_CN.md" || \
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.2' "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the current RC tag identity"
   grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the CPA $round14_cpa_version identity"
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost the current source version"
-  grep -Fqx 'current_rc_tag: v1.0.0-rc.1' "$doc_root/docs/RELEASE_POLICY.md" || \
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.2' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost the current RC tag"
   grep -Fqx 'current_rc_prerelease: true' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost prerelease=true"
   grep -Fqx 'current_rc_make_latest: false' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost make_latest=false"
-  grep -Fq '## Unreleased - v1.0.0-rc.1' "$doc_root/CHANGELOG.md" || \
-    fail "CHANGELOG.md lost the active v1.0.0-rc.1 section"
+  grep -Fq '## Unreleased - v1.0.0-rc.2' "$doc_root/CHANGELOG.md" || \
+    fail "CHANGELOG.md lost the active v1.0.0-rc.2 section"
   grep -Fq "round14_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/docs/ROUND14_STATUS.md" || \
     fail "ROUND14_STATUS.md lost the exact CPA identity"
   for relative in \
@@ -716,7 +726,7 @@ PY
     case "$relative" in
       CHANGELOG.md)
         active_section="$(awk '
-          $0 == "## Unreleased - v1.0.0-rc.1" { inside = 1; next }
+          $0 == "## Unreleased - v1.0.0-rc.2" { inside = 1; next }
           inside && $0 == "### Frozen Round 13 v7.2.125 development history" { exit }
           inside && /^## / { exit }
           inside { print }
@@ -906,7 +916,7 @@ PY
   done
 
   verify_round14_repository_contracts
-  printf 'release document consistency passed: source=%s rc=v%s-rc.1 cpa=%s audit_tests=%s\n' \
+  printf 'release document consistency passed: source=%s rc=v%s-rc.2 cpa=%s audit_tests=%s\n' \
     "$current_release_version" "$current_release_version" "$round14_cpa_version" \
     "$current_audit_tool_test_count"
   exit 0
