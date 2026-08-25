@@ -516,9 +516,11 @@ jobs:
             --waiver-cpa-binary-sha256 "$so_sha256" --waiver-tree "$TREE" \
             --waiver-output "$waiver_report" --github-output "$GITHUB_OUTPUT"
           [[ -f "$waiver_report" && ! -L "$waiver_report" ]]
-          printf 'second_machine_report_sha256=%s\n' "$(sha256sum "$waiver_report" | awk '{print $1}')" >>"$GITHUB_OUTPUT"
-          printf 'second_machine_report_size=%s\n' "$(stat -c %s "$waiver_report")" >>"$GITHUB_OUTPUT"
-          printf 'second_machine_waiver_reason=%s\n' "$REASON" >>"$GITHUB_OUTPUT"
+          {
+            printf 'second_machine_report_sha256=%s\n' "$(sha256sum "$waiver_report" | awk '{print $1}')"
+            printf 'second_machine_report_size=%s\n' "$(stat -c %s "$waiver_report")"
+            printf 'second_machine_waiver_reason=%s\n' "$REASON"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Upload explicit maintainer waiver evidence
         if: ${{ inputs.second_machine_waiver == 'true' }}

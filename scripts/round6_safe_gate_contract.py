@@ -1163,7 +1163,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "8bc9f73be43aac79b7878846e901e0b3c9de8c22db073fa48b2fec4d5427a2bf"
+ACTIVE_RC_WORKFLOW_SHA256 = "146b804969495fc24a02f3ae8b99269cb122065b9ada5189062687970d359b4a"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
     "f685d382d0019993def8be0f5bd86e7761306932e32ac832d193d8d4c060b42a"
