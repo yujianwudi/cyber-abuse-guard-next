@@ -94,6 +94,7 @@ round14_documents=(
   docs/INSTALL_DOCKER.md
   docs/LIMITATIONS.md
   docs/RAW_CAPTURE.md
+  docs/RC2_PLATFORM_DRIFT_RECOVERY.md
   docs/README.md
   docs/RELEASE_POLICY.md
   docs/ROUND6_DEVELOPMENT_HANDOFF.md
@@ -528,11 +529,29 @@ round14_must_fail round13-unreviewed-workflow \
   'workflow directory contains an unreviewed Round 14 active workflow: .github/workflows/unreviewed.yml'
 
 cp -a "$work/round14-pass" "$work/round14-stale-release-boundary"
-sed -i 's/The active workflow directory contains exactly four workflows:/The active workflow directory contains three workflows:/' \
+sed -i 's/The active workflow directory contains exactly four repository workflows:/The active workflow directory contains three repository workflows:/' \
   "$work/round14-stale-release-boundary/docs/README.md"
 round14_must_fail round14-stale-release-boundary \
   "$work/round14-stale-release-boundary" \
   'documentation index lost the exact four-workflow Round 14 boundary'
+
+cp -a "$work/round14-pass" "$work/round14-missing-platform-workflow-index"
+sed -i '/dynamic\/dependabot\/dependabot-updates/d' \
+  "$work/round14-missing-platform-workflow-index/.github/workflows/README.md"
+printf '\nSpoof prose mentions dynamic/dependabot/dependabot-updates but is not an allowlist row.\n' >> \
+  "$work/round14-missing-platform-workflow-index/.github/workflows/README.md"
+round14_must_fail round14-missing-platform-workflow-index \
+  "$work/round14-missing-platform-workflow-index" \
+  'workflow index lost the bounded platform workflow: dynamic/dependabot/dependabot-updates'
+
+cp -a "$work/round14-pass" "$work/round14-missing-platform-workflow-status"
+sed -i '/round14_platform_dynamic_workflows:/d' \
+  "$work/round14-missing-platform-workflow-status/docs/ROUND14_STATUS.md"
+printf '\nSpoof prose mentions dynamic/dependabot/dependabot-updates and dynamic/dependabot/update-graph.\n' >> \
+  "$work/round14-missing-platform-workflow-status/docs/ROUND14_STATUS.md"
+round14_must_fail round14-missing-platform-workflow-status \
+  "$work/round14-missing-platform-workflow-status" \
+  'ROUND14_STATUS.md lost the exact bounded platform workflow line'
 
 cp -a "$work/round14-pass" "$work/round14-release-schema-drift"
 sed -i 's/cyber-abuse-guard\.second-machine-release-admission\.v3/cyber-abuse-guard.second-machine-release-admission.v2/' \

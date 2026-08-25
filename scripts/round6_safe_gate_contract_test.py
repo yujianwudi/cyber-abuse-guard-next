@@ -4839,6 +4839,8 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             "tools/current-cpa-audit/tests/test_lazy_read.py",
             "tools/current-cpa-audit/tests/test_unit_receipt.py",
             "scripts/current_cpa_audit_unit_receipt.py",
+            "scripts/release_rc_workflow_inventory.py",
+            "scripts/release_rc_workflow_inventory_test.py",
             "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json",
         )
         self.assertEqual(set(linked_paths), set(ROUND14_RC_LINKED_CONTRACT_SHA256))

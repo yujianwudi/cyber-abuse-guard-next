@@ -127,7 +127,7 @@ func TestPublishedRCStoreArchive(t *testing.T) {
 	if errAbs != nil {
 		t.Fatalf("filepath.Abs(DIST_DIR) error = %v", errAbs)
 	}
-	const version = "1.0.0-rc.1"
+	const version = "1.0.0-rc.2"
 	archiveName := officialArchiveName(t, version)
 	archivePath := filepath.Join(distDir, archiveName)
 	if _, errStat := os.Lstat(archivePath); errStat != nil {

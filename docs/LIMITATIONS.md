@@ -1,8 +1,8 @@
-# Known Limitations — v1.0.0-rc.1 candidate
+# Known Limitations — v1.0.0-rc.2 candidate
 
 > [!IMPORTANT]
 > The active Round 14 boundary is Linux amd64, source `1.0.0`, planned
-> `v1.0.0-rc.1`, and CPA
+> `v1.0.0-rc.2`, and CPA
 > `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3.
 > Round 13 v7.2.125/schema 2 and older evidence below remain historical and
 > non-transferable; current gate status is tracked in

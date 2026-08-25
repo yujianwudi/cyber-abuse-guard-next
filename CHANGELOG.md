@@ -5,9 +5,17 @@ current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
 ```
 
-Source-tree status updated: 2026-08-24 (Asia/Shanghai)
+Source-tree status updated: 2026-08-25 (Asia/Shanghai)
 
-## Unreleased - v1.0.0-rc.1
+## Unreleased - v1.0.0-rc.2
+
+- Retire the immutable, unpublished `v1.0.0-rc.1` tag after its admission
+  correctly failed closed when GitHub added platform-owned Dependabot workflows
+  to the Actions inventory. No RC1 Release or release asset was created.
+- Keep the four repository-owned workflow paths exact while allowing only the
+  two GitHub platform paths `dynamic/dependabot/dependabot-updates` and
+  `dynamic/dependabot/update-graph`; any other active repository or platform
+  workflow still fails admission and the same check is repeated at publication.
 
 - Preserve ordinary Host-performance sampler failure IDs on the fail-closed
   exception and emit only allowlisted internal identifiers such as
@@ -84,7 +92,8 @@ Source-tree status updated: 2026-08-24 (Asia/Shanghai)
 - Close the Round 14 release-document contract around Audit SQLite schema 7,
   CSAM text policy `csam-text-policy-v1` / SHA-256
   `c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f`,
-  second-machine release admission v3, and the exact four-workflow inventory.
+  second-machine release admission v3, the exact four repository-workflow
+  inventory, and the bounded GitHub Dependabot dynamic-workflow allowlist.
   RC publication is allowed only after every applicable acceptance gate passes
   through `release-rc.yml`; the current pending state cannot publish.
 - Start Round 14 by moving the sole active CPA contract to official
@@ -107,13 +116,13 @@ Source-tree status updated: 2026-08-24 (Asia/Shanghai)
   skips on WSL Linux/x86_64 under Go 1.26.6. A canonical repository-owned development
   self-check receipt records unittest stderr, command and time window plus the
   315 test IDs, every tested implementation/test source byte, and receipt fields
-  `runner_bundle=5c3e6af865cd2197245ee44b5fa1cf71e83deaed780408e55f92fc1e162472ec`,
+  `runner_bundle=49512adde24e013e8c79cac0ef33dcbd51b975144cb20eb4542c582905af4e3c`,
   `audit_contract=7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642`,
   `run_source=434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665`,
   `machine_schema=3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e`,
-  `test_sources=cc6c1e0468d519ea83d4bf5003768ce46ed9f2078c6e234f311d9c95831a936c`,
+  `test_sources=94c47cb2e1dac34dfdf8a5a7f8d1777f00c93537a7e12f8850cbb6dcd1a373a1`,
   `test_ids=54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f`,
-  and `receipt_sha256=1fb557487fa5571ee3cc4d37b697911e807750e89375eb8efc3af79e984e68c5`.
+  and `receipt_sha256=b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c`.
   It is unsigned and cannot
   replace exact-commit CI or independent evidence. Five schema-3 Host fixture
   tests, the targeted CAG RPC schema test under WSL, and one upstream
@@ -284,7 +293,7 @@ historical Round 13 or earlier evidence. It does not describe the active Round
   other transient copies.
 - Move the active source identity from historical `0.16` development to strict
   three-component SemVer `1.0.0`; the only authorized publication in this round
-  is Linux prerelease tag/artifact `v1.0.0-rc.1` with `latest=false`.
+  is Linux prerelease tag/artifact `v1.0.0-rc.2` with `latest=false`.
 
 ## Historical unreleased - v0.16 main development
 

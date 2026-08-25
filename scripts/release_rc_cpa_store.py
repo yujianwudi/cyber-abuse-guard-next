@@ -16,7 +16,7 @@ from pathlib import Path
 ENTRY_NAME = "cyber-abuse-guard.so"
 SO_NAME = "cyber-abuse-guard-v1.0.0.so"
 AUDIT_ZIP = "cyber-abuse-guard_1.0.0_linux_amd64.zip"
-RC_ZIP = "cyber-abuse-guard_1.0.0-rc.1_linux_amd64.zip"
+RC_ZIP = "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip"
 AUDIT_CHECKSUMS = "audit-candidate-checksums.txt"
 CPA_CHECKSUMS = "checksums.txt"
 AUDIT_CHECKSUM_NAMES = frozenset(
@@ -115,7 +115,7 @@ def verify_release(directory: Path) -> None:
     so = directory / SO_NAME
     if so.is_symlink() or not so.is_file():
         raise ValueError("audited standalone SO is missing or unsafe")
-    if (directory / "cyber-abuse-guard-v1.0.0-rc.1.so").exists():
+    if (directory / "cyber-abuse-guard-v1.0.0-rc.2.so").exists():
         raise ValueError("RC-named standalone SO must not be published")
     payload = so.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()

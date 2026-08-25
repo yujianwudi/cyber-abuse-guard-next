@@ -60,4 +60,4 @@ Store installation, request reconstruction, logging, counted Mock behavior, and
 upstream/usage isolation remain server-sandbox work. No profile is real Host or
 counted Mock evidence. Independent audit is still required, production approval
 has not been granted, and this source contract alone does not authorize planned
-`v1.0.0-rc.1` or any stable release.
+`v1.0.0-rc.2` or any stable release.

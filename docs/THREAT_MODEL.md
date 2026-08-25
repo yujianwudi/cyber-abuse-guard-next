@@ -1,7 +1,7 @@
 # Threat Model
 
 > [!IMPORTANT]
-> The active source is `1.0.0`, the planned prerelease is `v1.0.0-rc.1`, and
+> The active source is `1.0.0`, the planned prerelease is `v1.0.0-rc.2`, and
 > the sole Host target is CPA
 > `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` on Linux amd64, C ABI 1 /
 > RPC schema 3. Round 13 v7.2.125/schema 2 and older identities below are frozen

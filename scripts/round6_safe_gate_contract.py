@@ -1058,7 +1058,7 @@ CANDIDATE_ARTIFACTS = (
 )
 CANDIDATE_SCRIPT_SHA256 = {
     "round6-candidate-artifacts.sh": "8a12c39c951ec8d15673946124558635f9809492729480fc421750d1564d59ab",
-    "release-candidate-contract-test.sh": "2e64d30b1efed40bf6ea36d0a85a47804902d0c8e476237e29e0bc61662719dc",
+    "release-candidate-contract-test.sh": "2f0a591d988583d8215b93ca00968865d18d33664ab2d3971b544328a3125019",
 }
 RC_RELEASE_SCRIPT_SHA256 = "2d5e680dad7e4edfbe42c806df534da4de8561e421e846bf530f6a28c898cc48"
 RELEASE_BUILD_METADATA_SCRIPT = "scripts/release-build-metadata.sh"
@@ -1163,7 +1163,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "146b804969495fc24a02f3ae8b99269cb122065b9ada5189062687970d359b4a"
+ACTIVE_RC_WORKFLOW_SHA256 = "aa8c53963eb705d7dd19bb17bb716426a72109a1c46cbf82c8ceb15bae290762"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
     "f685d382d0019993def8be0f5bd86e7761306932e32ac832d193d8d4c060b42a"
@@ -1242,9 +1242,16 @@ ROUND13_RC_LINKED_CONTRACT_SHA256 = {
 # this mapping without rewriting the historical values above.
 ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     **ROUND13_RC_LINKED_CONTRACT_SHA256,
+    ROUND13_RC_RELEASE_SCRIPT: "a3573eec89a6aad9fd669a443502bd667f8be1af4cdceee473a629e531aa5382",
+    ROUND13_RC_CONTRACT_TEST_SCRIPT: "8c65374d050f923764e979721348f239e34dd6953827367fe1492e175b65edfb",
+    ROUND13_RC_CPA_STORE_SCRIPT: "4fb6ea742d1f5498b77b973dad407f35880983cf7f9e199779f36e326c78f52d",
+    ROUND13_RC_CPA_STORE_TEST_SCRIPT: "e74652867732ff87a05f1b1778164b1c5c0e77f804e191d9768939c3c566d9c0",
+    ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT: "082f5d42f15f4f709bb16b02b6fcd437c9d73db10765f0d4e9a5c5c3d71c438c",
+    ROUND13_RC_CPA_STORE_OVERLAY: "d47569533d5124c02547db43ea9fe84f000f9abde38c9a88e6e64747c577b026",
+    ROUND13_RC_GITHUB_ADMISSION_SCRIPT: "f941838a7cb9d9e0550b4d07011a8590ab41585138364e23e28e52fcc9327cce",
     ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "185a901017679c8b1ac0c64d047b5c8e273c35bfc2b3e216f572167d8a7fc49a",
-    ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "710e818cd00d3dab920666992096d4317c60082715c19a374459b7c4c76365d6",
-    "tools/current-cpa-audit/README.md": "01ca1ade8eea8edd3aa4d95967bdfb5222cd93fdcc1d399df319461251baa947",
+    ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "ef849062f7b68317fd738b464c82049152b589c1912f1703ac722fbc7a7d5b4c",
+    "tools/current-cpa-audit/README.md": "cad81590605f6374137788d44e7e2630aa2d866e7d7c4340c3ed09a507e73559",
     "tools/current-cpa-audit/acquire.py": "806f424d6a9b9d688132d414d98a2499606a3a9f230f54836cc706410c131ec3",
     "tools/current-cpa-audit/audit_contract.py": "7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642",
     "tools/current-cpa-audit/repository-policy.json": "688d3919de025d8e2ee52584fe7bdf8a8757bf507ae83a2e1159c403f2bc26e4",
@@ -1258,7 +1265,9 @@ ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     "tools/current-cpa-audit/tests/test_lazy_read.py": "79ac4eb032a8f2c9ef68b88ff138d1a78e6e7907c8e9a2a64acf0b9850f4317a",
     "tools/current-cpa-audit/tests/test_unit_receipt.py": "fbd5b0b13da93982752b62e75590dfb20329d360c25f8e7b67bc52b2e9a831bc",
     "scripts/current_cpa_audit_unit_receipt.py": "26b1b54b34d269c5c31c59f1d063a8fe154975c7efd9d11e8ae4044d816c858b",
-    "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "1fb557487fa5571ee3cc4d37b697911e807750e89375eb8efc3af79e984e68c5",
+    "scripts/release_rc_workflow_inventory.py": "a3166adfab479a06b6c0c756d6a7d0b5494976a33c4c10397416bbae6b55c683",
+    "scripts/release_rc_workflow_inventory_test.py": "86be65f8ab7bec700b38107b5e4763550def0bd7bb55a52f1ac29504535637d0",
+    "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c",
     "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
     "integration/host_integration_test.go": "23c02ec1a1f92592aec8c702429193de4876b16024e4a717c83f5b4e67966f36",
 }
@@ -1289,7 +1298,7 @@ ROUND13_RC_ALLOWED_SECRET_EXPRESSIONS = {
     "jobs.publish_prerelease.steps[4].env.GOVERNANCE_TOKEN": "${{ secrets.CAG_RELEASE_GOVERNANCE_TOKEN }}",
 }
 ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
-    "run-name": "RC v1.0.0-rc.1 from ${{ github.ref_name }}",
+    "run-name": "RC v1.0.0-rc.2 from ${{ github.ref_name }}",
     "jobs.admission.steps[1].env.ACTOR": "${{ github.actor }}",
     "jobs.admission.steps[1].env.ACTOR_ID": "${{ github.actor_id }}",
     "jobs.admission.steps[1].env.DISPATCH_REF": "${{ github.ref }}",
@@ -1507,11 +1516,11 @@ ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
 }
 ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT = ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT
 ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "d17c8692d463a975b96a25f4543a5bbd7e58e73612239aea87f548d0d35bf0b7"
+    "a8d3906cf2f4f8e088ac078d3fc7f70fdc8df98f1452d3958ba42d04bc979398"
 )
 ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "11e02f5d3ebf3a7bf98a950338f1175624b98f84e9a0cd30e6f5302d3e368e05",
-    "scripts/release-doc-consistency.sh": "3b861bcc075cfc67806f1ccb92bc80a544d505d3fc5f88a4dfbe860541692037",
+    "scripts/release-doc-consistency-test.sh": "71149ec6c2230d58c82a77a4cab6fd9352cdca9922dab7332fb00a2e022fb4ef",
+    "scripts/release-doc-consistency.sh": "6c976af08a56e774ed2e88ad2c370ba5aca5a9afcc44ee535a4910c19b5e9bdf",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1649,7 +1658,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
 ROUND6_SAFE_GATE_TEST_SHA256 = "d7df09aebed70991343061b2ab2146afc6aa86fd2bc60a5955fc51622fe575ef"
-ROUND14_SAFE_GATE_TEST_SHA256 = "b661199e1bc7f5a342b33d728649e742d7c2f93b75ee5ce88ab139b3bef4a67a"
+ROUND14_SAFE_GATE_TEST_SHA256 = "c03d671115f96eec39c6a43e523546189a0c72c01ec4c82b4327962c5e537ff7"
 ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS = (
     "TestSupplementalTerminalSkillActivationCannotBorrowSiblingField",
     "TestSupplementalTerminalSkillActivationLaterFieldCancellationParity",
@@ -7743,7 +7752,7 @@ def validate_historical_round8_rc_release_workflow(text: str, source: Path) -> N
 
 
 def validate_rc_release_workflow(text: str, source: Path) -> None:
-    """Validate the sole active Round 13 v1.0.0-rc.1 publication lane."""
+    """Validate the sole active Round 14 v1.0.0-rc.2 publication lane."""
 
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != ACTIVE_RC_WORKFLOW_SHA256:
         raise ContractError("Round 13 RC workflow differs from the exact reviewed contract")
@@ -7782,7 +7791,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     require_yaml_scalar(root["name"], "RC Release", source, "name")
     require_yaml_scalar(
         root["run-name"],
-        "RC v1.0.0-rc.1 from ${{ github.ref_name }}",
+        "RC v1.0.0-rc.2 from ${{ github.ref_name }}",
         source,
         "run-name",
     )
@@ -7845,7 +7854,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     require_yaml_scalar(
         concurrency["group"],
-        "rc-release-v1.0.0-rc.1",
+        "rc-release-v1.0.0-rc.2",
         source,
         "concurrency.group",
     )
@@ -7858,11 +7867,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
 
     expected_environment = (
-        ("RC_TAG", "v1.0.0-rc.1"),
+        ("RC_TAG", "v1.0.0-rc.2"),
         ("RC_TAG_SIGNER_POLICY", "github-verification-verified-valid-annotated-tag-and-commit"),
         ("RC_SOURCE_VERSION", "1.0.0"),
         ("RC_BINARY_VERSION", "1.0.0"),
-        ("RC_ARTIFACT_VERSION", "1.0.0-rc.1"),
+        ("RC_ARTIFACT_VERSION", "1.0.0-rc.2"),
         ("RC_CPA_VERSION", CPA_ACTIVE_VERSION),
         ("RC_CPA_COMMIT", CPA_ACTIVE_COMMIT),
         ("RC_CPA_C_ABI", "1"),
@@ -7874,7 +7883,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("RC_SUPPLEMENTAL_ARCHIVE_SHA256", "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c"),
         ("RC_SUPPLEMENTAL_REQUIRED_STATUS", "SUPPLEMENTAL_ARCHIVE_PASS"),
         ("RC_NATIVE_HOST_REQUIRED_STATUS", "NATIVE_HOST_SPECIAL_PATHS_PASS"),
-        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.1-second-machine-admission"),
+        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.2-second-machine-admission"),
         ("RC_SECOND_MACHINE_WAIVER_SCHEMA", "cyber-abuse-guard.second-machine-release-admission-waiver.v1"),
         ("RC_SECOND_MACHINE_WAIVER_STATUS", "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED"),
         ("RC_PUBLISH_TIMEOUT_SECONDS", "1200"),
@@ -8061,7 +8070,8 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '.required_signatures.enabled == true and',
         'verify_repository_governance() {',
         '.data.repository.release.isLatest == false and',
-        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.1" and',
+        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.2" and',
+        'python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"',
         '.verification.verified == true and .verification.reason == "valid"',
         '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',
         "supplemental_archive_status=",

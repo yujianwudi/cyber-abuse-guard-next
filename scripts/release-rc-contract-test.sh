@@ -13,12 +13,14 @@ artifact_zip="$root/scripts/release_rc_artifact_zip.py"
 artifact_zip_test="$root/scripts/release_rc_artifact_zip_test.py"
 cpa_store="$root/scripts/release_rc_cpa_store.py"
 cpa_store_test="$root/scripts/release_rc_cpa_store_test.py"
+workflow_inventory="$root/scripts/release_rc_workflow_inventory.py"
+workflow_inventory_test="$root/scripts/release_rc_workflow_inventory_test.py"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 
 for path in "$contract_test" "$release_script" "$workflow" "$portable" \
   "$portable_schema" "$github_validator" "$artifact_zip" "$artifact_zip_test" \
-  "$cpa_store" "$cpa_store_test"; do
+  "$cpa_store" "$cpa_store_test" "$workflow_inventory" "$workflow_inventory_test"; do
   [[ -f "$path" && ! -L "$path" ]] || {
     printf 'required RC release contract input is missing: %s\n' "$path" >&2
     exit 1
@@ -41,6 +43,8 @@ for relative in (
     "scripts/release_rc_artifact_zip_test.py",
     "scripts/release_rc_cpa_store.py",
     "scripts/release_rc_cpa_store_test.py",
+    "scripts/release_rc_workflow_inventory.py",
+    "scripts/release_rc_workflow_inventory_test.py",
 ):
     path = root / relative
     compile(path.read_bytes(), relative, "exec")
@@ -48,6 +52,7 @@ PY
 python3 -B ./scripts/release_rc_artifact_zip_test.py
 python3 -B ./scripts/release_rc_cpa_store_test.py
 python3 -B ./scripts/release_rc_github_admission_test.py
+python3 -B ./scripts/release_rc_workflow_inventory_test.py
 python3 -B ./tools/current-cpa-audit/tests/test_second_machine_release_admission.py
 (cd "$root/integration/pluginstorecontract" && \
   go test ./... -run '^TestCPAReleaseCandidatePluginStoreInstallContract$' -count=1)
@@ -63,6 +68,7 @@ import sys
 
 root = Path(sys.argv[1])
 workflow = (root / ".github/workflows/release-rc.yml").read_text("utf-8")
+workflow_inventory = (root / "scripts/release_rc_workflow_inventory.py").read_text("utf-8")
 script = (root / "scripts/release-rc.sh").read_text("utf-8")
 portable = (root / "tools/current-cpa-audit/second_machine_release_admission.py").read_text("utf-8")
 portable_schema = (root / "tools/current-cpa-audit/second-machine-release-admission.schema.json").read_text("utf-8")
@@ -138,13 +144,27 @@ for marker in (
     "verify_release_assets()",
     "verify_draft_release_exact()",
     "actions/workflows?per_page=100",
-    "active workflow inventory",
+    'python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"',
     "--minimum-remaining-seconds \"$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))\"",
     "ATTESTATION_BUNDLE_PATH:",
     '[[ "$verified" == 18 ]]',
     '((${#assets[@]} == 19))',
 ):
     require(marker in workflow, f"workflow is missing {marker!r}")
+
+require(workflow.count('python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"') == 2,
+        "workflow inventory validator must run at admission and publication")
+for marker in (
+    '".github/workflows/ci.yml"',
+    '".github/workflows/codeql.yml"',
+    '".github/workflows/policy-gate.yml"',
+    '".github/workflows/release-rc.yml"',
+    '"dynamic/dependabot/dependabot-updates"',
+    '"dynamic/dependabot/update-graph"',
+    "duplicate active workflow path",
+    "unknown active workflow paths",
+):
+    require(marker in workflow_inventory, f"workflow inventory validator is missing {marker!r}")
 
 trigger_block = workflow.split("on:", 1)[1].split("\npermissions:", 1)[0]
 top_level_triggers = re.findall(r"(?m)^  ([a-z_]+):\s*$", trigger_block)
@@ -295,8 +315,8 @@ for marker in (
 for marker in (
     "readonly rc_source_version='1.0.0'",
     "readonly rc_binary_version='1.0.0'",
-    "readonly rc_artifact_version='1.0.0-rc.1'",
-    "readonly rc_tag='v1.0.0-rc.1'",
+    "readonly rc_artifact_version='1.0.0-rc.2'",
+    "readonly rc_tag='v1.0.0-rc.2'",
     "readonly rc_cpa_version='v7.2.137'",
     "readonly rc_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'",
     "readonly rc_cpa_c_abi='1'",
@@ -365,9 +385,9 @@ for stale_identity in (
     require(stale_identity not in workflow, f"workflow retains stale release identity: {stale_identity}")
     require(stale_identity not in script, f"release script retains stale release identity: {stale_identity}")
 
-require("cyber-abuse-guard-v1.0.0-rc.1.so" not in workflow,
+require("cyber-abuse-guard-v1.0.0-rc.2.so" not in workflow,
         "workflow names an RC SO that was never audited")
-require("cyber-abuse-guard-v1.0.0-rc.1.so" not in script,
+require("cyber-abuse-guard-v1.0.0-rc.2.so" not in script,
         "release script names an RC SO that was never audited")
 
 uses_pattern = re.compile(r"(?m)^\s*uses:\s+([^\s#]+)(?:\s+#.*)?$")
@@ -483,4 +503,4 @@ for failure_mode in return exit; do
 done
 printf 'release RC candidate validation faults fail closed and clean staging\n'
 
-printf 'all v1.0.0-rc.1 release contracts passed\n'
+printf 'all v1.0.0-rc.2 release contracts passed\n'

@@ -1118,7 +1118,7 @@ summaries, denominators, and gates rather than trusting the report's `status`
 field.
 
 Create a draft staging Release with tag name
-`v1.0.0-rc.1-second-machine-admission`, set `target_commitish` to the exact
+`v1.0.0-rc.2-second-machine-admission`, set `target_commitish` to the exact
 protected `main` commit, and upload the report with the fixed asset name
 `second-machine-release-admission.json`. The report cannot contain its own
 asset ID/digest without a circular hash. `release-rc.yml` therefore closes that
@@ -1128,7 +1128,7 @@ upload state/API digest/size; downloads and rehashes the real bytes; checks the
 expiry; and runs the validator from the exact signed tag.
 
 Before that dispatch, a real authorized signer who controls the corresponding
-private key must create `v1.0.0-rc.1` as a GitHub-verified signed annotated tag
+private key must create `v1.0.0-rc.2` as a GitHub-verified signed annotated tag
 on the exact protected-main commit. An unsigned annotated tag, lightweight tag,
 Release-generated tag, unverified key, or signature that impersonates a
 maintainer is not acceptable.

@@ -84,7 +84,7 @@ or change release evidence to claim external Host, audit, evaluation, or
 production approval.
 
 The current Round 14 scope is compatibility/admission only and authorizes no
-tag or Release. It does not authorize `v1.0.0-rc.1`, stable `v1.0.0`, production
+tag or Release. It does not authorize `v1.0.0-rc.2`, stable `v1.0.0`, production
 deployment, or an independent-attestation claim. The owner-run input diagnostic is not an independent
 attestation and must not be relabelled as the pending final-candidate
 second-machine result.
