@@ -13,9 +13,9 @@ import (
 	"testing"
 )
 
-const rcVersion = "1.0.0-rc.2"
+const rcVersion = "1.0.0-rc.3"
 const rcTag = "v1.0.0-rc.3"
-const rcArchive = "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip"
+const rcArchive = "cyber-abuse-guard_1.0.0-rc.3_linux_amd64.zip"
 
 func rcPlugin() Plugin {
 	return Plugin{
