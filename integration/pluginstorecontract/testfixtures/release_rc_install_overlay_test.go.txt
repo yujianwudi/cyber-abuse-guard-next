@@ -14,7 +14,7 @@ import (
 )
 
 const rcVersion = "1.0.0-rc.2"
-const rcTag = "v1.0.0-rc.2"
+const rcTag = "v1.0.0-rc.3"
 const rcArchive = "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip"
 
 func rcPlugin() Plugin {
@@ -58,7 +58,7 @@ func TestCyberAbuseGuardRCPluginStoreContract(t *testing.T) {
 
 	for name, entries := range map[string]map[string]string{
 		"unversioned":        {"cyber-abuse-guard.so": payload},
-		"exact-rc-versioned": {"cyber-abuse-guard-v1.0.0-rc.2.so": payload},
+		"exact-rc-versioned": {"cyber-abuse-guard-v1.0.0-rc.3.so": payload},
 	} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
@@ -68,7 +68,7 @@ func TestCyberAbuseGuardRCPluginStoreContract(t *testing.T) {
 			if errInstall != nil {
 				t.Fatalf("InstallArchive() error = %v", errInstall)
 			}
-			installed, errRead := os.ReadFile(filepath.Join(root, "linux", "amd64", "cyber-abuse-guard-v1.0.0-rc.2.so"))
+			installed, errRead := os.ReadFile(filepath.Join(root, "linux", "amd64", "cyber-abuse-guard-v1.0.0-rc.3.so"))
 			if errRead != nil || string(installed) != payload || result.Version != rcVersion {
 				t.Fatalf("installed payload/result = %q/%#v, err=%v", installed, result, errRead)
 			}

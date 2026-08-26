@@ -97,16 +97,16 @@ class ContractTests(unittest.TestCase):
                 "tag": CPA_TAG,
             },
             {
-                "commit": "85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
+                "commit": "1f53b2eb03b9e963bac647e5566ca2b304239116",
                 "go_mod_sum": "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
-                "module_sum": "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=",
-                "official_binary_sha256": "aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa",
-                "official_asset_name": "CLIProxyAPI_7.2.137_linux_amd64.tar.gz",
+                "module_sum": "h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=",
+                "official_binary_sha256": "e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b",
+                "official_asset_name": "CLIProxyAPI_7.2.142_linux_amd64.tar.gz",
                 "official_asset_sha256": (
-                    "ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401"
+                    "a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051"
                 ),
                 "official_asset_size": 21_072_175,
-                "tag": "v7.2.137",
+                "tag": "v7.2.142",
             },
         )
 

@@ -2,7 +2,7 @@ module github.com/router-for-me/CLIProxyAPI/v7/cyber-abuse-guard-store-contract
 
 go 1.26.0
 
-require github.com/router-for-me/CLIProxyAPI/v7 v7.2.137
+require github.com/router-for-me/CLIProxyAPI/v7 v7.2.142
 
 require (
 	github.com/sirupsen/logrus v1.9.3 // indirect

@@ -859,7 +859,7 @@ else:
     def test_rejects_candidate_or_report_identity_drift(self) -> None:
         report = evidence()
         report["candidate"]["cpa"]["rpc_schema"] = 2
-        with self.assertRaisesRegex(host.HostAdmissionError, "frozen v7.2.137"):
+        with self.assertRaisesRegex(host.HostAdmissionError, "frozen v7.2.142"):
             validate_report(report)
         report = evidence()
         report["runtime_identity"]["mock"]["init_pid"] = 404

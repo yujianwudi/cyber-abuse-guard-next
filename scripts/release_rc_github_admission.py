@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate fixtureable GitHub API identities for the fixed v1.0.0-rc.2 lane."""
+"""Validate fixtureable GitHub API identities for the fixed v1.0.0-rc.3 lane."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Any, Mapping, NoReturn, Sequence
 
 REPOSITORY = "yujianwudi/cyber-abuse-guard-next"
 CANDIDATE_NAME = "cyber-abuse-guard-linux-amd64-audit-candidate"
-SECOND_MACHINE_TAG = "v1.0.0-rc.2-second-machine-admission"
+SECOND_MACHINE_TAG = "v1.0.0-rc.3-second-machine-admission"
 SECOND_MACHINE_ASSET_NAME = "second-machine-release-admission.json"
 SECOND_MACHINE_WAIVER_SCHEMA = "cyber-abuse-guard.second-machine-release-admission-waiver.v1"
 SECOND_MACHINE_WAIVER_STATUS = "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED"

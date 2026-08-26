@@ -252,7 +252,7 @@ def _validate_candidate(value: Any) -> dict[str, Any]:
     ):
         _exact_string(cpa[key], f"evidence.candidate.cpa.{key}", 256)
     if cpa != expected_cpa:
-        fail("evidence.candidate.cpa is not the frozen v7.2.137 Linux amd64 identity")
+        fail("evidence.candidate.cpa is not the frozen v7.2.142 Linux amd64 identity")
 
     cag = exact_keys(
         candidate["cag"],
@@ -723,7 +723,7 @@ def _validate_realtime(
             _exact_string(route["auth"], f"{route_label}.auth", 16),
         )
         if identity in seen or identity != REALTIME_ROUTE_CONTRACT[index - 1]:
-            fail(f"{route_label} is duplicate, reordered, or outside the fixed v7.2.137 route set")
+            fail(f"{route_label} is duplicate, reordered, or outside the fixed v7.2.142 route set")
         seen.add(identity)
         route_target = exact_keys(
             route["target_boundary"],
@@ -770,9 +770,9 @@ def _validate_realtime(
         previous_rpc = route_rpc_after
         previous_mock = route_mock_after
     if observed_count != len(REALTIME_ROUTE_CONTRACT):
-        fail(f"{label}.routes must cover the exact fixed v7.2.137 route set")
+        fail(f"{label}.routes must cover the exact fixed v7.2.142 route set")
     if seen != set(REALTIME_ROUTE_CONTRACT):
-        fail(f"{label}.routes omits a fixed v7.2.137 realtime route")
+        fail(f"{label}.routes omits a fixed v7.2.142 realtime route")
     if previous_rpc != after_rpc or previous_mock != after_mock:
         fail(f"{label}.routes do not close against the realtime final counters")
     return realtime

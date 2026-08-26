@@ -115,7 +115,7 @@ def verify_release(directory: Path) -> None:
     so = directory / SO_NAME
     if so.is_symlink() or not so.is_file():
         raise ValueError("audited standalone SO is missing or unsafe")
-    if (directory / "cyber-abuse-guard-v1.0.0-rc.2.so").exists():
+    if (directory / "cyber-abuse-guard-v1.0.0-rc.3.so").exists():
         raise ValueError("RC-named standalone SO must not be published")
     payload = so.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()

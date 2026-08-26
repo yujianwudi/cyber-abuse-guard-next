@@ -1,9 +1,9 @@
-# CPA v7.2.137 schema-3 plugin-store source contracts
+# CPA v7.2.142 schema-3 plugin-store source contracts
 
 This isolated Go module exists because the repository's main module cannot
 legally import CPA's `internal/pluginstore` package. Its module path is under
-the CPA v7 import prefix and its dependency is pinned exactly to `v7.2.137`
-(`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`).
+the CPA v7 import prefix and its dependency is pinned exactly to `v7.2.142`
+(`1f53b2eb03b9e963bac647e5566ca2b304239116`).
 
 It contains source-level contract suites and checksum-pinned overlays:
 
@@ -33,7 +33,7 @@ It contains source-level contract suites and checksum-pinned overlays:
   ModelRouter without changing CPA production source. Its separately named
   legacy Router subtest is explicitly a schema-1 compatibility fixture.
 - `testfixtures/release_rc_install_overlay_test.go.txt` binds the exact
-  `v1.0.0-rc.2` tag/version/archive name, rejects stable-only assets and
+  `v1.0.0-rc.3` tag/version/archive name, rejects stable-only assets and
   candidate-style root names for an RC install, proves both the unversioned
   root and exact RC-versioned root forms accepted by CPA, and performs a
   checksum-verified mocked `InstallVersion` whose installed bytes equal the
@@ -43,7 +43,7 @@ The exact audited behaviors and limitations are recorded in
   [CPA_HOST_SOURCE_CONTRACT.md](CPA_HOST_SOURCE_CONTRACT.md).
 
 These source suites never load or execute this project's `.so`. The repository
-root is also pinned to CPA v7.2.137; native-host evidence is produced separately
+root is also pinned to CPA v7.2.142; native-host evidence is produced separately
 by the integration-tagged Store-installed Host tests in GitHub CI. The pure-C
 multi-Router test remains schema-1 compatibility evidence. Source-contract PASS
 must not be reported as native-load PASS.

@@ -108,8 +108,8 @@ for marker in (
     "SUPPLEMENTAL_ARCHIVE_PASS",
     "NATIVE_HOST_SPECIAL_PATHS_PASS",
     "RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3",
-    "RC_CPA_VERSION: v7.2.137",
-    "RC_CPA_COMMIT: 85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
+    "RC_CPA_VERSION: v7.2.142",
+    "RC_CPA_COMMIT: 1f53b2eb03b9e963bac647e5566ca2b304239116",
     "RC_CPA_C_ABI: '1'",
     "RC_CPA_RPC_SCHEMA: '3'",
     "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
@@ -316,9 +316,9 @@ for marker in (
     "readonly rc_source_version='1.0.0'",
     "readonly rc_binary_version='1.0.0'",
     "readonly rc_artifact_version='1.0.0-rc.2'",
-    "readonly rc_tag='v1.0.0-rc.2'",
-    "readonly rc_cpa_version='v7.2.137'",
-    "readonly rc_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'",
+    "readonly rc_tag='v1.0.0-rc.3'",
+    "readonly rc_cpa_version='v7.2.142'",
+    "readonly rc_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'",
     "readonly rc_cpa_c_abi='1'",
     "readonly rc_cpa_rpc_schema='3'",
     "readonly rc_second_schema='cyber-abuse-guard.second-machine-release-admission.v3'",
@@ -385,9 +385,9 @@ for stale_identity in (
     require(stale_identity not in workflow, f"workflow retains stale release identity: {stale_identity}")
     require(stale_identity not in script, f"release script retains stale release identity: {stale_identity}")
 
-require("cyber-abuse-guard-v1.0.0-rc.2.so" not in workflow,
+require("cyber-abuse-guard-v1.0.0-rc.3.so" not in workflow,
         "workflow names an RC SO that was never audited")
-require("cyber-abuse-guard-v1.0.0-rc.2.so" not in script,
+require("cyber-abuse-guard-v1.0.0-rc.3.so" not in script,
         "release script names an RC SO that was never audited")
 
 uses_pattern = re.compile(r"(?m)^\s*uses:\s+([^\s#]+)(?:\s+#.*)?$")
@@ -503,4 +503,4 @@ for failure_mode in return exit; do
 done
 printf 'release RC candidate validation faults fail closed and clean staging\n'
 
-printf 'all v1.0.0-rc.2 release contracts passed\n'
+printf 'all v1.0.0-rc.3 release contracts passed\n'

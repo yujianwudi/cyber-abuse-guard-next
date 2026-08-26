@@ -8,9 +8,9 @@ source "$root/scripts/release-common.sh"
 readonly rc_source_version='1.0.0'
 readonly rc_binary_version='1.0.0'
 readonly rc_artifact_version='1.0.0-rc.2'
-readonly rc_tag='v1.0.0-rc.2'
-readonly rc_cpa_version='v7.2.137'
-readonly rc_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'
+readonly rc_tag='v1.0.0-rc.3'
+readonly rc_cpa_version='v7.2.142'
+readonly rc_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'
 readonly rc_cpa_c_abi='1'
 readonly rc_cpa_rpc_schema='3'
 readonly rc_repository='yujianwudi/cyber-abuse-guard-next'
@@ -82,7 +82,7 @@ usage: release-rc.sh seal-candidate CANDIDATE_DIRECTORY SECOND_MACHINE_REPORT
        release-rc.sh verify
        release-rc.sh attach-attestation BUNDLE_PATH
 
-This fixed v1.0.0-rc.2 entry point seals the exact CI-audited v1.0.0 bytes.
+This fixed v1.0.0-rc.3 entry point seals the exact CI-audited v1.0.0 bytes.
 It never recompiles or renames the standalone audited Linux amd64 shared object.
 It deterministically derives only the CPA-compatible RC ZIP container.
 EOF

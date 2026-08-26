@@ -384,9 +384,9 @@ CLEAN_EXECUTION_ENV_PATHS = {
 CPA_MODULE_PATH = "github.com/router-for-me/CLIProxyAPI/v7"
 CPA_ROUND8_VERSION = "v7.2.95"
 CPA_ROUND8_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
-CPA_ACTIVE_VERSION = "v7.2.137"
-CPA_ACTIVE_COMMIT = "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
-CPA_ACTIVE_MODULE_SUM = "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w="
+CPA_ACTIVE_VERSION = "v7.2.142"
+CPA_ACTIVE_COMMIT = "1f53b2eb03b9e963bac647e5566ca2b304239116"
+CPA_ACTIVE_MODULE_SUM = "h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ="
 CPA_ACTIVE_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 CPA_ROUND9_VERSION = "v7.2.113"
 CPA_ROUND9_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
@@ -1237,7 +1237,7 @@ ROUND13_RC_LINKED_CONTRACT_SHA256 = {
 }
 # Round 13 is an immutable historical review baseline.  The active Round 14
 # release workflow inherits every unchanged Round 13 pin, explicitly replaces
-# the files reviewed for the CPA v7.2.137/schema-3 audit closure, and adds the
+# the files reviewed for the CPA v7.2.142/schema-3 audit closure, and adds the
 # new lazy-read and CSAM text-only evidence modules.  Active validation must use
 # this mapping without rewriting the historical values above.
 ROUND14_RC_LINKED_CONTRACT_SHA256 = {
@@ -1298,7 +1298,7 @@ ROUND13_RC_ALLOWED_SECRET_EXPRESSIONS = {
     "jobs.publish_prerelease.steps[4].env.GOVERNANCE_TOKEN": "${{ secrets.CAG_RELEASE_GOVERNANCE_TOKEN }}",
 }
 ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
-    "run-name": "RC v1.0.0-rc.2 from ${{ github.ref_name }}",
+    "run-name": "RC v1.0.0-rc.3 from ${{ github.ref_name }}",
     "jobs.admission.steps[1].env.ACTOR": "${{ github.actor }}",
     "jobs.admission.steps[1].env.ACTOR_ID": "${{ github.actor_id }}",
     "jobs.admission.steps[1].env.DISPATCH_REF": "${{ github.ref }}",
@@ -7752,7 +7752,7 @@ def validate_historical_round8_rc_release_workflow(text: str, source: Path) -> N
 
 
 def validate_rc_release_workflow(text: str, source: Path) -> None:
-    """Validate the sole active Round 14 v1.0.0-rc.2 publication lane."""
+    """Validate the sole active Round 14 v1.0.0-rc.3 publication lane."""
 
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != ACTIVE_RC_WORKFLOW_SHA256:
         raise ContractError("Round 13 RC workflow differs from the exact reviewed contract")
@@ -7791,7 +7791,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     require_yaml_scalar(root["name"], "RC Release", source, "name")
     require_yaml_scalar(
         root["run-name"],
-        "RC v1.0.0-rc.2 from ${{ github.ref_name }}",
+        "RC v1.0.0-rc.3 from ${{ github.ref_name }}",
         source,
         "run-name",
     )
@@ -7854,7 +7854,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     require_yaml_scalar(
         concurrency["group"],
-        "rc-release-v1.0.0-rc.2",
+        "rc-release-v1.0.0-rc.3",
         source,
         "concurrency.group",
     )
@@ -7867,7 +7867,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
 
     expected_environment = (
-        ("RC_TAG", "v1.0.0-rc.2"),
+        ("RC_TAG", "v1.0.0-rc.3"),
         ("RC_TAG_SIGNER_POLICY", "github-verification-verified-valid-annotated-tag-and-commit"),
         ("RC_SOURCE_VERSION", "1.0.0"),
         ("RC_BINARY_VERSION", "1.0.0"),
@@ -7883,7 +7883,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("RC_SUPPLEMENTAL_ARCHIVE_SHA256", "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c"),
         ("RC_SUPPLEMENTAL_REQUIRED_STATUS", "SUPPLEMENTAL_ARCHIVE_PASS"),
         ("RC_NATIVE_HOST_REQUIRED_STATUS", "NATIVE_HOST_SPECIAL_PATHS_PASS"),
-        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.2-second-machine-admission"),
+        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.3-second-machine-admission"),
         ("RC_SECOND_MACHINE_WAIVER_SCHEMA", "cyber-abuse-guard.second-machine-release-admission-waiver.v1"),
         ("RC_SECOND_MACHINE_WAIVER_STATUS", "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED"),
         ("RC_PUBLISH_TIMEOUT_SECONDS", "1200"),
@@ -8070,7 +8070,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '.required_signatures.enabled == true and',
         'verify_repository_governance() {',
         '.data.repository.release.isLatest == false and',
-        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.2" and',
+        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.3" and',
         'python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"',
         '.verification.verified == true and .verification.reason == "valid"',
         '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',

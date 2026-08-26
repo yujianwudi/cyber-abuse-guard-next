@@ -7,10 +7,10 @@ here.
 
 | File | Display name | Trigger | Responsibility |
 |---|---|---|---|
-| `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.137 / C ABI 1 / RPC schema 3 compatibility, tests, fuzzing, development artifacts, and reproducibility |
+| `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.142 / C ABI 1 / RPC schema 3 compatibility, tests, fuzzing, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Linux Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
-| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.2` annotated tag | Revalidate protected-main checks, real second-machine admission or an explicit maintainer waiver, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
+| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.3` annotated tag | Revalidate protected-main checks, real second-machine admission or an explicit maintainer waiver, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
 
 ## RC publication boundary
 
@@ -19,7 +19,7 @@ a build path and it cannot run on a push or pull request. Publication is
 allowed only after all required Round 14 checks have passed. In particular:
 
 - dispatch must target the existing GitHub-verified signed annotated
-  `v1.0.0-rc.2` tag, peeled to the exact protected `main` commit;
+  `v1.0.0-rc.3` tag, peeled to the exact protected `main` commit;
 - the exact CI, CodeQL and Policy and Corpus Gate push runs and all five
   required checks must already be successful;
 - the exact nine-file CI candidate must close before assets are sealed; either a

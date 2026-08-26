@@ -53,9 +53,9 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.137",
-	Commit:    "85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
-	ModuleSum: "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=",
+	Version:   "v7.2.142",
+	Commit:    "1f53b2eb03b9e963bac647e5566ca2b304239116",
+	ModuleSum: "h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=",
 	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
@@ -274,7 +274,7 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		}
 	}
 
-	// CPA v7.2.137 keeps request normalization split out of the websocket transport
+	// CPA v7.2.142 keeps request normalization split out of the websocket transport
 	// file. Pin the semantic implementation file while the upstream behavior
 	// tests above continue to guard the public contract.
 	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")
@@ -482,14 +482,14 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 	read := func(relative string) []byte {
 		data, err := os.ReadFile(filepath.Join(moduleDir, filepath.FromSlash(relative)))
 		if err != nil {
-			t.Fatalf("read CPA v7.2.137 realtime source %s: %v", relative, err)
+			t.Fatalf("read CPA v7.2.142 realtime source %s: %v", relative, err)
 		}
 		return data
 	}
 
 	routes := read("internal/api/server_routes.go")
 	for _, marker := range [][]byte{
-		// Keep one source marker for every v7.2.137 /v1/realtime* registration.
+		// Keep one source marker for every v7.2.142 /v1/realtime* registration.
 		// These routes intentionally do not inherit the protected v1 group.
 		[]byte(`s.engine.GET("/v1/realtime", realtimeAuth, s.codexLiveHandler.HandleRealtimeWebsocket)`),
 		[]byte(`s.engine.POST("/v1/realtime", realtimeAuth, s.codexLiveHandler.Handle)`),
@@ -507,7 +507,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 		[]byte(`s.engine.POST("/v1/realtime/calls/:call_id/refer", standardAuth, s.codexLiveHandler.HandleSIPControl)`),
 	} {
 		if count := bytes.Count(routes, marker); count != 1 {
-			t.Fatalf("CPA v7.2.137 realtime route source marker %q occurs %d times, want exactly once", marker, count)
+			t.Fatalf("CPA v7.2.142 realtime route source marker %q occurs %d times, want exactly once", marker, count)
 		}
 	}
 	for _, marker := range [][]byte{
@@ -515,7 +515,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 		[]byte(`standardAuth := realtimeStandardAuthMiddleware(s.accessManager)`),
 	} {
 		if count := bytes.Count(routes, marker); count != 1 {
-			t.Fatalf("CPA v7.2.137 realtime auth source marker %q occurs %d times, want exactly once", marker, count)
+			t.Fatalf("CPA v7.2.142 realtime auth source marker %q occurs %d times, want exactly once", marker, count)
 		}
 	}
 
@@ -524,7 +524,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 	v1Start := bytes.Index(routes, []byte(`v1 := s.engine.Group("/v1")`))
 	realtimeStart := bytes.Index(routes, []byte(`realtimeAuth := realtimeAuthMiddleware`))
 	if v1Start < 0 || realtimeStart < 0 || realtimeStart <= v1Start {
-		t.Fatal("CPA v7.2.137 realtime routes are not visibly registered after the protected v1 group")
+		t.Fatal("CPA v7.2.142 realtime routes are not visibly registered after the protected v1 group")
 	}
 
 	for _, relative := range []string{
@@ -553,7 +553,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 			[]byte("CAG"),
 		} {
 			if bytes.Contains(source, forbidden) {
-				t.Fatalf("CPA v7.2.137 realtime handler %s unexpectedly contains plugin-aware execution marker %q", relative, forbidden)
+				t.Fatalf("CPA v7.2.142 realtime handler %s unexpectedly contains plugin-aware execution marker %q", relative, forbidden)
 			}
 		}
 	}

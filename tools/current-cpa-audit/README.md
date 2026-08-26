@@ -1,17 +1,17 @@
 # Current CPA five-repository isolated audit
 
-This directory is the current diagnostic harness for **CPA v7.2.137** at commit
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`. The closed active upstream identity
-also binds module sum `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`,
+This directory is the current diagnostic harness for **CPA v7.2.142** at commit
+`1f53b2eb03b9e963bac647e5566ca2b304239116`. The closed active upstream identity
+also binds module sum `h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=`,
 go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 3,
 and the official Linux
-amd64 asset `CLIProxyAPI_7.2.137_linux_amd64.tar.gz` at exactly 21,072,175 bytes
+amd64 asset `CLIProxyAPI_7.2.142_linux_amd64.tar.gz` at exactly 21,072,175 bytes
 with SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`, and
+`a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`, and
 the 63,738,088-byte extracted binary SHA-256
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
 These values identify the active upstream input only; they do not relabel an
-older second-machine or CI result as a v7.2.137 PASS. The harness output claim
+older second-machine or CI result as a v7.2.142 PASS. The harness output claim
 is deliberately limited to:
 
 > SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION
@@ -73,7 +73,7 @@ It does not approve a release or a production deployment.
 - Cleanup never calls a global prune and never removes images. It stops CPA and
   Mock gracefully, checkpoints SQLite, and removes only resources carrying the
   exact run label.
-- The v7.2.137 `/v1/realtime*` source topology is separately labelled
+- The v7.2.142 `/v1/realtime*` source topology is separately labelled
   `SOURCE_TOPOLOGY_UNPROTECTED`. Runtime negative coverage supplies no
   credential and requires every fixed route to end at `AUTH_REJECTED`, without
   WebSocket upgrade, Mock/Provider/Usage activity, or any of the six fixed CAG
@@ -104,7 +104,7 @@ interface is an explicit `--supplemental-archive` input whose value names
 `/srv/cag-audit/supplemental/authorized-codex-archive.zip`, with its own source
 hash, case count, false-positive denominator, malicious-recall denominator,
 results, and cleanup status. Parser, runner, schemas, validators, and negative
-fixtures now fail closed together, but no real v7.2.137 candidate run has yet
+fixtures now fail closed together, but no real v7.2.142 candidate run has yet
 completed, so its truthful status remains `NOT_RUN`; the five-repository result
 must never be relabelled as a supplemental-archive PASS.
 
@@ -322,7 +322,7 @@ sbom.cdx.json
 ```
 
 Place only the reviewed upstream CPA archive at
-`/srv/artifacts/upstream/CLIProxyAPI_7.2.137_linux_amd64.tar.gz`. Do not place
+`/srv/artifacts/upstream/CLIProxyAPI_7.2.142_linux_amd64.tar.gz`. Do not place
 candidate files in the upstream directory or the CPA archive in the candidate
 directory.
 
@@ -333,8 +333,8 @@ Preload, do not pull during the audit:
    the selected merge commit/tree and report `dirty=false`; the runner rejects
    dirty development bytes. This is still an unreleased diagnostic candidate,
    not a release artifact.
-2. CPA v7.2.137 image by exact RepoDigest and image ID.
-3. The official v7.2.137 linux/amd64 asset at exactly 21,072,175 bytes and its
+2. CPA v7.2.142 image by exact RepoDigest and image ID.
+3. The official v7.2.142 linux/amd64 asset at exactly 21,072,175 bytes and its
    published SHA-256.
 4. The exact CPA binary SHA-256 expected inside that image.
 5. A counted-Mock image built from this directory with a previously reviewed,
@@ -401,10 +401,10 @@ python3 -B tools/current-cpa-audit/make_run_config.py \
   --candidate-artifact-id '<GitHub artifact-id>' \
   --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
   --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
-  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.137_linux_amd64.tar.gz" \
-  --cpa-official-asset-sha256 ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401 \
+  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.142_linux_amd64.tar.gz" \
+  --cpa-official-asset-sha256 a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051 \
   --cpa-binary-path /CLIProxyAPI \
-  --cpa-binary-sha256 aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa \
+  --cpa-binary-sha256 e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b \
   --cpa-image-ref 'private-audit-registry/cpa@sha256:<64-hex>' \
   --cpa-image-id 'sha256:<64-hex>' \
   --mock-image-ref 'private-audit-registry/cag-counted-mock@sha256:<64-hex>' \
@@ -467,7 +467,7 @@ zero or one matching `/tmp` entry there and rejects every other bind, volume,
 or non-bind mount. The dedicated-UID condition bounds the non-atomic daemon
 handoff. The runner itself creates only an internal bridge.
 
-The private `/cag/config` bind is writable by design. CPA v7.2.137 persists a
+The private `/cag/config` bind is writable by design. CPA v7.2.142 persists a
 replacement `plugins.configs.<id>` object to `config.yaml` before applying the
 hot reload, so a read-only config bind makes every Audit/Balanced/Strict mode
 transition fail with HTTP 500. This does not expose a Host or business config:
@@ -1118,7 +1118,7 @@ summaries, denominators, and gates rather than trusting the report's `status`
 field.
 
 Create a draft staging Release with tag name
-`v1.0.0-rc.2-second-machine-admission`, set `target_commitish` to the exact
+`v1.0.0-rc.3-second-machine-admission`, set `target_commitish` to the exact
 protected `main` commit, and upload the report with the fixed asset name
 `second-machine-release-admission.json`. The report cannot contain its own
 asset ID/digest without a circular hash. `release-rc.yml` therefore closes that
@@ -1128,7 +1128,7 @@ upload state/API digest/size; downloads and rehashes the real bytes; checks the
 expiry; and runs the validator from the exact signed tag.
 
 Before that dispatch, a real authorized signer who controls the corresponding
-private key must create `v1.0.0-rc.2` as a GitHub-verified signed annotated tag
+private key must create `v1.0.0-rc.3` as a GitHub-verified signed annotated tag
 on the exact protected-main commit. An unsigned annotated tag, lightweight tag,
 Release-generated tag, unverified key, or signature that impersonates a
 maintainer is not acceptable.

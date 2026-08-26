@@ -224,7 +224,7 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 		if p.requestLifecycle.matches(requestID, fingerprint, lifecycleGeneration) {
 			response := okEnvelope(pluginapi.RequestInterceptResponse{})
 			p.opMu.RUnlock()
-			// CPA v7.2.137 passes the same RequestID to before-auth and after-auth.
+			// CPA v7.2.142 passes the same RequestID to before-auth and after-auth.
 			// Classification already ran on this exact security-relevant request
 			// representation, so the second callback performs only the bounded input
 			// fingerprint and pass-through instead of a duplicate classification,
@@ -238,7 +238,7 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 		lifecycleGeneration = p.requestLifecycle.generationToken()
 	}
 
-	// CPA v7.2.137 invokes the after-auth interceptor before request
+	// CPA v7.2.142 invokes the after-auth interceptor before request
 	// translation. ToFormat names the future upstream representation, while
 	// Body is still encoded in the original SourceFormat. This matters on the
 	// defensive cache-miss path (for example after TTL/capacity eviction): using

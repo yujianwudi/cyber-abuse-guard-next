@@ -857,7 +857,7 @@ try:
     ManagementHandler.config_contract = "valid"
 
     # A current safe config must not mask middleware installed by an unsafe
-    # startup. The non-management fixed-418 proof models CPA v7.2.137's synchronous
+    # startup. The non-management fixed-418 proof models CPA v7.2.142's synchronous
     # error-only raw-body artifact.
     ManagementHandler.startup_request_logging_installed = True
     stranded_startup_middleware = run_watchdog()
