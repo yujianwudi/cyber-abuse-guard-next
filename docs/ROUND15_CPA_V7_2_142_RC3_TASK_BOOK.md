@@ -24,7 +24,7 @@ cpa_checksums_bytes: 1094
 cpa_checksums_sha256: 2a04364707aa7e8922c7ee35ad3b90437659c08fa4dbaa962f02b274993a0a6c
 cpa_c_abi: 1
 cpa_rpc_schema: 3
-second_machine: 42.193.150.215 / ubuntu / authorized isolated sandbox
+second_machine: owner-authorized machine 2 / ubuntu / isolated sandbox
 ```
 
 仓库已经存在并保护两个 GitHub-verified signed annotated tag：
