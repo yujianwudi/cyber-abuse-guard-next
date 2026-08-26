@@ -105,7 +105,7 @@ class ContractTests(unittest.TestCase):
                 "official_asset_sha256": (
                     "a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051"
                 ),
-                "official_asset_size": 21_072_175,
+                "official_asset_size": 21_193_314,
                 "tag": "v7.2.142",
             },
         )
