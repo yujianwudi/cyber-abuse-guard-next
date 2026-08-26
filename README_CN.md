@@ -18,7 +18,7 @@ current_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7
-current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
+current_csam_text_policy: csam-text-policy-v1 / 1a8b1ecc7b67ef3a8672abfc93b34db3bf9ff96e39262c2178425cf2133b6905
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
 current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED

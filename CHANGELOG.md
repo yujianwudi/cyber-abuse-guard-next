@@ -2,12 +2,12 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 ```
 
 Source-tree status updated: 2026-08-25 (Asia/Shanghai)
 
-## Unreleased - v1.0.0-rc.2
+## Unreleased - v1.0.0-rc.3
 
 - Retire the immutable, unpublished `v1.0.0-rc.1` tag after its admission
   correctly failed closed when GitHub added platform-owned Dependabot workflows
@@ -77,7 +77,7 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   mixed-policy winners, keep tainted blocks out of Raw Capture, treat coverage
   exhaustion as Balanced audit / Strict fail-closed, and add legal/compliance/
   reporting false-positive regressions. The resulting policy identity is
-  `csam-text-policy-v1` / `c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f`.
+  `csam-text-policy-v1` / `1a8b1ecc7b67ef3a8672abfc93b34db3bf9ff96e39262c2178425cf2133b6905`.
 - Close the provider multipart symbol-leet gap for bounded single-character
   `@`/`!`/`$` fragments in batch and streaming paths without joining ordinary
   independent fields, including bounded uneven fragments around an isolated
