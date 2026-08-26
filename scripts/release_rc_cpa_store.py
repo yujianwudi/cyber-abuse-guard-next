@@ -16,7 +16,7 @@ from pathlib import Path
 ENTRY_NAME = "cyber-abuse-guard.so"
 SO_NAME = "cyber-abuse-guard-v1.0.0.so"
 AUDIT_ZIP = "cyber-abuse-guard_1.0.0_linux_amd64.zip"
-RC_ZIP = "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip"
+RC_ZIP = "cyber-abuse-guard_1.0.0-rc.3_linux_amd64.zip"
 AUDIT_CHECKSUMS = "audit-candidate-checksums.txt"
 CPA_CHECKSUMS = "checksums.txt"
 AUDIT_CHECKSUM_NAMES = frozenset(
