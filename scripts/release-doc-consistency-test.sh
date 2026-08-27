@@ -13,7 +13,7 @@ stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
 round14_classifier_policy_version="classifier-policy-v20"
-round14_classifier_policy_sha256="1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d"
+round14_classifier_policy_sha256="a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -579,7 +579,7 @@ done
 
 cp -a "$work/round14-pass" "$work/round14-stale-active-navigation"
 sed -i \
-  's/Active v7\.2\.137 CPA integration overlay/Active v7.2.125 CPA integration overlay/' \
+  's/Active v7\.2\.142 CPA integration overlay/Active v7.2.125 CPA integration overlay/' \
   "$work/round14-stale-active-navigation/docs/README.md"
 round14_must_fail round14-stale-active-navigation \
   "$work/round14-stale-active-navigation" \
@@ -614,10 +614,10 @@ printf 'Round 13 release document consistency allowed explicit frozen v7.2.124 h
 
 cp -a "$work/round14-pass" "$work/round14-binary-sha"
 sed -i \
-  's/aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  's/e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b/0000000000000000000000000000000000000000000000000000000000000000/g' \
   "$work/round14-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
 round14_must_fail round14-binary-sha "$work/round14-binary-sha" \
-  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.137 binary SHA-256'
+  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.142 binary SHA-256'
 
 cp -a "$work/round14-pass" "$work/round13-cag-version"
 sed -i 's/cyber-abuse-guard-v1\.0\.0\.so/cyber-abuse-guard-v0.16.so/g' \
@@ -727,19 +727,19 @@ round14_must_fail round14-release-evidence-audit-run-source \
   'docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: round14_audit_run_source_sha256'
 
 cp -a "$work/round14-pass" "$work/round14-duplicate-active-cpa-target"
-sed -i '/^round14_cpa_target:/a round14_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa' \
+sed -i '/^round14_cpa_target:/a round14_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116' \
   "$work/round14-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
 round14_must_fail round14-duplicate-active-cpa-target \
   "$work/round14-duplicate-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.137 round14_cpa_target'
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.142 round14_cpa_target'
 
 cp -a "$work/round14-pass" "$work/round14-conflicting-active-cpa-target"
 sed -i \
-  's|^round14_cpa_target: v7\.2\.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa$|round14_cpa_target: v7.2.137 / 197f520426374e514218ed155933ac546c98d345|' \
+  's|^round14_cpa_target: v7\.2\.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116$|round14_cpa_target: v7.2.142 / 197f520426374e514218ed155933ac546c98d345|' \
   "$work/round14-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
 round14_must_fail round14-conflicting-active-cpa-target \
   "$work/round14-conflicting-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.137 round14_cpa_target'
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.142 round14_cpa_target'
 
 cp -a "$work/round14-pass" "$work/round12-active-key-in-frozen-block"
 printf '\nactive_cpa_remote_latest: PASS\n' \
