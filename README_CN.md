@@ -28,7 +28,7 @@ Cyber-Abuse-Guard Next（CAG）是面向
 [CLIProxyAPI（CPA）](https://github.com/router-for-me/CLIProxyAPI) 的本地、确定性、
 路由前请求风控与审计插件。项目目标是降低网络滥用风险，同时保护普通编码、
 防御性安全、事件响应、合规和授权运维请求不被关键词误伤。当前唯一维护分支是
-`main`，唯一兼容目标是 CPA `v7.2.137` / RPC schema 3。
+`main`，唯一兼容目标是 CPA `v7.2.142` / RPC schema 3。
 
 RC1 基线已经合并到 `main`，合并后的 Linux CI 也已通过。GitHub 开始在 Actions
 库存中暴露平台自有 Dependabot workflow 后，不可变的 `v1.0.0-rc.1` tag 未产生
@@ -100,7 +100,7 @@ CSAM 检测只处理文本策略。预防指南、热线/平台通知、举报�
 
 ## CPA 与 Host 兼容性
 
-当前固定目标为 CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`、C ABI 1、
+当前固定目标为 CPA `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`、C ABI 1、
 RPC schema 3。schema 3 仅在 header-init 保留 `OriginalRequest` / `RequestBody`，
 payload chunk 不重复携带；插件不注册 successful-response 或 stream-chunk interceptor。
 
@@ -114,7 +114,7 @@ inspect 验证、彼此不同的两个 RFC1918 bridge IPv4；任何 Host binding
 
 ## Linux amd64 构建
 
-需要 Go 1.26.6、Linux amd64 工具链、CPA v7.2.137，以及支持 C ABI 1 / RPC schema 3 的 CPA loader。
+需要 Go 1.26.6、Linux amd64 工具链、CPA v7.2.142，以及支持 C ABI 1 / RPC schema 3 的 CPA loader。
 
 ```bash
 git clone https://github.com/yujianwudi/cyber-abuse-guard-next.git

@@ -28,7 +28,7 @@ Cyber-Abuse-Guard Next (CAG) is a native, deterministic, pre-routing policy and
 audit plugin for [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI).
 It is designed to reduce cyber-abuse risk while preserving ordinary coding,
 defensive security, incident-response, compliance and authorized operations.
-The active source line is `main`. CPA `v7.2.137` with RPC schema 3 is the only
+The active source line is `main`. CPA `v7.2.142` with RPC schema 3 is the only
 supported compatibility target in this tree.
 
 The RC1 base code is merged on `main` and its exact post-merge Linux CI passed.
@@ -133,7 +133,7 @@ code is required by the repository tests.
 
 ## CPA and Host compatibility
 
-The active contract is CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`,
+The active contract is CPA `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`,
 C ABI 1 and RPC schema 3. Schema 3 retains `OriginalRequest` and `RequestBody`
 only in header-init; payload chunks omit them. The plugin does not register a
 successful-response or stream-chunk interceptor.
@@ -153,7 +153,7 @@ any Host binding, additional container, or non-internal network as inadmissible.
 
 ## Build and install (Linux amd64)
 
-Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.137, and a CPA plugin
+Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.142, and a CPA plugin
 loader compatible with C ABI 1 / RPC schema 3.
 
 ```bash
