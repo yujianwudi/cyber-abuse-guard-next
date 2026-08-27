@@ -9,6 +9,12 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
 
 ## Unreleased - v1.0.0-rc.3
 
+- Implement CPA v7.2.142 `plugin.quiesce` and accept the Host's exact-config
+  `plugin.reconfigure` rollback for already-registered retired instances. A
+  failed replacement now restores the retained runtime instead of leaving it
+  quiesced; config drift remains rejected. The CSAM text closure advances to
+  `csam-text-policy-v1` / `a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee`.
+
 - Retire the immutable, unpublished `v1.0.0-rc.1` tag after its admission
   correctly failed closed when GitHub added platform-owned Dependabot workflows
   to the Actions inventory. No RC1 Release or release asset was created.

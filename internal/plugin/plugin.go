@@ -351,7 +351,7 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 		}
 		return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, ""), 0
 	}
-	if p.quiescing.Load() && method != pluginabi.MethodPluginRegister {
+	if p.quiescing.Load() && method != pluginabi.MethodPluginRegister && method != pluginabi.MethodPluginReconfigure {
 		policy := decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())
 		if method == pluginabi.MethodModelRoute {
 			return p.modelRouteFailureWithPolicy(
@@ -753,9 +753,10 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		return errorEnvelope("unsupported_schema", fmt.Sprintf("unsupported schema version %d", request.SchemaVersion), 0, "")
 	}
 	if p.quiescing.Load() {
-		if reconfigure {
-			return errorEnvelope("plugin_quiesced", "plugin is quiesced for hot reload", 0, "")
-		}
+		// CPA v7.2.142 keeps the retired instance marked registered and invokes
+		// plugin.reconfigure, not plugin.register, when a replacement cannot be
+		// loaded. Both lifecycle methods therefore use the same exact-byte
+		// rollback contract while quiesced. A changed config remains rejected.
 		return p.restoreQuiescedRuntime(request)
 	}
 
@@ -1575,9 +1576,11 @@ func (p *Plugin) Quiesce() error {
 	return nil
 }
 
-// restoreQuiescedRuntime accepts only CPA's rollback registration with the
-// exact config bytes that produced the still-live runtime. It does not rebuild
-// or reopen SQLite and therefore cannot race the old Store with a second handle.
+// restoreQuiescedRuntime accepts only CPA's rollback lifecycle call with the
+// exact config bytes that produced the still-live runtime. CPA v7.2.142 uses
+// plugin.reconfigure for an already-registered retired instance. It does not
+// rebuild or reopen SQLite and therefore cannot race the old Store with a
+// second handle.
 func (p *Plugin) restoreQuiescedRuntime(request lifecycleRequest) []byte {
 	p.opMu.Lock()
 	defer p.opMu.Unlock()

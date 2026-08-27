@@ -17,6 +17,9 @@
 3. 已增加 quiesce 单元测试及 race 测试覆盖。
 4. 已写入本轮任务书与验收标准：
    [ROUND15_CPA_V7_2_142_RC3_TASK_BOOK.md](ROUND15_CPA_V7_2_142_RC3_TASK_BOOK.md)
+5. 二号机隔离测试发现并修复 CPA v7.2.142 失败热替换的真实 P0：Host 对已注册旧实例使用
+   `plugin.reconfigure` 回滚；CAG 现在对 register/reconfigure 统一执行精确配置字节恢复，配置
+   漂移仍拒绝。新增回归同时验证恢复、漂移拒绝及计数器。
 
 ## 验证状态
 
@@ -28,7 +31,13 @@ go test -tags=sqlite_omit_load_extension -race ./internal/plugin -run '^TestQuie
 go test -tags=sqlite_omit_load_extension ./internal/... ./cmd/... -run '^$'
 ```
 
-Windows 原生环境不作为 Linux/CGO 验收依据。二号机 v142 隔离沙盒、完整 CPA host black-box、五个公开仓库及 `Codex全破.zip` 测试尚未在本状态文件中宣称通过。
+Windows 原生环境不作为 Linux/CGO 验收依据。五个公开仓库及 `Codex全破.zip` 的本轮
+精确候选测试尚未在本状态文件中宣称通过。
+
+二号机已完成官方 CPA 资产/二进制校验、候选 ELF 校验、插件 load/register/unload、管理
+状态读取、普通请求到达本地 Mock 上游、合成凭据窃取请求在上游前 403、Mock 上游无额外
+命中，以及成功 hot reload。失败替换第一次测试暴露上述 P0；修复后的精确候选仍需重新
+构建并复测后，才能把失败回滚项标记为通过。测试没有连接真实 Provider 或生产凭据。
 
 ## 未完成门禁
 

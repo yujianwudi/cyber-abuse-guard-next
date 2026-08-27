@@ -109,6 +109,51 @@ func TestQuiesceRejectsConfigDriftAndRemainsReversible(t *testing.T) {
 	}
 }
 
+func TestQuiesceExactReconfigureRestoresCPA142FailedHotReload(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	configYAML := "mode: balanced\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"
+	register(t, p, configYAML)
+	before := p.runtime.Load()
+
+	if err := p.Quiesce(); err != nil {
+		t.Fatal(err)
+	}
+	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
+		"mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
+	if code != 0 {
+		t.Fatalf("mismatched CPA v7.2.142 rollback code=%d envelope=%s", code, raw)
+	}
+	var mismatch rpcEnvelope
+	if err := json.Unmarshal(raw, &mismatch); err != nil {
+		t.Fatal(err)
+	}
+	if mismatch.OK || mismatch.Error == nil || mismatch.Error.Code != "plugin_quiesce_restore_mismatch" {
+		t.Fatalf("mismatched CPA v7.2.142 rollback envelope=%s", raw)
+	}
+	if !p.quiescing.Load() || p.runtime.Load() != before {
+		t.Fatal("mismatched CPA v7.2.142 rollback changed the quiesced runtime")
+	}
+
+	raw, code = p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t, configYAML))
+	if code != 0 {
+		t.Fatalf("CPA v7.2.142 rollback plugin.reconfigure code=%d envelope=%s", code, raw)
+	}
+	decodeOKResult(t, raw, &registration{})
+	if p.quiescing.Load() || p.runtime.Load() != before {
+		t.Fatalf("CPA v7.2.142 rollback restore quiescing=%t runtime_changed=%t", p.quiescing.Load(), p.runtime.Load() != before)
+	}
+	if got := p.counters.quiesceTransitions.Load(); got != 1 {
+		t.Fatalf("quiesce transitions=%d, want 1", got)
+	}
+	if got := p.counters.quiesceRestores.Load(); got != 1 {
+		t.Fatalf("quiesce restores=%d, want 1", got)
+	}
+	if got := p.counters.quiesceRestoreRejected.Load(); got != 1 {
+		t.Fatalf("quiesce restore rejected=%d, want 1", got)
+	}
+}
+
 func TestQuiesceBeforeRegisterFailsWithoutPoisoningRegistration(t *testing.T) {
 	p := New()
 	t.Cleanup(p.Shutdown)
