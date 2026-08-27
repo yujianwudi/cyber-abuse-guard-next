@@ -1,20 +1,20 @@
 # Threat Model
 
 > [!IMPORTANT]
-> The active source is `1.0.0`, the planned prerelease is `v1.0.0-rc.2`, and
+> The active source is `1.0.0`, the planned prerelease is `v1.0.0-rc.3`, and
 > the sole Host target is CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` on Linux amd64, C ABI 1 /
+> `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116` on Linux amd64, C ABI 1 /
 > RPC schema 3. Round 13 v7.2.125/schema 2 and older identities below are frozen
 > historical evidence; their PASS results do not transfer.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 ```
 
 ## Active Round 14 uncovered-route threat
 
-CPA v7.2.137 sends all `/v1/realtime*` requests through an independent path
+CPA v7.2.142 sends all `/v1/realtime*` requests through an independent path
 that bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle.
 That route family is explicitly **OUT_OF_SCOPE / UNPROTECTED /
 CAG_NOT_VISIBLE**. An attacker using it is not screened by CAG. Only registered

@@ -11,10 +11,10 @@ current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a00
 
 ```text
 current_source_version: 1.0.0
-current_rc_tag: v1.0.0-rc.2
-current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+current_rc_tag: v1.0.0-rc.3
+current_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-current_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+current_cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7

@@ -1251,7 +1251,7 @@ ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     ROUND13_RC_GITHUB_ADMISSION_SCRIPT: "dab9a848874cba1be2ab62524c31420ce3ff1998f6f61356009d0ca6a03c19e8",
     ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "bd1f76253af14610f2dafb4d51232194889e4c78307c386d84596752babdc574",
     ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "153b64582096af5001d319224b98ec8f95b8421d2ce69338add36c872f45dea5",
-    "tools/current-cpa-audit/README.md": "57417bbf9dda851e06cdd0621fdc943ecfca142d9855b55bb7223cce02925020",
+    "tools/current-cpa-audit/README.md": "990be05d7c8a7d12773f796b6da6559207117c5ee79d47d79285270c7662ab46",
     "tools/current-cpa-audit/acquire.py": "806f424d6a9b9d688132d414d98a2499606a3a9f230f54836cc706410c131ec3",
     "tools/current-cpa-audit/audit_contract.py": "92d71d0ef20667e38cc39ccf7deaa19661a40408d77d1c9c3f4c757fabc003e4",
     "tools/current-cpa-audit/repository-policy.json": "688d3919de025d8e2ee52584fe7bdf8a8757bf507ae83a2e1159c403f2bc26e4",
@@ -1274,7 +1274,7 @@ ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     "scripts/current_cpa_audit_unit_receipt.py": "26b1b54b34d269c5c31c59f1d063a8fe154975c7efd9d11e8ae4044d816c858b",
     "scripts/release_rc_workflow_inventory.py": "a3166adfab479a06b6c0c756d6a7d0b5494976a33c4c10397416bbae6b55c683",
     "scripts/release_rc_workflow_inventory_test.py": "86be65f8ab7bec700b38107b5e4763550def0bd7bb55a52f1ac29504535637d0",
-    "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c",
+    "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "839470612986ca96fbcf298698bc178e62171c3654238c82927740e4d790f266",
     "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
     "integration/host_integration_test.go": "2888fef742535abfa7cd99c26b81e0f695cf313c0141c1609c5767a1d8af60a0",
 }

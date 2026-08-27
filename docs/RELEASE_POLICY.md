@@ -1,29 +1,29 @@
-# Current v1.0.0-rc.2 release admission overlay
+# Current v1.0.0-rc.3 release admission overlay
 
 ```text
 current_source_version: 1.0.0
 current_binary_version: 1.0.0
-current_rc_tag: v1.0.0-rc.2
-current_release_artifact_version: 1.0.0-rc.2
+current_rc_tag: v1.0.0-rc.3
+current_release_artifact_version: 1.0.0-rc.3
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 current_rc_prerelease: true
 current_rc_make_latest: false
-current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+current_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
 current_platform: linux-amd64
 current_go_toolchain: go1.26.6
 current_release_gate: ROUND14_ADMISSION_INCOMPLETE / RELEASE_AFTER_REQUIRED_CHECKS_OR_EXPLICIT_MAINTAINER_WAIVER
 ```
 
-The active compatibility identity is CPA v7.2.137/schema 3. Its official
-Linux amd64 archive is 21,072,175 bytes with SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
+The active compatibility identity is CPA v7.2.142/schema 3. Its official
+Linux amd64 archive is 21,193,314 bytes with SHA-256
+`a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`;
 the contained binary SHA-256 is
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
 Round 13 v7.2.125/schema 2 and every older PASS remain immutable historical
 evidence and cannot authorize or transfer to this lane. Round 14 permits the
-fixed `v1.0.0-rc.2` prerelease only after every applicable acceptance gate and
+fixed `v1.0.0-rc.3` prerelease only after every applicable acceptance gate and
 the reviewed RC workflow admission pass; see the
 [RC2 recovery contract](RC2_PLATFORM_DRIFT_RECOVERY.md), the historical
 [Round 14 RC1 execution contract](ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md), and

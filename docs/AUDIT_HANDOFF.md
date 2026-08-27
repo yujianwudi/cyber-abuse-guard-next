@@ -1,21 +1,21 @@
-# 审计交接说明 — Cyber Abuse Guard Next v1.0.0-rc.2 / CPA v7.2.137
+# 审计交接说明 — Cyber Abuse Guard Next v1.0.0-rc.3 / CPA v7.2.142
 
 ## 第十四轮当前交接边界
 
 当前唯一活动目标为 Linux amd64、CPA
-`v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`、C ABI 1 / RPC schema 3。
-模块校验和为 `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`，go.mod
+`v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`、C ABI 1 / RPC schema 3。
+模块校验和为 `h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=`，go.mod
 校验和为 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`；正式 Linux
-amd64 归档为 21,072,175 bytes / SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`，
+amd64 归档为 21,193,314 bytes / SHA-256
+`a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`，
 内含二进制 SHA-256 为
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`。
+`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`。
 任务与状态以[第十四轮任务书](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)和
 [状态页](ROUND14_STATUS.md)为准。
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 ```
 
 第十三轮 v7.2.125/schema 2 以下全部记录均为 superseded historical；所有旧

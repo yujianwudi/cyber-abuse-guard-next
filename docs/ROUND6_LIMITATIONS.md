@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 ```
 
 > **Frozen historical snapshot.** Except for the active-tree classifier identity
@@ -15,9 +15,9 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 > `v1.0.0-rc.1` on Linux amd64, and:
 >
 > ```text
-> current_formal_cpa: v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa
+> current_formal_cpa: v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116
 > current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-> current_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+> current_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
 >

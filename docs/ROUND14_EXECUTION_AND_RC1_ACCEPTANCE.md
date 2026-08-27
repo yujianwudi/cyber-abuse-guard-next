@@ -25,20 +25,20 @@ repository: yujianwudi/cyber-abuse-guard-next
 branch: agent/cpa-v7.2.130-v1-rc1
 round14_baseline: c4408af041e4b3c0d58406ccca816b8d8585840b
 current_dirty_worktree_base_head_2026-08-14: f328975193515058ece24e64ca8056f252aa5024
-cpa: github.com/router-for-me/CLIProxyAPI/v7@v7.2.137
+cpa: github.com/router-for-me/CLIProxyAPI/v7@v7.2.142
 cpa_commit: 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
-cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
 cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 cpa_contract: C_ABI_1 / RPC_SCHEMA_3
 audit_sqlite_schema: 7
-csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
+csam_text_policy: csam-text-policy-v1 / a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee
 second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
 cpa_asset: CLIProxyAPI_7.2.137_linux_amd64.tar.gz
-cpa_asset_bytes: 21072175
-cpa_asset_sha256: ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401
-cpa_binary_bytes: 63738088
-cpa_binary_sha256: aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa
+cpa_asset_bytes: 21193314
+cpa_asset_sha256: a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051
+cpa_binary_bytes: 64088616
+cpa_binary_sha256: e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b
 platform: linux/amd64 only
 candidate_release: v1.0.0-rc.1
 ```
@@ -51,7 +51,7 @@ v7.2.125/schema 2 及更早 PASS 只能作为其原身份历史记录，`transfe
 
 目标：
 
-1. 证明 CPA v7.2.137/schema 3 的 source、compile、Store、Host 与 stream 合同。
+1. 证明 CPA v7.2.142/schema 3 的 source、compile、Store、Host 与 stream 合同。
 2. 在二号机以官方 Host、精确候选 SO/ZIP 和 counted Mock 完成隔离审计。
 3. 对五个固定仓库实行惰性只读文本输入，验证误报、召回、block 后副作用和清理。
 4. 重新取得 CPA-only/CPA+CAG Host A/B 性能以及 300/3600 秒稳定性证据。
@@ -261,7 +261,7 @@ unexpected_http_or_infrastructure_errors = 0
 
 ### P2：二号机 Host、回滚和清理
 
-二号机必须使用官方 v7.2.137 binary、同一精确 candidate SO/Store ZIP、内部 counted
+二号机必须使用官方 v7.2.142 binary、同一精确 candidate SO/Store ZIP、内部 counted
 Mock、新 RUN_ID/evidence root，无 Host 端口和真实 Provider。
 
 Host admission：
@@ -283,7 +283,7 @@ schema 7 及清理。300s 不能替代 3600s；中断或漂移必须换新 RUN_I
 
 切换前备份 Host image/binary、SO、Store metadata、config 和 SQLite/audit DB；数据库
 使用 SQLite Online Backup 并验证 `quick_check`，不得仅复制活动 WAL。回滚必须成对：
-v7.2.137 Host 只配 ABI1/schema3 本轮 SO；旧 Host 只配其此前验证的旧 SO。回滚后
+v7.2.142 Host 只配 ABI1/schema3 本轮 SO；旧 Host 只配其此前验证的旧 SO。回滚后
 复核 hash/schema/health/root/models/PID/restart/Mock/SQLite，不能以“进程启动”代替。
 
 清理只删除本轮精确 label/root 的容器、网络、临时配置和惰性文本；禁止

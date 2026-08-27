@@ -5,10 +5,10 @@ This directory is the current diagnostic harness for **CPA v7.2.142** at commit
 also binds module sum `h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=`,
 go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 3,
 and the official Linux
-amd64 asset `CLIProxyAPI_7.2.142_linux_amd64.tar.gz` at exactly 21,072,175 bytes
+amd64 asset `CLIProxyAPI_7.2.142_linux_amd64.tar.gz` at exactly 21,193,314 bytes
 with SHA-256
 `a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`, and
-the 63,738,088-byte extracted binary SHA-256
+the 64,088,616-byte extracted binary SHA-256
 `e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
 These values identify the active upstream input only; they do not relabel an
 older second-machine or CI result as a v7.2.142 PASS. The harness output claim

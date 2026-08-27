@@ -119,14 +119,14 @@ if [[ "$fixture_mode" == 1 && "$current_release_version" != 1.0.0 ]]; then
   # still binds the current reviewed tool closure from the real source tree.
   round14_audit_receipt="$root/$round14_audit_receipt_relative"
 fi
-round14_cpa_module_sum='h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w='
+round14_cpa_module_sum='h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ='
 round14_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
-round14_cpa_archive_sha256='ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401'
-round14_cpa_binary_sha256='aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa'
-round14_cpa_version='v7.2.137'
-round14_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'
-round14_classifier_policy_sha256='1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d'
-round14_csam_text_policy_sha256='c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f'
+round14_cpa_archive_sha256='a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051'
+round14_cpa_binary_sha256='e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b'
+round14_cpa_version='v7.2.142'
+round14_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'
+round14_classifier_policy_sha256='a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db'
+round14_csam_text_policy_sha256='a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee'
 if [[ "$round14_audit_receipt" == "$doc_root/$round14_audit_receipt_relative" ]]; then
   verify_canonical_relative_path "$round14_audit_receipt_relative"
 fi
@@ -399,26 +399,26 @@ if [[
 
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README.md" || \
     fail "README.md lost the current 1.0.0 source identity"
-  grep -Fqx 'current_rc_tag: v1.0.0-rc.2' "$doc_root/README.md" || \
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.3' "$doc_root/README.md" || \
     fail "README.md lost the current RC tag identity"
   grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README.md" || \
     fail "README.md lost the CPA $round14_cpa_version identity"
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the current 1.0.0 source identity"
-  grep -Fqx 'current_rc_tag: v1.0.0-rc.2' "$doc_root/README_CN.md" || \
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.3' "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the current RC tag identity"
   grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the CPA $round14_cpa_version identity"
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost the current source version"
-  grep -Fqx 'current_rc_tag: v1.0.0-rc.2' "$doc_root/docs/RELEASE_POLICY.md" || \
+  grep -Fqx 'current_rc_tag: v1.0.0-rc.3' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost the current RC tag"
   grep -Fqx 'current_rc_prerelease: true' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost prerelease=true"
   grep -Fqx 'current_rc_make_latest: false' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost make_latest=false"
-  grep -Fq '## Unreleased - v1.0.0-rc.2' "$doc_root/CHANGELOG.md" || \
-    fail "CHANGELOG.md lost the active v1.0.0-rc.2 section"
+  grep -Fq '## Unreleased - v1.0.0-rc.3' "$doc_root/CHANGELOG.md" || \
+    fail "CHANGELOG.md lost the active v1.0.0-rc.3 section"
   grep -Fq "round14_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/docs/ROUND14_STATUS.md" || \
     fail "ROUND14_STATUS.md lost the exact CPA identity"
   for relative in \
@@ -726,7 +726,7 @@ PY
     case "$relative" in
       CHANGELOG.md)
         active_section="$(awk '
-          $0 == "## Unreleased - v1.0.0-rc.2" { inside = 1; next }
+          $0 == "## Unreleased - v1.0.0-rc.3" { inside = 1; next }
           inside && $0 == "### Frozen Round 13 v7.2.125 development history" { exit }
           inside && /^## / { exit }
           inside { print }
@@ -799,13 +799,13 @@ relative = "docs/reports/RELEASE_EVIDENCE.md"
 marker = "## Frozen Round 13 release boundary"
 active, frozen = split_once(relative, marker)
 expected_target = (
-    "round14_cpa_target: v7.2.137 / "
-    "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
+    "round14_cpa_target: v7.2.142 / "
+    "1f53b2eb03b9e963bac647e5566ca2b304239116"
 )
 active_target = re.compile(r"(?m)^[ \t]*" + re.escape(expected_target) + r"[ \t]*$")
 if len(active_target.findall(active)) != 1:
     raise SystemExit(
-        f"{relative}: active boundary must contain exactly one exact v7.2.137 round14_cpa_target"
+        f"{relative}: active boundary must contain exactly one exact v7.2.142 round14_cpa_target"
     )
 if len(re.findall(r"(?m)^[ \t]*round14_cpa_target[ \t]*:", active)) != 1:
     raise SystemExit(f"{relative}: active boundary contains a duplicate or conflicting round14_cpa_target")
@@ -916,7 +916,7 @@ PY
   done
 
   verify_round14_repository_contracts
-  printf 'release document consistency passed: source=%s rc=v%s-rc.2 cpa=%s audit_tests=%s\n' \
+  printf 'release document consistency passed: source=%s rc=v%s-rc.3 cpa=%s audit_tests=%s\n' \
     "$current_release_version" "$current_release_version" "$round14_cpa_version" \
     "$current_audit_tool_test_count"
   exit 0

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
@@ -10,16 +10,16 @@ are the shortest current-status entry points. The previously documented old
 repository and `v0.15` Release both returned GitHub API `404` on 2026-08-04;
 legacy availability is `UNAVAILABLE` and security support is `SUSPENDED`.
 The current project target is source `1.0.0` and planned prerelease
-`v1.0.0-rc.2`, pinned to CPA v7.2.137 at
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`; C ABI 1 and RPC schema 3 are the
+`v1.0.0-rc.3`, pinned to CPA v7.2.142 at
+`1f53b2eb03b9e963bac647e5566ca2b304239116`; C ABI 1 and RPC schema 3 are the
 active contract. The module sum is
-`h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=` and the go.mod sum is
+`h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=` and the go.mod sum is
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The upstream Linux amd64
 archive SHA-256 is
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`
-(21,072,175 bytes); its
+`a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`
+(21,193,314 bytes); its
 binary SHA-256 is
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
 The active workflow directory contains exactly four repository workflows:
 `ci.yml`, `codeql.yml`, `policy-gate.yml`, and the gated `release-rc.yml`.
 GitHub-owned Dependabot `dynamic/` entries are separately bounded by an exact
@@ -33,14 +33,14 @@ and release readiness are `NOT_PROVIDED`, and no stable `v0.16` exists.
 Commit `21267e742b624b29a75bd3683fd6914f76c764b5` is a confirmed green
 historical v7.2.116 engineering baseline. The supplied v7.2.116 second-machine
 report and any five-repository data are historical diagnostic evidence only;
-they do not transfer to v7.2.137/schema 3. Round 13 v7.2.125/schema 2 results
+they do not transfer to v7.2.142/schema 3. Round 13 v7.2.125/schema 2 results
 also retain their old identity and transfer no PASS. The exact Round 14
 candidate still requires its own second-machine execution. The current feature branch also requires
 its own PR checks. Engineering CI validates source and development artifacts
 only; it does not establish a protected Host, independent-audit, release, or
 production PASS.
 
-CPA v7.2.137 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
+CPA v7.2.142 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
 `RequestInterceptor`. The active lane therefore requires a new regression for
 the rewritten tool-schema/tool-payload boundary; no v7.2.116 report may be
 relabelled to satisfy it. Documents under `docs/reports/` retain their recorded
@@ -59,7 +59,7 @@ references remain stable.
 
 - [RC2 platform-workflow drift recovery and acceptance](RC2_PLATFORM_DRIFT_RECOVERY.md)
 - [Active Round 14 status and evidence boundary](ROUND14_STATUS.md)
-- [Active Round 14 CPA v7.2.137 / RPC schema 3 task book](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)
+- [Active CPA v7.2.142 / RPC schema 3 task book](ROUND15_CPA_V7_2_142_RC3_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Release policy](RELEASE_POLICY.md)
 
@@ -76,7 +76,7 @@ references remain stable.
 ## Historical v0.16 navigation
 
 The following entries preserve the Round 12 and earlier point-in-time identity;
-they do not define the active v7.2.137 implementation:
+they do not define the active v7.2.142 implementation:
 
 - [Historical Round 12 v7.2.124 status and evidence boundary](ROUND12_STATUS.md)
 - [Historical Round 12 v7.2.124 production-hardening task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md)
@@ -181,15 +181,15 @@ Project baselines and engineering evidence:
 
 - [Classifier redesign baseline](reports/CLASSIFIER_REDESIGN_BASELINE.md)
 - [Regression corpus report](reports/CORPUS_REPORT.md)
-- [Active v7.2.137 CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
+- [Active v7.2.142 CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
 - [CPA packaging and contract baseline](reports/PHASE0_CPA_CONTRACT.md)
 - [Performance report and v0.16 acceptance table](reports/PERFORMANCE.md)
 - [Privacy report](reports/PRIVACY.md)
 - [Prompt-injection defensive review](reports/PROMPT_INJECTION_REVIEW.md)
 - [Public jailbreak repository review](reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md)
-- [Release evidence](reports/RELEASE_EVIDENCE.md) — active v7.2.137 boundary
+- [Release evidence](reports/RELEASE_EVIDENCE.md) — active v7.2.142 boundary
   plus retained historical records
-- [Test report](reports/TEST_REPORT.md) — active v7.2.137 boundary plus retained
+- [Test report](reports/TEST_REPORT.md) — active v7.2.142 boundary plus retained
   historical records
 
 Frozen evaluation reports:

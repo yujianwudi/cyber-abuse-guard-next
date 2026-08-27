@@ -2,14 +2,14 @@
 
 > [!IMPORTANT]
 > The active Round 14 Host identity is CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3.
+> `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`, C ABI 1 / RPC schema 3.
 > Round 13 v7.2.125/schema 2 and older capture observations retain their exact
 > historical identities and transfer no PASS. Every `/v1/realtime*` route
 > bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle, so it
 > is **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE** and cannot produce a CAG
 > blocked-request capture. Capture applies only to protected registered callback
 > paths such as chat and Responses; it is not evidence of all-traffic coverage.
-> The exact v7.2.137 / CAG `1.0.0` lane must revalidate it before any current
+> The exact v7.2.142 / CAG `1.0.0` lane must revalidate it before any current
 > transport or capture claim is admitted.
 
 The raw-capture facility exists only for operator review of false-positive

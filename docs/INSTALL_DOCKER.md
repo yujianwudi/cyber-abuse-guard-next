@@ -2,20 +2,20 @@
 
 > [!IMPORTANT]
 > For Round 14, substitute only an exact Linux amd64 candidate bound to CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3.
+> `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`, C ABI 1 / RPC schema 3.
 > The Round 12/13 commands and hashes retained below are historical; they must
 > not be used as current artifacts or PASS evidence. Production deployment
 > remains outside this candidate runbook.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 ```
 
-The official CPA archive identity is 21,072,175 bytes / SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
+The official CPA archive identity is 21,193,314 bytes / SHA-256
+`a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`;
 the contained binary SHA-256 is
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
 Round 13 v7.2.125/schema 2 and every older PASS remain historical and
 non-transferable.
 
@@ -28,10 +28,10 @@ non-transferable.
 ## Round 14 active installation contract
 
 All current installation and validation work must use the exact Linux amd64
-candidate for CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1,
+candidate for CPA `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`, C ABI 1,
 and RPC schema 3. The frozen Round 12 procedure below is retained for audit
 history only; do not execute its v7.2.124/schema-2 commands against the active
-candidate. Current Host evidence must load the v7.2.137 candidate bytes, prove
+candidate. Current Host evidence must load the v7.2.142 candidate bytes, prove
 the schema-3 envelope, and keep `/v1/realtime*` explicitly outside CAG coverage.
 
 ## Frozen historical Round 12 installation body

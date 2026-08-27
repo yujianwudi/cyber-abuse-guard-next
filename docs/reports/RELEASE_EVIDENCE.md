@@ -1,30 +1,30 @@
-# v1.0.0-rc.2 evidence — CPA v7.2.137 active target; gated RC publication
+# v1.0.0-rc.3 evidence — CPA v7.2.142 active target; gated RC publication
 
 ## Round 14 active release boundary
 
 ```text
-round14_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
-round14_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+round14_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
+round14_cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
 round14_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 round14_cpa_plugin_c_abi_rpc_schema: 1 / 3
-round14_cpa_linux_asset: CLIProxyAPI_7.2.137_linux_amd64.tar.gz / 21072175_BYTES / SHA256_ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401
+round14_cpa_linux_asset: CLIProxyAPI_7.2.142_linux_amd64.tar.gz / 21193314_BYTES / SHA256_a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051
 round14_cpa_checksums_sha256: 9ae7dee90cd717a373acb58fad0163264891d5a76b27fb15d4c88bd10467012e
-round14_cpa_linux_binary: 63738088_BYTES / SHA256_aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa
-round14_classifier_policy: classifier-policy-v20 / 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+round14_cpa_linux_binary: 64088616_BYTES / SHA256_e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b
+round14_classifier_policy: classifier-policy-v20 / a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
 round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
 round14_audit_expected_test_count: 315 / EXECUTED
-round14_audit_runner_bundle_sha256: 49512adde24e013e8c79cac0ef33dcbd51b975144cb20eb4542c582905af4e3c
-round14_audit_contract_sha256: 7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642
-round14_audit_run_source_sha256: 434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665
-round14_audit_machine_schema_sha256: 3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e
+round14_audit_runner_bundle_sha256: f3dfc5f1ce10c1226633b733edb3e3de87150b326479d3549680f76d277ca522
+round14_audit_contract_sha256: 92d71d0ef20667e38cc39ccf7deaa19661a40408d77d1c9c3f4c757fabc003e4
+round14_audit_run_source_sha256: 126226c325d5868b6dfd495419f0e30ec954f54e0de58246406db0efc0490634
+round14_audit_machine_schema_sha256: 733a8202425ec00436412e00b21fe7a28a66ffdd11321775e2438db3b3c9cf22
 round14_audit_tool_tests: PASS / LINUX / 315_OF_315
 round14_audit_tool_skips: 0
-round14_audit_test_sources_sha256: 94c47cb2e1dac34dfdf8a5a7f8d1777f00c93537a7e12f8850cbb6dcd1a373a1
+round14_audit_test_sources_sha256: e094d7288ce885ea75d044b1565d1f96952b0da5cf06d771aa1277a685c27806
 round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round14_audit_unit_receipt_sha256: b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c
-round14_audit_unit_started_at: 2026-08-25T10:18:13.842Z
-round14_audit_unit_finished_at: 2026-08-25T10:18:49.358Z
-round14_audit_unit_elapsed_ms: 35516
+round14_audit_unit_receipt_sha256: 839470612986ca96fbcf298698bc178e62171c3654238c82927740e4d790f266
+round14_audit_unit_started_at: 2026-08-27T01:20:43.291Z
+round14_audit_unit_finished_at: 2026-08-27T01:21:18.185Z
+round14_audit_unit_elapsed_ms: 34893
 round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
 round14_targeted_schema3_host_fixture: PASS / 5_TESTS
 round14_targeted_cag_rpc_schema: PASS / WSL
