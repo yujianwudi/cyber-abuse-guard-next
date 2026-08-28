@@ -1260,10 +1260,8 @@ ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     "tools/current-cpa-audit/second-machine-release-admission.schema.json": "bf9c5a43370d1dd7009f65e486170b7a631016ef2f02a49d05dc19727f3a6c2d",
     "tools/current-cpa-audit/machine-evidence.schema.json": "733a8202425ec00436412e00b21fe7a28a66ffdd11321775e2438db3b3c9cf22",
     "tools/current-cpa-audit/host-performance-evidence.schema.json": "4b054eae7dbaefff69d8bc57abdb46890ecaae0012ae3ab1281e87c2cb12d9d5",
-    "tools/current-cpa-audit/host-admission-evidence.schema.json": "434fa5e5b0b90034975295be9eb92c0e52c9fb5e10e152902a8d858684411716",
     "tools/current-cpa-audit/native-host-special-paths.schema.json": "86df0c0ec935ff1858ce7b8f74de544f6bf8a242c8a51bdaa51f70561319d190",
     "tools/current-cpa-audit/native_host_special_paths.py": "dc316284c8d5eec9da49b0519052c63cae4e50d3ff2031839ce68ce9cd1cdf9f",
-    "tools/current-cpa-audit/tests/test_host_admission.py": "d2920ba48b2806d09e993a0fd2274376ca382dfc296379ebd6e44759fa44b780",
     "tools/current-cpa-audit/csam_text_evidence.py": "096bc2fda7e6c7b2c3a2825325dc9ccb3656499c68f7952192d3fb027a58b431",
     "tools/current-cpa-audit/csam_text_runner.py": "991cca40118131c6c6b3a8b18d0b003ab52082fa97169bf3903de0eb15076455",
     "tools/current-cpa-audit/lazy_read.py": "dd89574f7402834b9f5f26e482412b083f7a1686771df81cc38038ee8c6b8119",
@@ -1526,7 +1524,7 @@ ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
     "a8d3906cf2f4f8e088ac078d3fc7f70fdc8df98f1452d3958ba42d04bc979398"
 )
 ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "71149ec6c2230d58c82a77a4cab6fd9352cdca9922dab7332fb00a2e022fb4ef",
+    "scripts/release-doc-consistency-test.sh": "58496c77107a6f2ee8f98da4ea608f09fc4ee444f7ec877dccfef9d1bc8e83b8",
     "scripts/release-doc-consistency.sh": "6c976af08a56e774ed2e88ad2c370ba5aca5a9afcc44ee535a4910c19b5e9bdf",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
