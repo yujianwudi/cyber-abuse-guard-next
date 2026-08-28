@@ -130,9 +130,9 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-24; source drift fails.
+  five-repository source identities reviewed on 2026-08-28; source drift fails.
   The fixed commit/tree pairs are Keysmith
-  `2cb7f382ea8a08e9af5a6d9c16580b45f639891a` / `0d46f7e9ffe6907b2483d9955a6f40a8f75800dd`,
+  `aef9f901aa7d14089923b54913ad1d5e47802b00` / `05ad97a17e057e37e45b2e591b670159e66b2872`,
   Codex-5.5 `ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d` /
   `e6081de4a8a56e839be2f2eb281195e314386b31`, Codex-X
   `d7610f9b12276e074c40cacf9940db3b9bdc67ff` / `d05dfcc40e96dcde4755067acf543de683a1246e`,
