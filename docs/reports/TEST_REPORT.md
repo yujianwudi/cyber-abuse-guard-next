@@ -1,12 +1,12 @@
-# Test Report — CPA v7.2.142 Round 15 and frozen historical evidence
+# Test Report — CPA v7.2.144 Round 15 and frozen historical evidence
 
 ## Round 14 current test boundary
 
 ```text
-round14_cpa: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116 / C_ABI_1 / RPC_SCHEMA_3
-round14_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
+round14_cpa: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb / C_ABI_1 / RPC_SCHEMA_4
+round14_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 round14_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
-round14_schema3_host_fixture_targeted: PASS / 5_TESTS
+round14_schema4_host_fixture_targeted: PASS / 5_TESTS
 round14_cag_rpc_schema_targeted: PASS / WSL
 round14_upstream_hook_no_copy_auth_realtime_targeted: PASS / 1_TEST
 round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK

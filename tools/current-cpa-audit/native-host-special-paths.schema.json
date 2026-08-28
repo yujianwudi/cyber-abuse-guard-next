@@ -177,9 +177,9 @@
       "required": ["c_abi", "commit", "rpc_schema", "tag"],
       "properties": {
         "c_abi": {"const": 1},
-        "commit": {"const": "1f53b2eb03b9e963bac647e5566ca2b304239116"},
-        "rpc_schema": {"const": 3},
-        "tag": {"const": "v7.2.142"}
+        "commit": {"const": "d36b776c790a4d58027fd4fb434800fb5334bceb"},
+        "rpc_schema": {"const": 4},
+        "tag": {"const": "v7.2.144"}
       }
     },
     "command": {

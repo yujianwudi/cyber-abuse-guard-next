@@ -111,34 +111,42 @@ else
     fail "cannot determine the exact three-component semantic release version"
 fi
 
-round14_audit_receipt_tool="$root/scripts/current_cpa_audit_unit_receipt.py"
-round14_audit_receipt_relative="docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
-round14_audit_receipt="$doc_root/$round14_audit_receipt_relative"
+active_audit_receipt_tool="$root/scripts/current_cpa_audit_unit_receipt.py"
+active_audit_receipt_relative="docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
+active_audit_receipt="$doc_root/$active_audit_receipt_relative"
 if [[ "$fixture_mode" == 1 && "$current_release_version" != 1.0.0 ]]; then
   # The legacy v0.16 mutation fixture predates the Round 14 document set. It
   # still binds the current reviewed tool closure from the real source tree.
-  round14_audit_receipt="$root/$round14_audit_receipt_relative"
+  active_audit_receipt="$root/$active_audit_receipt_relative"
 fi
+active_cpa_module_sum='h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk='
+active_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
+active_cpa_archive_sha256='02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96'
+active_cpa_binary_sha256='eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09'
+active_cpa_version='v7.2.144'
+active_cpa_commit='d36b776c790a4d58027fd4fb434800fb5334bceb'
+# Round 14 is an immutable historical document/evidence boundary.  Keep its
+# reviewed identity separate from the active Round 16 CPA pin above.
 round14_cpa_module_sum='h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ='
 round14_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
 round14_cpa_archive_sha256='a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051'
 round14_cpa_binary_sha256='e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b'
 round14_cpa_version='v7.2.142'
 round14_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'
-round14_classifier_policy_sha256='a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db'
-round14_csam_text_policy_sha256='a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee'
-if [[ "$round14_audit_receipt" == "$doc_root/$round14_audit_receipt_relative" ]]; then
-  verify_canonical_relative_path "$round14_audit_receipt_relative"
+round14_classifier_policy_sha256='f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3'
+round14_csam_text_policy_sha256='85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e'
+if [[ "$active_audit_receipt" == "$doc_root/$active_audit_receipt_relative" ]]; then
+  verify_canonical_relative_path "$active_audit_receipt_relative"
 fi
-[[ -f "$round14_audit_receipt" && ! -L "$round14_audit_receipt" ]] || \
-  fail "Round 14 CPA audit unit receipt is missing or unsafe: $round14_audit_receipt_relative"
-[[ -f "$round14_audit_receipt_tool" && ! -L "$round14_audit_receipt_tool" ]] || \
-  fail "Round 14 CPA audit unit receipt validator is missing or unsafe"
+[[ -f "$active_audit_receipt" && ! -L "$active_audit_receipt" ]] || \
+  fail "active CPA audit unit receipt is missing or unsafe: $active_audit_receipt_relative"
+[[ -f "$active_audit_receipt_tool" && ! -L "$active_audit_receipt_tool" ]] || \
+  fail "active CPA audit unit receipt validator is missing or unsafe"
 
 audit_identity_output=""
-if ! audit_identity_output="$("$python3_bin" -I -B "$round14_audit_receipt_tool" validate \
-  --receipt "$round14_audit_receipt" --output-lines)"; then
-  fail "Round 14 CPA audit unit receipt validation failed"
+if ! audit_identity_output="$("$python3_bin" -I -B "$active_audit_receipt_tool" validate \
+  --receipt "$active_audit_receipt" --output-lines)"; then
+  fail "active CPA audit unit receipt validation failed"
 fi
 audit_identity_values=()
 mapfile -t audit_identity_values <<<"$audit_identity_output"
@@ -191,7 +199,7 @@ if [[ "$doc_root" == "$root" ]]; then
   current_audit_execution_output=""
   if ! current_audit_execution_output="$(
     GOTOOLCHAIN=go1.26.6 PYTHONDONTWRITEBYTECODE=1 \
-      "$python3_bin" -I -B "$round14_audit_receipt_tool" run \
+      "$python3_bin" -I -B "$active_audit_receipt_tool" run \
       --output "$current_audit_execution_receipt" --replace
   )"; then
     rm -f -- "$current_audit_execution_receipt"
@@ -272,14 +280,14 @@ verify_round14_repository_contracts() {
     fail "ROUND14_STATUS.md lost the exact bounded platform workflow line"
   grep -Fq 'RC publication' "$doc_root/docs/README.md" ||
     fail "documentation index lost the gated RC publication boundary"
-  grep -Fqx "  RC_CPA_VERSION: $round14_cpa_version" "$doc_root/.github/workflows/release-rc.yml" ||
-    fail "release-rc.yml lost the exact CPA $round14_cpa_version identity"
-  grep -Fqx "  RC_CPA_COMMIT: $round14_cpa_commit" "$doc_root/.github/workflows/release-rc.yml" ||
-    fail "release-rc.yml lost the exact CPA $round14_cpa_version commit"
+  grep -Fqx "  RC_CPA_VERSION: $active_cpa_version" "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost the exact CPA $active_cpa_version identity"
+  grep -Fqx "  RC_CPA_COMMIT: $active_cpa_commit" "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost the exact CPA $active_cpa_version commit"
   grep -Fqx '  RC_CPA_C_ABI: '\''1'\''' "$doc_root/.github/workflows/release-rc.yml" ||
     fail "release-rc.yml lost C ABI 1"
-  grep -Fqx '  RC_CPA_RPC_SCHEMA: '\''3'\''' "$doc_root/.github/workflows/release-rc.yml" ||
-    fail "release-rc.yml lost RPC schema 3"
+  grep -Fqx '  RC_CPA_RPC_SCHEMA: '\''4'\''' "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost active RPC schema 4"
   grep -Fqx '  RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3' \
     "$doc_root/.github/workflows/release-rc.yml" ||
     fail "release-rc.yml lost second-machine admission schema v3"
@@ -341,6 +349,7 @@ if [[
     docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md
     docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md
     docs/ROUND14_STATUS.md
+    docs/ROUND16_STATUS.md
     docs/THREAT_MODEL.md
     docs/reports/CPA_INTEGRATION.md
     docs/reports/PHASE0_CPA_CONTRACT.md
@@ -354,6 +363,7 @@ if [[
     docs/reports/ROUND9_EXECUTION_RECORD.md
     docs/reports/TEST_REPORT.md
     docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json
+    docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json
     integration/cpalatestcontract/README.md
     integration/pluginstorecontract/README.md
     tools/current-cpa-audit/README.md
@@ -401,14 +411,14 @@ if [[
     fail "README.md lost the current 1.0.0 source identity"
   grep -Fqx 'current_rc_tag: v1.0.0-rc.3' "$doc_root/README.md" || \
     fail "README.md lost the current RC tag identity"
-  grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README.md" || \
-    fail "README.md lost the CPA $round14_cpa_version identity"
+  grep -Fqx "current_cpa_target: $active_cpa_version / $active_cpa_commit" "$doc_root/README.md" || \
+    fail "README.md lost the CPA $active_cpa_version identity"
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the current 1.0.0 source identity"
   grep -Fqx 'current_rc_tag: v1.0.0-rc.3' "$doc_root/README_CN.md" || \
     fail "README_CN.md lost the current RC tag identity"
-  grep -Fqx "current_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/README_CN.md" || \
-    fail "README_CN.md lost the CPA $round14_cpa_version identity"
+  grep -Fqx "current_cpa_target: $active_cpa_version / $active_cpa_commit" "$doc_root/README_CN.md" || \
+    fail "README_CN.md lost the CPA $active_cpa_version identity"
   grep -Fqx 'current_source_version: 1.0.0' "$doc_root/docs/RELEASE_POLICY.md" || \
     fail "RELEASE_POLICY.md lost the current source version"
   grep -Fqx 'current_rc_tag: v1.0.0-rc.3' "$doc_root/docs/RELEASE_POLICY.md" || \
@@ -419,8 +429,8 @@ if [[
     fail "RELEASE_POLICY.md lost make_latest=false"
   grep -Fq '## Unreleased - v1.0.0-rc.3' "$doc_root/CHANGELOG.md" || \
     fail "CHANGELOG.md lost the active v1.0.0-rc.3 section"
-  grep -Fq "round14_cpa_target: $round14_cpa_version / $round14_cpa_commit" "$doc_root/docs/ROUND14_STATUS.md" || \
-    fail "ROUND14_STATUS.md lost the exact CPA identity"
+  grep -Fq "round14_cpa_target: $active_cpa_version / $active_cpa_commit" "$doc_root/docs/ROUND14_STATUS.md" || \
+    fail "ROUND14_STATUS.md lost the exact active CPA identity"
   for relative in \
     README.md \
     README_CN.md \
@@ -453,52 +463,26 @@ if [[
     "$doc_root/docs/ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md" || \
     fail "Round 13 task book lost the frozen CPA v7.2.125 identity"
 
-  declare -A round14_audit_identities=(
-    [round14_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
-    [round14_audit_contract_sha256]="$current_audit_contract_sha256"
-    [round14_audit_run_source_sha256]="$current_audit_run_source_sha256"
-    [round14_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
-    [round14_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
-    [round14_audit_tool_skips]="$current_audit_tool_skip_count"
-    [round14_audit_test_sources_sha256]="$current_audit_test_sources_sha256"
-    [round14_audit_test_ids_sha256]="$current_audit_test_ids_sha256"
-    [round14_audit_unit_receipt_sha256]="$current_audit_tool_receipt_sha256"
-    [round14_audit_unit_started_at]="$current_audit_tool_started_at"
-    [round14_audit_unit_finished_at]="$current_audit_tool_finished_at"
-    [round14_audit_unit_elapsed_ms]="$current_audit_tool_elapsed_ms"
-    [round14_audit_unit_command]="$current_audit_tool_command"
-  )
-  for relative in \
-    docs/ROUND14_STATUS.md \
-    docs/reports/TEST_REPORT.md \
-    docs/reports/CPA_INTEGRATION.md; do
-    for key in "${!round14_audit_identities[@]}"; do
-      value="${round14_audit_identities[$key]}"
-      [[ "$(grep -Fxc -- "$key: $value" "$doc_root/$relative")" == 1 &&
-        "$(grep -Ec "^${key}:" "$doc_root/$relative")" == 1 ]] ||
-        fail "$relative must bind the exact current Round 14 audit identity: $key"
-    done
-  done
   declare -A active_audit_identities=(
-    [round14_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
-    [round14_audit_contract_sha256]="$current_audit_contract_sha256"
-    [round14_audit_run_source_sha256]="$current_audit_run_source_sha256"
-    [round14_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
-    [round14_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
-    [round14_audit_tool_skips]="$current_audit_tool_skip_count"
-    [round14_audit_test_sources_sha256]="$current_audit_test_sources_sha256"
-    [round14_audit_test_ids_sha256]="$current_audit_test_ids_sha256"
-    [round14_audit_unit_receipt_sha256]="$current_audit_tool_receipt_sha256"
-    [round14_audit_unit_started_at]="$current_audit_tool_started_at"
-    [round14_audit_unit_finished_at]="$current_audit_tool_finished_at"
-    [round14_audit_unit_elapsed_ms]="$current_audit_tool_elapsed_ms"
-    [round14_audit_unit_command]="$current_audit_tool_command"
+    [round16_audit_runner_bundle_sha256]="$current_audit_runner_bundle_sha256"
+    [round16_audit_contract_sha256]="$current_audit_contract_sha256"
+    [round16_audit_run_source_sha256]="$current_audit_run_source_sha256"
+    [round16_audit_machine_schema_sha256]="$current_audit_machine_schema_sha256"
+    [round16_audit_tool_tests]="PASS / LINUX / ${current_audit_tool_test_count}_OF_${current_audit_tool_test_count}"
+    [round16_audit_tool_skips]="$current_audit_tool_skip_count"
+    [round16_audit_test_sources_sha256]="$current_audit_test_sources_sha256"
+    [round16_audit_test_ids_sha256]="$current_audit_test_ids_sha256"
+    [round16_audit_unit_receipt_sha256]="$current_audit_tool_receipt_sha256"
+    [round16_audit_unit_started_at]="$current_audit_tool_started_at"
+    [round16_audit_unit_finished_at]="$current_audit_tool_finished_at"
+    [round16_audit_unit_elapsed_ms]="$current_audit_tool_elapsed_ms"
+    [round16_audit_unit_command]="$current_audit_tool_command"
   )
   for key in "${!active_audit_identities[@]}"; do
     value="${active_audit_identities[$key]}"
-    [[ "$(grep -Fxc -- "$key: $value" "$doc_root/docs/reports/RELEASE_EVIDENCE.md")" == 1 &&
-      "$(grep -Ec "^${key}:" "$doc_root/docs/reports/RELEASE_EVIDENCE.md")" == 1 ]] ||
-      fail "docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: $key"
+    [[ "$(grep -Fxc -- "$key: $value" "$doc_root/docs/ROUND16_STATUS.md")" == 1 &&
+      "$(grep -Ec "^${key}:" "$doc_root/docs/ROUND16_STATUS.md")" == 1 ]] ||
+      fail "docs/ROUND16_STATUS.md must bind the exact current audit identity: $key"
   done
 
   # Round 12 remains immutable historical evidence.  Its CPA audit closure is
@@ -553,14 +537,14 @@ if [[
   )
   for relative in "${round14_identity_documents[@]}"; do
     document="$doc_root/$relative"
-    grep -Fq "$round14_cpa_module_sum" "$document" || \
-      fail "$relative lost the exact CPA $round14_cpa_version module sum"
-    grep -Fq "$round14_cpa_go_mod_sum" "$document" || \
-      fail "$relative lost the exact CPA $round14_cpa_version go.mod sum"
-    grep -Fq "$round14_cpa_archive_sha256" "$document" || \
-      fail "$relative lost the exact CPA $round14_cpa_version archive SHA-256"
-    grep -Fq "$round14_cpa_binary_sha256" "$document" || \
-      fail "$relative lost the exact CPA $round14_cpa_version binary SHA-256"
+    grep -Fq "$active_cpa_module_sum" "$document" || \
+      fail "$relative lost the exact CPA $active_cpa_version module sum"
+    grep -Fq "$active_cpa_go_mod_sum" "$document" || \
+      fail "$relative lost the exact CPA $active_cpa_version go.mod sum"
+    grep -Fq "$active_cpa_archive_sha256" "$document" || \
+      fail "$relative lost the exact CPA $active_cpa_version archive SHA-256"
+    grep -Fq "$active_cpa_binary_sha256" "$document" || \
+      fail "$relative lost the exact CPA $active_cpa_version binary SHA-256"
   done
 
   round14_overlay_documents=(
@@ -575,13 +559,13 @@ if [[
   )
   for relative in "${round14_overlay_documents[@]}"; do
     document="$doc_root/$relative"
-    grep -Fq "$round14_cpa_version@$round14_cpa_commit" "$document" || \
-      fail "$relative lost its active-tree CPA $round14_cpa_version overlay"
+    grep -Fq "$active_cpa_version@$active_cpa_commit" "$document" || \
+      fail "$relative lost its active-tree CPA $active_cpa_version overlay"
     grep -Fq 'current_classifier_policy_version: classifier-policy-v20' "$document" || \
       fail "$relative lost its active-tree classifier overlay"
   done
 
-  grep -Fq "exact $round14_cpa_version / CAG \`1.0.0\` lane must revalidate it" \
+  grep -Fq "exact $active_cpa_version / CAG \`1.0.0\` lane must revalidate it" \
     "$doc_root/docs/RAW_CAPTURE.md" || \
     fail "docs/RAW_CAPTURE.md lost the active $round14_cpa_version transport guidance"
   grep -Fq '## Frozen historical Round 12 evidence boundary' \
@@ -799,13 +783,13 @@ relative = "docs/reports/RELEASE_EVIDENCE.md"
 marker = "## Frozen Round 13 release boundary"
 active, frozen = split_once(relative, marker)
 expected_target = (
-    "round14_cpa_target: v7.2.142 / "
-    "1f53b2eb03b9e963bac647e5566ca2b304239116"
+    "round14_cpa_target: v7.2.144 / "
+    "d36b776c790a4d58027fd4fb434800fb5334bceb"
 )
 active_target = re.compile(r"(?m)^[ \t]*" + re.escape(expected_target) + r"[ \t]*$")
 if len(active_target.findall(active)) != 1:
     raise SystemExit(
-        f"{relative}: active boundary must contain exactly one exact v7.2.142 round14_cpa_target"
+        f"{relative}: active boundary must contain exactly one exact v7.2.144 round14_cpa_target"
     )
 if len(re.findall(r"(?m)^[ \t]*round14_cpa_target[ \t]*:", active)) != 1:
     raise SystemExit(f"{relative}: active boundary contains a duplicate or conflicting round14_cpa_target")
@@ -902,22 +886,22 @@ PY
     "$root/go.mod" \
     "$root/integration/cpalatestcontract/go.mod" \
     "$root/integration/pluginstorecontract/go.mod"; do
-    grep -Fq "github.com/router-for-me/CLIProxyAPI/v7 $round14_cpa_version" "$modfile" || \
-      fail "active CPA module is not pinned to $round14_cpa_version: $modfile"
+    grep -Fq "github.com/router-for-me/CLIProxyAPI/v7 $active_cpa_version" "$modfile" || \
+      fail "active CPA module is not pinned to $active_cpa_version: $modfile"
   done
   for sumfile in \
     "$root/go.sum" \
     "$root/integration/cpalatestcontract/go.sum" \
     "$root/integration/pluginstorecontract/go.sum"; do
-    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 $round14_cpa_version $round14_cpa_module_sum" "$sumfile" || \
+    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 $active_cpa_version $active_cpa_module_sum" "$sumfile" || \
       fail "active CPA module sum is not exact: $sumfile"
-    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 $round14_cpa_version/go.mod $round14_cpa_go_mod_sum" "$sumfile" || \
+    grep -Fqx "github.com/router-for-me/CLIProxyAPI/v7 $active_cpa_version/go.mod $active_cpa_go_mod_sum" "$sumfile" || \
       fail "active CPA go.mod sum is not exact: $sumfile"
   done
 
   verify_round14_repository_contracts
   printf 'release document consistency passed: source=%s rc=v%s-rc.3 cpa=%s audit_tests=%s\n' \
-    "$current_release_version" "$current_release_version" "$round14_cpa_version" \
+    "$current_release_version" "$current_release_version" "$active_cpa_version" \
     "$current_audit_tool_test_count"
   exit 0
 fi

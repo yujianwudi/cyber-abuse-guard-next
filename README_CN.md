@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 [English](README.md) | 简体中文
@@ -12,13 +12,13 @@ current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a00
 ```text
 current_source_version: 1.0.0
 current_rc_tag: v1.0.0-rc.3
-current_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
-current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-current_cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
+current_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
+current_cpa_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7
-current_csam_text_policy: csam-text-policy-v1 / a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee
+current_csam_text_policy: csam-text-policy-v1 / 85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
 current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
@@ -28,12 +28,13 @@ Cyber-Abuse-Guard Next（CAG）是面向
 [CLIProxyAPI（CPA）](https://github.com/router-for-me/CLIProxyAPI) 的本地、确定性、
 路由前请求风控与审计插件。项目目标是降低网络滥用风险，同时保护普通编码、
 防御性安全、事件响应、合规和授权运维请求不被关键词误伤。当前唯一维护分支是
-`main`，唯一兼容目标是 CPA `v7.2.142` / RPC schema 3。
+`main`，唯一兼容目标是 CPA `v7.2.144` / RPC schema 4。
 
 RC1 基线已经合并到 `main`，合并后的 Linux CI 也已通过。GitHub 开始在 Actions
 库存中暴露平台自有 Dependabot workflow 后，不可变的 `v1.0.0-rc.1` tag 未产生
-Release；`v1.0.0-rc.2` 在不放宽四个仓库 YAML 白名单的前提下修正该准入合同，
-目前仍未发布。发行合同支持真实二号机准入报告，也支持下方明确的维护者豁免路径。不能用旧候选、
+Release；RC2 tag 也已成为不可变历史记录。当前 `v1.0.0-rc.3` 在不放宽四个仓库
+YAML 白名单的前提下升级 CPA/schema 与准入合同。发行合同支持真实二号机准入报告，
+也支持下方明确的维护者豁免路径。不能用旧候选、
 本地回执或历史 PASS 替代当前候选身份。
 
 RC workflow 现在支持由维护者明确豁免已取消的二号机环节。必须设置
@@ -44,7 +45,7 @@ RC workflow 现在支持由维护者明确豁免已取消的二号机环节。�
 ## 请求处理链路
 
 ```text
-CPA schema-3 请求
+CPA schema-4 请求
       |
       v
 before-auth RequestInterceptor
@@ -100,8 +101,8 @@ CSAM 检测只处理文本策略。预防指南、热线/平台通知、举报�
 
 ## CPA 与 Host 兼容性
 
-当前固定目标为 CPA `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`、C ABI 1、
-RPC schema 3。schema 3 仅在 header-init 保留 `OriginalRequest` / `RequestBody`，
+当前固定目标为 CPA `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`、C ABI 1、
+RPC schema 4。schema 4 仅在 header-init 保留 `OriginalRequest` / `RequestBody`，
 payload chunk 不重复携带；插件不注册 successful-response 或 stream-chunk interceptor。
 
 Host 性能采集仅支持 Linux。Docker Engine API 使用有界 v1.44 读取；队列采样在每个
@@ -114,7 +115,7 @@ inspect 验证、彼此不同的两个 RFC1918 bridge IPv4；任何 Host binding
 
 ## Linux amd64 构建
 
-需要 Go 1.26.6、Linux amd64 工具链、CPA v7.2.142，以及支持 C ABI 1 / RPC schema 3 的 CPA loader。
+需要 Go 1.26.6、Linux amd64 工具链、CPA v7.2.144，以及支持 C ABI 1 / RPC schema 4 的 CPA loader。
 
 ```bash
 git clone https://github.com/yujianwudi/cyber-abuse-guard-next.git

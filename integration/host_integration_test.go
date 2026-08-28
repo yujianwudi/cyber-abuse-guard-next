@@ -1191,7 +1191,7 @@ func assertHostPluginForwardedCounterDelta(t *testing.T, before, after map[strin
 	}
 	if after["total"] < before["total"] || after["executor_blocks"] < before["executor_blocks"] ||
 		after["router_errors"] < before["router_errors"] {
-		t.Fatalf("schema-v3 direct-path counters decreased; before=%v after=%v", before, after)
+		t.Fatalf("schema-v4 direct-path counters decreased; before=%v after=%v", before, after)
 	}
 	if totalDelta := after["total"] - before["total"]; totalDelta != 1 {
 		t.Fatalf("forwarded request classification delta=%d want=1; before=%v after=%v", totalDelta, before, after)
@@ -1460,7 +1460,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 	work := t.TempDir()
 	pluginsDir := filepath.Join(work, "plugins")
 	pluginTarget := installPluginForHost(t, pluginsDir)
-	t.Logf("CPA v7.2.142 schema-v3 Host plugin path: %s", pluginTarget)
+	t.Logf("CPA v7.2.144 schema-v4 Host plugin path: %s", pluginTarget)
 
 	upstream := newMockUpstream(t)
 	port := freePort(t)
@@ -2308,7 +2308,7 @@ openai-compatibility:
 			if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
 				t.Fatalf("openai-image 403 body lacks guard marker: %s", response.Body)
 			}
-			// This is also the executable Host proof that the schema-v3 interceptor
+			// This is also the executable Host proof that the schema-v4 interceptor
 			// receives CPA's openai-image SourceFormat before provider selection.
 			assertNoProviderSideEffects(t, response.Header, upstream, providerProbe, upstreamBefore, providerBefore,
 				authSelector, selectorBefore)
@@ -2934,7 +2934,7 @@ openai-compatibility:
 	}
 	if scenario.wantGuardRegistered {
 		// The schema-v1 fixture remains the selected ModelRouter for ready modes,
-		// but schema-v3 CAG interception terminates before its executor callback.
+		// but schema-v4 CAG interception terminates before its executor callback.
 		assertGuardExecutorIdle(t, guardExecutorProbe, guardExecutorBefore)
 		assertHostPluginCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL), map[string]uint64{
 			"blocked": 1, "coverage_complete": 1,

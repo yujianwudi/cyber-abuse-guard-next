@@ -65,11 +65,11 @@ env:
   RC_TAG_SIGNER_POLICY: github-verification-verified-valid-annotated-tag-and-commit
   RC_SOURCE_VERSION: '1.0.0'
   RC_BINARY_VERSION: '1.0.0'
-  RC_ARTIFACT_VERSION: 1.0.0-rc.2
-  RC_CPA_VERSION: v7.2.142
-  RC_CPA_COMMIT: 1f53b2eb03b9e963bac647e5566ca2b304239116
+  RC_ARTIFACT_VERSION: 1.0.0-rc.3
+  RC_CPA_VERSION: v7.2.144
+  RC_CPA_COMMIT: d36b776c790a4d58027fd4fb434800fb5334bceb
   RC_CPA_C_ABI: '1'
-  RC_CPA_RPC_SCHEMA: '3'
+  RC_CPA_RPC_SCHEMA: '4'
   RC_CANDIDATE_ARTIFACT_NAME: cyber-abuse-guard-linux-amd64-audit-candidate
   RC_SECOND_MACHINE_ASSET_NAME: second-machine-release-admission.json
   RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3

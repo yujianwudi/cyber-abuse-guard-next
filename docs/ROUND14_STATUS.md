@@ -11,31 +11,32 @@ round14_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DYNAMIC_WORKFLOW_DR
 round14_branch: release/rc2-platform-drift
 round14_baseline_head: c4408af041e4b3c0d58406ccca816b8d8585840b
 round14_fix_base_head: a216395803b3a3e46497c5b6eabf1001689edbe1 / CURRENT_WORKTREE_DIRTY
-round14_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
-round14_cpa_module: github.com/router-for-me/CLIProxyAPI/v7@v7.2.142
-round14_cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
+round14_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
+round14_cpa_module: github.com/router-for-me/CLIProxyAPI/v7@v7.2.144
+round14_cpa_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 round14_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
-round14_cpa_plugin_c_abi_rpc_schema: 1 / 3
+round14_cpa_plugin_c_abi_rpc_schema: 1 / 4
 round14_go_toolchain: go1.26.6 / linux-amd64
 round14_audit_sqlite_schema: 7 / ACTIVE_CONTRACT
-round14_csam_text_policy: csam-text-policy-v1 / a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee
+round14_csam_text_policy: csam-text-policy-v1 / 85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e
 round14_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 round14_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
 round14_platform_dynamic_workflows: ALLOWLIST_ONLY / dynamic/dependabot/dependabot-updates / dynamic/dependabot/update-graph / ZERO_OTHER_ACTIVE_PATHS
-round14_cpa_linux_asset: CLIProxyAPI_7.2.142_linux_amd64.tar.gz / 21193314_BYTES
-round14_cpa_linux_asset_sha256: a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051
-round14_cpa_linux_binary: 64088616_BYTES / SHA256_e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b
-round14_cpa_checksums_sha256: 2a04364707aa7e8922c7ee35ad3b90437659c08fa4dbaa962f02b274993a0a6c
+round14_cpa_linux_asset: CLIProxyAPI_7.2.144_linux_amd64.tar.gz / 21223927_BYTES
+round14_cpa_linux_asset_sha256: 02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96
+round14_cpa_linux_binary: 64203432_BYTES / SHA256_eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09
+round14_cpa_checksums_sha256: 1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331
 round14_cpa_release: FORMAL / 2026-08-19
-round14_schema3_stream_header_init: PASS / ORIGINAL_REQUEST_AND_REQUEST_BODY_REQUIRED
-round14_schema3_stream_payload: PASS / ORIGINAL_REQUEST_AND_REQUEST_BODY_OMITTED
+round14_schema4_stream_header_init: PASS / ORIGINAL_REQUEST_AND_REQUEST_BODY_REQUIRED
+round14_schema4_stream_payload: PASS / ORIGINAL_REQUEST_AND_REQUEST_BODY_OMITTED
+round14_schema4_websocket_response_observer_registration: PASS / FALSE
 round14_cag_response_interceptor_registration: PASS / FALSE
 round14_cag_stream_interceptor_registration: PASS / FALSE
 round14_protected_route_contracts: PENDING
 round14_realtime_boundary: SOURCE_TOPOLOGY_UNPROTECTED / DYNAMIC_AUTH_BOUNDARY_NOT_RUN / AUTHENTICATED_DYNAMIC_NOT_PERFORMED_PROVIDER_SAFETY_BOUNDARY / NO_ALL_TRAFFIC_COVERAGE_CLAIM
 round14_oracle_category_free_meta_audit: PASS / META_OVERRIDE_001_ONLY
 round14_oracle_transport_winner_rejection: PASS
-round14_classifier_policy: classifier-policy-v20 / a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+round14_classifier_policy: classifier-policy-v20 / f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
 round14_audit_expected_test_count: 315 / EXECUTED
 round14_audit_runner_bundle_sha256: f3dfc5f1ce10c1226633b733edb3e3de87150b326479d3549680f76d277ca522
@@ -51,8 +52,8 @@ round14_audit_unit_started_at: 2026-08-27T01:20:43.291Z
 round14_audit_unit_finished_at: 2026-08-27T01:21:18.185Z
 round14_audit_unit_elapsed_ms: 34893
 round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
-round14_local_targeted_cpalatest_schema3: PASS
-round14_local_targeted_pluginstore_schema3: PASS
+round14_local_targeted_cpalatest_schema4: PASS
+round14_local_targeted_pluginstore_schema4: PASS
 round14_local_targeted_plugin_registration: PASS / LINUX_AMD64
 round14_local_targeted_oracle_tests: PASS
 round14_local_full_linux: NOT_RUN
@@ -89,7 +90,7 @@ round14_stable_production_approved: NOT_PROVIDED
 ## Verified inputs before execution
 
 - The task identity is frozen to CPA v7.2.137, commit
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 and RPC schema 3.
+`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 and RPC schema 4.
 - The supplied official Linux amd64 archive, binary and checksums identities are
   recorded above. On 2026-08-21, a fresh Linux download verified the archive,
   checksums file, and contained binary bytes against the recorded hashes. The
@@ -98,7 +99,7 @@ round14_stable_production_approved: NOT_PROVIDED
   `85d2faddd17e6f4f8675a84ee28b131f702e8eaa`; GitHub reports the target commit as
   validly verified. This is upstream provenance evidence, not a signature for
   the CAG candidate.
-- Schema 3 defines a split stream contract: header-init retains
+- schema 4 defines a split stream contract: header-init retains
   `OriginalRequest` and `RequestBody`; payload chunks omit them. Source and Host
   verification are still `PENDING`/`NOT_RUN` as shown above.
 - CAG is intended not to register a successful-response or stream-chunk

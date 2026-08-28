@@ -1,25 +1,25 @@
-# CPA v7.2.142 Packaging and Contract Baseline
+# CPA v7.2.144 Packaging and Contract Baseline
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 This path is retained by the audit-bundle contract, but its contents describe
 only the current CPA target. Historical Phase 0 version matrices are available
 in Git history and are not shipped here as active validation guidance.
 
-The root module and both isolated integration modules pin CPA v7.2.142 at commit
-`1f53b2eb03b9e963bac647e5566ca2b304239116`, module sum
-`h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=`, and go.mod sum
+The root module and both isolated integration modules pin CPA v7.2.144 at commit
+`d36b776c790a4d58027fd4fb434800fb5334bceb`, module sum
+`h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
 archive is 21,193,314 bytes with SHA-256
-`a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`;
+`02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
 the checksums file SHA-256 is
 `2a04364707aa7e8922c7ee35ad3b90437659c08fa4dbaa962f02b274993a0a6c`.
 The extracted binary is 64,088,616 bytes with SHA-256
-`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
-This target uses C ABI 1 / RPC schema 3.
+`eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
+This target uses C ABI 1 / RPC schema 4.
 Current validation paths are:
 
 - the official Host source and fail-open fixture contract;
@@ -30,7 +30,7 @@ Current validation paths are:
 
 See [CPA_INTEGRATION.md](CPA_INTEGRATION.md) for the active commands, exact
 module checksums, last fully verified source baseline, and evidence boundary.
-The owner-operated isolated CPA v7.2.142 Host + Mock-upstream record remains a
+The owner-operated isolated CPA v7.2.144 Host + Mock-upstream record remains a
 separate release requirement; source or CI compile checks do not authorize
 production deployment.
 
@@ -42,7 +42,7 @@ Host evidence uses prerelease attestation schema v2 fields `cpa_version`,
 Current Round 14 evidence is development-only. The repository-owned receipt
 now records Linux `315/315 PASS` with zero skips for the audit-tool closure;
 the prior 283-test receipt remains immutable historical evidence. Five targeted
-schema-3 Host fixture tests, the targeted CAG RPC schema test in WSL, and one
+schema-4 Host fixture tests, the targeted CAG RPC schema test in WSL, and one
 upstream hook/no-copy/auth/realtime source-contract test remain separately
 recorded development checks. The prior `f663ea6` / `0eaed101` candidate's
 semantic, CSAM and native-Host PASS records remain bound to its old collector

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 > **Frozen historical snapshot.** The classifier identity above is active-tree
@@ -11,7 +11,7 @@ current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a00
 > wording such as "current release target"; those statements are historical only
 > and are not the active repository release identity. The current Round 14
 > overlay is CAG source `1.0.0`, planned `v1.0.0-rc.1` on Linux amd64, and
-> `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116` (C ABI 1 / RPC schema 3).
+> `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb` (C ABI 1 / RPC schema 4).
 > Round 13 v7.2.125/schema 2 evidence retains its historical identity and does
 > not transfer a PASS. Every `/v1/realtime*` route currently bypasses CAG
 > `RequestInterceptor`, `ModelRouter`, and request lifecycle and is

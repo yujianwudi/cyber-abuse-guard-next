@@ -1,28 +1,28 @@
-# CPA v7.2.142 schema-3 active contract and frozen historical validation
+# CPA v7.2.144 schema-4 active contract and frozen historical validation
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 ## Round 14 active compatibility overlay
 
 The active classifier remains `classifier-policy-v20`. Its protected summary
 includes the root `go.mod`/`go.sum` together with the bounded multipart and
-streaming implementation, so the CPA v7.2.142 pin plus the current symbol-leet
+streaming implementation, so the CPA v7.2.144 pin plus the current symbol-leet
 and winner-order fixes produce SHA-256
-`a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db`.
+`f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3`.
 
 The sole active source/compile target is CLIProxyAPI
-`v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`, C ABI 1 / RPC schema 3,
-module sum `h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=`, and go.mod sum
+`v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`, C ABI 1 / RPC schema 4,
+module sum `h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
-asset `CLIProxyAPI_7.2.142_linux_amd64.tar.gz` is 21,193,314 bytes with
-SHA-256 `a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`;
+asset `CLIProxyAPI_7.2.144_linux_amd64.tar.gz` is 21,223,927 bytes with
+SHA-256 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
 the official checksums file has SHA-256
-`2a04364707aa7e8922c7ee35ad3b90437659c08fa4dbaa962f02b274993a0a6c`,
-and the contained 64,088,616-byte binary has SHA-256
-`e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`.
+`1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331`,
+and the contained 64,203,432-byte binary has SHA-256
+`eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
 
 The current repository-owned development self-check now records `315/315 PASS`
 on Linux with zero skips. The receipt records the command, time window, stderr,
@@ -32,7 +32,7 @@ isolated Python against that snapshot; it is not inferred from test discovery
 or a mutable source-tree subprocess. It is repository-authored and unsigned,
 so it cannot replace exact-commit GitHub CI or independent evidence. The prior
 283-test receipt remains immutable historical evidence and is not relabelled.
-Five targeted schema-3 Host fixture tests, the targeted CAG RPC schema test
+Five targeted schema-4 Host fixture tests, the targeted CAG RPC schema test
 under WSL, and one new upstream hook/no-copy/auth/realtime source-contract test
 also pass as dirty-worktree development evidence.
 The complete Linux matrix, remote/exact-candidate CI, exact-fix second-machine,
@@ -48,11 +48,11 @@ management connection per measured cell without changing the 100 ms cadence or
 any admission threshold. The old candidate transfers no PASS after the
 collector bytes changed. The RC lane may publish only after all applicable acceptance gates
 pass; the current pending state does not yet authorize a tag or Release.
-The upstream v7.2.142 tag/commit and a fresh Linux download of the official
+The upstream v7.2.144 tag/commit and a fresh Linux download of the official
 archive, checksums file, and contained binary were rechecked on 2026-08-21;
 those checks close only upstream identity, not Host execution or release admission.
 
-CPA v7.2.142 `/v1/realtime*` uses a path that bypasses CAG. It is explicitly
+CPA v7.2.144 `/v1/realtime*` uses a path that bypasses CAG. It is explicitly
 `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE`; protected-route results must not
 be described as all-traffic coverage. This source-topology conclusion is
 reported separately as `SOURCE_TOPOLOGY_UNPROTECTED`. The isolated dynamic

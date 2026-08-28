@@ -47,8 +47,8 @@ const (
 	managementStartupPrivacyProofPath   = managementBasePath + "/health/startup-privacy-proof"
 	startupPrivacyProofResourcePath     = "/v0/resource/plugins/" + ID + "/health/startup-privacy-proof"
 	managementMigrationBackupPurgePath  = managementBasePath + "/migration-backups/purge"
-	managementAuthDocumentation         = "CPA v7.2.142 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
-	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 3 RequestInterceptor protocol-path failures"
+	managementAuthDocumentation         = "CPA v7.2.144 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
+	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 4 RequestInterceptor protocol-path failures"
 	migrationBackupDeleteConfirmation   = "DELETE_ALL_MIGRATION_BACKUPS"
 	migrationBackupRollbackConfirmation = "ACKNOWLEDGE_OLD_SO_ROLLBACK_REQUIRES_EXTERNAL_BACKUP"
 )
@@ -67,7 +67,7 @@ type resourceRoute struct {
 }
 
 // managementRawCapture preserves the readable preview for existing operators
-// and adds a canonical transport-safe representation. CPA v7.2.142 HTML-escapes
+// and adds a canonical transport-safe representation. CPA v7.2.144 HTML-escapes
 // every JSON string returned by ServeManagementHTTP, so raw_preview_b64 is the
 // only byte-stable representation across the plugin/Host boundary.
 type managementRawCapture struct {
@@ -537,7 +537,7 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 			"request_interceptor_enumeration_supported": false,
 			"router_enumeration_supported":              false,
 			"duplicate_plugin_binary_scan_supported":    false,
-			"reason":                                    "CPA v7.2.142 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
+			"reason":                                    "CPA v7.2.144 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
 		},
 	}
 	if state != nil {
@@ -742,7 +742,7 @@ func managementRawCaptureResponseDefaults(enabled bool, requestedLimit int) mana
 }
 
 // managementBoundRawCaptureResponse selects the largest newest-first prefix
-// whose complete CPA v7.2.142 Host-visible JSON body fits the fixed response
+// whose complete CPA v7.2.144 Host-visible JSON body fits the fixed response
 // budget. Each sensitive row is counted once; only the small metadata envelope
 // is re-encoded while the prefix grows.
 func managementBoundRawCaptureResponse(page audit.RawCapturePage, requestedLimit int) (managementRawCaptureResponse, error) {
@@ -961,7 +961,7 @@ func managementRawCaptureResponseBodies(response managementRawCaptureResponse) (
 	return body, len(hostBody), nil
 }
 
-// managementCPAHostSanitizeJSON mirrors CPA v7.2.142
+// managementCPAHostSanitizeJSON mirrors CPA v7.2.144
 // internal/htmlsanitize.JSONBody. The compatibility contract module compares
 // this prediction with the real Host ServeManagementHTTP behavior.
 func managementCPAHostSanitizeJSON(body []byte) ([]byte, bool) {

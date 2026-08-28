@@ -655,7 +655,7 @@ def validate_report(value: Any, *, check_local_tool: bool = True) -> dict[str, A
         or exact_int(cpa["rpc_schema"], "report.cpa.rpc_schema", 1)
         != CPA_RPC_SCHEMA
     ):
-        fail("report CPA identity is not v7.2.142")
+        fail("report CPA identity is not v7.2.144")
     runtime = exact_object(
         report["runtime"], {"go_version", "platform"}, "report.runtime"
     )

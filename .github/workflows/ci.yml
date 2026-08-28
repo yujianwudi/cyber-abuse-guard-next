@@ -91,7 +91,7 @@ jobs:
         run: make round6-module-verify
       - name: Historical Round 8 counted-Mock regression
         run: make round8-counted-mock-historical-regression
-      - name: CPA v7.2.142 pinned source API and SDK contract
+      - name: CPA v7.2.144 pinned source API and SDK contract
         env:
           CPA_COMPAT_PROFILE: "primary"
           CPA_COMPAT_VERIFY_REMOTE: "1"
@@ -356,8 +356,8 @@ jobs:
             printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
             sha256sum "$artifact"
           done
-          echo 'integration_summary=CPA v7.2.142 schema-3 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed'
-          echo 'cpa_primary_identity=v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116'
+          echo 'integration_summary=CPA v7.2.144 schema-4 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed'
+          echo 'cpa_primary_identity=v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb'
       - name: clean-tree-check
         run: make clean-tree-check
       - name: Upload exact-merge clean audit candidate

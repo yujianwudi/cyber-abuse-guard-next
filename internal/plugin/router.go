@@ -77,13 +77,13 @@ func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
 }
 
 // callModelRouteRequest shares the existing classifier, audit, subject-risk,
-// and failure semantics with schema-v3 request interception without encoding
+// and failure semantics with schema-v4 request interception without encoding
 // and decoding a second full request body. The returned failureRecorded bit
 // tells the interceptor adapter whether the router layer already accounted for
 // an operational failure, avoiding duplicate router_errors increments.
 func (p *Plugin) callModelRouteRequest(request pluginapi.ModelRouteRequest) (result modelRouteCallResult) {
-	// CPA v7.2.142 still routes Codex Alpha Search exclusively through the
-	// ModelRouter surface. For ordinary Host-originated requests, schema-v3
+	// CPA v7.2.144 still routes Codex Alpha Search exclusively through the
+	// ModelRouter surface. For ordinary Host-originated requests, schema-v4
 	// RequestInterceptor is the production enforcement path and this registered
 	// router must be an O(1) no-op to avoid duplicate classification. Direct
 	// calls without PluginID remain available to the legacy executor contract and
@@ -531,7 +531,7 @@ func extractionProfile(format string) (extract.RequestProfile, bool) {
 	case "interactions":
 		profile.Source = extract.SourceProfileInteractions
 	case audit.SourceFormatCodexAlphaSearch:
-		// CPA v7.2.142 exposes Alpha Search model payloads only to ModelRouter.
+		// CPA v7.2.144 exposes Alpha Search model payloads only to ModelRouter.
 		// They have no chat-role envelope, so treat their model-visible strings as
 		// direct untrusted text while retaining a distinct structural profile.
 		profile.Source = extract.SourceProfileCodexAlphaSearch

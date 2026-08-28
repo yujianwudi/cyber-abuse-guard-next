@@ -1,16 +1,16 @@
-# v1.0.0-rc.3 evidence — CPA v7.2.142 active target; gated RC publication
+# v1.0.0-rc.3 evidence — CPA v7.2.144 active target; gated RC publication
 
 ## Round 14 active release boundary
 
 ```text
-round14_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
-round14_cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
+round14_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
+round14_cpa_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 round14_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
-round14_cpa_plugin_c_abi_rpc_schema: 1 / 3
-round14_cpa_linux_asset: CLIProxyAPI_7.2.142_linux_amd64.tar.gz / 21193314_BYTES / SHA256_a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051
-round14_cpa_checksums_sha256: 9ae7dee90cd717a373acb58fad0163264891d5a76b27fb15d4c88bd10467012e
-round14_cpa_linux_binary: 64088616_BYTES / SHA256_e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b
-round14_classifier_policy: classifier-policy-v20 / a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+round14_cpa_plugin_c_abi_rpc_schema: 1 / 4
+round14_cpa_linux_asset: CLIProxyAPI_7.2.144_linux_amd64.tar.gz / 21223927_BYTES / SHA256_02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96
+round14_cpa_checksums_sha256: 1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331
+round14_cpa_linux_binary: 64203432_BYTES / SHA256_eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09
+round14_classifier_policy: classifier-policy-v20 / f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
 round14_audit_expected_test_count: 315 / EXECUTED
 round14_audit_runner_bundle_sha256: f3dfc5f1ce10c1226633b733edb3e3de87150b326479d3549680f76d277ca522
@@ -54,7 +54,7 @@ The prior `f663ea6` / `0eaed101` candidate passed semantic, CSAM and native-Host
   after the collector bytes changed.
 Every Round 13 v7.2.125 and Round 12 or earlier result below is frozen
 `HISTORICAL / SUPERSEDED` evidence for its original bytes and identity; no PASS
-is transferred to v7.2.137/schema 3. The fresh v7.2.137 upstream asset recheck
+is transferred to v7.2.137/schema 4. The fresh v7.2.137 upstream asset recheck
 does not close the exact-fix candidate, second-machine, performance, or release
 gates.
 

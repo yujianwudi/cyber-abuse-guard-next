@@ -54,8 +54,21 @@ python3 -B ./scripts/release_rc_cpa_store_test.py
 python3 -B ./scripts/release_rc_github_admission_test.py
 python3 -B ./scripts/release_rc_workflow_inventory_test.py
 python3 -B ./tools/current-cpa-audit/tests/test_second_machine_release_admission.py
-(cd "$root/integration/pluginstorecontract" && \
-  go test ./... -run '^TestCPAReleaseCandidatePluginStoreInstallContract$' -count=1)
+origin_metadata="$work/cpa-origin.json"
+jq -cn \
+  --arg path 'github.com/router-for-me/CLIProxyAPI/v7' \
+  --arg version 'v7.2.144' \
+  --arg sum 'h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=' \
+  --arg go_mod_sum 'h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=' \
+  --arg commit 'd36b776c790a4d58027fd4fb434800fb5334bceb' \
+  '{Path: $path, Version: $version, Sum: $sum, GoModSum: $go_mod_sum,
+    Origin: {VCS: "git", URL: "https://github.com/router-for-me/CLIProxyAPI",
+             Hash: $commit, Ref: ("refs/tags/" + $version)}}' >"$origin_metadata"
+(
+  export CPA_COMPAT_ORIGIN_FILE="$origin_metadata"
+  cd "$root/integration/pluginstorecontract"
+  go test ./... -run '^TestCPAReleaseCandidatePluginStoreInstallContract$' -count=1
+)
 
 python3 -B - "$root" <<'PY'
 from __future__ import annotations
@@ -108,10 +121,10 @@ for marker in (
     "SUPPLEMENTAL_ARCHIVE_PASS",
     "NATIVE_HOST_SPECIAL_PATHS_PASS",
     "RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3",
-    "RC_CPA_VERSION: v7.2.142",
-    "RC_CPA_COMMIT: 1f53b2eb03b9e963bac647e5566ca2b304239116",
+    "RC_CPA_VERSION: v7.2.144",
+    "RC_CPA_COMMIT: d36b776c790a4d58027fd4fb434800fb5334bceb",
     "RC_CPA_C_ABI: '1'",
-    "RC_CPA_RPC_SCHEMA: '3'",
+    "RC_CPA_RPC_SCHEMA: '4'",
     "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
     "supplemental_archive_status=",
     "supplemental_archive_sha256=",
@@ -306,7 +319,7 @@ for marker in (
     "test_source_sha256",
     "critical_tests_sha256",
     '"const": "cyber-abuse-guard.second-machine-release-admission.v3"',
-    '"rpc_schema": { "const": 3 }',
+    '"rpc_schema": { "const": 4 }',
     '"c_abi": { "const": 1 }',
     '"evidence_refs"',
 ):
@@ -315,12 +328,12 @@ for marker in (
 for marker in (
     "readonly rc_source_version='1.0.0'",
     "readonly rc_binary_version='1.0.0'",
-    "readonly rc_artifact_version='1.0.0-rc.2'",
+    "readonly rc_artifact_version='1.0.0-rc.3'",
     "readonly rc_tag='v1.0.0-rc.3'",
-    "readonly rc_cpa_version='v7.2.142'",
-    "readonly rc_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'",
+    "readonly rc_cpa_version='v7.2.144'",
+    "readonly rc_cpa_commit='d36b776c790a4d58027fd4fb434800fb5334bceb'",
     "readonly rc_cpa_c_abi='1'",
-    "readonly rc_cpa_rpc_schema='3'",
+    "readonly rc_cpa_rpc_schema='4'",
     "readonly rc_second_schema='cyber-abuse-guard.second-machine-release-admission.v3'",
     "release_assert_rc_build",
     "seal_candidate()",

@@ -384,9 +384,9 @@ CLEAN_EXECUTION_ENV_PATHS = {
 CPA_MODULE_PATH = "github.com/router-for-me/CLIProxyAPI/v7"
 CPA_ROUND8_VERSION = "v7.2.95"
 CPA_ROUND8_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
-CPA_ACTIVE_VERSION = "v7.2.142"
-CPA_ACTIVE_COMMIT = "1f53b2eb03b9e963bac647e5566ca2b304239116"
-CPA_ACTIVE_MODULE_SUM = "h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ="
+CPA_ACTIVE_VERSION = "v7.2.144"
+CPA_ACTIVE_COMMIT = "d36b776c790a4d58027fd4fb434800fb5334bceb"
+CPA_ACTIVE_MODULE_SUM = "h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk="
 CPA_ACTIVE_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 CPA_ROUND9_VERSION = "v7.2.113"
 CPA_ROUND9_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
@@ -1163,7 +1163,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "2cf892ef1d5e0eb34c40c8b14324c78960d8fda073d6d2df6eebbee43b14fb2a"
+ACTIVE_RC_WORKFLOW_SHA256 = "1d106dd2060e06f15593dec865de50fec48072e4a0e57af3b2e6048d3a748a28"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
     "f685d382d0019993def8be0f5bd86e7761306932e32ac832d193d8d4c060b42a"
@@ -1237,35 +1237,37 @@ ROUND13_RC_LINKED_CONTRACT_SHA256 = {
 }
 # Round 13 is an immutable historical review baseline.  The active Round 14
 # release workflow inherits every unchanged Round 13 pin, explicitly replaces
-# the files reviewed for the CPA v7.2.142/schema-3 audit closure, and adds the
+# the files reviewed for the active CPA/schema-4 audit closure, and adds the
 # new lazy-read and CSAM text-only evidence modules.  Active validation must use
 # this mapping without rewriting the historical values above.
 ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     **ROUND13_RC_LINKED_CONTRACT_SHA256,
-    ROUND13_RC_RELEASE_SCRIPT: "3ec724b89c59233971fbc02b5491a3241384a4c5540642565a2de4fc1d3b652f",
-    ROUND13_RC_CONTRACT_TEST_SCRIPT: "fc3d137e6cb03467255972edf3fb1b38001128c84d72f20205ff8fe4a6333cf4",
+    ROUND13_RC_RELEASE_SCRIPT: "27e453b8e3f3f777ab7d603c6691770a7ce9f9a1c30f790ab1e8f743131fc593",
+    ROUND13_RC_CONTRACT_TEST_SCRIPT: "bd1db357065dd42558976b6c2145ddabb5562ddbf25154032eaa46ee2b45a8b3",
     ROUND13_RC_CPA_STORE_SCRIPT: "b9d4eef0506a7656724e41c1e9bed7957110b9f3bffeaeba7ebe4dfd3bff6382",
     ROUND13_RC_CPA_STORE_TEST_SCRIPT: "fa6f5dd4a04bdbcde5454e4eb203cf4f3ccd10dd49dd6b3ea77011aa1deb1b4b",
     ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT: "306fab3a8efd4b2446256239471863b9f43f1b953180098b0bffa5403eeb7b9f",
+    ROUND13_RC_CPA_STORE_HOST_CONTRACT: "0fefff64f9fb1ba2a0954461886e2858d545f2652747a8b9be71a038c9d93a25",
     ROUND13_RC_CPA_STORE_OVERLAY: "fc755a1138f29c4169231565585d8231131d29a3e2b265be882cb8e0ecbb101b",
     ROUND13_RC_GITHUB_ADMISSION_SCRIPT: "dab9a848874cba1be2ab62524c31420ce3ff1998f6f61356009d0ca6a03c19e8",
-    ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "bd1f76253af14610f2dafb4d51232194889e4c78307c386d84596752babdc574",
+    ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT: "2ab24bc5e3c8ce91003d52314815c8f304c8e541b7bf173afc87bd2a5c3763a4",
+    ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "30e87192df0135e219fd246f3f72f4b65972d79a5dd9fcb3829d636cd88821f2",
     ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "153b64582096af5001d319224b98ec8f95b8421d2ce69338add36c872f45dea5",
-    "tools/current-cpa-audit/README.md": "990be05d7c8a7d12773f796b6da6559207117c5ee79d47d79285270c7662ab46",
+    "tools/current-cpa-audit/README.md": "7a7f11c6fa521c3237511152f13c65124c00fa356a3e2a810277b1412fda3773",
     "tools/current-cpa-audit/acquire.py": "806f424d6a9b9d688132d414d98a2499606a3a9f230f54836cc706410c131ec3",
-    "tools/current-cpa-audit/audit_contract.py": "92d71d0ef20667e38cc39ccf7deaa19661a40408d77d1c9c3f4c757fabc003e4",
-    "tools/current-cpa-audit/repository-policy.json": "688d3919de025d8e2ee52584fe7bdf8a8757bf507ae83a2e1159c403f2bc26e4",
-    "tools/current-cpa-audit/run.py": "126226c325d5868b6dfd495419f0e30ec954f54e0de58246406db0efc0490634",
+    "tools/current-cpa-audit/audit_contract.py": "6e63b60327ef1262925693cb88a0142ec7aa3e6387b9637076e6af073387253f",
+    "tools/current-cpa-audit/repository-policy.json": "426e80240f187aff741856abdc81af1c0b796015e59fe1c88a079db02e9bbd1c",
+    "tools/current-cpa-audit/run.py": "f421c571783c2f58c3b09adc214d57c727b4b30e0d45ea7569100e80fd535fc5",
     "tools/current-cpa-audit/validate.py": "64ed85b2f43aa48401069bef28cdcf3c5cbea64f6aafd20dc7a7a42df20885ca",
-    "tools/current-cpa-audit/second-machine-release-admission.schema.json": "bf9c5a43370d1dd7009f65e486170b7a631016ef2f02a49d05dc19727f3a6c2d",
-    "tools/current-cpa-audit/machine-evidence.schema.json": "733a8202425ec00436412e00b21fe7a28a66ffdd11321775e2438db3b3c9cf22",
-    "tools/current-cpa-audit/host-performance-evidence.schema.json": "4b054eae7dbaefff69d8bc57abdb46890ecaae0012ae3ab1281e87c2cb12d9d5",
-    "tools/current-cpa-audit/native-host-special-paths.schema.json": "86df0c0ec935ff1858ce7b8f74de544f6bf8a242c8a51bdaa51f70561319d190",
-    "tools/current-cpa-audit/native_host_special_paths.py": "dc316284c8d5eec9da49b0519052c63cae4e50d3ff2031839ce68ce9cd1cdf9f",
+    "tools/current-cpa-audit/second-machine-release-admission.schema.json": "4b50fa3a8b5e383b1d34d651b95186436bc5815539de9249425a9772a83943d8",
+    "tools/current-cpa-audit/machine-evidence.schema.json": "0890c7f21218d2baa94a024e1bb4fecc316564411d1b50837752d2fa469b3ad7",
+    "tools/current-cpa-audit/host-performance-evidence.schema.json": "3d02143a29f2d53677738cfde16f4600e98f15111a28f1b29cda1c19b56a50ea",
+    "tools/current-cpa-audit/native-host-special-paths.schema.json": "bc03cf47ee9aa047fe3ed5ca489dcd6622953863cb5d3f15a4617777341c2168",
+    "tools/current-cpa-audit/native_host_special_paths.py": "a3ecfd3e603e8c2f9b6ab957f394f7e1dd339b43cbb83a717f04936933a194d5",
     "tools/current-cpa-audit/csam_text_evidence.py": "096bc2fda7e6c7b2c3a2825325dc9ccb3656499c68f7952192d3fb027a58b431",
     "tools/current-cpa-audit/csam_text_runner.py": "991cca40118131c6c6b3a8b18d0b003ab52082fa97169bf3903de0eb15076455",
     "tools/current-cpa-audit/lazy_read.py": "dd89574f7402834b9f5f26e482412b083f7a1686771df81cc38038ee8c6b8119",
-    "tools/current-cpa-audit/tests/test_contract.py": "b55fc5eeac4666eebf8aec3dc56a2278f4d12c4e3c92830737308cbe9d1ce764",
+    "tools/current-cpa-audit/tests/test_contract.py": "75634816687f92c52fc84092cced05969e1f39e7de0645883112234dcfd155e1",
     "tools/current-cpa-audit/tests/test_csam_text_evidence.py": "d80d3d2b324523139824b33822c2c63b4d0ae3f482be533a1b6cbaf15ec90326",
     "tools/current-cpa-audit/tests/test_lazy_read.py": "79ac4eb032a8f2c9ef68b88ff138d1a78e6e7907c8e9a2a64acf0b9850f4317a",
     "tools/current-cpa-audit/tests/test_unit_receipt.py": "fbd5b0b13da93982752b62e75590dfb20329d360c25f8e7b67bc52b2e9a831bc",
@@ -1274,7 +1276,7 @@ ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     "scripts/release_rc_workflow_inventory_test.py": "86be65f8ab7bec700b38107b5e4763550def0bd7bb55a52f1ac29504535637d0",
     "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "839470612986ca96fbcf298698bc178e62171c3654238c82927740e4d790f266",
     "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
-    "integration/host_integration_test.go": "2888fef742535abfa7cd99c26b81e0f695cf313c0141c1609c5767a1d8af60a0",
+    "integration/host_integration_test.go": "676f05946bcf23c43f418e1e21c2e6dca46515ee619977288a4ebebeb8979c90",
 }
 ROUND13_RC_INPUT_ORDER = (
     "ci_run_id",
@@ -1525,7 +1527,7 @@ ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
 )
 ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256 = {
     "scripts/release-doc-consistency-test.sh": "58496c77107a6f2ee8f98da4ea608f09fc4ee444f7ec877dccfef9d1bc8e83b8",
-    "scripts/release-doc-consistency.sh": "6c976af08a56e774ed2e88ad2c370ba5aca5a9afcc44ee535a4910c19b5e9bdf",
+    "scripts/release-doc-consistency.sh": "387fbecf66e23d1e5050d8b64914eda61f5fccc913a33544bf1d43090e55fa6c",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1549,7 +1551,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "d0799e9395cd8147fa642df5af328259ab0fae8b4a297f88ebf16b6902b29c21"
+    "82362c57c8ddba0a94e526ff6f1d0389a1ac7163341196d9c444c6683f41057d"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then
@@ -3853,7 +3855,7 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         f"{cpa_path}.run",
     )
     current_identity_markers = (
-        f"integration_summary=CPA {CPA_ACTIVE_VERSION} schema-3 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed",
+        f"integration_summary=CPA {CPA_ACTIVE_VERSION} schema-4 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed",
         f"cpa_primary_identity={CPA_ACTIVE_VERSION}@{CPA_ACTIVE_COMMIT}",
     )
     if any(text.count(marker) != 1 for marker in current_identity_markers):
@@ -7876,11 +7878,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("RC_TAG_SIGNER_POLICY", "github-verification-verified-valid-annotated-tag-and-commit"),
         ("RC_SOURCE_VERSION", "1.0.0"),
         ("RC_BINARY_VERSION", "1.0.0"),
-        ("RC_ARTIFACT_VERSION", "1.0.0-rc.2"),
+        ("RC_ARTIFACT_VERSION", "1.0.0-rc.3"),
         ("RC_CPA_VERSION", CPA_ACTIVE_VERSION),
         ("RC_CPA_COMMIT", CPA_ACTIVE_COMMIT),
         ("RC_CPA_C_ABI", "1"),
-        ("RC_CPA_RPC_SCHEMA", "3"),
+        ("RC_CPA_RPC_SCHEMA", "4"),
         ("RC_CANDIDATE_ARTIFACT_NAME", "cyber-abuse-guard-linux-amd64-audit-candidate"),
         ("RC_SECOND_MACHINE_ASSET_NAME", "second-machine-release-admission.json"),
         ("RC_SECOND_MACHINE_SCHEMA", "cyber-abuse-guard.second-machine-release-admission.v3"),

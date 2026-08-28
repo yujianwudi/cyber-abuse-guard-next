@@ -7,12 +7,12 @@ source "$root/scripts/release-common.sh"
 
 readonly rc_source_version='1.0.0'
 readonly rc_binary_version='1.0.0'
-readonly rc_artifact_version='1.0.0-rc.2'
+readonly rc_artifact_version='1.0.0-rc.3'
 readonly rc_tag='v1.0.0-rc.3'
-readonly rc_cpa_version='v7.2.142'
-readonly rc_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'
+readonly rc_cpa_version='v7.2.144'
+readonly rc_cpa_commit='d36b776c790a4d58027fd4fb434800fb5334bceb'
 readonly rc_cpa_c_abi='1'
-readonly rc_cpa_rpc_schema='3'
+readonly rc_cpa_rpc_schema='4'
 readonly rc_repository='yujianwudi/cyber-abuse-guard-next'
 readonly rc_workflow='.github/workflows/release-rc.yml'
 readonly rc_candidate_name='cyber-abuse-guard-linux-amd64-audit-candidate'
@@ -762,7 +762,7 @@ verify_assets() {
      .second_machine_owner_admission.asset_id == $second_asset_id and
      .second_machine_owner_admission.asset_digest == $second_digest and
      .second_machine_owner_admission.independent_proof == false and
-     .derived_artifacts == [{name: "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip",
+     .derived_artifacts == [{name: "cyber-abuse-guard_1.0.0-rc.3_linux_amd64.zip",
        relationship: "cpa-plugin-store-container",
        derived_from: {name: "cyber-abuse-guard-v1.0.0.so", sha256: $so_sha},
        archive_entry: "cyber-abuse-guard.so", payload_sha256: $so_sha,
@@ -790,7 +790,7 @@ verify_assets() {
       c_abi: $cpa_abi, rpc_schema: $cpa_rpc_schema,
       version_policy: "fixed-no-latest-follow"} and
     .cpa_plugin_store == {
-      release_version: $version, archive: "cyber-abuse-guard_1.0.0-rc.2_linux_amd64.zip",
+      release_version: $version, archive: "cyber-abuse-guard_1.0.0-rc.3_linux_amd64.zip",
       archive_entry: "cyber-abuse-guard.so", payload_sha256: $so_sha,
       derived_from: {name: $so, sha256: $so_sha},
       audited_candidate_archive: "cyber-abuse-guard_1.0.0_linux_amd64.zip",

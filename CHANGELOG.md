@@ -2,12 +2,22 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 Source-tree status updated: 2026-08-25 (Asia/Shanghai)
 
 ## Unreleased - v1.0.0-rc.3
+
+- Upgrade the sole active CPA target to
+  `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`, C ABI 1 / RPC schema 4,
+  module sum `h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=` and unchanged go.mod
+  sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux
+  amd64 archive is 21,223,927 bytes / SHA-256
+  `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
+  its binary is 64,203,432 bytes / SHA-256
+  `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
+  CAG deliberately does not register the new WebSocket response observer.
 
 - Implement CPA v7.2.142 `plugin.quiesce` and accept the Host's exact-config
   `plugin.reconfigure` rollback for already-registered retired instances. A

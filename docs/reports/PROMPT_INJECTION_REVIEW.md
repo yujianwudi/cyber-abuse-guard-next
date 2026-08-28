@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 > **Frozen historical snapshot.** The Round 6 addendum and the older
@@ -15,16 +15,16 @@ current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a00
 > amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
-> current_formal_cpa: v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116
+> current_formal_cpa: v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb
 > current_cpa_plugin_c_abi_rpc_schema: 1 / 3
-> current_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
+> current_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
 > current_complete_linux_ci_host_release: NOT_RUN / PENDING / NO_RELEASE_THIS_ROUND
 > ```
 >
 > `/v1/realtime*` bypasses CAG. Historical review PASS statements below do not
-> establish v7.2.130/schema-3, realtime, Host, candidate, or release PASS.
+> establish v7.2.130/schema-4, realtime, Host, candidate, or release PASS.
 
 ## Round 6 CPA pinned-compatibility addendum
 

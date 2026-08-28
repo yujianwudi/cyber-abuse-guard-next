@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db
+current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
 English | [简体中文](README_CN.md)
@@ -12,13 +12,13 @@ English | [简体中文](README_CN.md)
 ```text
 current_source_version: 1.0.0
 current_rc_tag: v1.0.0-rc.3
-current_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116
-current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-current_cpa_module_sum: h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=
+current_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
+current_cpa_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7
-current_csam_text_policy: csam-text-policy-v1 / a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee
+current_csam_text_policy: csam-text-policy-v1 / 85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
 current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
@@ -28,14 +28,14 @@ Cyber-Abuse-Guard Next (CAG) is a native, deterministic, pre-routing policy and
 audit plugin for [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI).
 It is designed to reduce cyber-abuse risk while preserving ordinary coding,
 defensive security, incident-response, compliance and authorized operations.
-The active source line is `main`. CPA `v7.2.142` with RPC schema 3 is the only
+The active source line is `main`. CPA `v7.2.144` with RPC schema 4 is the only
 supported compatibility target in this tree.
 
 The RC1 base code is merged on `main` and its exact post-merge Linux CI passed.
 The immutable `v1.0.0-rc.1` tag produced no Release after GitHub began exposing
-platform-owned Dependabot workflows in the Actions inventory. `v1.0.0-rc.2`
-updates that admission contract without weakening the four repository-owned
-workflow allowlist and is intentionally not published yet. The reviewed workflow
+platform-owned Dependabot workflows in the Actions inventory. The immutable RC2
+tag is also historical; `v1.0.0-rc.3` updates the active CPA/schema and admission
+contracts without weakening the four repository-owned workflow allowlist. The reviewed workflow
 accepts either a real second-machine admission report or the explicit maintainer
 waiver described below. No release claim is inferred from an old candidate or
 from local self-checks.
@@ -63,7 +63,7 @@ where CPA actually invokes the registered plugin callbacks.
 ## Runtime architecture
 
 ```text
-CPA schema-3 request
+CPA schema-4 request
         |
         v
 RequestInterceptor (before-auth)
@@ -133,8 +133,8 @@ code is required by the repository tests.
 
 ## CPA and Host compatibility
 
-The active contract is CPA `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`,
-C ABI 1 and RPC schema 3. Schema 3 retains `OriginalRequest` and `RequestBody`
+The active contract is CPA `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`,
+C ABI 1 and RPC schema 4. schema 4 retains `OriginalRequest` and `RequestBody`
 only in header-init; payload chunks omit them. The plugin does not register a
 successful-response or stream-chunk interceptor.
 
@@ -153,8 +153,8 @@ any Host binding, additional container, or non-internal network as inadmissible.
 
 ## Build and install (Linux amd64)
 
-Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.142, and a CPA plugin
-loader compatible with C ABI 1 / RPC schema 3.
+Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.144, and a CPA plugin
+loader compatible with C ABI 1 / RPC schema 4.
 
 ```bash
 git clone https://github.com/yujianwudi/cyber-abuse-guard-next.git

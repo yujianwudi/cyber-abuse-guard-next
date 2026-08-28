@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the fixed five-repository corpus against CPA v7.2.142 in isolation.
+"""Run the fixed five-repository corpus against CPA v7.2.144 in isolation.
 
 The harness never executes corpus bytes.  It gives CPA exactly one internal
 counted-Mock upstream, publishes no host port, records no request text, and
@@ -2268,7 +2268,7 @@ class Harness:
         return result
 
     def probe_realtime_boundary(self, cold_start: int) -> dict[str, Any]:
-        """Prove the fixed v7.2.142 realtime registrations bypass CAG.
+        """Prove the fixed v7.2.144 realtime registrations bypass CAG.
 
         Every request is deliberately unauthenticated, so the isolated Host must
         terminate in its realtime authentication middleware.  Supplying model or
