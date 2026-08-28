@@ -5,10 +5,10 @@ This directory is the current diagnostic harness for **CPA v7.2.144** at commit
 also binds module sum `h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=`,
 go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 4,
 and the official Linux
-amd64 asset `CLIProxyAPI_7.2.142_linux_amd64.tar.gz` at exactly 21,193,314 bytes
+amd64 asset `CLIProxyAPI_7.2.144_linux_amd64.tar.gz` at exactly 21,223,927 bytes
 with SHA-256
 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`, and
-the 64,088,616-byte extracted binary SHA-256
+the 64,203,432-byte extracted binary SHA-256
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
 These values identify the active upstream input only; they do not relabel an
 older second-machine or CI result as a v7.2.144 PASS. The harness output claim
@@ -322,7 +322,7 @@ sbom.cdx.json
 ```
 
 Place only the reviewed upstream CPA archive at
-`/srv/artifacts/upstream/CLIProxyAPI_7.2.142_linux_amd64.tar.gz`. Do not place
+`/srv/artifacts/upstream/CLIProxyAPI_7.2.144_linux_amd64.tar.gz`. Do not place
 candidate files in the upstream directory or the CPA archive in the candidate
 directory.
 
@@ -334,7 +334,7 @@ Preload, do not pull during the audit:
    dirty development bytes. This is still an unreleased diagnostic candidate,
    not a release artifact.
 2. CPA v7.2.144 image by exact RepoDigest and image ID.
-3. The official v7.2.144 linux/amd64 asset at exactly 21,072,175 bytes and its
+3. The official v7.2.144 linux/amd64 asset at exactly 21,223,927 bytes and its
    published SHA-256.
 4. The exact CPA binary SHA-256 expected inside that image.
 5. A counted-Mock image built from this directory with a previously reviewed,
@@ -401,7 +401,7 @@ python3 -B tools/current-cpa-audit/make_run_config.py \
   --candidate-artifact-id '<GitHub artifact-id>' \
   --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
   --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
-  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.142_linux_amd64.tar.gz" \
+  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.144_linux_amd64.tar.gz" \
   --cpa-official-asset-sha256 02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96 \
   --cpa-binary-path /CLIProxyAPI \
   --cpa-binary-sha256 eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09 \

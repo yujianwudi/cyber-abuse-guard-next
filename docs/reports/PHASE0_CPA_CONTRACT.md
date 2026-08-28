@@ -13,11 +13,11 @@ The root module and both isolated integration modules pin CPA v7.2.144 at commit
 `d36b776c790a4d58027fd4fb434800fb5334bceb`, module sum
 `h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
-archive is 21,193,314 bytes with SHA-256
+archive is 21,223,927 bytes with SHA-256
 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
 the checksums file SHA-256 is
-`2a04364707aa7e8922c7ee35ad3b90437659c08fa4dbaa962f02b274993a0a6c`.
-The extracted binary is 64,088,616 bytes with SHA-256
+`1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331`.
+The extracted binary is 64,203,432 bytes with SHA-256
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
 This target uses C ABI 1 / RPC schema 4.
 Current validation paths are:
@@ -39,7 +39,7 @@ Linux amd64. This release line does not automatically follow later upstream CPA 
 Host evidence uses prerelease attestation schema v2 fields `cpa_version`,
 `cpa_commit`, and `cpa_host_sha256`.
 
-Current Round 14 evidence is development-only. The repository-owned receipt
+Current Round 16 evidence is development-only. The repository-owned receipt
 now records Linux `315/315 PASS` with zero skips for the audit-tool closure;
 the prior 283-test receipt remains immutable historical evidence. Five targeted
 schema-4 Host fixture tests, the targeted CAG RPC schema test in WSL, and one

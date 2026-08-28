@@ -1,7 +1,7 @@
 # Docker Sandbox Installation, Staged Rollout, Rollback, and Cleanup
 
 > [!IMPORTANT]
-> For Round 14, substitute only an exact Linux amd64 candidate bound to CPA
+> For Round 16, substitute only an exact Linux amd64 candidate bound to CPA
 > `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`, C ABI 1 / RPC schema 4.
 > The Round 12/13 commands and hashes retained below are historical; they must
 > not be used as current artifacts or PASS evidence. Production deployment
@@ -12,11 +12,11 @@ current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
-The official CPA archive identity is 21,193,314 bytes / SHA-256
+The official CPA archive identity is 21,223,927 bytes / SHA-256
 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
 the contained binary SHA-256 is
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
-Round 13 v7.2.125/schema 2 and every older PASS remain historical and
+Round 15 v7.2.142/schema 3 and every older PASS remain historical and
 non-transferable.
 
 > [!WARNING]
@@ -25,7 +25,7 @@ non-transferable.
 > CAG_NOT_VISIBLE**. This installation protects only registered callback paths
 > such as chat and Responses; do not advertise all-traffic coverage.
 
-## Round 14 active installation contract
+## Round 16 active installation contract
 
 All current installation and validation work must use the exact Linux amd64
 candidate for CPA `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`, C ABI 1,

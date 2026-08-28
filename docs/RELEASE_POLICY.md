@@ -13,21 +13,20 @@ current_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
 current_platform: linux-amd64
 current_go_toolchain: go1.26.6
-current_release_gate: ROUND14_ADMISSION_INCOMPLETE / RELEASE_AFTER_REQUIRED_CHECKS_OR_EXPLICIT_MAINTAINER_WAIVER
+current_release_gate: ROUND16_ADMISSION_INCOMPLETE / RELEASE_AFTER_REQUIRED_CHECKS_OR_EXPLICIT_MAINTAINER_WAIVER
 ```
 
 The active compatibility identity is CPA v7.2.144/schema 4. Its official
-Linux amd64 archive is 21,193,314 bytes with SHA-256
+Linux amd64 archive is 21,223,927 bytes with SHA-256
 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
 the contained binary SHA-256 is
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
-Round 13 v7.2.125/schema 2 and every older PASS remain immutable historical
-evidence and cannot authorize or transfer to this lane. Round 14 permits the
+Round 15 v7.2.142/schema 3 and every older PASS remain immutable historical
+evidence and cannot authorize or transfer to this lane. Round 16 permits the
 fixed `v1.0.0-rc.3` prerelease only after every applicable acceptance gate and
 the reviewed RC workflow admission pass; see the
-[RC2 recovery contract](RC2_PLATFORM_DRIFT_RECOVERY.md), the historical
-[Round 14 RC1 execution contract](ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md), and
-[status](ROUND14_STATUS.md).
+[Round 16 task book](ROUND16_CPA_V7_2_144_TASK_BOOK.md) and
+[status](ROUND16_STATUS.md).
 
 The signed `v1.0.0-rc.1` tag is immutable and intentionally has no Release or
 release assets. Its admission failed closed after GitHub began returning

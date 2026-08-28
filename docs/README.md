@@ -17,14 +17,14 @@ active contract. The module sum is
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The upstream Linux amd64
 archive SHA-256 is
 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`
-(21,193,314 bytes); its
+(21,223,927 bytes); its
 binary SHA-256 is
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
 The active workflow directory contains exactly four repository workflows:
 `ci.yml`, `codeql.yml`, `policy-gate.yml`, and the gated `release-rc.yml`.
 GitHub-owned Dependabot `dynamic/` entries are separately bounded by an exact
 platform allowlist and are not repository YAML files. RC publication is allowed
-only after every applicable Round 14 acceptance gate passes; before
+only after every applicable Round 16 acceptance gate passes; before
 that point tags, prereleases, GitHub Releases, provenance attestations, and
 release-asset uploads remain forbidden.
 Owner-run server diagnostics are not independent evidence; production approval
@@ -33,8 +33,8 @@ and release readiness are `NOT_PROVIDED`, and no stable `v0.16` exists.
 Commit `21267e742b624b29a75bd3683fd6914f76c764b5` is a confirmed green
 historical v7.2.116 engineering baseline. The supplied v7.2.116 second-machine
 report and any five-repository data are historical diagnostic evidence only;
-they do not transfer to v7.2.144/schema 4. Round 13 v7.2.125/schema 2 results
-also retain their old identity and transfer no PASS. The exact Round 14
+they do not transfer to v7.2.144/schema 4. Round 15 v7.2.142/schema 3 results
+also retain their old identity and transfer no PASS. The exact Round 16
 candidate still requires its own second-machine execution. The current feature branch also requires
 its own PR checks. Engineering CI validates source and development artifacts
 only; it does not establish a protected Host, independent-audit, release, or
@@ -55,10 +55,9 @@ This cleanup adds navigation without relocating frozen evaluation or Holdout
 evidence. Those files keep their existing paths so historical hashes and
 references remain stable.
 
-## Current Round 14 navigation
+## Current Round 16 navigation
 
-- [RC2 platform-workflow drift recovery and acceptance](RC2_PLATFORM_DRIFT_RECOVERY.md)
-- [Active Round 14 status and evidence boundary](ROUND14_STATUS.md)
+- [Active Round 16 status and evidence boundary](ROUND16_STATUS.md)
 - [Active CPA v7.2.144 / RPC schema 4 task book](ROUND16_CPA_V7_2_144_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Release policy](RELEASE_POLICY.md)
@@ -89,7 +88,7 @@ they do not define the active v7.2.144 implementation:
 - [Historical performance evidence and v0.16 acceptance table](reports/PERFORMANCE.md)
 
 Round 8 readiness, calibration, and Host documents are immutable historical
-regression evidence. They do not define the active Round 14 boundary:
+regression evidence. They do not define the active Round 16 boundary:
 
 - [Historical Round 8 v0.16-rc.2 release readiness](reports/ROUND8_RELEASE_READINESS.md)
 - [Historical Round 8 synthetic score calibration](reports/ROUND8_CALIBRATION.md)
