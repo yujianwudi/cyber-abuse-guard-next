@@ -39,7 +39,7 @@ fi
 # reviewed scheme and optional port.
 BASE_URL="${BASE_URL/\/\/localhost/\/\/127.0.0.1}"
 BASE_URL="${BASE_URL%/}"
-[[ -n "$DIRECT_BASE_URL" ]] || fail "set CPA_DIRECT_BASE_URL to the CPA v7.2.142 process listener; reverse proxies are forbidden for the startup privacy proof"
+[[ -n "$DIRECT_BASE_URL" ]] || fail "set CPA_DIRECT_BASE_URL to the CPA v7.2.144 process listener; reverse proxies are forbidden for the startup privacy proof"
 if [[ ! "$DIRECT_BASE_URL" =~ ^https?://(127\.0\.0\.1|localhost|\[::1\])(:[0-9]{1,5})?$ ]]; then
   fail "CPA_DIRECT_BASE_URL must contain only the CPA process loopback listener and optional numeric port; paths, userinfo, queries, and fragments are forbidden"
 fi
@@ -56,7 +56,7 @@ esac
 [[ "$MAX_ROUTER_ERRORS" =~ ^[0-9]+$ ]] || fail "MAX_ROUTER_ERRORS must be a non-negative integer"
 [[ "$MAX_PANICS_RECOVERED" =~ ^[0-9]+$ ]] || fail "MAX_PANICS_RECOVERED must be a non-negative integer"
 [[ -z "$MAX_NEW_UNKNOWN_SOURCE_FORMATS" || "$MAX_NEW_UNKNOWN_SOURCE_FORMATS" =~ ^[0-9]+$ ]] || fail "MAX_NEW_UNKNOWN_SOURCE_FORMATS must be empty or a non-negative integer"
-[[ -n "$CPA_LOG_DIR" ]] || fail "set CPA_LOG_DIR to the dedicated CPA v7.2.142 runtime log directory visible from this watchdog"
+[[ -n "$CPA_LOG_DIR" ]] || fail "set CPA_LOG_DIR to the dedicated CPA v7.2.144 runtime log directory visible from this watchdog"
 
 management_key="${CPA_MANAGEMENT_KEY:-}"
 if [[ -z "$management_key" && -n "${CPA_MANAGEMENT_KEY_FILE:-}" ]]; then
@@ -181,7 +181,7 @@ validate_cpa_logging_config() {
     || fail "${phase} CPA request/file logging controls must be strict booleans: commercial-mode=true request-log=false logging-to-file=false"
 }
 
-# The config response is current-state evidence only. In CPA v7.2.142 a process
+# The config response is current-state evidence only. In CPA v7.2.144 a process
 # that started with commercial-mode=false keeps RequestLoggingMiddleware after a
 # hot reload. The active proof below binds a unique mode-0600 marker to CPA's
 # authenticated error-log inventory. The incomplete-body proof independently
@@ -191,7 +191,7 @@ validate_cpa_logging_config() {
 # partial one-time challenges carrying the same process identity first reported
 # by status and consumed only by this CAG process through its hidden
 # non-management resource. Raw lowercase
-# get traverses CPA v7.2.142 request logging but the resource handler does not
+# get traverses CPA v7.2.144 request logging but the resource handler does not
 # read the body. The complete probe detects raw error-log artifacts; a partial
 # timeout is only an inconclusive fail-closed signal. Management paths remain
 # unsuitable because shouldLogRequest() skips them.
@@ -211,8 +211,8 @@ import sys
 import time
 import urllib.parse
 
-EXPECTED_VERSION = "7.2.137"
-EXPECTED_COMMIT = "1f53b2eb03b9e963bac647e5566ca2b304239116"
+EXPECTED_VERSION = "7.2.144"
+EXPECTED_COMMIT = "d36b776c790a4d58027fd4fb434800fb5334bceb"
 MIN_COMMIT_PREFIX_LENGTH = 7
 MAX_RESPONSE_BYTES = 1 << 20
 STARTUP_PROOF_MANAGEMENT_PATH = "/v0/management/plugins/cyber-abuse-guard/health/startup-privacy-proof"
@@ -377,7 +377,7 @@ def validate_runtime_identity(headers):
         reject("unexpected_cpa_version")
     normalized_commit = commit.lower()
     # Official CPA builds may expose Git's dynamically sized abbreviated hash
-# (v7.2.142 currently emits eight characters). Keep the identity pinned to
+# (v7.2.144 currently emits eight characters). Keep the identity pinned to
     # the reviewed full commit while accepting no prefix weaker than the
     # seven-character form already supported by this watchdog.
     if (

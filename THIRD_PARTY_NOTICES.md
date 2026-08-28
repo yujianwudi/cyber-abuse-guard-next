@@ -2,9 +2,9 @@
 
 ## Direct build dependencies
 
-- CLIProxyAPI SDK v7.2.137 — MIT license. Active pin:
-  `85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, module sum
-  `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`, go.mod sum
+- CLIProxyAPI SDK v7.2.144 — MIT license. Active pin:
+  `d36b776c790a4d58027fd4fb434800fb5334bceb`, module sum
+  `h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=`, go.mod sum
   `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`.
 - `github.com/mattn/go-sqlite3` — MIT license.
 - `golang.org/x/sys` — BSD-3-Clause license.
@@ -16,11 +16,12 @@ Release automation must retain dependency license information and re-run
 The embedded default rule terms are original project data and do not import a
 third-party signature/rule library.
 
-This dependency identity is the Round 14 C ABI 1 / RPC schema 3 target. Round
-13 v7.2.125/schema 2 notices and PASS evidence remain historical and do not
-transfer. CPA v7.2.137 `/v1/realtime*` bypasses CAG `RequestInterceptor`,
+This dependency identity is the Round 16 C ABI 1 / RPC schema 4 target. Round
+15 v7.2.142/schema 3 notices and PASS evidence remain historical and do not
+transfer. CPA v7.2.144 `/v1/realtime*` bypasses CAG `RequestInterceptor`,
 `ModelRouter`, and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED**;
-only registered callback paths such as chat and Responses are covered.
+only registered callback paths such as chat and Responses are covered. CAG also
+does not register schema 4's WebSocket response observer.
 
 ## Public adversarial development corpus
 

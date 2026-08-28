@@ -60,8 +60,8 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
     startup_request_logging_installed = False
     emit_request_log_artifact = False
     swap_log_dir_on_probe = False
-    runtime_version = "7.2.137"
-    runtime_commit = "85d2fadd"
+    runtime_version = "7.2.144"
+    runtime_commit = "d36b776c"
     log_dir = ""
     swapped_log_dir = ""
     request_paths = []
@@ -430,8 +430,8 @@ class SplitFrontProxyHandler(http.server.BaseHTTPRequestHandler):
 
 class IsolatedDirectHandler(http.server.BaseHTTPRequestHandler):
     startup_privacy_instance_id = "b" * 64
-    runtime_version = "7.2.137"
-    runtime_commit = "85d2fadd"
+    runtime_version = "7.2.144"
+    runtime_commit = "d36b776c"
     log_dir = ""
     startup_challenges = {}
     startup_proof_requests = 0
@@ -857,7 +857,7 @@ try:
     ManagementHandler.config_contract = "valid"
 
     # A current safe config must not mask middleware installed by an unsafe
-    # startup. The non-management fixed-418 proof models CPA v7.2.142's synchronous
+    # startup. The non-management fixed-418 proof models CPA v7.2.144's synchronous
     # error-only raw-body artifact.
     ManagementHandler.startup_request_logging_installed = True
     stranded_startup_middleware = run_watchdog()
@@ -898,18 +898,18 @@ try:
         rejected_error_log_contracts.append((contract, run_watchdog()))
     ManagementHandler.error_logs_contract = "valid"
 
-    ManagementHandler.runtime_version = "7.2.112"
+    ManagementHandler.runtime_version = "7.2.143"
     wrong_cpa_version = run_watchdog()
-    ManagementHandler.runtime_version = "7.2.137"
-    ManagementHandler.runtime_commit = "85d2fadd"
+    ManagementHandler.runtime_version = "7.2.144"
+    ManagementHandler.runtime_commit = "d36b776c"
     official_eight_character_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "85d2fa"
+    ManagementHandler.runtime_commit = "d36b77"
     too_short_cpa_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "85d2fad0"
+    ManagementHandler.runtime_commit = "d36b7760"
     divergent_cpa_commit = run_watchdog()
     ManagementHandler.runtime_commit = "deadbeef"
     wrong_cpa_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "85d2fad"
+    ManagementHandler.runtime_commit = "d36b776"
     minimum_seven_character_commit = run_watchdog()
 
     missing_log_dir = run_watchdog({"CPA_LOG_DIR": ""})

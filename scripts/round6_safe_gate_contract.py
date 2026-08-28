@@ -1276,7 +1276,7 @@ ROUND14_RC_LINKED_CONTRACT_SHA256 = {
     "scripts/release_rc_workflow_inventory_test.py": "86be65f8ab7bec700b38107b5e4763550def0bd7bb55a52f1ac29504535637d0",
     "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "839470612986ca96fbcf298698bc178e62171c3654238c82927740e4d790f266",
     "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
-    "integration/host_integration_test.go": "676f05946bcf23c43f418e1e21c2e6dca46515ee619977288a4ebebeb8979c90",
+    "integration/host_integration_test.go": "8a61d6cd659594a20aaba1d032ab5bb5427892177e8c027ed7df948d424059a0",
 }
 ROUND13_RC_INPUT_ORDER = (
     "ci_run_id",

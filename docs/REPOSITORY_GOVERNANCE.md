@@ -4,11 +4,11 @@ This document records the desired repository-side controls for `main`. GitHub
 settings must be verified through the API; this checked-in document is not
 evidence that remote settings are currently enabled.
 
-## Round 14 gated RC publication policy
+## Round 16 gated RC publication policy
 
 Tag creation, prereleases, GitHub Releases, provenance attestations, package
 publication, and release-asset uploads remain forbidden until every applicable
-Round 14 acceptance gate passes. The executable workflow directory contains
+Round 16 acceptance gate passes. The executable workflow directory contains
 exactly these four repository-owned workflow files:
 
 | Workflow file | Display name | Required-check contexts |
@@ -36,8 +36,8 @@ publication permission. RC Release remains inert unless its complete,
 exact-candidate admission succeeds. CI and Policy Gate remain push/pull-request
 validation workflows with `contents: read`.
 
-The active compatibility boundary is CPA `v7.2.137` at commit
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI `1`, RPC schema `3`, Linux
+The active compatibility boundary is CPA `v7.2.144` at commit
+`d36b776c790a4d58027fd4fb434800fb5334bceb`, C ABI `1`, RPC schema `4`, Linux
 amd64 only. This identity alone is not release authorization; the full
 acceptance and RC admission contracts remain mandatory.
 
