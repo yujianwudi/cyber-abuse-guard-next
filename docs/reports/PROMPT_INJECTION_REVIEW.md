@@ -11,12 +11,12 @@ current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128
 > classifier identity, validation, taxonomy, and "current" statements must not
 > be inherited as current release or v0.15 PASS evidence.
 >
-> The current Round 14 active-tree overlay is CAG source `1.0.0` on Linux
+> The current Round 16 active-tree overlay is CAG source `1.0.0` on Linux
 > amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
 > current_formal_cpa: v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb
-> current_cpa_plugin_c_abi_rpc_schema: 1 / 3
+> current_cpa_plugin_c_abi_rpc_schema: 1 / 4
 > current_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
@@ -24,7 +24,7 @@ current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128
 > ```
 >
 > `/v1/realtime*` bypasses CAG. Historical review PASS statements below do not
-> establish v7.2.130/schema-4, realtime, Host, candidate, or release PASS.
+> establish v7.2.144/schema-4, realtime, Host, candidate, or release PASS.
 
 ## Round 6 CPA pinned-compatibility addendum
 

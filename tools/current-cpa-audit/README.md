@@ -7,7 +7,9 @@ go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schem
 and the official Linux
 amd64 asset `CLIProxyAPI_7.2.144_linux_amd64.tar.gz` at exactly 21,223,927 bytes
 with SHA-256
-`02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`, and
+`02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`, the
+official checksums-file SHA-256
+`1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331`, and
 the 64,203,432-byte extracted binary SHA-256
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
 These values identify the active upstream input only; they do not relabel an

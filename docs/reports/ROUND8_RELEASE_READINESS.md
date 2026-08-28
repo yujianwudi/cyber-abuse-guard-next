@@ -18,12 +18,12 @@ Historical snapshot last updated: 2026-07-22 (Asia/Shanghai)
 > statement, including the eight-workflow count, is relative to that frozen
 > Round 8 snapshot; none is the active repository release identity.
 >
-> The current Round 14 active-tree overlay is CAG source `1.0.0` on Linux
+> The current Round 16 active-tree overlay is CAG source `1.0.0` on Linux
 > amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
 > current_formal_cpa: v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb
-> current_cpa_plugin_c_abi_rpc_schema: 1 / 3
+> current_cpa_plugin_c_abi_rpc_schema: 1 / 4
 > current_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
@@ -31,7 +31,7 @@ Historical snapshot last updated: 2026-07-22 (Asia/Shanghai)
 > ```
 >
 > `/v1/realtime*` bypasses CAG. Historical Round 8 PASS statements below do
-> not establish v7.2.130/schema-4, realtime, Host, candidate, or release PASS.
+> not establish v7.2.144/schema-4, realtime, Host, candidate, or release PASS.
 
 This document describes the source-tree release contract. It is not a Host
 attestation, independent audit, production authorization, or Release record.

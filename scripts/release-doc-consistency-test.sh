@@ -12,8 +12,8 @@ old_classifier_policy_sha256="2763f10e2565dce2ffcf700f5d6566e9fbac68f3fedd08fcce
 stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
-round14_classifier_policy_version="classifier-policy-v20"
-round14_classifier_policy_sha256="f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3"
+round16_classifier_policy_version="classifier-policy-v20"
+round16_classifier_policy_sha256="f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -84,7 +84,7 @@ documents=(
   docs/reports/CORPUS_REPORT.md
 )
 
-round14_documents=(
+round16_documents=(
   README.md
   README_CN.md
   CHANGELOG.md
@@ -461,43 +461,43 @@ run_gate() {
   env "${environment[@]}" "$gate"
 }
 
-make_round14_fixture() {
+make_round16_fixture() {
   local fixture="$1" relative
   mkdir -p "$fixture/.github/workflows"
   for relative in ci.yml codeql.yml policy-gate.yml release-rc.yml; do
     cp -a -- "$root/.github/workflows/$relative" "$fixture/.github/workflows/$relative"
   done
   cp -a -- "$root/.github/workflows/README.md" "$fixture/.github/workflows/README.md"
-  for relative in "${round14_documents[@]}"; do
+  for relative in "${round16_documents[@]}"; do
     mkdir -p "$(dirname "$fixture/$relative")"
     cp -a -- "$root/$relative" "$fixture/$relative"
   done
 }
 
-run_round14_gate() {
+run_round16_gate() {
   local fixture="$1"
   local environment=(
     "RELEASE_DOC_ROOT=$fixture"
     "RELEASE_DOC_FIXTURE_MODE=1"
     "CURRENT_RELEASE_VERSION=1.0.0"
     "CURRENT_RULESET_SHA256=$ruleset_sha256"
-    "CURRENT_CLASSIFIER_POLICY_VERSION=$round14_classifier_policy_version"
-    "CURRENT_CLASSIFIER_POLICY_SHA256=$round14_classifier_policy_sha256"
+    "CURRENT_CLASSIFIER_POLICY_VERSION=$round16_classifier_policy_version"
+    "CURRENT_CLASSIFIER_POLICY_SHA256=$round16_classifier_policy_sha256"
   )
   env "${environment[@]}" "$gate"
 }
 
-round14_must_fail() {
+round16_must_fail() {
   local name="$1" fixture="$2" expected_diagnostic="$3"
-  if run_round14_gate "$fixture" >"$work/$name.log" 2>&1; then
-    printf 'Round 14 release document consistency fixture unexpectedly passed: %s\n' "$name" >&2
+  if run_round16_gate "$fixture" >"$work/$name.log" 2>&1; then
+    printf 'Round 16 release document consistency fixture unexpectedly passed: %s\n' "$name" >&2
     exit 1
   fi
   if ! grep -Fq -- "$expected_diagnostic" "$work/$name.log"; then
-    printf 'Round 14 release document consistency fixture emitted the wrong diagnostic: %s\n' "$name" >&2
+    printf 'Round 16 release document consistency fixture emitted the wrong diagnostic: %s\n' "$name" >&2
     exit 1
   fi
-  printf 'Round 14 release document consistency fixture rejected as expected: %s\n' "$name"
+  printf 'Round 16 release document consistency fixture rejected as expected: %s\n' "$name"
 }
 
 must_fail() {
@@ -516,52 +516,59 @@ must_fail() {
 make_fixture "$work/pass"
 run_gate "$work/pass"
 
-make_round14_fixture "$work/round14-pass"
-run_round14_gate "$work/round14-pass"
+make_round16_fixture "$work/round16-pass"
+run_round16_gate "$work/round16-pass"
 
-cp -a "$work/round14-pass" "$work/round14-missing-release-workflow"
-rm -- "$work/round14-missing-release-workflow/.github/workflows/release-rc.yml"
-round14_must_fail round14-missing-release-workflow \
-  "$work/round14-missing-release-workflow" \
-  'required Round 14 active workflow must be a regular non-symlink file: .github/workflows/release-rc.yml'
+cp -a "$work/round16-pass" "$work/round16-missing-release-workflow"
+rm -- "$work/round16-missing-release-workflow/.github/workflows/release-rc.yml"
+round16_must_fail round16-missing-release-workflow \
+  "$work/round16-missing-release-workflow" \
+  'required Round 16 active workflow must be a regular non-symlink file: .github/workflows/release-rc.yml'
 
-cp -a "$work/round14-pass" "$work/round13-unreviewed-workflow"
+cp -a "$work/round16-pass" "$work/round13-unreviewed-workflow"
 printf 'name: unreviewed\n' >"$work/round13-unreviewed-workflow/.github/workflows/unreviewed.yml"
-round14_must_fail round13-unreviewed-workflow \
+round16_must_fail round13-unreviewed-workflow \
   "$work/round13-unreviewed-workflow" \
-  'workflow directory contains an unreviewed Round 14 active workflow: .github/workflows/unreviewed.yml'
+  'workflow directory contains an unreviewed Round 16 active workflow: .github/workflows/unreviewed.yml'
 
-cp -a "$work/round14-pass" "$work/round14-stale-release-boundary"
+cp -a "$work/round16-pass" "$work/round16-stale-release-boundary"
 sed -i 's/The active workflow directory contains exactly four repository workflows:/The active workflow directory contains three repository workflows:/' \
-  "$work/round14-stale-release-boundary/docs/README.md"
-round14_must_fail round14-stale-release-boundary \
-  "$work/round14-stale-release-boundary" \
-  'documentation index lost the exact four-workflow Round 14 boundary'
+  "$work/round16-stale-release-boundary/docs/README.md"
+round16_must_fail round16-stale-release-boundary \
+  "$work/round16-stale-release-boundary" \
+  'documentation index lost the exact four-workflow Round 16 boundary'
 
-cp -a "$work/round14-pass" "$work/round14-missing-platform-workflow-index"
+cp -a "$work/round16-pass" "$work/round16-missing-platform-workflow-index"
 sed -i '/dynamic\/dependabot\/dependabot-updates/d' \
-  "$work/round14-missing-platform-workflow-index/.github/workflows/README.md"
+  "$work/round16-missing-platform-workflow-index/.github/workflows/README.md"
 printf '\nSpoof prose mentions dynamic/dependabot/dependabot-updates but is not an allowlist row.\n' >> \
-  "$work/round14-missing-platform-workflow-index/.github/workflows/README.md"
-round14_must_fail round14-missing-platform-workflow-index \
-  "$work/round14-missing-platform-workflow-index" \
+  "$work/round16-missing-platform-workflow-index/.github/workflows/README.md"
+round16_must_fail round16-missing-platform-workflow-index \
+  "$work/round16-missing-platform-workflow-index" \
   'workflow index lost the bounded platform workflow: dynamic/dependabot/dependabot-updates'
 
-cp -a "$work/round14-pass" "$work/round14-missing-platform-workflow-status"
-sed -i '/round14_platform_dynamic_workflows:/d' \
-  "$work/round14-missing-platform-workflow-status/docs/ROUND14_STATUS.md"
+cp -a "$work/round16-pass" "$work/round16-missing-platform-workflow-status"
+sed -i '/round16_platform_dynamic_workflows:/d' \
+  "$work/round16-missing-platform-workflow-status/docs/ROUND16_STATUS.md"
 printf '\nSpoof prose mentions dynamic/dependabot/dependabot-updates and dynamic/dependabot/update-graph.\n' >> \
-  "$work/round14-missing-platform-workflow-status/docs/ROUND14_STATUS.md"
-round14_must_fail round14-missing-platform-workflow-status \
-  "$work/round14-missing-platform-workflow-status" \
-  'ROUND14_STATUS.md lost the exact bounded platform workflow line'
+  "$work/round16-missing-platform-workflow-status/docs/ROUND16_STATUS.md"
+round16_must_fail round16-missing-platform-workflow-status \
+  "$work/round16-missing-platform-workflow-status" \
+  'ROUND16_STATUS.md lost the exact bounded platform workflow line'
 
-cp -a "$work/round14-pass" "$work/round14-release-schema-drift"
+cp -a "$work/round16-pass" "$work/round16-release-schema-drift"
 sed -i 's/cyber-abuse-guard\.second-machine-release-admission\.v3/cyber-abuse-guard.second-machine-release-admission.v2/' \
-  "$work/round14-release-schema-drift/.github/workflows/release-rc.yml"
-round14_must_fail round14-release-schema-drift \
-  "$work/round14-release-schema-drift" \
+  "$work/round16-release-schema-drift/.github/workflows/release-rc.yml"
+round16_must_fail round16-release-schema-drift \
+  "$work/round16-release-schema-drift" \
   'release-rc.yml lost second-machine admission schema v3'
+
+cp -a "$work/round16-pass" "$work/round16-forbidden-second-machine-waiver"
+sed -i '/^permissions: {}/i\  SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED: forbidden' \
+  "$work/round16-forbidden-second-machine-waiver/.github/workflows/release-rc.yml"
+round16_must_fail round16-forbidden-second-machine-waiver \
+  "$work/round16-forbidden-second-machine-waiver" \
+  'release-rc.yml retains a forbidden second-machine waiver path'
 
 for mutation in \
   'README.md:readme-current' \
@@ -573,27 +580,27 @@ for mutation in \
   relative="${mutation%%:*}"
   name="${mutation##*:}"
   fixture="$work/round13-classifier-$name"
-  cp -a "$work/round14-pass" "$fixture"
+  cp -a "$work/round16-pass" "$fixture"
   sed -i '0,/current_classifier_policy_version: classifier-policy-v20/s//current_classifier_policy_version: classifier-policy-v12/' \
     "$fixture/$relative"
-  round14_must_fail "round13-classifier-$name" "$fixture" \
+  round16_must_fail "round13-classifier-$name" "$fixture" \
     "$relative lost the exact current classifier identity in its first 20 lines"
 done
 
-cp -a "$work/round14-pass" "$work/round14-stale-active-navigation"
+cp -a "$work/round16-pass" "$work/round16-stale-active-navigation"
 sed -i \
   's/Active v7\.2\.144 CPA integration overlay/Active v7.2.125 CPA integration overlay/' \
-  "$work/round14-stale-active-navigation/docs/README.md"
-round14_must_fail round14-stale-active-navigation \
-  "$work/round14-stale-active-navigation" \
-  'Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim'
+  "$work/round16-stale-active-navigation/docs/README.md"
+round16_must_fail round16-stale-active-navigation \
+  "$work/round16-stale-active-navigation" \
+  'Round 16 active document allowlist contains an unfrozen current/active non-v7.2.144 claim'
 
-cp -a "$work/round14-pass" "$work/round13-stale-active-overlay"
+cp -a "$work/round16-pass" "$work/round13-stale-active-overlay"
 printf '\n> current_formal_cpa: v7.2.124@197f520426374e514218ed155933ac546c98d345\n' \
   >>"$work/round13-stale-active-overlay/docs/ROUND6_LIMITATIONS.md"
-round14_must_fail round13-stale-active-overlay \
+round16_must_fail round13-stale-active-overlay \
   "$work/round13-stale-active-overlay" \
-  'Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim'
+  'Round 16 active document allowlist contains an unfrozen current/active non-v7.2.144 claim'
 
 for mutation in \
   'docs/DESIGN.md|## Frozen historical Round 12 design body|round13-stale-design-before-freeze' \
@@ -601,31 +608,38 @@ for mutation in \
   'docs/THREAT_MODEL.md|## Frozen historical Round 12 threat-model body|round13-stale-threat-model-before-freeze'; do
   IFS='|' read -r relative marker name <<<"$mutation"
   fixture="$work/$name"
-  cp -a "$work/round14-pass" "$fixture"
+  cp -a "$work/round16-pass" "$fixture"
   sed -i \
     "0,/^${marker}$/s//Current CPA identity: v7.2.124 with an unfrozen active claim\\n\\n&/" \
     "$fixture/$relative"
-  round14_must_fail "$name" "$fixture" \
-    'Round 14 active document allowlist contains an unfrozen current/active v7.2.125/v7.2.124 claim'
+  round16_must_fail "$name" "$fixture" \
+    'Round 16 active document allowlist contains an unfrozen current/active non-v7.2.144 claim'
 done
 
-cp -a "$work/round14-pass" "$work/round13-frozen-history"
+cp -a "$work/round16-pass" "$work/round13-frozen-history"
 printf '\nThe then-current target was v7.2.124 in this explicitly frozen historical section.\n' \
   >>"$work/round13-frozen-history/docs/LIMITATIONS.md"
-run_round14_gate "$work/round13-frozen-history"
+run_round16_gate "$work/round13-frozen-history"
 printf 'Round 13 release document consistency allowed explicit frozen v7.2.124 history\n'
 
-cp -a "$work/round14-pass" "$work/round14-binary-sha"
+cp -a "$work/round16-pass" "$work/round16-binary-sha"
 sed -i \
   's/eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09/0000000000000000000000000000000000000000000000000000000000000000/g' \
-  "$work/round14-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
-round14_must_fail round14-binary-sha "$work/round14-binary-sha" \
+  "$work/round16-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
+round16_must_fail round16-binary-sha "$work/round16-binary-sha" \
   'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.144 binary SHA-256'
 
-cp -a "$work/round14-pass" "$work/round13-cag-version"
+cp -a "$work/round16-pass" "$work/round16-checksums-sha"
+sed -i \
+  's/1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  "$work/round16-checksums-sha/tools/current-cpa-audit/README.md"
+round16_must_fail round16-checksums-sha "$work/round16-checksums-sha" \
+  'tools/current-cpa-audit/README.md lost the exact CPA v7.2.144 checksums-file SHA-256'
+
+cp -a "$work/round16-pass" "$work/round13-cag-version"
 sed -i 's/cyber-abuse-guard-v1\.0\.0\.so/cyber-abuse-guard-v0.16.so/g' \
   "$work/round13-cag-version/tools/current-cpa-audit/README.md"
-round14_must_fail round13-cag-version "$work/round13-cag-version" \
+round16_must_fail round13-cag-version "$work/round13-cag-version" \
   'current CPA audit README lost the closed CAG 1.0.0 SO name'
 
 for mutation in \
@@ -634,26 +648,41 @@ for mutation in \
   relative="${mutation%%:*}"
   name="${mutation##*:}"
   fixture="$work/$name"
-  cp -a "$work/round14-pass" "$fixture"
+  cp -a "$work/round16-pass" "$fixture"
   sed -i '0,/315\/315 PASS/s//223\/223 PASS/' "$fixture/$relative"
-  round14_must_fail "$name" "$fixture" \
-    "$relative: active Round 14 overlay must contain exactly one 315/315 PASS result"
+  round16_must_fail "$name" "$fixture" \
+    "$relative: active Round 16 overlay must contain exactly one 315/315 PASS result"
 done
 
-cp -a "$work/round14-pass" "$work/round14-missing-audit-receipt"
-rm -- "$work/round14-missing-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
-round14_must_fail round14-missing-audit-receipt \
-  "$work/round14-missing-audit-receipt" \
+for mutation in \
+  'docs/reports/CPA_INTEGRATION.md:round16-cpa-integration-audit-contract' \
+  'docs/reports/RELEASE_EVIDENCE.md:round16-release-evidence-audit-contract' \
+  'docs/reports/TEST_REPORT.md:round16-test-report-audit-contract'; do
+  relative="${mutation%%:*}"
+  name="${mutation##*:}"
+  fixture="$work/$name"
+  cp -a "$work/round16-pass" "$fixture"
+  sed -i \
+    "s|^round16_audit_contract_sha256: .*$|round16_audit_contract_sha256: $(printf '0%.0s' {1..64})|" \
+    "$fixture/$relative"
+  round16_must_fail "$name" "$fixture" \
+    "$relative must bind the exact current audit identity: round16_audit_contract_sha256"
+done
+
+cp -a "$work/round16-pass" "$work/round16-missing-audit-receipt"
+rm -- "$work/round16-missing-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
+round16_must_fail round16-missing-audit-receipt \
+  "$work/round16-missing-audit-receipt" \
   'active CPA audit unit receipt is missing or unsafe: docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json'
 
-cp -a "$work/round14-pass" "$work/round14-tampered-audit-receipt"
+cp -a "$work/round16-pass" "$work/round16-tampered-audit-receipt"
 sed -i 's/"tests_run":315/"tests_run":296/' \
-  "$work/round14-tampered-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
-round14_must_fail round14-tampered-audit-receipt \
-  "$work/round14-tampered-audit-receipt" \
+  "$work/round16-tampered-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
+round16_must_fail round16-tampered-audit-receipt \
+  "$work/round16-tampered-audit-receipt" \
   'active CPA audit unit receipt validation failed'
 
-receipt_closure_fixture="$work/round14-receipt-closure"
+receipt_closure_fixture="$work/round16-receipt-closure"
 mkdir -p \
   "$receipt_closure_fixture/scripts" \
   "$receipt_closure_fixture/docs/reports" \
@@ -681,16 +710,16 @@ printf '\n# receipt drift mutation\n' \
 if /usr/bin/python3 -I -B \
   "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
   --receipt "$receipt_closure_fixture/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json" \
-  >"$work/round14-receipt-implementation-drift.log" 2>&1; then
-  printf 'Round 14 receipt accepted tested implementation drift\n' >&2
+  >"$work/round16-receipt-implementation-drift.log" 2>&1; then
+  printf 'Round 16 receipt accepted tested implementation drift\n' >&2
   exit 1
 fi
 grep -Fq 'receipt.closure.test_sources_sha256 differs from the current source closure' \
-  "$work/round14-receipt-implementation-drift.log" || {
-  printf 'Round 14 receipt emitted the wrong implementation-drift diagnostic\n' >&2
+  "$work/round16-receipt-implementation-drift.log" || {
+  printf 'Round 16 receipt emitted the wrong implementation-drift diagnostic\n' >&2
   exit 1
 }
-printf 'Round 14 receipt rejected tested implementation drift as expected\n'
+printf 'Round 16 receipt rejected tested implementation drift as expected\n'
 
 cp -a -- "$root/tools/current-cpa-audit/host_performance.py" \
   "$receipt_closure_fixture/tools/current-cpa-audit/host_performance.py"
@@ -699,70 +728,70 @@ printf '\n// receipt repository-input drift mutation\n' \
 if /usr/bin/python3 -I -B \
   "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
   --receipt "$receipt_closure_fixture/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json" \
-  >"$work/round14-receipt-repository-input-drift.log" 2>&1; then
-  printf 'Round 14 receipt accepted tested repository-input drift\n' >&2
+  >"$work/round16-receipt-repository-input-drift.log" 2>&1; then
+  printf 'Round 16 receipt accepted tested repository-input drift\n' >&2
   exit 1
 fi
 grep -Fq 'receipt.closure.test_sources_sha256 differs from the current source closure' \
-  "$work/round14-receipt-repository-input-drift.log" || {
-  printf 'Round 14 receipt emitted the wrong repository-input-drift diagnostic\n' >&2
+  "$work/round16-receipt-repository-input-drift.log" || {
+  printf 'Round 16 receipt emitted the wrong repository-input-drift diagnostic\n' >&2
   exit 1
 }
-printf 'Round 14 receipt rejected tested repository-input drift as expected\n'
+printf 'Round 16 receipt rejected tested repository-input drift as expected\n'
 
 for mutation in \
   'docs/ROUND16_STATUS.md|round16_audit_runner_bundle_sha256|round16-status-audit-bundle' \
   'docs/ROUND16_STATUS.md|round16_audit_contract_sha256|round16-status-audit-contract'; do
   IFS='|' read -r relative key name <<<"$mutation"
   fixture="$work/$name"
-  cp -a "$work/round14-pass" "$fixture"
+  cp -a "$work/round16-pass" "$fixture"
   sed -i "s|^${key}: .*$|${key}: $(printf '0%.0s' {1..64})|" "$fixture/$relative"
-  round14_must_fail "$name" "$fixture" \
+  round16_must_fail "$name" "$fixture" \
     "$relative must bind the exact current audit identity: $key"
 done
 
-cp -a "$work/round14-pass" "$work/round14-release-evidence-audit-run-source"
+cp -a "$work/round16-pass" "$work/round16-release-evidence-audit-run-source"
 sed -i \
   "s|^round16_audit_run_source_sha256: .*$|round16_audit_run_source_sha256: $(printf '0%.0s' {1..64})|" \
-  "$work/round14-release-evidence-audit-run-source/docs/ROUND16_STATUS.md"
-round14_must_fail round14-release-evidence-audit-run-source \
-  "$work/round14-release-evidence-audit-run-source" \
+  "$work/round16-release-evidence-audit-run-source/docs/ROUND16_STATUS.md"
+round16_must_fail round16-release-evidence-audit-run-source \
+  "$work/round16-release-evidence-audit-run-source" \
   'docs/ROUND16_STATUS.md must bind the exact current audit identity: round16_audit_run_source_sha256'
 
-cp -a "$work/round14-pass" "$work/round14-duplicate-active-cpa-target"
-sed -i '/^round14_cpa_target:/a round14_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb' \
-  "$work/round14-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
-round14_must_fail round14-duplicate-active-cpa-target \
-  "$work/round14-duplicate-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.144 round14_cpa_target'
+cp -a "$work/round16-pass" "$work/round16-duplicate-active-cpa-target"
+sed -i '/^round16_cpa_target:/a round16_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb' \
+  "$work/round16-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round16_must_fail round16-duplicate-active-cpa-target \
+  "$work/round16-duplicate-active-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.144 round16_cpa_target'
 
-cp -a "$work/round14-pass" "$work/round14-conflicting-active-cpa-target"
+cp -a "$work/round16-pass" "$work/round16-conflicting-active-cpa-target"
 sed -i \
-  's|^round14_cpa_target: v7\.2\.144 / d36b776c790a4d58027fd4fb434800fb5334bceb$|round14_cpa_target: v7.2.144 / 197f520426374e514218ed155933ac546c98d345|' \
-  "$work/round14-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
-round14_must_fail round14-conflicting-active-cpa-target \
-  "$work/round14-conflicting-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.144 round14_cpa_target'
+  's|^round16_cpa_target: v7\.2\.144 / d36b776c790a4d58027fd4fb434800fb5334bceb$|round16_cpa_target: v7.2.144 / 197f520426374e514218ed155933ac546c98d345|' \
+  "$work/round16-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
+round16_must_fail round16-conflicting-active-cpa-target \
+  "$work/round16-conflicting-active-cpa-target" \
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.144 round16_cpa_target'
 
-cp -a "$work/round14-pass" "$work/round12-active-key-in-frozen-block"
+cp -a "$work/round16-pass" "$work/round12-active-key-in-frozen-block"
 printf '\nactive_cpa_remote_latest: PASS\n' \
   >>"$work/round12-active-key-in-frozen-block/docs/reports/RELEASE_EVIDENCE.md"
-round14_must_fail round12-active-key-in-frozen-block \
+round16_must_fail round12-active-key-in-frozen-block \
   "$work/round12-active-key-in-frozen-block" \
   'docs/reports/RELEASE_EVIDENCE.md: frozen release history contains active_cpa_* keys: active_cpa_remote_latest'
 
-cp -a "$work/round14-pass" "$work/round13-active-key-in-frozen-block"
+cp -a "$work/round16-pass" "$work/round13-active-key-in-frozen-block"
 sed -i \
   '/^Everything below is frozen v0\.16 \/ Round 12 history/i active_cpa_remote_latest: PASS' \
   "$work/round13-active-key-in-frozen-block/docs/reports/RELEASE_EVIDENCE.md"
-round14_must_fail round13-active-key-in-frozen-block \
+round16_must_fail round13-active-key-in-frozen-block \
   "$work/round13-active-key-in-frozen-block" \
   'docs/reports/RELEASE_EVIDENCE.md: frozen release history contains active_cpa_* keys: active_cpa_remote_latest'
 
-cp -a "$work/round14-pass" "$work/round13-missing-historical-cpa-target"
+cp -a "$work/round16-pass" "$work/round13-missing-historical-cpa-target"
 sed -i '/^historical_round12_cpa_target:/d' \
   "$work/round13-missing-historical-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
-round14_must_fail round13-missing-historical-cpa-target \
+round16_must_fail round13-missing-historical-cpa-target \
   "$work/round13-missing-historical-cpa-target" \
   'docs/reports/RELEASE_EVIDENCE.md: frozen history must contain exactly one historical_round12_cpa_target'
 
@@ -773,10 +802,10 @@ for mutation in \
   marker="${mutation%%:*}"
   name="${mutation##*:}"
   fixture="$work/$name"
-  cp -a "$work/round14-pass" "$fixture"
+  cp -a "$work/round16-pass" "$fixture"
   sed -i "0,/${marker//\//\\/}/s//BROKEN_ROUND13_STORE_MARKER/" \
     "$fixture/docs/reports/RELEASE_EVIDENCE.md"
-  round14_must_fail "$name" "$fixture" \
+  round16_must_fail "$name" "$fixture" \
     'docs/reports/RELEASE_EVIDENCE.md: frozen Round 13 boundary must retain exactly one RC Store marker:'
 done
 
@@ -789,7 +818,7 @@ printf '%s\n' \
   >"$work/python-exit-after-output/python3"
 chmod 0700 "$work/python-exit-after-output/python3"
 if PATH="$work/python-exit-after-output:$PATH" \
-  run_round14_gate "$work/round14-pass" \
+  run_round16_gate "$work/round16-pass" \
   >"$work/python-exit-after-output.log" 2>&1; then
   :
 else
@@ -810,7 +839,7 @@ printf '%s\n' \
   'exit 0' \
   >"$work/python-path-shim/python3"
 chmod 0700 "$work/python-path-shim/python3"
-PATH="$work/python-path-shim:$PATH" run_round14_gate "$work/round14-pass" \
+PATH="$work/python-path-shim:$PATH" run_round16_gate "$work/round16-pass" \
   >"$work/python-path-shim.log" 2>&1
 grep -Fq 'release document consistency passed:' "$work/python-path-shim.log" || {
   printf 'release document consistency did not ignore a forged PATH python3 shim\n' >&2

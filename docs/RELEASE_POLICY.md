@@ -13,7 +13,7 @@ current_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
 current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
 current_platform: linux-amd64
 current_go_toolchain: go1.26.6
-current_release_gate: ROUND16_ADMISSION_INCOMPLETE / RELEASE_AFTER_REQUIRED_CHECKS_OR_EXPLICIT_MAINTAINER_WAIVER
+current_release_gate: ROUND16_ADMISSION_INCOMPLETE / REQUIRED_CHECKS_AND_REAL_SECOND_MACHINE_ADMISSION_MANDATORY
 ```
 
 The active compatibility identity is CPA v7.2.144/schema 4. Its official
@@ -36,13 +36,11 @@ keeps the four repository YAML paths exact and separately allows only
 `dynamic/dependabot/update-graph`; any other active path still fails closed,
 and the same inventory check is repeated immediately before publication.
 
-The second-machine execution requirement has an explicit maintainer waiver
-path. It is disabled by default and can continue only when the manual RC
-workflow receives `second_machine_waiver=true`, the exact acknowledgment
-`I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded one-line reason, and actor
-`yujianwudi`. The resulting evidence status is
-`SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED`; it records no remote test and
-does not claim an independent Host audit or production approval.
+Second-machine execution is a mandatory release requirement. The manual RC
+workflow may continue only after it validates a canonical, non-expired real
+second-machine v3 admission report bound to the exact candidate and same-run
+Host evidence. Cancellation, no remote execution, an old report, or a local
+maintainer assertion leaves publication blocked.
 
 Every `/v1/realtime*` route bypasses CAG `RequestInterceptor`, `ModelRouter`,
 and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED**. Release claims may

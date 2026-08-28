@@ -19,8 +19,6 @@ readonly rc_candidate_name='cyber-abuse-guard-linux-amd64-audit-candidate'
 readonly rc_second_report='second-machine-release-admission.json'
 readonly rc_second_schema='cyber-abuse-guard.second-machine-release-admission.v3'
 readonly rc_second_status='SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS'
-readonly rc_second_waiver_schema='cyber-abuse-guard.second-machine-release-admission-waiver.v1'
-readonly rc_second_waiver_status='SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED'
 readonly rc_attestation_action='actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373'
 readonly rc_attestation_asset='release-attestation.intoto.jsonl'
 readonly rc_tag_signer_policy='github-verification-verified-valid-annotated-tag-and-commit'
@@ -145,37 +143,23 @@ init_rc_identity() {
     release_die "admitted annotated tag object differs from the checked-out tag"
   [[ "${RC_ADMISSION_STATUS:-}" == EXACT_PROTECTED_MAIN_CHECKS_PASS ]] || \
     release_die "RC sealing requires the exact protected-main admission result"
-  if [[ "${RC_SECOND_MACHINE_STATUS:-}" != "$rc_second_status" &&
-        "${RC_SECOND_MACHINE_STATUS:-}" != "$rc_second_waiver_status" ]]; then
-    release_die "RC sealing requires a validated second-machine admission or an explicit maintainer waiver"
-  fi
+  [[ "${RC_SECOND_MACHINE_STATUS:-}" == "$rc_second_status" ]] || \
+    release_die "RC sealing requires a validated second-machine admission"
   [[ "${RC_SECOND_MACHINE_REPORT_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || \
     release_die "RC sealing requires the downloaded second-machine report SHA-256"
   [[ "${RC_SECOND_MACHINE_SO_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] || \
     release_die "RC sealing requires the report-derived audited SO SHA-256"
   [[ "${RC_SECOND_MACHINE_EXPIRES_AT:-}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || \
     release_die "RC sealing requires the report-derived fixed expiration"
-  if [[ "${RC_SECOND_MACHINE_STATUS:-}" == "$rc_second_waiver_status" ]]; then
-    require_positive RC_SECOND_MACHINE_REPORT_SIZE
-  fi
-
   require_positive RC_CANDIDATE_ARTIFACT_ID
   require_positive RC_CANDIDATE_ARTIFACT_SIZE
   require_digest RC_CANDIDATE_ARTIFACT_DIGEST
-  if [[ "${RC_SECOND_MACHINE_STATUS:-}" == "$rc_second_status" ]]; then
-    require_positive RC_SECOND_MACHINE_RELEASE_ID
-    require_positive RC_SECOND_MACHINE_ASSET_ID
-    require_positive RC_SECOND_MACHINE_ASSET_SIZE
-    require_digest RC_SECOND_MACHINE_ASSET_DIGEST
-    [[ "$RC_SECOND_MACHINE_ASSET_DIGEST" == "sha256:$RC_SECOND_MACHINE_REPORT_SHA256" ]] || \
-      release_die "second-machine API digest differs from the downloaded report SHA-256"
-  else
-    [[ "${RC_SECOND_MACHINE_RELEASE_ID:-}" == 0 &&
-       "${RC_SECOND_MACHINE_ASSET_ID:-}" == 0 &&
-       "${RC_SECOND_MACHINE_ASSET_SIZE:-}" == 0 &&
-       -z "${RC_SECOND_MACHINE_ASSET_DIGEST:-}" ]] ||
-      release_die "waived second-machine admission must use zero remote IDs and no remote asset digest"
-  fi
+  require_positive RC_SECOND_MACHINE_RELEASE_ID
+  require_positive RC_SECOND_MACHINE_ASSET_ID
+  require_positive RC_SECOND_MACHINE_ASSET_SIZE
+  require_digest RC_SECOND_MACHINE_ASSET_DIGEST
+  [[ "$RC_SECOND_MACHINE_ASSET_DIGEST" == "sha256:$RC_SECOND_MACHINE_REPORT_SHA256" ]] || \
+    release_die "second-machine API digest differs from the downloaded report SHA-256"
 
   local run_id
   for run_id in "${RC_CI_RUN_ID:-}" "${RC_CODEQL_RUN_ID:-}" "${RC_POLICY_RUN_ID:-}"; do
@@ -241,31 +225,6 @@ assert_exact_dist_assets() {
 validate_portable_and_candidate() {
   local report="$1"
   local candidate_directory="$2"
-  if [[ "${RC_SECOND_MACHINE_STATUS:-}" == "$rc_second_waiver_status" ]]; then
-    jq -e \
-      --arg schema "$rc_second_waiver_schema" \
-      --arg status "$rc_second_waiver_status" \
-      --arg repository "$rc_repository" \
-      --arg commit "$RELEASE_GIT_COMMIT" \
-      --arg tree "$RELEASE_GIT_TREE" \
-      --arg cpa_tag "$rc_cpa_version" \
-      --arg cpa_commit "$rc_cpa_commit" \
-      --argjson cpa_abi "$rc_cpa_c_abi" \
-      --argjson cpa_rpc_schema "$rc_cpa_rpc_schema" \
-      '.schema == $schema and .status == $status and .executed == false and
-       .repository == $repository and .source.commit == $commit and
-       .source.tree == $tree and .cpa.tag == $cpa_tag and
-       .cpa.commit == $cpa_commit and .cpa.c_abi == $cpa_abi and
-       .cpa.rpc_schema == $cpa_rpc_schema and
-       .waiver.authorized_by == "yujianwudi" and
-       .waiver.acknowledgment == "I_ACK_SECOND_MACHINE_NOT_RUN"' \
-      "$report" >/dev/null || release_die "maintainer waiver report identity is invalid"
-    [[ "$(hash_file "$report")" == "$RC_SECOND_MACHINE_REPORT_SHA256" ]] ||
-      release_die "waiver report bytes differ from the admitted SHA-256"
-    [[ "$(stat -c %s "$report")" == "$RC_SECOND_MACHINE_REPORT_SIZE" ]] ||
-      release_die "waiver report size differs from the admitted size"
-    return 0
-  fi
   python3 -B "$root/tools/current-cpa-audit/second_machine_release_admission.py" validate \
     --report "$report" \
     --expected-repository "$rc_repository" \
@@ -416,12 +375,8 @@ write_release_evidence() {
     printf 'The RC workflow downloaded the unique live nine-file candidate artifact from the exact protected-main CI run. '
     printf 'The standalone `%s`, audited candidate Store ZIP, build metadata, ruleset files, SBOM, candidate checksums, and candidate manifest are reused byte-for-byte. ' "$so"
     printf 'The CPA-facing `%s` is a deterministic derived container with one root `cyber-abuse-guard.so` entry whose payload is byte-identical to the audited standalone SO; `checksums.txt` is generated for CPA and the candidate checksum anchor remains `%s`. ' "$cpa_store_zip" "$audit_checksums"
-    if [[ "$RC_SECOND_MACHINE_STATUS" == "$rc_second_waiver_status" ]]; then
-      printf 'The second-machine requirement was explicitly waived by the repository maintainer. No second-machine execution or independent Host admission is claimed. The waiver is not an independent audit or independent proof.\n\n'
-    else
-      printf 'The canonical second-machine report was downloaded from the fixed-name asset of an exact-commit draft Release, rehashed, checked for expiry, and validated by the exact tagged code. '
-      printf 'It is owner-run corroboration and release admission, not an independent audit or independent proof.\n\n'
-    fi
+    printf 'The canonical second-machine report was downloaded from the fixed-name asset of an exact-commit draft Release, rehashed, checked for expiry, and validated by the exact tagged code. '
+    printf 'It is owner-run corroboration and release admission, not an independent audit or independent proof.\n\n'
     printf '## Core artifact SHA-256\n\n| Asset | SHA-256 |\n|---|---|\n'
     for name in "${core_assets[@]}"; do
       printf '| `%s` | `%s` |\n' "$name" "$(hash_file "$dist/$name")"

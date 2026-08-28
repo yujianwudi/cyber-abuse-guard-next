@@ -21,7 +21,7 @@ current_audit_sqlite_schema: 7
 current_csam_text_policy: csam-text-policy-v1 / 85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
-current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
+current_status: ROUND16_ADMISSION_INCOMPLETE / REAL_SECOND_MACHINE_REQUIRED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next（CAG）是面向
@@ -33,14 +33,9 @@ Cyber-Abuse-Guard Next（CAG）是面向
 RC1 基线已经合并到 `main`，合并后的 Linux CI 也已通过。GitHub 开始在 Actions
 库存中暴露平台自有 Dependabot workflow 后，不可变的 `v1.0.0-rc.1` tag 未产生
 Release；RC2 tag 也已成为不可变历史记录。当前 `v1.0.0-rc.3` 在不放宽四个仓库
-YAML 白名单的前提下升级 CPA/schema 与准入合同。发行合同支持真实二号机准入报告，
-也支持下方明确的维护者豁免路径。不能用旧候选、
-本地回执或历史 PASS 替代当前候选身份。
-
-RC workflow 现在支持由维护者明确豁免已取消的二号机环节。必须设置
-`second_machine_waiver=true`、填写 `I_ACK_SECOND_MACHINE_NOT_RUN`、提供有界原因，
-且执行者必须是 `yujianwudi`。豁免发行版会明确标注未执行二号机，不代表独立 Host
-证明或生产批准。
+YAML 白名单的前提下升级 CPA/schema 与准入合同。发行合同强制要求一份由真实二号机
+执行、与精确候选绑定且未过期的 v3 准入报告。取消执行、缺少远程运行、旧候选、
+本地回执或历史 PASS 均不能关闭 RC 发行门禁。
 
 ## 请求处理链路
 
@@ -141,8 +136,8 @@ python3 -B scripts/round6_safe_gate_contract.py --root .
 make repository-secret-scan
 ```
 
-五仓和 supplemental ZIP 测试按身份绑定、分母隔离且不执行第三方代码。二号机测试取消后，
-它不能关闭 RC 发行门禁。
+五仓和 supplemental ZIP 测试按身份绑定、分母隔离且不执行第三方代码。精确候选的
+真实二号机运行是强制门禁且仍待执行；其准入报告通过前，RC 发行门禁保持关闭。
 
 ## 仓库布局与归档原则
 

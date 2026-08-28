@@ -113,11 +113,6 @@ for marker in (
     "bash scripts/release-rc.sh seal-candidate",
     "EXACT_PROTECTED_MAIN_CHECKS_PASS",
     "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS",
-    "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
-    "I_ACK_SECOND_MACHINE_NOT_RUN",
-    "second_machine_waiver:",
-    "second_machine_waiver_acknowledgment:",
-    "second_machine_waiver_reason:",
     "SUPPLEMENTAL_ARCHIVE_PASS",
     "NATIVE_HOST_SPECIAL_PATHS_PASS",
     "RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3",
@@ -165,6 +160,16 @@ for marker in (
 ):
     require(marker in workflow, f"workflow is missing {marker!r}")
 
+for forbidden_marker in (
+    "second_machine_waiver",
+    "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
+    "I_ACK_SECOND_MACHINE_NOT_RUN",
+    "MAINTAINER_WAIVER",
+):
+    require(forbidden_marker not in workflow, f"workflow retains forbidden waiver marker {forbidden_marker!r}")
+    require(forbidden_marker not in script, f"release script retains forbidden waiver marker {forbidden_marker!r}")
+    require(forbidden_marker not in api_validator, f"admission validator retains forbidden waiver marker {forbidden_marker!r}")
+
 require(workflow.count('python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"') == 2,
         "workflow inventory validator must run at admission and publication")
 for marker in (
@@ -194,9 +199,6 @@ require(
         "second_machine_asset_id",
         "second_machine_asset_sha256",
         "authorize_prerelease",
-        "second_machine_waiver",
-        "second_machine_waiver_acknowledgment",
-        "second_machine_waiver_reason",
     ],
     f"RC dispatch input trust boundary changed: {dispatch_inputs!r}",
 )
@@ -246,14 +248,11 @@ require(
         "second_machine_asset_id",
         "second_machine_asset_sha256",
         "authorize_prerelease",
-        "second_machine_waiver",
-        "second_machine_waiver_acknowledgment",
-        "second_machine_waiver_reason",
     ],
     f"dispatch input trust boundary changed: {inputs!r}",
 )
-require(len(re.findall(r"(?m)^        type:\s+(?:string|boolean)\s*$", input_block)) == 10,
-        "RC dispatch must expose exactly ten typed inputs")
+require(len(re.findall(r"(?m)^        type:\s+(?:string|boolean)\s*$", input_block)) == 7,
+        "RC dispatch must expose exactly seven typed inputs")
 for forbidden in (
     "second_machine_status:",
     "second_machine_report_sha256:",
@@ -408,9 +407,9 @@ uses = uses_pattern.findall(workflow)
 expected_uses = Counter(
     {
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0": 3,
-        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131": 3,
+        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131": 2,
         "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373": 1,
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": 2,
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": 1,
     }
 )
 require(Counter(uses) == expected_uses, f"GitHub action allowlist changed: {Counter(uses)!r}")

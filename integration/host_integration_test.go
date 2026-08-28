@@ -2638,6 +2638,10 @@ type routerFixtureScenario struct {
 	wantUpstreamDelta     int64
 	wantProviderExecution bool
 	wantGuardRegistered   bool
+	wantUsageProvider     string
+	wantUsageInputTokens  int64
+	wantUsageOutputTokens int64
+	wantUsageTotalTokens  int64
 }
 
 func TestCPAPluginHostRouterFixtureMatrix(t *testing.T) {
@@ -2737,18 +2741,21 @@ func TestCPAPluginHostRouterFixtureMatrix(t *testing.T) {
 			fixtureMode: "ready", fixtureID: "fixture-router", fixturePriority: 300,
 			guardState: "missing", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: fixtureMarker,
+			wantUsageProvider: "fixture-router",
 		},
 		{
 			name:        "guard-registration-failure-fixture-handles",
 			fixtureMode: "ready", fixtureID: "fixture-router", fixturePriority: 300,
 			guardState: "register_error", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: fixtureMarker,
+			wantUsageProvider: "fixture-router",
 		},
 		{
 			name:        "guard-disabled-fixture-handles",
 			fixtureMode: "ready", fixtureID: "fixture-router", fixturePriority: 300,
 			guardState: "disabled", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: fixtureMarker,
+			wantUsageProvider: "fixture-router",
 		},
 		{
 			name:        "guard-not-loaded-unhandled-fixture-reaches-native-provider",
@@ -2756,6 +2763,8 @@ func TestCPAPluginHostRouterFixtureMatrix(t *testing.T) {
 			guardState: "missing", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: nativeMarker,
 			wantUpstreamDelta: 1, wantProviderExecution: true,
+			wantUsageProvider:    "openai-compatible-mock",
+			wantUsageInputTokens: 1, wantUsageOutputTokens: 1, wantUsageTotalTokens: 2,
 		},
 	}
 
@@ -2927,9 +2936,15 @@ openai-compatibility:
 			traceID, traceErr, traceSelected, scenario.wantProviderExecution, upstreamDelta, scenario.wantUpstreamDelta,
 			providerDelta, scenario.wantProviderExecution)
 	}
-	if !scenario.wantProviderExecution {
-		// Guard-local blocks and fixture-handled routes must leave the native
-		// provider's asynchronous usage queue untouched.
+	if scenario.wantUsageProvider != "" {
+		// CPA v7.2.144 publishes a usage record for successful plugin Executor
+		// responses. Keep that Host-local accounting distinct from Provider,
+		// Auth Selector, and Mock-upstream execution.
+		assertUsageQueueProviderAndDrain(t, baseURL, scenario.wantUsageProvider,
+			scenario.wantUsageInputTokens, scenario.wantUsageOutputTokens, scenario.wantUsageTotalTokens)
+	} else if !scenario.wantProviderExecution {
+		// Guard-local blocks must leave the native provider's asynchronous
+		// usage queue untouched.
 		assertUsageQueueQuiet(t, baseURL)
 	}
 	if scenario.wantGuardRegistered {
@@ -3641,6 +3656,64 @@ func assertUsageQueueIncrementedAndDrain(t *testing.T, baseURL string) {
 	}
 }
 
+func assertUsageQueueProviderAndDrain(
+	t *testing.T,
+	baseURL, wantProvider string,
+	wantInputTokens, wantOutputTokens, wantTotalTokens int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		usageBody, status, err := rawRequest(http.MethodGet, baseURL+"/v0/management/usage-queue?count=100", nil, managementKey)
+		if err != nil {
+			t.Fatalf("query CPA usage queue for plugin Executor record: %v", err)
+		}
+		if status != http.StatusOK {
+			t.Fatalf("CPA usage queue status for plugin Executor record = %d, want 200", status)
+		}
+		if !bytes.Equal(bytes.TrimSpace(usageBody), []byte("[]")) {
+			var records []struct {
+				Provider string `json:"provider"`
+				Model    string `json:"model"`
+				Failed   *bool  `json:"failed"`
+				Tokens   *struct {
+					Input  int64 `json:"input_tokens"`
+					Output int64 `json:"output_tokens"`
+					Total  int64 `json:"total_tokens"`
+				} `json:"tokens"`
+			}
+			if errJSON := json.Unmarshal(usageBody, &records); errJSON != nil {
+				t.Fatalf("decode CPA plugin Executor usage queue: %v", errJSON)
+			}
+			if len(records) != 1 || records[0].Provider != wantProvider {
+				t.Fatalf("plugin Executor usage providers = %#v, want exactly %q", records, wantProvider)
+			}
+			record := records[0]
+			if record.Model != modelName || record.Failed == nil || *record.Failed {
+				t.Fatalf("plugin Executor usage identity provider=%q model=%q failed=%v, want provider=%q model=%q failed=false",
+					record.Provider, record.Model, record.Failed, wantProvider, modelName)
+			}
+			if record.Tokens == nil {
+				t.Fatal("plugin Executor usage record omitted token accounting")
+			}
+			if record.Tokens.Input != wantInputTokens || record.Tokens.Output != wantOutputTokens ||
+				record.Tokens.Total != wantTotalTokens {
+				t.Fatalf("plugin Executor usage tokens=%d/%d/%d, want %d/%d/%d",
+					record.Tokens.Input, record.Tokens.Output, record.Tokens.Total,
+					wantInputTokens, wantOutputTokens, wantTotalTokens)
+			}
+			// The successful local Executor publishes exactly one asynchronous
+			// result record. A later duplicate would still be contract drift.
+			assertUsageQueueQuiet(t, baseURL)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("plugin Executor %q did not generate its CPA usage record within 5 seconds", wantProvider)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 func assertUsageQueueQuiet(t *testing.T, baseURL string) {
 	t.Helper()
 	deadline := time.Now().Add(500 * time.Millisecond)
@@ -3653,7 +3726,7 @@ func assertUsageQueueQuiet(t *testing.T, baseURL string) {
 			t.Fatalf("CPA usage queue status during quiet window = %d, want 200", status)
 		}
 		if !bytes.Equal(bytes.TrimSpace(usageBody), []byte("[]")) {
-			t.Fatal("a locally blocked request generated an upstream usage record during the bounded quiet window")
+			t.Fatal("an unexpected CPA usage record appeared during the bounded quiet window")
 		}
 		if time.Now().After(deadline) {
 			return

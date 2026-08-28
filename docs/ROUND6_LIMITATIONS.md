@@ -11,8 +11,8 @@ current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128
 > target are scoped only to that frozen Round 6 snapshot and are not the active
 > repository release identity.
 >
-> The current Round 14 active-tree overlay is CAG source `1.0.0`, planned
-> `v1.0.0-rc.1` on Linux amd64, and:
+> The current Round 16 active-tree overlay is CAG source `1.0.0`, planned
+> `v1.0.0-rc.3` on Linux amd64, and:
 >
 > ```text
 > current_formal_cpa: v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb
@@ -26,7 +26,7 @@ current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128
 > `ModelRouter`, and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED /
 > CAG_NOT_VISIBLE**. Only registered callback paths such as chat and Responses
 > are protected; there is no all-traffic coverage claim. See
-> [Round 14 status](ROUND14_STATUS.md).
+> [Round 16 status](ROUND16_STATUS.md).
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**; a candidate-bound
 `evaluation-v11` or later first-and-only `CONSUMED / PASS` attestation is also

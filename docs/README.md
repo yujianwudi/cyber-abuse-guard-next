@@ -17,7 +17,8 @@ active contract. The module sum is
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The upstream Linux amd64
 archive SHA-256 is
 `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`
-(21,223,927 bytes); its
+(21,223,927 bytes); the official checksums-file SHA-256 is
+`1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331`; its
 binary SHA-256 is
 `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
 The active workflow directory contains exactly four repository workflows:
@@ -35,7 +36,9 @@ historical v7.2.116 engineering baseline. The supplied v7.2.116 second-machine
 report and any five-repository data are historical diagnostic evidence only;
 they do not transfer to v7.2.144/schema 4. Round 15 v7.2.142/schema 3 results
 also retain their old identity and transfer no PASS. The exact Round 16
-candidate still requires its own second-machine execution. The current feature branch also requires
+candidate requires a fresh real second-machine execution and canonical,
+non-expired v3 admission report; this mandatory gate remains open. The current
+feature branch also requires
 its own PR checks. Engineering CI validates source and development artifacts
 only; it does not establish a protected Host, independent-audit, release, or
 production PASS.
@@ -61,6 +64,9 @@ references remain stable.
 - [Active CPA v7.2.144 / RPC schema 4 task book](ROUND16_CPA_V7_2_144_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Release policy](RELEASE_POLICY.md)
+- [Active CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
+- [Active test overlay plus frozen history](reports/TEST_REPORT.md)
+- [Active release overlay plus frozen history](reports/RELEASE_EVIDENCE.md)
 
 ## Superseded historical Round 13 navigation
 
@@ -68,9 +74,6 @@ references remain stable.
 - [Round 13 CPA v7.2.125 / v1.0.0-rc.1 task book](ROUND13_CPA_V7_2_125_V1_RC1_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Release policy](RELEASE_POLICY.md)
-- [Active CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
-- [Active test overlay plus frozen history](reports/TEST_REPORT.md)
-- [Active release overlay plus frozen history](reports/RELEASE_EVIDENCE.md)
 
 ## Historical v0.16 navigation
 

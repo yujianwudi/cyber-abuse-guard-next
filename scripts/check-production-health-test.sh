@@ -970,6 +970,9 @@ if completed.returncode != 0:
     sys.stderr.write(completed.stdout)
     sys.stderr.write(completed.stderr)
     raise SystemExit("watchdog failed its direct management request")
+if "cpa=7.2.144" not in completed.stdout or "cpa=7.2.130" in completed.stdout:
+    sys.stderr.write(completed.stdout)
+    raise SystemExit("watchdog success output did not preserve the exact CPA v7.2.144 identity")
 if not initial_request_paths or initial_request_paths[0] != config_path:
     raise SystemExit("CPA logging controls were not checked before plugin health routes")
 if initial_startup_proof_requests != 2:

@@ -963,5 +963,5 @@ elif (( new_unknown_source_formats > 0 )); then
     "$new_unknown_source_formats" >&2
 fi
 
-printf 'cyber-abuse-guard health check OK: mode=%s ruleset=%s cpa=7.2.130 startup_request_logging=absent_under_admitted_listener_contract direct_listener_binding=deployment_required router_errors=%s (Router/RequestInterceptor protocol failures) panics_recovered=%s unknown_source_formats=%s\n' \
+printf 'cyber-abuse-guard health check OK: mode=%s ruleset=%s cpa=7.2.144 startup_request_logging=absent_under_admitted_listener_contract direct_listener_binding=deployment_required router_errors=%s (Router/RequestInterceptor protocol failures) panics_recovered=%s unknown_source_formats=%s\n' \
   "$actual_mode" "$ruleset_version" "$router_errors_after" "$panics_after" "$unknown_source_formats_after"

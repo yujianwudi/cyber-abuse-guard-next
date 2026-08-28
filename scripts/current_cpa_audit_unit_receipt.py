@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate and validate the Round 14 current-CPA audit unit-test receipt.
+"""Generate and validate the Round 16 current-CPA audit unit-test receipt.
 
 The release-document gate must never infer PASS from unittest discovery.  This
 tool records one local Linux development execution and detects drift in the
@@ -255,7 +255,7 @@ def reject_constant(value: str) -> NoReturn:
 
 
 def load_json(path: Path) -> tuple[dict[str, Any], bytes]:
-    raw = read_regular_bytes(path, "Round 14 audit unit receipt", 2 * 1024 * 1024)
+    raw = read_regular_bytes(path, "Round 16 audit unit receipt", 2 * 1024 * 1024)
     try:
         value = json.loads(
             raw,
@@ -263,11 +263,11 @@ def load_json(path: Path) -> tuple[dict[str, Any], bytes]:
             parse_constant=reject_constant,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        fail(f"Round 14 audit unit receipt is not strict UTF-8 JSON: {exc}")
+        fail(f"Round 16 audit unit receipt is not strict UTF-8 JSON: {exc}")
     if type(value) is not dict:
-        fail("Round 14 audit unit receipt must be a JSON object")
+        fail("Round 16 audit unit receipt must be a JSON object")
     if raw != canonical_bytes(value) + b"\n":
-        fail("Round 14 audit unit receipt must use canonical JSON plus one LF")
+        fail("Round 16 audit unit receipt must use canonical JSON plus one LF")
     return value, raw
 
 
@@ -423,7 +423,7 @@ def discover_test_ids(python_executable: str, root: Path) -> list[str]:
         fail("CPA audit unittest discovery produced duplicate test IDs")
     if len(test_ids) != REVIEWED_TEST_COUNT:
         fail(
-            "CPA audit unittest closure differs from the reviewed Round 14 "
+            "CPA audit unittest closure differs from the reviewed Round 16 "
             f"count: expected {REVIEWED_TEST_COUNT}, found {len(test_ids)}"
         )
     return test_ids
@@ -514,7 +514,7 @@ def validate_receipt(path: Path) -> tuple[dict[str, Any], bytes]:
         "receipt",
     )
     if receipt["schema"] != SCHEMA:
-        fail("receipt.schema differs from the Round 14 contract")
+        fail("receipt.schema differs from the Round 16 contract")
 
     closure = exact_keys(
         receipt["closure"],
@@ -649,7 +649,7 @@ def validate_receipt(path: Path) -> tuple[dict[str, Any], bytes]:
     if exact_int(result["skipped"], "receipt.result.skipped") != skipped:
         fail("receipt.result.skipped differs from unittest stderr")
     if skipped != 0:
-        fail("Round 14 Linux audit unit receipt must not skip tests")
+        fail("Round 16 Linux audit unit receipt must not skip tests")
     return receipt, raw
 
 
@@ -657,8 +657,8 @@ def validate_receipt_bytes(path: Path) -> tuple[dict[str, Any], bytes]:
     """Validate from the already-read bytes and prove the path stayed stable."""
 
     receipt, raw = validate_receipt(path)
-    if read_regular_bytes(path, "Round 14 audit unit receipt", 2 * 1024 * 1024) != raw:
-        fail("Round 14 audit unit receipt changed after validation")
+    if read_regular_bytes(path, "Round 16 audit unit receipt", 2 * 1024 * 1024) != raw:
+        fail("Round 16 audit unit receipt changed after validation")
     return receipt, raw
 
 
@@ -688,7 +688,7 @@ def write_exclusive(path: Path, raw: bytes, replace: bool) -> None:
 
 def generate_receipt(output: Path, replace: bool) -> dict[str, Any]:
     if platform.system() != "Linux" or platform.machine() != "x86_64":
-        fail("Round 14 audit unit receipt generation requires Linux x86_64")
+        fail("Round 16 audit unit receipt generation requires Linux x86_64")
     remove_and_reject_bytecode(remove=True)
     source_bytes = source_closure_bytes()
     python_executable = str(Path(sys.executable).resolve(strict=True))

@@ -21,7 +21,7 @@ current_audit_sqlite_schema: 7
 current_csam_text_policy: csam-text-policy-v1 / 85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
-current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
+current_status: ROUND16_ADMISSION_INCOMPLETE / REAL_SECOND_MACHINE_REQUIRED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next (CAG) is a native, deterministic, pre-routing policy and
@@ -35,16 +35,10 @@ The RC1 base code is merged on `main` and its exact post-merge Linux CI passed.
 The immutable `v1.0.0-rc.1` tag produced no Release after GitHub began exposing
 platform-owned Dependabot workflows in the Actions inventory. The immutable RC2
 tag is also historical; `v1.0.0-rc.3` updates the active CPA/schema and admission
-contracts without weakening the four repository-owned workflow allowlist. The reviewed workflow
-accepts either a real second-machine admission report or the explicit maintainer
-waiver described below. No release claim is inferred from an old candidate or
-from local self-checks.
-
-The RC workflow now supports an explicit maintainer waiver for the canceled
-second-machine lane. It requires `second_machine_waiver=true`,
-`I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded reason and the `yujianwudi` actor. A
-waived Release is clearly marked as having no second-machine execution; it is
-not an independent Host attestation or production approval.
+contracts without weakening the four repository-owned workflow allowlist. The
+reviewed workflow requires a canonical, non-expired real second-machine v3
+admission report bound to the exact candidate. Cancellation, a missing remote
+run, an old candidate, or a local self-check cannot satisfy the RC release gate.
 
 ## What the plugin does
 
@@ -184,9 +178,9 @@ make repository-secret-scan
 ```
 
 The five-repository and supplemental ZIP lanes are identity-bound, do not
-execute third-party code, and are separate from ordinary unit tests. The last
-operator-requested second-machine run was canceled; therefore it cannot satisfy
-the RC release gate.
+execute third-party code, and are separate from ordinary unit tests. A fresh
+real second-machine run for the exact candidate is mandatory and remains
+pending; without its admitted report, the RC release gate stays closed.
 
 ## Repository layout and archive policy
 

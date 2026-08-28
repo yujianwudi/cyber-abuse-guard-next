@@ -15,6 +15,8 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux
   amd64 archive is 21,223,927 bytes / SHA-256
   `02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96`;
+  the official checksums file SHA-256 is
+  `1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331`;
   its binary is 64,203,432 bytes / SHA-256
   `eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09`.
   CAG deliberately does not register the new WebSocket response observer.
@@ -69,7 +71,7 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   duplicate paths, links, special members and extra entries, and hashes the
   exact sole candidate SO in memory, avoiding root-owned `0700` trees when
   Docker is invoked through passwordless sudo.
-- Eliminate Round 14 CSAM false positives for coordinated protective outputs
+- Eliminate CSAM false positives for coordinated protective outputs
   such as reporting guides, hotline/platform notices, safety/protection
   checklists, prevention resources, and quoted security-research detections.
   The exact 21-case benign live denominator is now a three-mode unit
@@ -111,29 +113,14 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   protection and Actions policy, squash-only merge governance, immutable
   Releases and a no-bypass RC tag ruleset; revalidate governance and main tip
   before both draft creation and final publication.
-- Close the Round 14 release-document contract around Audit SQLite schema 7,
+- Close the Round 16 release-document contract around Audit SQLite schema 7,
   CSAM text policy `csam-text-policy-v1` / SHA-256
   `a55c706059a27bd40156ea34ba9c5fb250baecefca19da18745620ed9fb556ee`,
   second-machine release admission v3, the exact four repository-workflow
   inventory, and the bounded GitHub Dependabot dynamic-workflow allowlist.
-  RC publication is allowed only after every applicable acceptance gate passes
-  through `release-rc.yml`; the current pending state cannot publish.
-- Start Round 14 by moving the sole active CPA contract to official
-  CLIProxyAPI `v7.2.142@1f53b2eb03b9e963bac647e5566ca2b304239116`, module sum
-  `h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ=`, unchanged go.mod sum
-  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1 and RPC schema 3.
-  The official Linux amd64 archive `CLIProxyAPI_7.2.142_linux_amd64.tar.gz`
-  is 21193314 bytes with SHA-256
-  `a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051`;
-  its 64088616-byte binary has SHA-256
-  `e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b`,
-  and the checksums file has SHA-256
-  `2a04364707aa7e8922c7ee35ad3b90437659c08fa4dbaa962f02b274993a0a6c`.
-  Because the classifier-policy protected summary includes the root
-  `go.mod`/`go.sum`, this module-pin change updates the active
-  `classifier-policy-v20` SHA-256 to
-  `d7aac3618ad2f8f7c0354db721150f8e6bcb0bf8d269fd91bb7fede12fb2750e`;
-  the policy version remains v20.
+  RC publication is allowed only after every applicable acceptance gate,
+  including the mandatory real second-machine v3 admission, passes through
+  `release-rc.yml`; the current pending state cannot publish.
 - Record the current audit-tool development result as `315/315 PASS` with zero
   skips on WSL Linux/x86_64 under Go 1.26.6. A canonical repository-owned development
   self-check receipt records unittest stderr, command and time window plus the
@@ -146,7 +133,7 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   `test_ids=54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f`,
   and `receipt_sha256=b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c`.
   It is unsigned and cannot
-  replace exact-commit CI or independent evidence. Five schema-3 Host fixture
+  replace exact-commit CI or independent evidence. Five schema-4 Host fixture
   tests, the targeted CAG RPC schema test under WSL, and one upstream
   hook/no-copy/auth/realtime source-contract test also pass. Complete Linux,
   exact-candidate CI,
@@ -163,19 +150,13 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   not transfer: its Host A/B run failed at CPA+CAG concurrency 4 / repetition 3
   with `queue_sample:MissedDeadline`, and the current fix still requires new
   exact-commit CI and Host verification.
-- Per operator instruction, all second-machine execution for this round is
-  canceled: no SSH, remote container, provider, or Host-performance task was
-  started and no remote evidence exists. The mandatory second-machine release
-  gates remain unsatisfied; the release workflow's fail-closed admission
-  contract is unchanged.
-- Add an explicit maintainer-only second-machine waiver path to the fixed RC
-  workflow. It requires `second_machine_waiver=true`, the exact acknowledgment
-  `I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded reason and the `yujianwudi` actor.
-  The resulting status is `SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED`; it
-  never claims a Host, independent-audit or production PASS.
-- Declare CPA v7.2.142 `/v1/realtime*` explicitly
+- Require a fresh real second-machine execution and canonical, non-expired v3
+  admission report bound to the exact RC candidate. Missing remote execution,
+  cancellation, an old report, or a local maintainer assertion fails closed and
+  leaves publication blocked.
+- Declare CPA v7.2.144 `/v1/realtime*` explicitly
   `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE` because it bypasses CAG. Freeze
-  all Round 13 v7.2.125 and Round 12 or earlier results as historical,
+  all Round 15 v7.2.142 and earlier results as historical,
   superseded evidence without relabelling or transferring any old PASS.
 
 ### Frozen Round 13 v7.2.125 development history

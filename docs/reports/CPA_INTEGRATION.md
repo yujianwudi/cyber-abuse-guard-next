@@ -5,7 +5,7 @@ current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
-## Round 14 active compatibility overlay
+## Round 16 active compatibility overlay
 
 The active classifier remains `classifier-policy-v20`. Its protected summary
 includes the root `go.mod`/`go.sum` together with the bounded multipart and
@@ -38,9 +38,9 @@ also pass as dirty-worktree development evidence.
 The complete Linux matrix, remote/exact-candidate CI, exact-fix second-machine,
 five-repository and supplemental-ZIP audits, false-positive gate, Host
 performance/soak, independent attestation, and release gates are not all
-closed. The operator canceled all second-machine execution for this round, so
-there is no remote evidence and those mandatory gates are
-`CANCELLED_BY_OPERATOR / NO_REMOTE_EXECUTION`. The prior exact `a216395` candidate passed its named
+closed. A fresh real second-machine run and its canonical, non-expired v3
+admission report are mandatory for the exact candidate and remain pending. The
+prior exact `a216395` candidate passed its named
 GitHub, semantic, CSAM and native-Host lanes, but its Host A/B run failed closed
 at CPA+CAG concurrency 4 / repetition 3 with
 `queue_sample:MissedDeadline`. The current fix uses one private persistent
@@ -64,24 +64,24 @@ authenticated handler/provider-path proof.
 Everything below this overlay, including every Round 13 v7.2.125 PASS and
 Round 12 or earlier record, is immutable `HISTORICAL / SUPERSEDED` evidence for
 its original identity only. No old PASS is relabelled or transferred to Round
-14. See [Round 14 status](../ROUND14_STATUS.md).
+16. See [Round 16 status](../ROUND16_STATUS.md).
 
 ```text
-round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
-round14_audit_expected_test_count: 315 / EXECUTED
-round14_audit_runner_bundle_sha256: f3dfc5f1ce10c1226633b733edb3e3de87150b326479d3549680f76d277ca522
-round14_audit_contract_sha256: 92d71d0ef20667e38cc39ccf7deaa19661a40408d77d1c9c3f4c757fabc003e4
-round14_audit_run_source_sha256: 126226c325d5868b6dfd495419f0e30ec954f54e0de58246406db0efc0490634
-round14_audit_machine_schema_sha256: 733a8202425ec00436412e00b21fe7a28a66ffdd11321775e2438db3b3c9cf22
-round14_audit_tool_tests: PASS / LINUX / 315_OF_315
-round14_audit_tool_skips: 0
-round14_audit_test_sources_sha256: e094d7288ce885ea75d044b1565d1f96952b0da5cf06d771aa1277a685c27806
-round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round14_audit_unit_receipt_sha256: 839470612986ca96fbcf298698bc178e62171c3654238c82927740e4d790f266
-round14_audit_unit_started_at: 2026-08-27T01:20:43.291Z
-round14_audit_unit_finished_at: 2026-08-27T01:21:18.185Z
-round14_audit_unit_elapsed_ms: 34893
-round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
+round16_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
+round16_audit_expected_test_count: 315 / EXECUTED
+round16_audit_runner_bundle_sha256: 902d7a7eca08b0abf0b260120fcb1aeea7c71e6ff70e684a4853e1ab5d1070d2
+round16_audit_contract_sha256: 6e63b60327ef1262925693cb88a0142ec7aa3e6387b9637076e6af073387253f
+round16_audit_run_source_sha256: f421c571783c2f58c3b09adc214d57c727b4b30e0d45ea7569100e80fd535fc5
+round16_audit_machine_schema_sha256: 0890c7f21218d2baa94a024e1bb4fecc316564411d1b50837752d2fa469b3ad7
+round16_audit_tool_tests: PASS / LINUX / 315_OF_315
+round16_audit_tool_skips: 0
+round16_audit_test_sources_sha256: 4e6c502d33c52c3907e7f150a40ec74c9b565652f6a5d951dea11c8b650477ab
+round16_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
+round16_audit_unit_receipt_sha256: 502805a468c842c32c066ce4f830ede0d5fba84eed7610ab577806ea85905b1b
+round16_audit_unit_started_at: 2026-08-28T15:46:46.542Z
+round16_audit_unit_finished_at: 2026-08-28T15:47:23.262Z
+round16_audit_unit_elapsed_ms: 36720
+round16_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
 ```
 
 ## Frozen Round 13 compatibility overlay — historical / superseded

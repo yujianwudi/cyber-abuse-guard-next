@@ -10,7 +10,7 @@ here.
 | `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.144 / C ABI 1 / RPC schema 4 compatibility, tests, fuzzing, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Linux Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
-| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.3` annotated tag | Revalidate protected-main checks, real second-machine admission or an explicit maintainer waiver, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
+| `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.3` annotated tag | Revalidate protected-main checks and mandatory real second-machine admission, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |
 
 ## RC publication boundary
 
@@ -22,10 +22,9 @@ allowed only after all required Round 16 checks have passed. In particular:
   `v1.0.0-rc.3` tag, peeled to the exact protected `main` commit;
 - the exact CI, CodeQL and Policy and Corpus Gate push runs and all five
   required checks must already be successful;
-- the exact nine-file CI candidate must close before assets are sealed; either a
-  non-expired second-machine v3 report must be admitted, or the maintainer must
-  set `second_machine_waiver=true`, enter `I_ACK_SECOND_MACHINE_NOT_RUN`, and
-  provide a bounded reason;
+- the exact nine-file CI candidate must close before assets are sealed, and a
+  canonical, non-expired real second-machine v3 report bound to that candidate
+  must be admitted;
 - the workflow reuses the audited SO bytes and only derives the deterministic
   CPA Store RC ZIP; it does not recompile or move the tag;
 - write permissions exist only on the attestation and final publication jobs;
@@ -43,9 +42,8 @@ platform list:
 Any other active path fails closed.
 
 Any missing identity, signature, required check, artifact, real second-machine
-report or waiver acknowledgment,
-asset digest, or final release-state assertion fails closed. A failed fixed RC
-tag is never deleted, moved, or replaced; a later attempt requires a new RC
+report, asset digest, or final release-state assertion fails closed. A failed
+fixed RC tag is never deleted, moved, or replaced; a later attempt requires a new RC
 version and a separately reviewed workflow change.
 
 ## Naming and governance

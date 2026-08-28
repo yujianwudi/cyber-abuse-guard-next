@@ -1,50 +1,50 @@
 # v1.0.0-rc.3 evidence — CPA v7.2.144 active target; gated RC publication
 
-## Round 14 active release boundary
+## Round 16 active release boundary
 
 ```text
-round14_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
-round14_cpa_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
-round14_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
-round14_cpa_plugin_c_abi_rpc_schema: 1 / 4
-round14_cpa_linux_asset: CLIProxyAPI_7.2.144_linux_amd64.tar.gz / 21223927_BYTES / SHA256_02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96
-round14_cpa_checksums_sha256: 1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331
-round14_cpa_linux_binary: 64203432_BYTES / SHA256_eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09
-round14_classifier_policy: classifier-policy-v20 / f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
-round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
-round14_audit_expected_test_count: 315 / EXECUTED
-round14_audit_runner_bundle_sha256: f3dfc5f1ce10c1226633b733edb3e3de87150b326479d3549680f76d277ca522
-round14_audit_contract_sha256: 92d71d0ef20667e38cc39ccf7deaa19661a40408d77d1c9c3f4c757fabc003e4
-round14_audit_run_source_sha256: 126226c325d5868b6dfd495419f0e30ec954f54e0de58246406db0efc0490634
-round14_audit_machine_schema_sha256: 733a8202425ec00436412e00b21fe7a28a66ffdd11321775e2438db3b3c9cf22
-round14_audit_tool_tests: PASS / LINUX / 315_OF_315
-round14_audit_tool_skips: 0
-round14_audit_test_sources_sha256: e094d7288ce885ea75d044b1565d1f96952b0da5cf06d771aa1277a685c27806
-round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round14_audit_unit_receipt_sha256: 839470612986ca96fbcf298698bc178e62171c3654238c82927740e4d790f266
-round14_audit_unit_started_at: 2026-08-27T01:20:43.291Z
-round14_audit_unit_finished_at: 2026-08-27T01:21:18.185Z
-round14_audit_unit_elapsed_ms: 34893
-round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
-round14_targeted_schema3_host_fixture: PASS / 5_TESTS
-round14_targeted_cag_rpc_schema: PASS / WSL
-round14_targeted_upstream_hook_no_copy_auth_realtime_contract: PASS / 1_TEST
-round14_complete_linux_matrix: NOT_RUN / PENDING
-round14_exact_candidate_ci: NOT_RUN / PENDING
-round14_second_machine_and_five_repository_zip_fp: EXACT_FIX_NOT_RUN / PARENT_20D6268_PASS_DOES_NOT_TRANSFER
-round14_host_performance_and_soak: EXACT_FIX_NOT_RUN / V1.44_ONE_SHOT_COLLECTOR_LOCAL_TEST_PASS
-round14_realtime_protection: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
-round14_tag_and_release: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC1_RELEASE_NOT_CREATED / RC2_NOT_CREATED / ALLOWED_AFTER_REQUIRED_CHECKS_AND_EXPLICIT_MAINTAINER_WAIVER / RELEASE_RC_WORKFLOW_ONLY
-round14_cpa_remote_tag_commit_recheck: PASS / GITHUB_API_TAG_REF_AND_COMMIT_VERIFIED / 2026-08-21
-round14_official_asset_and_binary_recheck: PASS / LINUX_DOWNLOAD_AND_CHECKSUMS_RECHECKED / 2026-08-21
+round16_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb
+round16_cpa_module_sum: h1:ZNLmwkaMZ+4KbR8BqLHUUDdDzWsQKpXZQbLYesh4ttk=
+round16_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+round16_cpa_plugin_c_abi_rpc_schema: 1 / 4
+round16_cpa_linux_asset: CLIProxyAPI_7.2.144_linux_amd64.tar.gz / 21223927_BYTES / SHA256_02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e575ba4b2a96
+round16_cpa_checksums_sha256: 1cd243af209cc8f7dac36b3785f9ff2d06a81518f409611a3c674ce2190a4331
+round16_cpa_linux_binary: 64203432_BYTES / SHA256_eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09
+round16_classifier_policy: classifier-policy-v20 / f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
+round16_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
+round16_audit_expected_test_count: 315 / EXECUTED
+round16_audit_runner_bundle_sha256: 902d7a7eca08b0abf0b260120fcb1aeea7c71e6ff70e684a4853e1ab5d1070d2
+round16_audit_contract_sha256: 6e63b60327ef1262925693cb88a0142ec7aa3e6387b9637076e6af073387253f
+round16_audit_run_source_sha256: f421c571783c2f58c3b09adc214d57c727b4b30e0d45ea7569100e80fd535fc5
+round16_audit_machine_schema_sha256: 0890c7f21218d2baa94a024e1bb4fecc316564411d1b50837752d2fa469b3ad7
+round16_audit_tool_tests: PASS / LINUX / 315_OF_315
+round16_audit_tool_skips: 0
+round16_audit_test_sources_sha256: 4e6c502d33c52c3907e7f150a40ec74c9b565652f6a5d951dea11c8b650477ab
+round16_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
+round16_audit_unit_receipt_sha256: 502805a468c842c32c066ce4f830ede0d5fba84eed7610ab577806ea85905b1b
+round16_audit_unit_started_at: 2026-08-28T15:46:46.542Z
+round16_audit_unit_finished_at: 2026-08-28T15:47:23.262Z
+round16_audit_unit_elapsed_ms: 36720
+round16_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
+round16_targeted_schema4_host_fixture: PASS / 5_TESTS
+round16_targeted_cag_rpc_schema: PASS / WSL
+round16_targeted_upstream_hook_no_copy_auth_realtime_contract: PASS / 1_TEST
+round16_complete_linux_matrix: NOT_RUN / PENDING
+round16_exact_candidate_ci: NOT_RUN / PENDING
+round16_second_machine_and_five_repository_zip_fp: NOT_RUN / REAL_SECOND_MACHINE_MANDATORY / PARENT_20D6268_PASS_DOES_NOT_TRANSFER
+round16_host_performance_and_soak: EXACT_FIX_NOT_RUN / V1.44_ONE_SHOT_COLLECTOR_LOCAL_TEST_PASS
+round16_realtime_protection: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
+round16_tag_and_release: NOT_CREATED / ALLOWED_ONLY_AFTER_REQUIRED_CHECKS_AND_REAL_SECOND_MACHINE_ADMISSION / RELEASE_RC_WORKFLOW_ONLY
+round16_cpa_remote_tag_commit_recheck: PASS / GITHUB_API_TAG_REF_AND_COMMIT_VERIFIED / 2026-08-21
+round16_official_asset_and_binary_recheck: PASS / LINUX_DOWNLOAD_AND_CHECKSUMS_RECHECKED / 2026-08-21
 ```
 
 RC publication is conditionally authorized only after every acceptance gate
-passes through the reviewed `release-rc.yml` lane. The operator canceled all
-second-machine execution for this round; no remote evidence exists. The named
-local targeted results are dirty-worktree development evidence only and do not
-yet close any exact-fix candidate, second-machine, performance, release, or
-production gate.
+passes through the reviewed `release-rc.yml` lane. A fresh real second-machine
+run and canonical, non-expired v3 admission report bound to the exact candidate
+are mandatory and remain pending. The named local targeted results are
+dirty-worktree development evidence only and do not yet close any exact-fix
+candidate, second-machine, performance, release, or production gate.
 The prior `f663ea6` / `0eaed101` candidate passed semantic, CSAM and native-Host
   lanes, but the later exact `a216395` candidate is the most recent superseded
   evidence boundary: its named GitHub, semantic, CSAM and native-Host lanes
@@ -54,7 +54,7 @@ The prior `f663ea6` / `0eaed101` candidate passed semantic, CSAM and native-Host
   after the collector bytes changed.
 Every Round 13 v7.2.125 and Round 12 or earlier result below is frozen
 `HISTORICAL / SUPERSEDED` evidence for its original bytes and identity; no PASS
-is transferred to v7.2.137/schema 4. The fresh v7.2.137 upstream asset recheck
+is transferred to v7.2.144/schema 4. The fresh v7.2.144 upstream asset recheck
 does not close the exact-fix candidate, second-machine, performance, or release
 gates.
 

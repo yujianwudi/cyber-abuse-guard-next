@@ -18,15 +18,15 @@ on:
         required: true
         type: string
       second_machine_release_id:
-        description: Numeric ID of the fixed second-machine evidence draft Release (required unless waiver is enabled)
+        description: Numeric ID of the fixed second-machine evidence draft Release
         required: true
         type: string
       second_machine_asset_id:
-        description: Numeric ID of second-machine-release-admission.json in that draft (required unless waiver is enabled)
+        description: Numeric ID of second-machine-release-admission.json in that draft
         required: true
         type: string
       second_machine_asset_sha256:
-        description: Lowercase SHA-256 of the canonical second-machine admission bytes (required unless waiver is enabled)
+        description: Lowercase SHA-256 of the canonical second-machine admission bytes
         required: true
         type: string
       authorize_prerelease:
@@ -34,18 +34,6 @@ on:
         required: true
         type: boolean
         default: false
-      second_machine_waiver:
-        description: Explicit maintainer waiver; no second-machine execution is claimed
-        required: true
-        type: string
-      second_machine_waiver_acknowledgment:
-        description: Type I_ACK_SECOND_MACHINE_NOT_RUN only when the maintainer accepts the missing Host admission
-        required: true
-        type: string
-      second_machine_waiver_reason:
-        description: One-line maintainer reason for waiving second-machine admission
-        required: true
-        type: string
 
 permissions: {}
 
@@ -78,8 +66,6 @@ env:
   RC_SUPPLEMENTAL_REQUIRED_STATUS: SUPPLEMENTAL_ARCHIVE_PASS
   RC_NATIVE_HOST_REQUIRED_STATUS: NATIVE_HOST_SPECIAL_PATHS_PASS
   RC_SECOND_MACHINE_STAGING_TAG: v1.0.0-rc.3-second-machine-admission
-  RC_SECOND_MACHINE_WAIVER_SCHEMA: cyber-abuse-guard.second-machine-release-admission-waiver.v1
-  RC_SECOND_MACHINE_WAIVER_STATUS: SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED
   RC_PUBLISH_TIMEOUT_SECONDS: '1200'
   RC_CLOCK_MARGIN_SECONDS: '300'
   RC_BUILDER_IMAGE: docker.io/library/golang:1.26.6-bookworm
@@ -107,47 +93,47 @@ jobs:
       actions: read
       contents: read
     outputs:
-      candidate_artifact_digest: ${{ steps.waiver.outputs.candidate_artifact_digest || steps.real_evidence.outputs.candidate_artifact_digest }}
-      candidate_artifact_id: ${{ steps.waiver.outputs.candidate_artifact_id || steps.real_evidence.outputs.candidate_artifact_id }}
-      candidate_artifact_size: ${{ steps.waiver.outputs.candidate_artifact_size || steps.real_evidence.outputs.candidate_artifact_size }}
-      cleanup_pass: ${{ steps.waiver.outputs.cleanup_pass || steps.real_evidence.outputs.cleanup_pass }}
+      candidate_artifact_digest: ${{ steps.real_evidence.outputs.candidate_artifact_digest }}
+      candidate_artifact_id: ${{ steps.real_evidence.outputs.candidate_artifact_id }}
+      candidate_artifact_size: ${{ steps.real_evidence.outputs.candidate_artifact_size }}
+      cleanup_pass: ${{ steps.real_evidence.outputs.cleanup_pass }}
       ci_run_attempt: ${{ steps.bind.outputs.ci_run_attempt }}
       codeql_run_attempt: ${{ steps.bind.outputs.codeql_run_attempt }}
-      commit: ${{ steps.waiver.outputs.commit || steps.real_evidence.outputs.commit }}
-      corpus_manifest_sha256: ${{ steps.waiver.outputs.corpus_manifest_sha256 || steps.real_evidence.outputs.corpus_manifest_sha256 }}
-      corpus_repository_count: ${{ steps.waiver.outputs.corpus_repository_count || steps.real_evidence.outputs.corpus_repository_count }}
-      corpus_source_count: ${{ steps.waiver.outputs.corpus_source_count || steps.real_evidence.outputs.corpus_source_count }}
-      cpa_binary_sha256: ${{ steps.waiver.outputs.cpa_binary_sha256 || steps.real_evidence.outputs.cpa_binary_sha256 }}
-      cpa_abi: ${{ steps.waiver.outputs.cpa_abi || steps.real_evidence.outputs.cpa_abi }}
-      cpa_commit: ${{ steps.waiver.outputs.cpa_commit || steps.real_evidence.outputs.cpa_commit }}
-      cpa_rpc_schema: ${{ steps.waiver.outputs.cpa_rpc_schema || steps.real_evidence.outputs.cpa_rpc_schema }}
-      cpa_tag: ${{ steps.waiver.outputs.cpa_tag || steps.real_evidence.outputs.cpa_tag }}
-      false_positives: ${{ steps.waiver.outputs.false_positives || steps.real_evidence.outputs.false_positives }}
-      independent_proof: ${{ steps.waiver.outputs.independent_proof || steps.real_evidence.outputs.independent_proof }}
-      malicious_recall_percent: ${{ steps.waiver.outputs.malicious_recall_percent || steps.real_evidence.outputs.malicious_recall_percent }}
-      owner_run: ${{ steps.waiver.outputs.owner_run || steps.real_evidence.outputs.owner_run }}
-      performance_gate_count: ${{ steps.waiver.outputs.performance_gate_count || steps.real_evidence.outputs.performance_gate_count }}
-      performance_gates_passed: ${{ steps.waiver.outputs.performance_gates_passed || steps.real_evidence.outputs.performance_gates_passed }}
-      performance_gates_sha256: ${{ steps.waiver.outputs.performance_gates_sha256 || steps.real_evidence.outputs.performance_gates_sha256 }}
-      performance_status: ${{ steps.waiver.outputs.performance_status || steps.real_evidence.outputs.performance_status }}
+      commit: ${{ steps.real_evidence.outputs.commit }}
+      corpus_manifest_sha256: ${{ steps.real_evidence.outputs.corpus_manifest_sha256 }}
+      corpus_repository_count: ${{ steps.real_evidence.outputs.corpus_repository_count }}
+      corpus_source_count: ${{ steps.real_evidence.outputs.corpus_source_count }}
+      cpa_binary_sha256: ${{ steps.real_evidence.outputs.cpa_binary_sha256 }}
+      cpa_abi: ${{ steps.real_evidence.outputs.cpa_abi }}
+      cpa_commit: ${{ steps.real_evidence.outputs.cpa_commit }}
+      cpa_rpc_schema: ${{ steps.real_evidence.outputs.cpa_rpc_schema }}
+      cpa_tag: ${{ steps.real_evidence.outputs.cpa_tag }}
+      false_positives: ${{ steps.real_evidence.outputs.false_positives }}
+      independent_proof: ${{ steps.real_evidence.outputs.independent_proof }}
+      malicious_recall_percent: ${{ steps.real_evidence.outputs.malicious_recall_percent }}
+      owner_run: ${{ steps.real_evidence.outputs.owner_run }}
+      performance_gate_count: ${{ steps.real_evidence.outputs.performance_gate_count }}
+      performance_gates_passed: ${{ steps.real_evidence.outputs.performance_gates_passed }}
+      performance_gates_sha256: ${{ steps.real_evidence.outputs.performance_gates_sha256 }}
+      performance_status: ${{ steps.real_evidence.outputs.performance_status }}
       policy_run_attempt: ${{ steps.bind.outputs.policy_run_attempt }}
       protected_commit: ${{ steps.bind.outputs.commit }}
       protected_tree: ${{ steps.bind.outputs.tree }}
-      semantic_case_count: ${{ steps.waiver.outputs.semantic_case_count || steps.real_evidence.outputs.semantic_case_count }}
-      semantic_summary_sha256: ${{ steps.waiver.outputs.semantic_summary_sha256 || steps.real_evidence.outputs.semantic_summary_sha256 }}
-      second_machine_asset_digest: ${{ steps.waiver.outputs.second_machine_asset_digest || steps.real_evidence.outputs.second_machine_asset_digest }}
-      second_machine_asset_id: ${{ steps.waiver.outputs.second_machine_asset_id || steps.real_evidence.outputs.second_machine_asset_id }}
-      second_machine_asset_size: ${{ steps.waiver.outputs.second_machine_asset_size || steps.real_evidence.outputs.second_machine_asset_size }}
-      second_machine_expires_at: ${{ steps.waiver.outputs.second_machine_expires_at || steps.real_evidence.outputs.expires_at }}
-      second_machine_release_id: ${{ steps.waiver.outputs.second_machine_release_id || steps.real_evidence.outputs.second_machine_release_id }}
-      second_machine_report_sha256: ${{ steps.waiver.outputs.second_machine_report_sha256 || steps.real_evidence.outputs.report_sha256 }}
-      second_machine_so_sha256: ${{ steps.waiver.outputs.second_machine_so_sha256 || steps.real_evidence.outputs.so_sha256 }}
-      second_machine_status: ${{ steps.waiver.outputs.second_machine_status || steps.real_evidence.outputs.status }}
-      side_effect_violations: ${{ steps.waiver.outputs.side_effect_violations || steps.real_evidence.outputs.side_effect_violations }}
+      semantic_case_count: ${{ steps.real_evidence.outputs.semantic_case_count }}
+      semantic_summary_sha256: ${{ steps.real_evidence.outputs.semantic_summary_sha256 }}
+      second_machine_asset_digest: ${{ steps.real_evidence.outputs.second_machine_asset_digest }}
+      second_machine_asset_id: ${{ steps.real_evidence.outputs.second_machine_asset_id }}
+      second_machine_asset_size: ${{ steps.real_evidence.outputs.second_machine_asset_size }}
+      second_machine_expires_at: ${{ steps.real_evidence.outputs.expires_at }}
+      second_machine_release_id: ${{ steps.real_evidence.outputs.second_machine_release_id }}
+      second_machine_report_sha256: ${{ steps.real_evidence.outputs.report_sha256 }}
+      second_machine_so_sha256: ${{ steps.real_evidence.outputs.so_sha256 }}
+      second_machine_status: ${{ steps.real_evidence.outputs.status }}
+      side_effect_violations: ${{ steps.real_evidence.outputs.side_effect_violations }}
       tag_object: ${{ steps.bind.outputs.tag_object }}
       tag_signer_policy: ${{ steps.bind.outputs.tag_signer_policy }}
-      third_party_code_executions: ${{ steps.waiver.outputs.third_party_code_executions || steps.real_evidence.outputs.third_party_code_executions }}
-      tree: ${{ steps.waiver.outputs.tree || steps.real_evidence.outputs.tree }}
+      third_party_code_executions: ${{ steps.real_evidence.outputs.third_party_code_executions }}
+      tree: ${{ steps.real_evidence.outputs.tree }}
     steps:
       - name: Checkout exact tagged admission validators
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -459,70 +445,8 @@ jobs:
             printf 'tag_signer_policy=%s\n' "$RC_TAG_SIGNER_POLICY"
           } >>"$GITHUB_OUTPUT"
 
-      - name: Generate and validate explicit maintainer second-machine waiver
-        id: waiver
-        if: ${{ inputs.second_machine_waiver == 'true' }}
-        env:
-          ACK: ${{ inputs.second_machine_waiver_acknowledgment }}
-          AUTHORIZED: ${{ inputs.authorize_prerelease }}
-          CI_RUN_ID: ${{ inputs.ci_run_id }}
-          COMMIT: ${{ steps.bind.outputs.commit }}
-          REASON: ${{ inputs.second_machine_waiver_reason }}
-          TREE: ${{ steps.bind.outputs.tree }}
-        run: |
-          set -euo pipefail
-          [[ "$GITHUB_ACTOR" == yujianwudi ]]
-          [[ "$AUTHORIZED" == true ]]
-          [[ "$ACK" == I_ACK_SECOND_MACHINE_NOT_RUN ]]
-          [[ "$REASON" != *$'\n'* && "$REASON" != *$'\r'* ]]
-          ((${#REASON} >= 20 && ${#REASON} <= 500))
-          candidate_pages="$RUNNER_TEMP/candidate-artifacts.json"
-          candidate_zip="$RUNNER_TEMP/candidate-artifact.zip"
-          candidate_dir="$RUNNER_TEMP/candidate-artifact"
-          waiver_report="$RUNNER_TEMP/$RC_SECOND_MACHINE_ASSET_NAME"
-          gh api --paginate --slurp \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            "repos/${GITHUB_REPOSITORY}/actions/runs/${CI_RUN_ID}/artifacts?per_page=100" >"$candidate_pages"
-          candidate_url="$(jq -er --arg name "$RC_CANDIDATE_ARTIFACT_NAME" \
-            '[.[] | .artifacts[]? | select(.name == $name)] | if length == 1 then .[0].archive_download_url else error("candidate artifact cardinality") end' \
-            "$candidate_pages")"
-          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 \
-            --header 'Accept: application/vnd.github+json' --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header 'X-GitHub-Api-Version: 2022-11-28' "$candidate_url" --output "$candidate_zip"
-          mkdir -p "$candidate_dir"
-          unzip -q "$candidate_zip" -d "$candidate_dir"
-          candidate_so="$candidate_dir/cyber-abuse-guard-v${RC_SOURCE_VERSION}.so"
-          [[ -f "$candidate_so" && ! -L "$candidate_so" ]]
-          so_sha256="$(sha256sum "$candidate_so" | awk '{print $1}')"
-          python3 -B scripts/release_rc_github_admission.py \
-            --candidate-artifacts "$candidate_pages" \
-            --repository "$GITHUB_REPOSITORY" --commit "$COMMIT" --ci-run-id "$CI_RUN_ID" \
-            --second-machine-waiver --waiver-authorized-by "$GITHUB_ACTOR" \
-            --waiver-acknowledgment "$ACK" --waiver-reason "$REASON" \
-            --waiver-cpa-version "$RC_CPA_VERSION" --waiver-cpa-commit "$RC_CPA_COMMIT" \
-            --waiver-cpa-c-abi "$RC_CPA_C_ABI" --waiver-cpa-rpc-schema "$RC_CPA_RPC_SCHEMA" \
-            --waiver-cpa-binary-sha256 "$so_sha256" --waiver-tree "$TREE" \
-            --waiver-output "$waiver_report" --github-output "$GITHUB_OUTPUT"
-          [[ -f "$waiver_report" && ! -L "$waiver_report" ]]
-          {
-            printf 'second_machine_report_sha256=%s\n' "$(sha256sum "$waiver_report" | awk '{print $1}')"
-            printf 'second_machine_report_size=%s\n' "$(stat -c %s "$waiver_report")"
-            printf 'second_machine_waiver_reason=%s\n' "$REASON"
-          } >>"$GITHUB_OUTPUT"
-
-      - name: Upload explicit maintainer waiver evidence
-        if: ${{ inputs.second_machine_waiver == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cyber-abuse-guard-v1.0.0-rc.3-second-machine-waiver
-          path: ${{ runner.temp }}/second-machine-release-admission.json
-          if-no-files-found: error
-          retention-days: 7
-
       - name: Download and validate real staged second-machine admission
         id: real_evidence
-        if: ${{ inputs.second_machine_waiver != 'true' }}
         env:
           CI_RUN_ATTEMPT: ${{ steps.bind.outputs.ci_run_attempt }}
           CI_RUN_ID: ${{ inputs.ci_run_id }}
@@ -693,7 +617,6 @@ jobs:
             --expected-size "$CANDIDATE_ARTIFACT_SIZE"
 
       - name: Download the exact admitted second-machine report bytes
-        if: ${{ inputs.second_machine_waiver != 'true' }}
         env:
           EXPECTED_BYTES: ${{ needs.admission.outputs.second_machine_asset_size }}
           EXPECTED_SHA256: ${{ needs.admission.outputs.second_machine_report_sha256 }}
@@ -711,13 +634,6 @@ jobs:
           [[ -f "$report" && ! -L "$report" ]]
           [[ "$(stat -c %s "$report")" == "$EXPECTED_BYTES" ]]
           [[ "$(sha256sum "$report" | awk '{print $1}')" == "$EXPECTED_SHA256" ]]
-
-      - name: Download the exact maintainer waiver bytes
-        if: ${{ inputs.second_machine_waiver == 'true' }}
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: cyber-abuse-guard-v1.0.0-rc.3-second-machine-waiver
-          path: ${{ runner.temp }}
 
       - name: Recheck fixed release and CPA contracts
         env:
@@ -1079,17 +995,6 @@ jobs:
 
           revalidate_second_machine() {
             local staging_release staging_assets staging_asset
-            if [[ "$SECOND_MACHINE_STATUS" == "$RC_SECOND_MACHINE_WAIVER_STATUS" ]]; then
-              jq -e --arg schema "$RC_SECOND_MACHINE_WAIVER_SCHEMA" \
-                --arg status "$RC_SECOND_MACHINE_WAIVER_STATUS" \
-                --arg commit "$COMMIT" --arg tree "$TREE" \
-                '.schema == $schema and .status == $status and .executed == false and
-                 .source.commit == $commit and .source.tree == $tree and
-                 .waiver.authorized_by == "yujianwudi" and
-                 .waiver.acknowledgment == "I_ACK_SECOND_MACHINE_NOT_RUN"' \
-                "$DIST_DIR/$RC_SECOND_MACHINE_ASSET_NAME" >/dev/null
-              return 0
-            fi
             staging_release="$(gh api \
               --header 'Accept: application/vnd.github+json' \
               --header 'X-GitHub-Api-Version: 2022-11-28' \

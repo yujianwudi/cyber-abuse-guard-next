@@ -9,15 +9,15 @@ current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128
 > navigation metadata only. The body below preserves the Round 6 /
 > v0.15 release gate, including any CPA v7.2.95 wording such as "current real
 > Host state"; those statements are historical only and are not the active
-> repository release identity. The current Round 14 overlay is CAG source
-> `1.0.0`, planned `v1.0.0-rc.1` on Linux amd64, and
+> repository release identity. The current Round 16 overlay is CAG source
+> `1.0.0`, planned `v1.0.0-rc.3` on Linux amd64, and
 > `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb` (C ABI 1 / RPC schema 4).
 > Round 13 v7.2.125/schema 2 evidence retains its historical identity and does
 > not transfer a PASS. Every `/v1/realtime*` route currently bypasses CAG
 > `RequestInterceptor`, `ModelRouter`, and request lifecycle and is
 > **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE**. Only registered callback
 > paths such as chat and Responses are protected; there is no all-traffic
-> coverage claim. See [Round 14 status](ROUND14_STATUS.md).
+> coverage claim. See [Round 16 status](ROUND16_STATUS.md).
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**.
 
