@@ -13,7 +13,7 @@ stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
 round14_classifier_policy_version="classifier-policy-v20"
-round14_classifier_policy_sha256="a25cd83ea9a6d409a09a4bdd9aa75357ff989757272a006a4f60a32d77ad76db"
+round14_classifier_policy_sha256="f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -23,7 +23,7 @@ if ! python3_bin="$(command -v python3)" || [[ ! -x "$python3_bin" ]]; then
 fi
 
 audit_receipt_tool="$root/scripts/current_cpa_audit_unit_receipt.py"
-audit_receipt="$root/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
+audit_receipt="$root/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
 audit_identity_output=""
 if ! audit_identity_output="$(/usr/bin/python3 -I -B "$audit_receipt_tool" validate \
   --receipt "$audit_receipt" --output-lines)"; then
@@ -80,7 +80,7 @@ documents=(
   docs/reports/ROUND8_RELEASE_READINESS.md
   docs/reports/ROUND9_EXECUTION_RECORD.md
   docs/reports/TEST_REPORT.md
-  docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json
+  docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json
   docs/reports/CORPUS_REPORT.md
 )
 
@@ -115,6 +115,8 @@ round14_documents=(
   docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md
   docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md
   docs/ROUND14_STATUS.md
+  docs/ROUND16_CPA_V7_2_144_TASK_BOOK.md
+  docs/ROUND16_STATUS.md
   docs/THREAT_MODEL.md
   docs/reports/CPA_INTEGRATION.md
   docs/reports/PHASE0_CPA_CONTRACT.md
@@ -129,6 +131,7 @@ round14_documents=(
   docs/reports/TEST_REPORT.md
   docs/reports/CORPUS_REPORT.md
   docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json
+  docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json
   integration/cpalatestcontract/README.md
   integration/pluginstorecontract/README.md
   tools/current-cpa-audit/README.md
@@ -579,7 +582,7 @@ done
 
 cp -a "$work/round14-pass" "$work/round14-stale-active-navigation"
 sed -i \
-  's/Active v7\.2\.142 CPA integration overlay/Active v7.2.125 CPA integration overlay/' \
+  's/Active v7\.2\.144 CPA integration overlay/Active v7.2.125 CPA integration overlay/' \
   "$work/round14-stale-active-navigation/docs/README.md"
 round14_must_fail round14-stale-active-navigation \
   "$work/round14-stale-active-navigation" \
@@ -614,10 +617,10 @@ printf 'Round 13 release document consistency allowed explicit frozen v7.2.124 h
 
 cp -a "$work/round14-pass" "$work/round14-binary-sha"
 sed -i \
-  's/e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  's/eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09/0000000000000000000000000000000000000000000000000000000000000000/g' \
   "$work/round14-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
 round14_must_fail round14-binary-sha "$work/round14-binary-sha" \
-  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.142 binary SHA-256'
+  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.144 binary SHA-256'
 
 cp -a "$work/round14-pass" "$work/round13-cag-version"
 sed -i 's/cyber-abuse-guard-v1\.0\.0\.so/cyber-abuse-guard-v0.16.so/g' \
@@ -638,17 +641,17 @@ for mutation in \
 done
 
 cp -a "$work/round14-pass" "$work/round14-missing-audit-receipt"
-rm -- "$work/round14-missing-audit-receipt/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
+rm -- "$work/round14-missing-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
 round14_must_fail round14-missing-audit-receipt \
   "$work/round14-missing-audit-receipt" \
-  'Round 14 CPA audit unit receipt is missing or unsafe: docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json'
+  'active CPA audit unit receipt is missing or unsafe: docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json'
 
 cp -a "$work/round14-pass" "$work/round14-tampered-audit-receipt"
 sed -i 's/"tests_run":315/"tests_run":296/' \
-  "$work/round14-tampered-audit-receipt/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json"
+  "$work/round14-tampered-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
 round14_must_fail round14-tampered-audit-receipt \
   "$work/round14-tampered-audit-receipt" \
-  'Round 14 CPA audit unit receipt validation failed'
+  'active CPA audit unit receipt validation failed'
 
 receipt_closure_fixture="$work/round14-receipt-closure"
 mkdir -p \
@@ -661,7 +664,7 @@ mkdir -p \
 cp -a -- "$root/scripts/current_cpa_audit_unit_receipt.py" \
   "$receipt_closure_fixture/scripts/"
 cp -a -- "$root/tools/current-cpa-audit" "$receipt_closure_fixture/tools/"
-cp -a -- "$root/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+cp -a -- "$root/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json" \
   "$receipt_closure_fixture/docs/reports/"
 cp -a -- "$root/.github/workflows/ci.yml" \
   "$receipt_closure_fixture/.github/workflows/"
@@ -671,13 +674,13 @@ cp -a -- "$root/testdata/development-public-jailbreak-patterns-v1/cases.jsonl" \
   "$receipt_closure_fixture/testdata/development-public-jailbreak-patterns-v1/"
 /usr/bin/python3 -I -B \
   "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
-  --receipt "$receipt_closure_fixture/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  --receipt "$receipt_closure_fixture/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json" \
   >/dev/null
 printf '\n# receipt drift mutation\n' \
   >>"$receipt_closure_fixture/tools/current-cpa-audit/host_performance.py"
 if /usr/bin/python3 -I -B \
   "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
-  --receipt "$receipt_closure_fixture/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  --receipt "$receipt_closure_fixture/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json" \
   >"$work/round14-receipt-implementation-drift.log" 2>&1; then
   printf 'Round 14 receipt accepted tested implementation drift\n' >&2
   exit 1
@@ -695,7 +698,7 @@ printf '\n// receipt repository-input drift mutation\n' \
   >>"$receipt_closure_fixture/integration/host_integration_test.go"
 if /usr/bin/python3 -I -B \
   "$receipt_closure_fixture/scripts/current_cpa_audit_unit_receipt.py" validate \
-  --receipt "$receipt_closure_fixture/docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json" \
+  --receipt "$receipt_closure_fixture/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json" \
   >"$work/round14-receipt-repository-input-drift.log" 2>&1; then
   printf 'Round 14 receipt accepted tested repository-input drift\n' >&2
   exit 1
@@ -708,38 +711,38 @@ grep -Fq 'receipt.closure.test_sources_sha256 differs from the current source cl
 printf 'Round 14 receipt rejected tested repository-input drift as expected\n'
 
 for mutation in \
-  'docs/ROUND14_STATUS.md|round14_audit_runner_bundle_sha256|round14-status-audit-bundle' \
-  'docs/reports/TEST_REPORT.md|round14_audit_contract_sha256|round14-test-report-audit-contract'; do
+  'docs/ROUND16_STATUS.md|round16_audit_runner_bundle_sha256|round16-status-audit-bundle' \
+  'docs/ROUND16_STATUS.md|round16_audit_contract_sha256|round16-status-audit-contract'; do
   IFS='|' read -r relative key name <<<"$mutation"
   fixture="$work/$name"
   cp -a "$work/round14-pass" "$fixture"
   sed -i "s|^${key}: .*$|${key}: $(printf '0%.0s' {1..64})|" "$fixture/$relative"
   round14_must_fail "$name" "$fixture" \
-    "$relative must bind the exact current Round 14 audit identity: $key"
+    "$relative must bind the exact current audit identity: $key"
 done
 
 cp -a "$work/round14-pass" "$work/round14-release-evidence-audit-run-source"
 sed -i \
-  "s|^round14_audit_run_source_sha256: .*$|round14_audit_run_source_sha256: $(printf '0%.0s' {1..64})|" \
-  "$work/round14-release-evidence-audit-run-source/docs/reports/RELEASE_EVIDENCE.md"
+  "s|^round16_audit_run_source_sha256: .*$|round16_audit_run_source_sha256: $(printf '0%.0s' {1..64})|" \
+  "$work/round14-release-evidence-audit-run-source/docs/ROUND16_STATUS.md"
 round14_must_fail round14-release-evidence-audit-run-source \
   "$work/round14-release-evidence-audit-run-source" \
-  'docs/reports/RELEASE_EVIDENCE.md must bind the exact current audit identity: round14_audit_run_source_sha256'
+  'docs/ROUND16_STATUS.md must bind the exact current audit identity: round16_audit_run_source_sha256'
 
 cp -a "$work/round14-pass" "$work/round14-duplicate-active-cpa-target"
-sed -i '/^round14_cpa_target:/a round14_cpa_target: v7.2.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116' \
+sed -i '/^round14_cpa_target:/a round14_cpa_target: v7.2.144 / d36b776c790a4d58027fd4fb434800fb5334bceb' \
   "$work/round14-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
 round14_must_fail round14-duplicate-active-cpa-target \
   "$work/round14-duplicate-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.142 round14_cpa_target'
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.144 round14_cpa_target'
 
 cp -a "$work/round14-pass" "$work/round14-conflicting-active-cpa-target"
 sed -i \
-  's|^round14_cpa_target: v7\.2\.142 / 1f53b2eb03b9e963bac647e5566ca2b304239116$|round14_cpa_target: v7.2.142 / 197f520426374e514218ed155933ac546c98d345|' \
+  's|^round14_cpa_target: v7\.2\.144 / d36b776c790a4d58027fd4fb434800fb5334bceb$|round14_cpa_target: v7.2.144 / 197f520426374e514218ed155933ac546c98d345|' \
   "$work/round14-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
 round14_must_fail round14-conflicting-active-cpa-target \
   "$work/round14-conflicting-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.142 round14_cpa_target'
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.144 round14_cpa_target'
 
 cp -a "$work/round14-pass" "$work/round12-active-key-in-frozen-block"
 printf '\nactive_cpa_remote_latest: PASS\n' \

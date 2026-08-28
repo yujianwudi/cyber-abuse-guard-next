@@ -11,10 +11,10 @@ round16_audit_tool_tests: PASS / LINUX / 315_OF_315
 round16_audit_tool_skips: 0
 round16_audit_test_sources_sha256: 3ad6f6de911cea65b4e98931c5a5b51b747e9098b0ccc286672abde91a56fabe
 round16_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round16_audit_unit_receipt_sha256: 2d5c22f5439ac024c3d0e8a658135ff5779d12a832e233a2009c67a4be7de8a7
-round16_audit_unit_started_at: 2026-08-28T09:12:32.010Z
-round16_audit_unit_finished_at: 2026-08-28T09:13:23.405Z
-round16_audit_unit_elapsed_ms: 51395
+round16_audit_unit_receipt_sha256: 953a7a4c80bd702151ae5bb245cd434ae59d79e5b3cac23857e5864dfb1b530a
+round16_audit_unit_started_at: 2026-08-28T12:05:52.621Z
+round16_audit_unit_finished_at: 2026-08-28T12:06:28.795Z
+round16_audit_unit_elapsed_ms: 36174
 round16_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
 ```
 

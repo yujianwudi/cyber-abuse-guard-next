@@ -1523,10 +1523,10 @@ ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
 }
 ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT = ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT
 ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "a8d3906cf2f4f8e088ac078d3fc7f70fdc8df98f1452d3958ba42d04bc979398"
+    "0716bfa9dd11008b332f88ad17ce5ef2b6b05e79ce609ee1af15781353fe9b96"
 )
 ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "58496c77107a6f2ee8f98da4ea608f09fc4ee444f7ec877dccfef9d1bc8e83b8",
+    "scripts/release-doc-consistency-test.sh": "daa0ecd14d81f10b58455e13fa13204421b60cfc9ae2d5bb93fac99be4c3ea23",
     "scripts/release-doc-consistency.sh": "0116f8984d26a118fb9ec77b5763111c8840c830bcca80b889a5d747cac1e571",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
