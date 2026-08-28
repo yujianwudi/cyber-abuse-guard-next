@@ -125,14 +125,6 @@ active_cpa_archive_sha256='02be1ad96791f1d2b7e6574bb0f68a3d75622e42cba07fecd012e
 active_cpa_binary_sha256='eef73e578f5d272173aadcdf52137390363cd7e4bf0da8651d4c0acd3c0c4f09'
 active_cpa_version='v7.2.144'
 active_cpa_commit='d36b776c790a4d58027fd4fb434800fb5334bceb'
-# Round 14 is an immutable historical document/evidence boundary.  Keep its
-# reviewed identity separate from the active Round 16 CPA pin above.
-round14_cpa_module_sum='h1:30twcgoSCSjBtc4tgZBKPC4sQpsEWwgu4d9r7tIDpQQ='
-round14_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
-round14_cpa_archive_sha256='a7cccc8f94b07660303c1874fb6bedae6d573a0f3c4c0b17ad8cf7885dd7a051'
-round14_cpa_binary_sha256='e0df04ae5e632649c36230533d9608058dd09689113947809e4824f598f36a9b'
-round14_cpa_version='v7.2.142'
-round14_cpa_commit='1f53b2eb03b9e963bac647e5566ca2b304239116'
 round14_classifier_policy_sha256='f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3'
 round14_csam_text_policy_sha256='85437c9e1bd94603f2a837bd66ede6a102b844143e3e869e768901ce9b56276e'
 if [[ "$active_audit_receipt" == "$doc_root/$active_audit_receipt_relative" ]]; then
@@ -567,7 +559,7 @@ if [[
 
   grep -Fq "exact $active_cpa_version / CAG \`1.0.0\` lane must revalidate it" \
     "$doc_root/docs/RAW_CAPTURE.md" || \
-    fail "docs/RAW_CAPTURE.md lost the active $round14_cpa_version transport guidance"
+    fail "docs/RAW_CAPTURE.md lost the active $active_cpa_version transport guidance"
   grep -Fq '## Frozen historical Round 12 evidence boundary' \
     "$doc_root/docs/LIMITATIONS.md" || \
     fail "docs/LIMITATIONS.md must explicitly freeze the retained Round 12 body"
