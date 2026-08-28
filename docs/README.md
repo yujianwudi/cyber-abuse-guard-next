@@ -59,7 +59,7 @@ references remain stable.
 
 - [RC2 platform-workflow drift recovery and acceptance](RC2_PLATFORM_DRIFT_RECOVERY.md)
 - [Active Round 14 status and evidence boundary](ROUND14_STATUS.md)
-- [Active CPA v7.2.144 / RPC schema 4 task book](ROUND15_CPA_V7_2_142_RC3_TASK_BOOK.md)
+- [Active CPA v7.2.144 / RPC schema 4 task book](ROUND16_CPA_V7_2_144_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Release policy](RELEASE_POLICY.md)
 
