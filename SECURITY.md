@@ -3,9 +3,9 @@
 The actively reviewed candidate is source `1.0.0`, planned tag
 `v1.0.0-rc.3`, against CLIProxyAPI
 `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb` on Linux amd64, C ABI 1 /
-RPC schema 4. It remains a prerelease until the Round 14 exact-candidate gates
-pass; Round 13 v7.2.125/schema 2 and older results are historical only and no
-old PASS transfers. See [Round 14 status](docs/ROUND14_STATUS.md).
+RPC schema 4. It remains a prerelease until the Round 16 exact-candidate gates
+pass; Round 15 v7.2.142/schema 3 and older results are historical only and no
+old PASS transfers. See [Round 16 status](docs/ROUND16_STATUS.md).
 
 Every `/v1/realtime*` route currently bypasses CAG `RequestInterceptor`,
 `ModelRouter`, and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED**.
@@ -29,8 +29,8 @@ current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128
 
 There is currently no downloadable release with active security support. The
 project historically used exact two-part stable versions: `v0.15.0` is not an
-alias for `v0.15`. Round 14 is a compatibility/admission round and does not
-authorize a release. [Round 14 status](docs/ROUND14_STATUS.md) and the root
+alias for `v0.15`. Round 16 is a compatibility/admission round and does not
+authorize a release by itself. [Round 16 status](docs/ROUND16_STATUS.md) and the root
 README status block define the active v7.2.144 identity while retaining all
 older results as history only.
 Development snapshots, local RC packages, CI artifacts, and prereleases do not

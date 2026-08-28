@@ -1,9 +1,9 @@
 # Blocked-request review capture
 
 > [!IMPORTANT]
-> The active Round 14 Host identity is CPA
+> The active Round 16 Host identity is CPA
 > `v7.2.144@d36b776c790a4d58027fd4fb434800fb5334bceb`, C ABI 1 / RPC schema 4.
-> Round 13 v7.2.125/schema 2 and older capture observations retain their exact
+> Round 15 v7.2.142/schema 3 and older capture observations retain their exact
 > historical identities and transfer no PASS. Every `/v1/realtime*` route
 > bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle, so it
 > is **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE** and cannot produce a CAG

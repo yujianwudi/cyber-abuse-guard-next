@@ -163,9 +163,9 @@ make repository-secret-scan
 
 ## 关键文档
 
-- [第十四轮任务书](docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)
-- [第十四轮执行与 RC 验收](docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md)
-- [第十四轮状态](docs/ROUND14_STATUS.md)
+- [第十六轮 CPA v7.2.144 任务书](docs/ROUND16_CPA_V7_2_144_TASK_BOOK.md)
+- [第十六轮状态](docs/ROUND16_STATUS.md)
+- [历史第十五轮 CPA v7.2.142 状态](docs/ROUND15_STATUS.md)
 - [发行策略](docs/RELEASE_POLICY.md)
 - [仓库治理](docs/REPOSITORY_GOVERNANCE.md)
 - [安全策略](SECURITY.md)

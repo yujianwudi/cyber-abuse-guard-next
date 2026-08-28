@@ -12,7 +12,7 @@ current_classifier_policy_version: classifier-policy-v20
 current_classifier_policy_sha256: f98ee38cea5b38b60130b98bd3ca6100cb6aeeee223128311235469af40ec9e3
 ```
 
-## Active Round 14 uncovered-route threat
+## Active Round 16 uncovered-route threat
 
 CPA v7.2.144 sends all `/v1/realtime*` requests through an independent path
 that bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle.
@@ -20,7 +20,7 @@ That route family is explicitly **OUT_OF_SCOPE / UNPROTECTED /
 CAG_NOT_VISIBLE**. An attacker using it is not screened by CAG. Only registered
 callback paths such as chat and Responses are protected, so no control or
 evidence statement may claim all-traffic coverage. See
-[Round 14 status](ROUND14_STATUS.md).
+[Round 16 status](ROUND16_STATUS.md).
 
 ## Frozen historical Round 12 threat-model body
 
