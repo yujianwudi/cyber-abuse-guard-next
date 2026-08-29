@@ -168,6 +168,44 @@ eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJjYW5hcnkifQ.signaturecanary`)
 	}
 }
 
+func TestPrepareRawCaptureRedactsGenericCredentialKeys(t *testing.T) {
+	now := time.Date(2026, 8, 29, 12, 0, 0, 0, time.UTC)
+	raw := []byte(`{"token":"generic-token-canary","id_token":"id-token-canary","oauth_token":"oauth-token-canary","credential":"credential-canary","private_key":"private-key-canary","note":"retain-review-context"}`)
+	capture, err := prepareRawCapture(RawCaptureInput{
+		EventID: "generic-redaction", Action: "block", Decision: "block_malicious_text", RawRequest: raw,
+	}, RawCaptureConfig{Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: time.Hour, RedactSecrets: true}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"generic-token-canary", "id-token-canary", "oauth-token-canary", "credential-canary", "private-key-canary"} {
+		if strings.Contains(capture.RawPreview, secret) {
+			t.Fatalf("generic sensitive key %q was retained: %q", secret, capture.RawPreview)
+		}
+	}
+	if !capture.Redacted || !strings.Contains(capture.RawPreview, "retain-review-context") {
+		t.Fatalf("generic redaction result=%#v", capture)
+	}
+}
+
+func TestPrepareRawCaptureRedactsUnicodeEscapedCredentialKeys(t *testing.T) {
+	now := time.Date(2026, 8, 29, 12, 30, 0, 0, time.UTC)
+	raw := []byte(`{"p\u0061ssword":"escaped-password-canary","o\u0061uth_token":"escaped-oauth-canary","note":"escaped-key-review-context"}`)
+	capture, err := prepareRawCapture(RawCaptureInput{
+		EventID: "unicode-key-redaction", Action: "block", Decision: "block_malicious_text", RawRequest: raw,
+	}, RawCaptureConfig{Enabled: true, OnlyBlocked: true, MaxBytes: 8192, TTL: time.Hour, RedactSecrets: true}, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"escaped-password-canary", "escaped-oauth-canary"} {
+		if strings.Contains(capture.RawPreview, secret) {
+			t.Fatalf("unicode-escaped sensitive key %q was retained: %q", secret, capture.RawPreview)
+		}
+	}
+	if !capture.Redacted || !strings.Contains(capture.RawPreview, "escaped-key-review-context") {
+		t.Fatalf("unicode-key redaction result=%#v", capture)
+	}
+}
+
 func TestRawCaptureRejectsDecisionKindExplanationSchemaMismatch(t *testing.T) {
 	t.Parallel()
 	now := time.Date(2026, 7, 24, 8, 0, 0, 0, time.UTC)
@@ -1045,6 +1083,24 @@ func TestRawCapturePurgeSnapshotBoundFailsBeforeDelete(t *testing.T) {
 	page, err := store.QueryRawCapturesPage(context.Background(), RawCaptureQuery{Limit: 10})
 	if err != nil || len(page.Captures) != 1 {
 		t.Fatalf("snapshot bound changed captures=%#v error=%v", page, err)
+	}
+}
+
+func TestRawCapturePurgeSnapshotVisibleRejectsUnexpectedRows(t *testing.T) {
+	now := time.Date(2026, 8, 29, 13, 0, 0, 0, time.UTC)
+	store, _, _ := openRawCapturePurgeFixture(t, "unexpected-row", now)
+	t.Cleanup(func() { _ = store.Close() })
+	conn, err := store.db.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	visible, err := rawCapturePurgeSnapshotVisible(context.Background(), conn, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visible {
+		t.Fatal("fresh purge verification accepted an unexpected row for an empty snapshot")
 	}
 }
 

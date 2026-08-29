@@ -39,6 +39,7 @@ ROUND6_SAFE_PACKAGES := \
 	./internal/audit \
 	./internal/buildinfo \
 	./internal/classifier \
+	./internal/csamtext \
 	./internal/config \
 	./internal/extract \
 	./internal/explanation \
@@ -904,5 +905,12 @@ tools:
 		golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 
 clean:
-	rm -rf $(DIST_DIR) build integration/.work coverage.out
-	rm -f ./*.test
+	@set -e; \
+	root="$$(pwd -P)"; \
+	dist="$$(realpath -m -- "$(DIST_DIR)")"; \
+	case "$$dist" in \
+		"$$root/dist") ;; \
+		*) echo 'clean refuses a DIST_DIR outside the repository dist directory' >&2; exit 1 ;; \
+	esac; \
+	rm -rf -- "$$root/dist" "$$root/build" "$$root/integration/.work" "$$root/coverage.out"; \
+	rm -f -- "$$root"/*.test

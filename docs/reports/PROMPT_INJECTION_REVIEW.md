@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
 > **Frozen historical snapshot.** The Round 6 addendum and the older
@@ -11,20 +11,20 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 > classifier identity, validation, taxonomy, and "current" statements must not
 > be inherited as current release or v0.15 PASS evidence.
 >
-> The current Round 14 active-tree overlay is CAG source `1.0.0` on Linux
+> The current Round 17 active-tree overlay is CAG source `1.0.0` on Linux
 > amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
-> current_formal_cpa: v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa
-> current_cpa_plugin_c_abi_rpc_schema: 1 / 3
-> current_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+> current_formal_cpa: v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724
+> current_cpa_plugin_c_abi_rpc_schema: 1 / 4
+> current_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
 > current_complete_linux_ci_host_release: NOT_RUN / PENDING / NO_RELEASE_THIS_ROUND
 > ```
 >
 > `/v1/realtime*` bypasses CAG. Historical review PASS statements below do not
-> establish v7.2.130/schema-3, realtime, Host, candidate, or release PASS.
+> establish v7.2.145/schema-4, realtime, Host, candidate, or release PASS.
 
 ## Round 6 CPA pinned-compatibility addendum
 

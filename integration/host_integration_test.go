@@ -94,7 +94,7 @@ type mockUpstreamRequest struct {
 }
 
 // countingProviderExecutor wraps CPA's real configured provider executor after
-// service readiness. CPA v7.2.137 replaces a Host-owned executor adapter with
+// service readiness. CPA v7.2.145 replaces a Host-owned executor adapter with
 // its native executor when OwnsExecutor reports true. The wrapper observes the
 // retained native execution path without changing the request, auth, response,
 // retry, translation, or upstream behavior.
@@ -1191,7 +1191,7 @@ func assertHostPluginForwardedCounterDelta(t *testing.T, before, after map[strin
 	}
 	if after["total"] < before["total"] || after["executor_blocks"] < before["executor_blocks"] ||
 		after["router_errors"] < before["router_errors"] {
-		t.Fatalf("schema-v3 direct-path counters decreased; before=%v after=%v", before, after)
+		t.Fatalf("schema-v4 direct-path counters decreased; before=%v after=%v", before, after)
 	}
 	if totalDelta := after["total"] - before["total"]; totalDelta != 1 {
 		t.Fatalf("forwarded request classification delta=%d want=1; before=%v after=%v", totalDelta, before, after)
@@ -1460,7 +1460,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 	work := t.TempDir()
 	pluginsDir := filepath.Join(work, "plugins")
 	pluginTarget := installPluginForHost(t, pluginsDir)
-	t.Logf("CPA v7.2.137 schema-v3 Host plugin path: %s", pluginTarget)
+	t.Logf("CPA v7.2.145 schema-v4 Host plugin path: %s", pluginTarget)
 
 	upstream := newMockUpstream(t)
 	port := freePort(t)
@@ -1485,7 +1485,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 		t.Fatalf("create isolated CPA auth directory: %v", err)
 	}
 	// A file-backed synthetic OAuth record makes CPA register its embedded
-	// v7.2.137 Codex model catalog for this client. The executor is replaced by
+	// v7.2.145 Codex model catalog for this client. The executor is replaced by
 	// the networkless probe before any Alpha Search request is sent, so no real
 	// credential or Provider endpoint is ever touched.
 	if err := os.WriteFile(
@@ -2215,7 +2215,7 @@ openai-compatibility:
 		{"openai-tool-name-payload", "/v1/chat/completions", fmt.Sprintf(`{"model":"%s","messages":[{"role":"assistant","tool_calls":[{"id":"call_2","type":"function","function":{"name":"execute","arguments":%q}}]},{"role":"user","content":%q}]}`, modelName, toolNameArguments, currentUserActivation), "cyber_abuse_guard_blocked"},
 		{"openai-negation-scope", "/v1/chat/completions", fmt.Sprintf(`{"model":"%s","messages":[{"role":"user","content":%q}]}`, modelName, negationScope), "cyber_abuse_guard_blocked"},
 		{"openai-responses", "/v1/responses", fmt.Sprintf(`{"model":"%s","input":%q}`, modelName, malicious), "cyber_abuse_guard_blocked"},
-		// CPA v7.2.137 normalizes direct interceptor terminations into Anthropic's native
+		// CPA v7.2.145 normalizes direct interceptor terminations into Anthropic's native
 		// error envelope and drops custom code/category fields.
 		{"anthropic", "/v1/messages", fmt.Sprintf(`{"model":"%s","max_tokens":64,"messages":[{"role":"user","content":%q}]}`, modelName, malicious), "policy_violation"},
 		{"anthropic-tool-use-input", "/v1/messages", fmt.Sprintf(`{"model":"%s","max_tokens":64,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"safe_wrapper","input":{"name":%q}}]},{"role":"user","content":%q}]}`, modelName, malicious, currentUserActivation), "policy_violation"},
@@ -2308,7 +2308,7 @@ openai-compatibility:
 			if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
 				t.Fatalf("openai-image 403 body lacks guard marker: %s", response.Body)
 			}
-			// This is also the executable Host proof that the schema-v3 interceptor
+			// This is also the executable Host proof that the schema-v4 interceptor
 			// receives CPA's openai-image SourceFormat before provider selection.
 			assertNoProviderSideEffects(t, response.Header, upstream, providerProbe, upstreamBefore, providerBefore,
 				authSelector, selectorBefore)
@@ -2370,7 +2370,7 @@ openai-compatibility:
 		providerBefore := providerProbe.calls.Load()
 		selectorBefore := authSelectionSnapshot(t, authSelector)
 		// This test-only adapter proves ProviderExecutor.HttpRequest error-to-HTTP
-		// normalization only. CPA v7.2.137 exposes no generic public HTTP route for
+		// normalization only. CPA v7.2.145 exposes no generic public HTTP route for
 		// this plugin executor method, so a final official-handler HTTP 405 is not
 		// available and is not claimed by this assertion.
 		assertGuardHTTPRequestAdapter405(t, guardExecutor)
@@ -2638,6 +2638,10 @@ type routerFixtureScenario struct {
 	wantUpstreamDelta     int64
 	wantProviderExecution bool
 	wantGuardRegistered   bool
+	wantUsageProvider     string
+	wantUsageInputTokens  int64
+	wantUsageOutputTokens int64
+	wantUsageTotalTokens  int64
 }
 
 func TestCPAPluginHostRouterFixtureMatrix(t *testing.T) {
@@ -2737,18 +2741,21 @@ func TestCPAPluginHostRouterFixtureMatrix(t *testing.T) {
 			fixtureMode: "ready", fixtureID: "fixture-router", fixturePriority: 300,
 			guardState: "missing", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: fixtureMarker,
+			wantUsageProvider: "fixture-router",
 		},
 		{
 			name:        "guard-registration-failure-fixture-handles",
 			fixtureMode: "ready", fixtureID: "fixture-router", fixturePriority: 300,
 			guardState: "register_error", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: fixtureMarker,
+			wantUsageProvider: "fixture-router",
 		},
 		{
 			name:        "guard-disabled-fixture-handles",
 			fixtureMode: "ready", fixtureID: "fixture-router", fixturePriority: 300,
 			guardState: "disabled", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: fixtureMarker,
+			wantUsageProvider: "fixture-router",
 		},
 		{
 			name:        "guard-not-loaded-unhandled-fixture-reaches-native-provider",
@@ -2756,6 +2763,8 @@ func TestCPAPluginHostRouterFixtureMatrix(t *testing.T) {
 			guardState: "missing", guardPriority: 400,
 			wantStatus: http.StatusOK, wantBodyMarker: nativeMarker,
 			wantUpstreamDelta: 1, wantProviderExecution: true,
+			wantUsageProvider:    "openai-compatible-mock",
+			wantUsageInputTokens: 1, wantUsageOutputTokens: 1, wantUsageTotalTokens: 2,
 		},
 	}
 
@@ -2927,14 +2936,20 @@ openai-compatibility:
 			traceID, traceErr, traceSelected, scenario.wantProviderExecution, upstreamDelta, scenario.wantUpstreamDelta,
 			providerDelta, scenario.wantProviderExecution)
 	}
-	if !scenario.wantProviderExecution {
-		// Guard-local blocks and fixture-handled routes must leave the native
-		// provider's asynchronous usage queue untouched.
+	if scenario.wantUsageProvider != "" {
+		// CPA v7.2.145 publishes a usage record for successful plugin Executor
+		// responses. Keep that Host-local accounting distinct from Provider,
+		// Auth Selector, and Mock-upstream execution.
+		assertUsageQueueProviderAndDrain(t, baseURL, scenario.wantUsageProvider,
+			scenario.wantUsageInputTokens, scenario.wantUsageOutputTokens, scenario.wantUsageTotalTokens)
+	} else if !scenario.wantProviderExecution {
+		// Guard-local blocks must leave the native provider's asynchronous
+		// usage queue untouched.
 		assertUsageQueueQuiet(t, baseURL)
 	}
 	if scenario.wantGuardRegistered {
 		// The schema-v1 fixture remains the selected ModelRouter for ready modes,
-		// but schema-v3 CAG interception terminates before its executor callback.
+		// but schema-v4 CAG interception terminates before its executor callback.
 		assertGuardExecutorIdle(t, guardExecutorProbe, guardExecutorBefore)
 		assertHostPluginCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL), map[string]uint64{
 			"blocked": 1, "coverage_complete": 1,
@@ -3641,6 +3656,64 @@ func assertUsageQueueIncrementedAndDrain(t *testing.T, baseURL string) {
 	}
 }
 
+func assertUsageQueueProviderAndDrain(
+	t *testing.T,
+	baseURL, wantProvider string,
+	wantInputTokens, wantOutputTokens, wantTotalTokens int64,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		usageBody, status, err := rawRequest(http.MethodGet, baseURL+"/v0/management/usage-queue?count=100", nil, managementKey)
+		if err != nil {
+			t.Fatalf("query CPA usage queue for plugin Executor record: %v", err)
+		}
+		if status != http.StatusOK {
+			t.Fatalf("CPA usage queue status for plugin Executor record = %d, want 200", status)
+		}
+		if !bytes.Equal(bytes.TrimSpace(usageBody), []byte("[]")) {
+			var records []struct {
+				Provider string `json:"provider"`
+				Model    string `json:"model"`
+				Failed   *bool  `json:"failed"`
+				Tokens   *struct {
+					Input  int64 `json:"input_tokens"`
+					Output int64 `json:"output_tokens"`
+					Total  int64 `json:"total_tokens"`
+				} `json:"tokens"`
+			}
+			if errJSON := json.Unmarshal(usageBody, &records); errJSON != nil {
+				t.Fatalf("decode CPA plugin Executor usage queue: %v", errJSON)
+			}
+			if len(records) != 1 || records[0].Provider != wantProvider {
+				t.Fatalf("plugin Executor usage providers = %#v, want exactly %q", records, wantProvider)
+			}
+			record := records[0]
+			if record.Model != modelName || record.Failed == nil || *record.Failed {
+				t.Fatalf("plugin Executor usage identity provider=%q model=%q failed=%v, want provider=%q model=%q failed=false",
+					record.Provider, record.Model, record.Failed, wantProvider, modelName)
+			}
+			if record.Tokens == nil {
+				t.Fatal("plugin Executor usage record omitted token accounting")
+			}
+			if record.Tokens.Input != wantInputTokens || record.Tokens.Output != wantOutputTokens ||
+				record.Tokens.Total != wantTotalTokens {
+				t.Fatalf("plugin Executor usage tokens=%d/%d/%d, want %d/%d/%d",
+					record.Tokens.Input, record.Tokens.Output, record.Tokens.Total,
+					wantInputTokens, wantOutputTokens, wantTotalTokens)
+			}
+			// The successful local Executor publishes exactly one asynchronous
+			// result record. A later duplicate would still be contract drift.
+			assertUsageQueueQuiet(t, baseURL)
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("plugin Executor %q did not generate its CPA usage record within 5 seconds", wantProvider)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 func assertUsageQueueQuiet(t *testing.T, baseURL string) {
 	t.Helper()
 	deadline := time.Now().Add(500 * time.Millisecond)
@@ -3653,7 +3726,7 @@ func assertUsageQueueQuiet(t *testing.T, baseURL string) {
 			t.Fatalf("CPA usage queue status during quiet window = %d, want 200", status)
 		}
 		if !bytes.Equal(bytes.TrimSpace(usageBody), []byte("[]")) {
-			t.Fatal("a locally blocked request generated an upstream usage record during the bounded quiet window")
+			t.Fatal("an unexpected CPA usage record appeared during the bounded quiet window")
 		}
 		if time.Now().After(deadline) {
 			return
@@ -4499,13 +4572,13 @@ func installPluginForHost(t *testing.T, pluginsDir string) string {
 			GOARCH:     "amd64",
 		})
 		if errInstall != nil {
-			t.Fatalf("CPA v7.2.137 Store install: %v", errInstall)
+			t.Fatalf("CPA v7.2.145 Store install: %v", errInstall)
 		}
 		expected := filepath.Join(pluginsDir, "linux", "amd64", "cyber-abuse-guard-v"+version+".so")
 		if result.ID != "cyber-abuse-guard" || result.Version != version || result.Path != expected || result.Overwritten || result.Skipped {
 			t.Fatalf("CPA Store install result = %#v, want first install at %s", result, expected)
 		}
-		t.Logf("CPA v7.2.137 Store installed real archive sha256=%x path=%s", checksum, result.Path)
+		t.Logf("CPA v7.2.145 Store installed real archive sha256=%x path=%s", checksum, result.Path)
 		return result.Path
 	}
 

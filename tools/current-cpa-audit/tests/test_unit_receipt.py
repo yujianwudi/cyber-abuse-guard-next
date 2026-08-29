@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -19,6 +20,29 @@ SPEC.loader.exec_module(receipt_tool)
 
 
 class UnitReceiptTimingTests(unittest.TestCase):
+    def test_trusted_environment_is_a_loader_and_credential_free_allowlist(self) -> None:
+        with mock.patch.dict(
+            receipt_tool.os.environ,
+            {
+                "LD_PRELOAD": "/tmp/hostile.so",
+                "LD_LIBRARY_PATH": "/tmp/hostile",
+                "LD_AUDIT": "hostile.so",
+                "BASH_ENV": "/tmp/hostile.sh",
+                "PYTHONPATH": "/tmp/hostile-python",
+                "HTTP_PROXY": "http://127.0.0.1:9",
+                "GH_TOKEN": "secret",
+                "AWS_SECRET_ACCESS_KEY": "secret",
+            },
+            clear=False,
+        ):
+            environment = receipt_tool.trusted_environment()
+        self.assertEqual(
+            set(environment),
+            {"PATH", "LANG", "LC_ALL", "PYTHONDONTWRITEBYTECODE", "GOTOOLCHAIN"},
+        )
+        self.assertEqual(environment["PATH"], receipt_tool.TRUSTED_TEST_PATH)
+        self.assertEqual(environment["GOTOOLCHAIN"], "go1.26.6")
+
     def test_utc_millisecond_format_truncates_submillisecond_precision(self) -> None:
         value = datetime(
             2026,

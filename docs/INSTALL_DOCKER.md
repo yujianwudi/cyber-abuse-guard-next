@@ -1,22 +1,22 @@
 # Docker Sandbox Installation, Staged Rollout, Rollback, and Cleanup
 
 > [!IMPORTANT]
-> For Round 14, substitute only an exact Linux amd64 candidate bound to CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3.
+> For Round 17, substitute only an exact Linux amd64 candidate bound to CPA
+> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4.
 > The Round 12/13 commands and hashes retained below are historical; they must
 > not be used as current artifacts or PASS evidence. Production deployment
 > remains outside this candidate runbook.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
-The official CPA archive identity is 21,072,175 bytes / SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
+The official CPA archive identity is 21,226,153 bytes / SHA-256
+`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
 the contained binary SHA-256 is
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
-Round 13 v7.2.125/schema 2 and every older PASS remain historical and
+`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
+Round 15 v7.2.142/schema 3 and every older PASS remain historical and
 non-transferable.
 
 > [!WARNING]
@@ -25,14 +25,14 @@ non-transferable.
 > CAG_NOT_VISIBLE**. This installation protects only registered callback paths
 > such as chat and Responses; do not advertise all-traffic coverage.
 
-## Round 14 active installation contract
+## Round 17 active installation contract
 
 All current installation and validation work must use the exact Linux amd64
-candidate for CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1,
-and RPC schema 3. The frozen Round 12 procedure below is retained for audit
+candidate for CPA `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1,
+and RPC schema 4. The frozen Round 12 procedure below is retained for audit
 history only; do not execute its v7.2.124/schema-2 commands against the active
-candidate. Current Host evidence must load the v7.2.137 candidate bytes, prove
-the schema-3 envelope, and keep `/v1/realtime*` explicitly outside CAG coverage.
+candidate. Current Host evidence must load the v7.2.145 candidate bytes, prove
+the schema-4 envelope, and keep `/v1/realtime*` explicitly outside CAG coverage.
 
 ## Frozen historical Round 12 installation body
 

@@ -4,18 +4,18 @@ set -euo pipefail
 root="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd -P)"
 fixture="$root/scripts/release-doc-consistency-test.sh"
 gate="$root/scripts/release-doc-consistency.sh"
-expected_fixture_sha256='71149ec6c2230d58c82a77a4cab6fd9352cdca9922dab7332fb00a2e022fb4ef'
-expected_gate_sha256='6c976af08a56e774ed2e88ad2c370ba5aca5a9afcc44ee535a4910c19b5e9bdf'
+expected_fixture_sha256='fc1378f06d963c8205d9e14748b1c94a4c387f4682b156e1950292044b2e826e'
+expected_gate_sha256='648f3744fe5f94f987c95db29f7bf4d23e6ab1d96e352676ea4679b1eed74d1c'
 
 for required in sha256sum awk; do
   command -v "$required" >/dev/null 2>&1 || {
-    printf '%s is required for the Round14 document fixture wrapper\n' "$required" >&2
+    printf '%s is required for the Round16 document fixture wrapper\n' "$required" >&2
     exit 127
   }
 done
 for path in "$fixture" "$gate"; do
   [[ -f "$path" && ! -L "$path" ]] || {
-    printf 'Round14 document fixture dependency must be a regular non-symlink file\n' >&2
+    printf 'Round16 document fixture dependency must be a regular non-symlink file\n' >&2
     exit 1
   }
 done
@@ -23,11 +23,11 @@ done
 fixture_sha256="$(sha256sum "$fixture" | awk '{print $1}')"
 gate_sha256="$(sha256sum "$gate" | awk '{print $1}')"
 [[ "$fixture_sha256" == "$expected_fixture_sha256" ]] || {
-  printf 'Round14 document mutation fixture changed outside the reviewed contract\n' >&2
+  printf 'Round16 document mutation fixture changed outside the reviewed contract\n' >&2
   exit 1
 }
 [[ "$gate_sha256" == "$expected_gate_sha256" ]] || {
-  printf 'Round14 document consistency gate changed outside the reviewed contract\n' >&2
+  printf 'Round16 document consistency gate changed outside the reviewed contract\n' >&2
   exit 1
 }
 

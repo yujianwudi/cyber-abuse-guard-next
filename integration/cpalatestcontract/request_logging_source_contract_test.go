@@ -1,14 +1,12 @@
 package cpalatestcontract
 
 import (
-	"bytes"
 	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/scanner"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -176,7 +174,7 @@ func TestLatestCPAStartupPrivacyResourceDispatchSourceContract(t *testing.T) {
 		`forceLog := w.logOnErrorOnly && hasAPIError && !w.logger.IsEnabled()`,
 		"disabled logger forced error artifact")
 
-	// CPA v7.2.137 moved the error-only admission policy into a helper. Keep
+	// CPA v7.2.145 keeps the error-only admission policy in a helper. Keep
 	// the semantic guard explicit: API errors always qualify, client-closed
 	// requests do not, cancellation only qualifies for an error status, and
 	// all remaining HTTP errors qualify. This prevents a source refactor from
@@ -244,27 +242,14 @@ func TestLatestCPARequestErrorLogManagementSourceContract(t *testing.T) {
 func resolveLatestCPASourceOffline(t *testing.T) latestResolvedCPAModule {
 	t.Helper()
 	profile := selectedCPACompatibilityProfile(t)
-	goBinary, err := exec.LookPath("go")
-	if err != nil {
-		t.Fatalf("locate go tool for offline CPA source resolution: %v", err)
-	}
-	command := exec.Command(goBinary, "list", "-mod=readonly", "-m", "-json", cpaLatestModulePath)
-	command.Env = latestCPAEnvironmentWithOverrides(map[string]string{
+	goBinary := latestCPAAbsoluteGoBinary(t, latestCPAConfiguredGoBinary())
+	moduleJSON := runLatestGoJSONCommandWithEnv(t, "", goBinary, map[string]string{
 		"GOPROXY": "off",
 		"GOSUMDB": "off",
-		"GOWORK":  "off",
-	})
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
-	if errRun := command.Run(); errRun != nil {
-		t.Fatalf("resolve cached CPA source with network disabled: %v\nstdout:\n%s\nstderr:\n%s",
-			errRun, stdout.String(), stderr.String())
-	}
+	}, "list", "-mod=readonly", "-m", "-json", cpaLatestModulePath)
 
 	var module latestResolvedCPAModule
-	if errDecode := json.Unmarshal(stdout.Bytes(), &module); errDecode != nil {
+	if errDecode := json.Unmarshal([]byte(moduleJSON), &module); errDecode != nil {
 		t.Fatalf("decode cached CPA module metadata: %v", errDecode)
 	}
 	if module.Replace != nil {
@@ -285,27 +270,6 @@ func resolveLatestCPASourceOffline(t *testing.T) latestResolvedCPAModule {
 	t.Logf("CPA source-only request logging contract: %s@%s sum=%s (GOPROXY=off)",
 		module.Path, module.Version, module.Sum)
 	return module
-}
-
-func latestCPAEnvironmentWithOverrides(overrides map[string]string) []string {
-	environment := make([]string, 0, len(os.Environ())+len(overrides))
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		replaced := false
-		for override := range overrides {
-			if strings.EqualFold(key, override) {
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			environment = append(environment, entry)
-		}
-	}
-	for key, value := range overrides {
-		environment = append(environment, key+"="+value)
-	}
-	return environment
 }
 
 func parseLatestCPASource(t *testing.T, moduleDir string, elements ...string) latestCPASourceSyntax {

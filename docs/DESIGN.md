@@ -1,25 +1,35 @@
 # Cyber Abuse Guard Next design
 
 > [!IMPORTANT]
-> The active Round 14 source is `1.0.0`, targets CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` on Linux amd64 with C ABI 1
-> and RPC schema 3. The detailed Round 12/13 text below is frozen historical
-> design; [Round 14](ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md) supersedes its
+> The active Round 17 source is `1.0.0`, targets CPA
+> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724` on Linux amd64 with C ABI 1
+> and RPC schema 4. The detailed Round 12/13 text below is frozen historical
+> design; [Round 17](ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md) supersedes its
 > version, release, compatibility, and evidence-status claims.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
-## Active Round 14 route boundary
+## Active Round 17 route boundary
 
 The registered CAG request callbacks protect routes such as chat and Responses.
-CPA v7.2.137 sends all `/v1/realtime*` traffic through an independent path that
+CPA v7.2.145 sends all `/v1/realtime*` traffic through an independent path that
 bypasses `RequestInterceptor`, `ModelRouter`, and request lifecycle. Realtime is
 therefore **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE**, and the design makes
 no all-traffic coverage claim. Round 13 v7.2.125/schema 2 and every older PASS
 remain bound to their original identities and do not transfer.
+
+At the active Round 17 interceptor boundary, the lifecycle cache fingerprints
+only request data that CAG actually uses: request ID, canonical source format,
+effective client model (`RequestedModel`, falling back to `Model` only when the
+client field is empty), stream flag, exact ordered headers, and body. CPA's
+post-auth selected-model/`ToFormat` projections and best-effort transport
+metadata are excluded, so normal authentication enrichment cannot cause a
+second classification. Client-intent changes, body/header changes, or an
+unencodable field still force reclassification. The detailed historical body
+below retains its original wording and identity.
 
 ## Frozen historical Round 12 design body
 

@@ -384,9 +384,9 @@ CLEAN_EXECUTION_ENV_PATHS = {
 CPA_MODULE_PATH = "github.com/router-for-me/CLIProxyAPI/v7"
 CPA_ROUND8_VERSION = "v7.2.95"
 CPA_ROUND8_COMMIT = "f71ec0eb6776854457892452cf28c47f0d658251"
-CPA_ACTIVE_VERSION = "v7.2.137"
-CPA_ACTIVE_COMMIT = "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
-CPA_ACTIVE_MODULE_SUM = "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w="
+CPA_ACTIVE_VERSION = "v7.2.145"
+CPA_ACTIVE_COMMIT = "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"
+CPA_ACTIVE_MODULE_SUM = "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o="
 CPA_ACTIVE_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 CPA_ROUND9_VERSION = "v7.2.113"
 CPA_ROUND9_COMMIT = "bc71c77f5cc42f3fbe1bf040cf14d4f166894835"
@@ -1163,7 +1163,7 @@ RC_SOURCE_ARCHIVE_SECRET_GUARD_BLOCK = '''  if grep -Eiq '(^|/)(\\.git($|/)|dist
     release_die "RC source archive contains a forbidden repository, build, database, secret, local sandbox, or log path"
   fi'''
 HISTORICAL_ROUND8_RC_WORKFLOW_SHA256 = "7f418cef8a0e405ed98b4324d607b7578762066d816c97009e1db7b3bf287740"
-ACTIVE_RC_WORKFLOW_SHA256 = "aa8c53963eb705d7dd19bb17bb716426a72109a1c46cbf82c8ceb15bae290762"
+ACTIVE_RC_WORKFLOW_SHA256 = "8de3f4dddfd2406adcb0238a3a1c2338e72727b45cbb6a8d876e340138485b86"
 ROUND13_RC_RELEASE_SCRIPT = "scripts/release-rc.sh"
 ROUND13_RC_RELEASE_SCRIPT_SHA256 = (
     "f685d382d0019993def8be0f5bd86e7761306932e32ac832d193d8d4c060b42a"
@@ -1179,9 +1179,9 @@ ROUND13_RC_CPA_STORE_TEST_SCRIPT_SHA256 = "74c1cb5f2eadcd0c10e9f9d348f33a7d72aab
 ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT = "integration/pluginstorecontract/archive_contract_test.go"
 ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT_SHA256 = "6366ab7a95bbab730d51151a2613392409f0b41b00dd43eacfc71266f0094d74"
 ROUND13_RC_CPA_STORE_HOST_CONTRACT = "integration/pluginstorecontract/host_source_contract_test.go"
-ROUND13_RC_CPA_STORE_HOST_CONTRACT_SHA256 = "0c2aace1d206d6aa5ca625e45dc08a7e7edc3932eb68cb8bbf0c34894197cd34"
+ROUND13_RC_CPA_STORE_HOST_CONTRACT_SHA256 = "3c70725720e15526c0e9182685e6d5226d8a132e212812f3e96d527d5a72b16b"
 ROUND13_RC_CPA_STORE_OVERLAY = "integration/pluginstorecontract/testfixtures/release_rc_install_overlay_test.go.txt"
-ROUND13_RC_CPA_STORE_OVERLAY_SHA256 = "8c196ab5656a27d9fe1219e95b65de272f0ebaabe155f3305f4b0cbf67f4b446"
+ROUND13_RC_CPA_STORE_OVERLAY_SHA256 = "fc755a1138f29c4169231565585d8231131d29a3e2b265be882cb8e0ecbb101b"
 ROUND13_RC_ARTIFACT_ZIP_SCRIPT = "scripts/release_rc_artifact_zip.py"
 ROUND13_RC_ARTIFACT_ZIP_SCRIPT_SHA256 = (
     "e694b03c9d6cd418216271fceb91c92075eb1d7829709eb4c2df370a1aa58795"
@@ -1193,11 +1193,11 @@ ROUND13_RC_ARTIFACT_ZIP_TEST_SCRIPT_SHA256 = (
 ROUND13_RC_GITHUB_ADMISSION_SCRIPT = "scripts/release_rc_github_admission.py"
 ROUND13_RC_GITHUB_ADMISSION_SCRIPT_SHA256 = "b2df62a89150c962ca345c306d741c8ebf9fb0ee093b5fef0b57d390cad71f83"
 ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT = "scripts/release_rc_github_admission_test.py"
-ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "6b4d5c06b20d710eb006698dc96108afc592b95c84c080ac53b69625c6933f3f"
+ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT_SHA256 = "481a44199bd8e6982d6e749010841c53e367dee98901797768cb100fa2644d08"
 ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT = "tools/current-cpa-audit/second_machine_release_admission.py"
 ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT_SHA256 = "aec77e979acd147b7447f7fe57f4b7ddd66dccc83d7c6dc4c0ceb73b2806f341"
 ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT = "tools/current-cpa-audit/tests/test_second_machine_release_admission.py"
-ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256 = "f747dd02b4aaa3aa2e20f0bf67f3ecc44862471e010fedad878760d5dcb80839"
+ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT_SHA256 = "153b64582096af5001d319224b98ec8f95b8421d2ce69338add36c872f45dea5"
 ROUND13_RC_LINKED_CONTRACT_SHA256 = {
     ROUND13_RC_RELEASE_SCRIPT: ROUND13_RC_RELEASE_SCRIPT_SHA256,
     ROUND13_RC_CONTRACT_TEST_SCRIPT: ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256,
@@ -1235,43 +1235,50 @@ ROUND13_RC_LINKED_CONTRACT_SHA256 = {
     "tools/current-cpa-audit/tests/test_native_host_special_paths.py": "8e29c772f0765b3655638851dfca1d42a94a2803264f64d3a0464dabc490ff0a",
     "tools/current-cpa-audit/tests/test_supplemental_zip.py": "61deffc9460697b275fdbf245aa9ec56f6ac627561126b6bf7be694521313974",
 }
-# Round 13 is an immutable historical review baseline.  The active Round 14
+# Round 13 is an immutable historical review baseline.  The active Round 16
 # release workflow inherits every unchanged Round 13 pin, explicitly replaces
-# the files reviewed for the CPA v7.2.137/schema-3 audit closure, and adds the
+# the files reviewed for the active CPA/schema-4 audit closure, and adds the
 # new lazy-read and CSAM text-only evidence modules.  Active validation must use
 # this mapping without rewriting the historical values above.
-ROUND14_RC_LINKED_CONTRACT_SHA256 = {
+ROUND16_RC_LINKED_CONTRACT_SHA256 = {
     **ROUND13_RC_LINKED_CONTRACT_SHA256,
-    ROUND13_RC_RELEASE_SCRIPT: "a3573eec89a6aad9fd669a443502bd667f8be1af4cdceee473a629e531aa5382",
-    ROUND13_RC_CONTRACT_TEST_SCRIPT: "8c65374d050f923764e979721348f239e34dd6953827367fe1492e175b65edfb",
-    ROUND13_RC_CPA_STORE_SCRIPT: "4fb6ea742d1f5498b77b973dad407f35880983cf7f9e199779f36e326c78f52d",
-    ROUND13_RC_CPA_STORE_TEST_SCRIPT: "e74652867732ff87a05f1b1778164b1c5c0e77f804e191d9768939c3c566d9c0",
-    ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT: "082f5d42f15f4f709bb16b02b6fcd437c9d73db10765f0d4e9a5c5c3d71c438c",
-    ROUND13_RC_CPA_STORE_OVERLAY: "d47569533d5124c02547db43ea9fe84f000f9abde38c9a88e6e64747c577b026",
-    ROUND13_RC_GITHUB_ADMISSION_SCRIPT: "f941838a7cb9d9e0550b4d07011a8590ab41585138364e23e28e52fcc9327cce",
-    ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "185a901017679c8b1ac0c64d047b5c8e273c35bfc2b3e216f572167d8a7fc49a",
-    ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "ef849062f7b68317fd738b464c82049152b589c1912f1703ac722fbc7a7d5b4c",
-    "tools/current-cpa-audit/README.md": "cad81590605f6374137788d44e7e2630aa2d866e7d7c4340c3ed09a507e73559",
+    ROUND13_RC_RELEASE_SCRIPT: "2332df787c2ff45a99f64ee35fa4748c1261ab167fba2a4467c5a0b3f5fc7bf3",
+    ROUND13_RC_CONTRACT_TEST_SCRIPT: "ee58ab4773a4fa18f8f686866aa77702b6c14654efa523ffa42a7365647737bd",
+    ROUND13_RC_CPA_STORE_SCRIPT: "b9d4eef0506a7656724e41c1e9bed7957110b9f3bffeaeba7ebe4dfd3bff6382",
+    ROUND13_RC_CPA_STORE_TEST_SCRIPT: "fa6f5dd4a04bdbcde5454e4eb203cf4f3ccd10dd49dd6b3ea77011aa1deb1b4b",
+    ROUND13_RC_CPA_STORE_ARCHIVE_CONTRACT: "306fab3a8efd4b2446256239471863b9f43f1b953180098b0bffa5403eeb7b9f",
+    ROUND13_RC_CPA_STORE_HOST_CONTRACT: "6d7ef92b5396e9c84c8d7b3162a0ef8d3badf9e6b8b3a51e2fbaa73102a8eb74",
+    ROUND13_RC_CPA_STORE_OVERLAY: "fc755a1138f29c4169231565585d8231131d29a3e2b265be882cb8e0ecbb101b",
+    ROUND13_RC_GITHUB_ADMISSION_SCRIPT: "f414466f15ef0a168909031adca1d33abdd59c47227556b7faa98b0411cc2125",
+    ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT: "869f317bc65d5916b44cc61fec9bc7056ddd145ca82cab54f95d55bda713fe01",
+    ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "6a9629bd7753ec4ec1e633b6e365e123d954d43642ccf246e63942d2f1684721",
+    ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "153b64582096af5001d319224b98ec8f95b8421d2ce69338add36c872f45dea5",
+    "tools/current-cpa-audit/README.md": "4f1c363e7c5ff83c1d47ea05f073afca1c010a83af7beb5d3b043aa1306fb106",
     "tools/current-cpa-audit/acquire.py": "806f424d6a9b9d688132d414d98a2499606a3a9f230f54836cc706410c131ec3",
-    "tools/current-cpa-audit/audit_contract.py": "7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642",
-    "tools/current-cpa-audit/repository-policy.json": "688d3919de025d8e2ee52584fe7bdf8a8757bf507ae83a2e1159c403f2bc26e4",
-    "tools/current-cpa-audit/run.py": "434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665",
+    "tools/current-cpa-audit/audit_contract.py": "3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77",
+    "tools/current-cpa-audit/repository-policy.json": "426e80240f187aff741856abdc81af1c0b796015e59fe1c88a079db02e9bbd1c",
+    "tools/current-cpa-audit/run.py": "44ea0e8519db3dd936de76db56a3f758d8046ff85e49562a254e0cf2ae27dc16",
     "tools/current-cpa-audit/validate.py": "64ed85b2f43aa48401069bef28cdcf3c5cbea64f6aafd20dc7a7a42df20885ca",
+    "tools/current-cpa-audit/second-machine-release-admission.schema.json": "82bcdb0e1a4136a5e699011612b05b9efb0cf22f2fca17db71afb302f47b4a90",
+    "tools/current-cpa-audit/machine-evidence.schema.json": "428d55f9b0f0fc42441ae0366031b4177d3e8d802e98c3dee4f813b660aa4658",
+    "tools/current-cpa-audit/host-performance-evidence.schema.json": "61f99680e6e76da24ca6783c1aeaad4d3e4c743a5057a00dadbe0e1e931a7f93",
+    "tools/current-cpa-audit/native-host-special-paths.schema.json": "3c91ee793cc234f1a1bea4b936a17844759ca4159a7c8152710f4d8579455715",
+    "tools/current-cpa-audit/native_host_special_paths.py": "4a090f1ac1c665430a48a959e2b8e21a03881bd37e62c1a80575e486c6fc5963",
     "tools/current-cpa-audit/csam_text_evidence.py": "096bc2fda7e6c7b2c3a2825325dc9ccb3656499c68f7952192d3fb027a58b431",
     "tools/current-cpa-audit/csam_text_runner.py": "991cca40118131c6c6b3a8b18d0b003ab52082fa97169bf3903de0eb15076455",
     "tools/current-cpa-audit/lazy_read.py": "dd89574f7402834b9f5f26e482412b083f7a1686771df81cc38038ee8c6b8119",
-    "tools/current-cpa-audit/tests/test_contract.py": "06f10300409078304ab55830e8b173c818870f80c56ac8a252ddf04b7baa4a0f",
+    "tools/current-cpa-audit/tests/test_contract.py": "9d8fc20a7012352ec7187a784c98bedb2e908eb8ec36e5908769e92bacb3de80",
     "tools/current-cpa-audit/tests/test_csam_text_evidence.py": "d80d3d2b324523139824b33822c2c63b4d0ae3f482be533a1b6cbaf15ec90326",
     "tools/current-cpa-audit/tests/test_lazy_read.py": "79ac4eb032a8f2c9ef68b88ff138d1a78e6e7907c8e9a2a64acf0b9850f4317a",
-    "tools/current-cpa-audit/tests/test_unit_receipt.py": "fbd5b0b13da93982752b62e75590dfb20329d360c25f8e7b67bc52b2e9a831bc",
-    "scripts/current_cpa_audit_unit_receipt.py": "26b1b54b34d269c5c31c59f1d063a8fe154975c7efd9d11e8ae4044d816c858b",
+    "tools/current-cpa-audit/tests/test_unit_receipt.py": "d6c366b8d7c6382ebe38024a2649026d90e868c06aefb62a7f64a255672dd311",
+    "scripts/current_cpa_audit_unit_receipt.py": "556a4524a7148bb7fb778d9b20cf3107459e8f90648573a5a7ffd484186e732f",
     "scripts/release_rc_workflow_inventory.py": "a3166adfab479a06b6c0c756d6a7d0b5494976a33c4c10397416bbae6b55c683",
     "scripts/release_rc_workflow_inventory_test.py": "86be65f8ab7bec700b38107b5e4763550def0bd7bb55a52f1ac29504535637d0",
-    "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json": "b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c",
+    "docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json": "4121883b94d6186bc6a086cf7486556664bf33e43de22e972f7c14ac6047ae5b",
     "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
-    "integration/host_integration_test.go": "23c02ec1a1f92592aec8c702429193de4876b16024e4a717c83f5b4e67966f36",
+    "integration/host_integration_test.go": "9f18922af5e8b4a5161ea15fb14c1385ae093bb0ead4c9a0238a56b5cfea8ff7",
 }
-ROUND13_RC_INPUT_ORDER = (
+ROUND16_RC_INPUT_ORDER = (
     "ci_run_id",
     "codeql_run_id",
     "policy_run_id",
@@ -1279,13 +1286,10 @@ ROUND13_RC_INPUT_ORDER = (
     "second_machine_asset_id",
     "second_machine_asset_sha256",
     "authorize_prerelease",
-    "second_machine_waiver",
-    "second_machine_waiver_acknowledgment",
-    "second_machine_waiver_reason",
 )
-ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS = {
+ROUND16_RC_ALLOWED_GITHUB_TOKEN_PATHS = {
     "jobs.admission.steps[1].env.GH_TOKEN",
-    "jobs.admission.steps[4].env.GH_TOKEN",
+    "jobs.admission.steps[2].env.GH_TOKEN",
     "jobs.seal_candidate.steps[3].with.github-token",
     "jobs.seal_candidate.steps[4].env.GH_TOKEN",
     "jobs.seal_candidate.steps[5].env.GH_TOKEN",
@@ -1293,12 +1297,12 @@ ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS = {
     "jobs.publish_prerelease.steps[3].env.GH_TOKEN",
     "jobs.publish_prerelease.steps[4].env.GH_TOKEN",
 }
-ROUND13_RC_ALLOWED_SECRET_EXPRESSIONS = {
+ROUND16_RC_ALLOWED_SECRET_EXPRESSIONS = {
     "jobs.admission.steps[1].env.GOVERNANCE_TOKEN": "${{ secrets.CAG_RELEASE_GOVERNANCE_TOKEN }}",
     "jobs.publish_prerelease.steps[4].env.GOVERNANCE_TOKEN": "${{ secrets.CAG_RELEASE_GOVERNANCE_TOKEN }}",
 }
-ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
-    "run-name": "RC v1.0.0-rc.2 from ${{ github.ref_name }}",
+ROUND16_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS = {
+    "run-name": "RC v1.0.0-rc.3 from ${{ github.ref_name }}",
     "jobs.admission.steps[1].env.ACTOR": "${{ github.actor }}",
     "jobs.admission.steps[1].env.ACTOR_ID": "${{ github.actor_id }}",
     "jobs.admission.steps[1].env.DISPATCH_REF": "${{ github.ref }}",
@@ -1514,13 +1518,13 @@ ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
     "scripts/release-doc-consistency-test.sh": "1a3c83824dd0ebcf9fa5160096016d3e29c1e30dafeb530f66013105a32a2c8d",
     "scripts/release-doc-consistency.sh": "017136c07d7f07d0da23c2d9e3745ec15c0b60fb8180f0616f005ffec7d9a91b",
 }
-ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT = ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT
-ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "a8d3906cf2f4f8e088ac078d3fc7f70fdc8df98f1452d3958ba42d04bc979398"
+ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT = ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT
+ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
+    "3d0336fba073ec671b88c6862c728d49a1448f049c059ba0e3b591f1349df912"
 )
-ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "71149ec6c2230d58c82a77a4cab6fd9352cdca9922dab7332fb00a2e022fb4ef",
-    "scripts/release-doc-consistency.sh": "6c976af08a56e774ed2e88ad2c370ba5aca5a9afcc44ee535a4910c19b5e9bdf",
+ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256 = {
+    "scripts/release-doc-consistency-test.sh": "fc1378f06d963c8205d9e14748b1c94a4c387f4682b156e1950292044b2e826e",
+    "scripts/release-doc-consistency.sh": "648f3744fe5f94f987c95db29f7bf4d23e6ab1d96e352676ea4679b1eed74d1c",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (
@@ -1544,7 +1548,7 @@ CPA_PINNED_MODULE_FILES = (
     ),
 )
 CPA_COMPAT_SCRIPT_SHA256 = (
-    "3481c052944678c7cf0e658c793bf3ea817d99396901843e32f616398fd94887"
+    "03f5a9114b281c6124d9e7bbf4082dc831ee5cc7ee3ebe80e1b88ccaab0fac31"
 )
 CPA_COMPAT_FINAL_OUTPUT_CONTRACT = """if [[ "$verify_remote" == 1 ]]; then
   if [[ "$require_latest" == 1 ]]; then
@@ -1658,7 +1662,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
 ROUND6_SAFE_GATE_TEST_SHA256 = "d7df09aebed70991343061b2ab2146afc6aa86fd2bc60a5955fc51622fe575ef"
-ROUND14_SAFE_GATE_TEST_SHA256 = "c03d671115f96eec39c6a43e523546189a0c72c01ec4c82b4327962c5e537ff7"
+ROUND16_SAFE_GATE_TEST_SHA256 = "756c46f663cfa5bba9c5f3e15d3f598085497893e29ac9421fbbf0b8b97c8db9"
 ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS = (
     "TestSupplementalTerminalSkillActivationCannotBorrowSiblingField",
     "TestSupplementalTerminalSkillActivationLaterFieldCancellationParity",
@@ -2813,8 +2817,9 @@ def audit_command_text(text: str, source: Path) -> tuple[set[str], set[str]]:
     # independently binds every executable contract it invokes, so do not
     # reinterpret its literal test body as a production dispatch surface.
     if tuple(source.parts[-2:]) == ("scripts", "release-rc-contract-test.sh"):
-        if hashlib.sha256(text.encode("utf-8")).hexdigest() != ROUND13_RC_CONTRACT_TEST_SCRIPT_SHA256:
-            raise ContractError("Round 14 RC contract fixture differs from reviewed text")
+        expected = ROUND16_RC_LINKED_CONTRACT_SHA256[ROUND13_RC_CONTRACT_TEST_SCRIPT]
+        if hashlib.sha256(text.encode("utf-8")).hexdigest() != expected:
+            raise ContractError("Round 16 RC contract fixture differs from reviewed text")
         return set(), set()
     scripts = reject_dynamic_dispatch(text, source)
     reject_go_all_packages(text, source)
@@ -3577,16 +3582,16 @@ def validate_round6_doc_fixture_wrapper_script(
     )
 
 
-def validate_round14_doc_fixture_wrapper_script(
+def validate_round16_doc_fixture_wrapper_script(
     text: str, source: Path, root: Path
 ) -> None:
     validate_doc_fixture_wrapper_script(
         text,
         source,
         root,
-        round_label="Round14",
-        wrapper_sha256=ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
-        dependency_sha256=ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256,
+        round_label="Round16",
+        wrapper_sha256=ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
+        dependency_sha256=ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256,
     )
 
 
@@ -3664,15 +3669,36 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
             f"CPA primary verification must query exactly the official latest Release endpoint: {source}"
         )
     for required in (
+        "unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR \\",
+        "  GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_NAMESPACE",
         'go_launcher="${GO:-go}"',
-        'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
+        'selected_go_root="$(run_bounded_go env GOTOOLCHAIN=local "$go_launcher" -C "$root" env GOROOT)"',
         'go_bin="$selected_go_root/bin/go"',
+        r'cpa_command_timeout="$(parse_command_timeout "${CPA_COMPAT_COMMAND_TIMEOUT:-5m}")"',
+        r'cpa_full_command_timeout="$(parse_command_timeout "${CPA_COMPAT_FULL_COMMAND_TIMEOUT:-10m}")"',
+        "run_bounded_go()",
+        "run_bounded_go_full()",
+        "CPA_COMPAT_COMMAND_TIMEOUT must use an integer seconds, minutes, or hours suffix",
+        "CPA_COMPAT_COMMAND_TIMEOUT must be between 1s and 600s",
         "export GOTOOLCHAIN=go1.26.6",
         "export GOTOOLCHAIN=local",
         "export GOFLAGS=-mod=readonly",
-        'selected_go_version="$("$go_bin" env GOVERSION)"',
+        'export GOSUMDB="${CPA_COMPAT_GOSUMDB:-sum.golang.org}"',
+        "export GOPRIVATE=",
+        "export GONOSUMDB=",
+        "export GONOPROXY=",
+        "export GOVCS='public:git|https'",
+        "export GOOS=linux",
+        "export GOARCH=amd64",
+        "export CGO_ENABLED=1",
+        "export GOENV=off",
+        "export GOPROXY='https://proxy.golang.org,direct'",
+        'selected_go_version="$(run_bounded_go "$go_bin" env GOVERSION)"',
         '[[ "$selected_go_version" == go1.26.6 ]]',
-        '"$("$go_bin" version)"',
+        '"$(run_bounded_go "$go_bin" version)"',
+        'selected_go_os="$(run_bounded_go "$go_bin" env GOOS)"',
+        'selected_go_arch="$(run_bounded_go "$go_bin" env GOARCH)"',
+        '[[ "$selected_go_os" == linux && "$selected_go_arch" == amd64 ]]',
         'requested_profile="${CPA_COMPAT_PROFILE:-primary}"',
         'require_latest="${CPA_COMPAT_REQUIRE_LATEST:-0}"',
         "CPA_COMPAT_REQUIRE_LATEST must be 0 or 1",
@@ -3682,12 +3708,17 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         f"cpa_commit='{CPA_ACTIVE_COMMIT}'",
         f"cpa_module_sum='{CPA_ACTIVE_MODULE_SUM}'",
         f"cpa_go_mod_sum='{CPA_ACTIVE_GO_MOD_SUM}'",
-        "root_mod_flags=()",
-        "contract_mod_flags=()",
         "contract_modfile='go.mod'",
+        'CPA_COMPAT_GO_BINARY="$lane_go_bin"',
+        'CPA_COMPAT_LANE_TIMEOUT:-25m',
         "for attempt in 1 2 3; do",
-        "timeout --signal=KILL 30s git",
-        '-C "$git_identity_dir"',
+        "timeout --signal=KILL 30s env",
+        "git -C \"$git_identity_dir\"",
+        "GIT_CONFIG_GLOBAL=/dev/null",
+        "GIT_CONFIG_SYSTEM=/dev/null",
+        "GIT_CONFIG_NOSYSTEM=1",
+        "GIT_TERMINAL_PROMPT=0",
+        "GIT_ASKPASS=/bin/false",
         "-c http.version=HTTP/1.1",
         "-c http.lowSpeedLimit=1 -c http.lowSpeedTime=30",
         'ls-remote --refs "$cpa_origin_git_url" "refs/tags/$tag"',
@@ -3708,6 +3739,9 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
         '"$cpa_module/sdk/pluginabi"',
         '"$cpa_module/sdk/pluginapi"',
         "-run='^(TestRegistrationMatchesTargetCPAContract|TestRegistrationDoesNotAdvertiseUsagePlugin|TestRouterUsesRoleAwareConversationClassification)$'",
+        'timeout --signal=TERM --kill-after=10s "$cpa_lane_timeout"',
+        "--run-contract-lane",
+        "-timeout=25m",
     ):
         if required not in text:
             raise ContractError(
@@ -3715,10 +3749,10 @@ def validate_cpa_compat_script(text: str, source: Path) -> None:
             )
     toolchain_selection_order = (
         "export GOTOOLCHAIN=go1.26.6",
-        'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
+        'selected_go_root="$(run_bounded_go env GOTOOLCHAIN=local "$go_launcher" -C "$root" env GOROOT)"',
         'go_bin="$selected_go_root/bin/go"',
         "export GOTOOLCHAIN=local",
-        'selected_go_version="$("$go_bin" env GOVERSION)"',
+        'selected_go_version="$(run_bounded_go "$go_bin" env GOVERSION)"',
     )
     toolchain_positions = [text.find(marker) for marker in toolchain_selection_order]
     if any(text.count(marker) != 1 for marker in toolchain_selection_order) or (
@@ -3848,7 +3882,7 @@ def validate_ci_workflow(text: str, source: Path) -> None:
         f"{cpa_path}.run",
     )
     current_identity_markers = (
-        f"integration_summary=CPA {CPA_ACTIVE_VERSION} schema-3 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed",
+        f"integration_summary=CPA {CPA_ACTIVE_VERSION} schema-4 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed",
         f"cpa_primary_identity={CPA_ACTIVE_VERSION}@{CPA_ACTIVE_COMMIT}",
     )
     if any(text.count(marker) != 1 for marker in current_identity_markers):
@@ -7752,10 +7786,10 @@ def validate_historical_round8_rc_release_workflow(text: str, source: Path) -> N
 
 
 def validate_rc_release_workflow(text: str, source: Path) -> None:
-    """Validate the sole active Round 14 v1.0.0-rc.2 publication lane."""
+    """Validate the sole active Round 16 v1.0.0-rc.3 publication lane."""
 
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != ACTIVE_RC_WORKFLOW_SHA256:
-        raise ContractError("Round 13 RC workflow differs from the exact reviewed contract")
+        raise ContractError("Round 16 RC workflow differs from the exact reviewed contract")
 
     document = parse_workflow_yaml(text, source)
     # The generic validate_workflow_safety contract intentionally rejects the
@@ -7767,11 +7801,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     validate_sensitive_workflow_expressions(
         document,
         source,
-        allowed_token_paths=ROUND13_RC_ALLOWED_GITHUB_TOKEN_PATHS,
+        allowed_token_paths=ROUND16_RC_ALLOWED_GITHUB_TOKEN_PATHS,
         allowed_identity_expressions=(
-            ROUND13_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS
+            ROUND16_RC_ALLOWED_GITHUB_IDENTITY_EXPRESSIONS
         ),
-        allowed_secret_expressions=ROUND13_RC_ALLOWED_SECRET_EXPRESSIONS,
+        allowed_secret_expressions=ROUND16_RC_ALLOWED_SECRET_EXPRESSIONS,
     )
     root = require_yaml_keys(
         document,
@@ -7791,7 +7825,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     require_yaml_scalar(root["name"], "RC Release", source, "name")
     require_yaml_scalar(
         root["run-name"],
-        "RC v1.0.0-rc.2 from ${{ github.ref_name }}",
+        "RC v1.0.0-rc.3 from ${{ github.ref_name }}",
         source,
         "run-name",
     )
@@ -7802,12 +7836,12 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     inputs = require_yaml_keys(
         dispatch["inputs"],
-        ROUND13_RC_INPUT_ORDER,
+        ROUND16_RC_INPUT_ORDER,
         source,
         "on.workflow_dispatch.inputs",
     )
     if len(inputs) > REPOSITORY_WORKFLOW_DISPATCH_INPUT_LIMIT:
-        raise ContractError("Round 13 RC workflow exceeds the reviewed dispatch input limit")
+        raise ContractError("Round 16 RC workflow exceeds the reviewed dispatch input limit")
     for input_name, input_node in inputs.items():
         path = f"on.workflow_dispatch.inputs.{input_name}"
         expected_keys = (
@@ -7854,7 +7888,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     require_yaml_scalar(
         concurrency["group"],
-        "rc-release-v1.0.0-rc.2",
+        "rc-release-v1.0.0-rc.3",
         source,
         "concurrency.group",
     )
@@ -7867,15 +7901,15 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
 
     expected_environment = (
-        ("RC_TAG", "v1.0.0-rc.2"),
+        ("RC_TAG", "v1.0.0-rc.3"),
         ("RC_TAG_SIGNER_POLICY", "github-verification-verified-valid-annotated-tag-and-commit"),
         ("RC_SOURCE_VERSION", "1.0.0"),
         ("RC_BINARY_VERSION", "1.0.0"),
-        ("RC_ARTIFACT_VERSION", "1.0.0-rc.2"),
+        ("RC_ARTIFACT_VERSION", "1.0.0-rc.3"),
         ("RC_CPA_VERSION", CPA_ACTIVE_VERSION),
         ("RC_CPA_COMMIT", CPA_ACTIVE_COMMIT),
         ("RC_CPA_C_ABI", "1"),
-        ("RC_CPA_RPC_SCHEMA", "3"),
+        ("RC_CPA_RPC_SCHEMA", "4"),
         ("RC_CANDIDATE_ARTIFACT_NAME", "cyber-abuse-guard-linux-amd64-audit-candidate"),
         ("RC_SECOND_MACHINE_ASSET_NAME", "second-machine-release-admission.json"),
         ("RC_SECOND_MACHINE_SCHEMA", "cyber-abuse-guard.second-machine-release-admission.v3"),
@@ -7883,9 +7917,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("RC_SUPPLEMENTAL_ARCHIVE_SHA256", "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c"),
         ("RC_SUPPLEMENTAL_REQUIRED_STATUS", "SUPPLEMENTAL_ARCHIVE_PASS"),
         ("RC_NATIVE_HOST_REQUIRED_STATUS", "NATIVE_HOST_SPECIAL_PATHS_PASS"),
-        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.2-second-machine-admission"),
-        ("RC_SECOND_MACHINE_WAIVER_SCHEMA", "cyber-abuse-guard.second-machine-release-admission-waiver.v1"),
-        ("RC_SECOND_MACHINE_WAIVER_STATUS", "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED"),
+        ("RC_SECOND_MACHINE_STAGING_TAG", "v1.0.0-rc.3-second-machine-admission"),
         ("RC_PUBLISH_TIMEOUT_SECONDS", "1200"),
         ("RC_CLOCK_MARGIN_SECONDS", "300"),
         ("RC_BUILDER_IMAGE", RC_BUILDER_IMAGE),
@@ -7894,7 +7926,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     if exact_string_mapping(root["env"], source, "env") != expected_environment:
         raise ContractError(
-            "Round 13 RC workflow must retain the exact release, CPA, Go, and builder identities"
+            "Round 16 RC workflow must retain the exact release, CPA, Go, and builder identities"
         )
 
     jobs = require_yaml_keys(
@@ -7947,20 +7979,14 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             tag="tag:yaml.org,2002:int",
         )
         if exact_string_mapping(job["permissions"], source, f"{job_path}.permissions") != permissions:
-            raise ContractError(f"Round 13 RC {job_name} permissions changed")
+            raise ContractError(f"Round 16 RC {job_name} permissions changed")
 
     # Every current RC step is required to run under GitHub's default success()
     # condition and fail the job on error. Keep an explicit empty allowlist so a
     # future genuinely conditional step requires a reviewed expression here rather
     # than silently accepting arbitrary conditions, failure overrides, shells,
     # or dangerous execution-context environment mutations.
-    allowed_step_if: dict[tuple[str, int], str] = {
-        ("admission", 2): "${{ inputs.second_machine_waiver == 'true' }}",
-        ("admission", 3): "${{ inputs.second_machine_waiver == 'true' }}",
-        ("admission", 4): "${{ inputs.second_machine_waiver != 'true' }}",
-        ("seal_candidate", 5): "${{ inputs.second_machine_waiver != 'true' }}",
-        ("seal_candidate", 6): "${{ inputs.second_machine_waiver == 'true' }}",
-    }
+    allowed_step_if: dict[tuple[str, int], str] = {}
     for job_name, job in parsed_jobs.items():
         steps = yaml_sequence(job["steps"], source, f"jobs.{job_name}.steps")
         for index, step_node in enumerate(steps):
@@ -7969,17 +7995,17 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
             validate_workflow_step_execution_context(step, source, step_path)
             if "continue-on-error" in step:
                 raise ContractError(
-                    f"Round 13 RC step must fail closed without continue-on-error: {step_path}"
+                    f"Round 16 RC step must fail closed without continue-on-error: {step_path}"
                 )
             expected_if = allowed_step_if.get((job_name, index))
             if expected_if is None:
                 if "if" in step:
                     raise ContractError(
-                        f"Round 13 RC step must remain unconditional: {step_path}"
+                        f"Round 16 RC step must remain unconditional: {step_path}"
                     )
             elif "if" not in step:
                 raise ContractError(
-                    f"Round 13 RC step is missing its reviewed condition: {step_path}"
+                    f"Round 16 RC step is missing its reviewed condition: {step_path}"
                 )
             else:
                 require_yaml_scalar(
@@ -8012,7 +8038,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         ("attestation_url", "${{ steps.attest.outputs.attestation-url }}"),
     ):
         raise ContractError(
-            "Round 13 RC seal candidate outputs changed from the reviewed digest contract"
+            "Round 16 RC seal candidate outputs changed from the reviewed digest contract"
         )
     publish_needs = yaml_sequence(
         parsed_jobs["publish_prerelease"]["needs"],
@@ -8023,7 +8049,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         yaml_scalar(node, source, f"jobs.publish_prerelease.needs[{index}]")
         for index, node in enumerate(publish_needs)
     ) != ("admission", "seal_candidate"):
-        raise ContractError("Round 13 RC publication must depend on admission and candidate sealing")
+        raise ContractError("Round 16 RC publication must depend on admission and candidate sealing")
     build_container = require_yaml_keys(
         parsed_jobs["seal_candidate"]["container"],
         ("image",),
@@ -8046,13 +8072,11 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373",
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
-        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
         "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131",
     )
     if sorted(uses) != sorted(expected_uses):
-        raise ContractError("Round 13 RC GitHub action allowlist changed")
+        raise ContractError("Round 16 RC GitHub action allowlist changed")
 
     required_markers = (
         '[[ "$GITHUB_REPOSITORY" == yujianwudi/cyber-abuse-guard-next ]]',
@@ -8061,6 +8085,9 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '[[ "$TRIGGERING_ACTOR" == yujianwudi ]]',
         '[[ "$DISPATCH_REF" == "refs/tags/$RC_TAG" ]]',
         '[[ "$WORKFLOW_SHA" == "$DISPATCH_SHA" ]]',
+        'verify_jobs "$CI_RUN_ID" quality-and-artifacts fuzz-long reproducibility',
+        "verify_jobs \"$CODEQL_RUN_ID\" 'Analyze Go on Linux'",
+        'verify_jobs "$POLICY_RUN_ID" round9-policy-and-corpus',
         '"repos/${GITHUB_REPOSITORY}/branches/main/protection"',
         '"repos/${GITHUB_REPOSITORY}/git/ref/heads/main"',
         '"repos/${GITHUB_REPOSITORY}/immutable-releases"',
@@ -8070,7 +8097,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '.required_signatures.enabled == true and',
         'verify_repository_governance() {',
         '.data.repository.release.isLatest == false and',
-        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.2" and',
+        '.immutable == true and .name == "Cyber Abuse Guard v1.0.0-rc.3" and',
         'python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"',
         '.verification.verified == true and .verification.reason == "valid"',
         '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',
@@ -8109,20 +8136,30 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
     )
     for marker in required_markers:
         if marker not in text:
-            raise ContractError(f"Round 13 RC workflow is missing reviewed marker: {marker}")
+            raise ContractError(f"Round 16 RC workflow is missing reviewed marker: {marker}")
+    for marker, expected_count in (
+        ('"repos/${GITHUB_REPOSITORY}/immutable-releases"', 2),
+        ('verify_jobs "$CI_RUN_ID" quality-and-artifacts fuzz-long reproducibility', 1),
+        ("verify_jobs \"$CODEQL_RUN_ID\" 'Analyze Go on Linux'", 1),
+        ('verify_jobs "$POLICY_RUN_ID" round9-policy-and-corpus', 1),
+    ):
+        if text.count(marker) != expected_count:
+            raise ContractError(
+                f"Round 16 RC workflow marker count changed: {marker}: expected {expected_count}"
+            )
     if text.count("verify_repository_governance") != 3:
         raise ContractError(
-            "Round 14 RC must revalidate repository governance before draft creation and final publication"
+            "Round 16 RC must revalidate repository governance before draft creation and final publication"
         )
     if text.count("contents: write") != 1:
-        raise ContractError("Round 13 RC contents write must exist only in publication")
+        raise ContractError("Round 16 RC contents write must exist only in publication")
     if text.count("attestations: write") != 1 or text.count("id-token: write") != 1:
-        raise ContractError("Round 13 RC attestation authority must exist only in build")
+        raise ContractError("Round 16 RC attestation authority must exist only in build")
     if text.count("attestations: read") != 1:
-        raise ContractError("Round 13 RC attestation read must exist only in publication")
+        raise ContractError("Round 16 RC attestation read must exist only in publication")
     if text.count("revalidate_second_machine") != 3:
-        raise ContractError("Round 13 RC must revalidate before draft creation and final publication")
-    order_context = "Round 13 RC revalidation order"
+        raise ContractError("Round 16 RC must revalidate before draft creation and final publication")
+    order_context = "Round 16 RC revalidation order"
     initial_validation = required_index(
         text,
         '--minimum-remaining-seconds "$((RC_PUBLISH_TIMEOUT_SECONDS + RC_CLOCK_MARGIN_SECONDS))"',
@@ -8141,7 +8178,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         for match in re.finditer(r"(?m)^          revalidate_second_machine$", text)
     )
     if len(revalidation_calls) != 2:
-        raise ContractError("Round 13 RC must contain exactly two publication revalidation calls")
+        raise ContractError("Round 16 RC must contain exactly two publication revalidation calls")
     draft_revalidation, final_revalidation = revalidation_calls
     draft_create = required_index(
         text, '          gh release create "$RC_TAG"', order_context
@@ -8177,7 +8214,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '          gh release create "$RC_TAG" "${assets[@]}" \\\n'
     ) not in text:
         raise ContractError(
-            "Round 13 RC draft revalidation must be immediately before create/upload"
+            "Round 16 RC draft revalidation must be immediately before create/upload"
         )
     if (
         '          verify_draft_release_exact "$release_id"\n\n'
@@ -8191,7 +8228,7 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         '          published="$(gh api --method PATCH \\\n'
     ) not in text:
         raise ContractError(
-            "Round 14 RC final evidence and tag revalidation must follow the completed asset verification loop and immediately precede PATCH"
+            "Round 16 RC final evidence and tag revalidation must follow the completed asset verification loop and immediately precede PATCH"
         )
     if not (
         initial_validation < seal_job < publish_job < asset_verification_function
@@ -8201,12 +8238,12 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         < final_patch < latest_verification
     ):
         raise ContractError(
-            "Round 13 RC revalidation order changed: initial admission must precede all "
+            "Round 16 RC revalidation order changed: initial admission must precede all "
             "publication, draft revalidation must precede create/upload, and final "
             "revalidation must follow exact asset verification and precede PATCH"
         )
     if text.count("runs-on: ubuntu-24.04") != 3:
-        raise ContractError("Round 13 RC must use exactly three fixed Linux jobs")
+        raise ContractError("Round 16 RC must use exactly three fixed Linux jobs")
     for forbidden in (
         "windows-",
         "macos-",
@@ -8215,30 +8252,67 @@ def validate_rc_release_workflow(text: str, source: Path) -> None:
         "make_latest=true",
         "round8-host-validation",
         "round9-release-rc.yml",
+        "second_machine_waiver",
+        "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
+        "I_ACK_SECOND_MACHINE_NOT_RUN",
+        "MAINTAINER_WAIVER",
     ):
         if forbidden in text:
-            raise ContractError(f"Round 13 RC workflow contains forbidden marker: {forbidden}")
+            raise ContractError(f"Round 16 RC workflow contains forbidden marker: {forbidden}")
     if re.search(r"(?im)^\s*runs-on:.*self-hosted", text):
-        raise ContractError("Round 13 RC workflow may not run on a self-hosted runner")
+        raise ContractError("Round 16 RC workflow may not run on a self-hosted runner")
 
     resolved_source = source.resolve()
     try:
         workflow_root = resolved_source.parents[2]
     except IndexError as exc:
-        raise ContractError("Round 13 RC workflow path is outside the reviewed repository layout") from exc
+        raise ContractError("Round 16 RC workflow path is outside the reviewed repository layout") from exc
     if (
         resolved_source.name != "release-rc.yml"
         or resolved_source.parent.name != "workflows"
         or resolved_source.parent.parent.name != ".github"
     ):
-        raise ContractError("Round 13 RC workflow path is outside .github/workflows")
-    for relative, expected_hash in ROUND14_RC_LINKED_CONTRACT_SHA256.items():
+        raise ContractError("Round 16 RC workflow path is outside .github/workflows")
+    for relative, expected_hash in ROUND16_RC_LINKED_CONTRACT_SHA256.items():
         linked_path = workflow_root / relative
         linked_text = read_regular_text(linked_path, workflow_root)
         if hashlib.sha256(linked_text.encode("utf-8")).hexdigest() != expected_hash:
             raise ContractError(
-                f"Round 14 RC linked contract differs from reviewed text: {relative}"
+                f"Round 16 RC linked contract differs from reviewed text: {relative}"
             )
+        if relative in {
+            ROUND13_RC_RELEASE_SCRIPT,
+            ROUND13_RC_CONTRACT_TEST_SCRIPT,
+            ROUND13_RC_GITHUB_ADMISSION_SCRIPT,
+            ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT,
+        }:
+            semantic_text = linked_text
+            if relative == ROUND13_RC_CONTRACT_TEST_SCRIPT:
+                semantic_text = "\n".join(
+                    line
+                    for line in linked_text.splitlines()
+                    if "forbidden_marker" not in line
+                    and "forbidden waiver marker" not in line
+                    and not any(
+                        marker in line
+                        for marker in (
+                            "second_machine_waiver",
+                            "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
+                            "I_ACK_SECOND_MACHINE_NOT_RUN",
+                            "MAINTAINER_WAIVER",
+                        )
+                    )
+                )
+            for marker in (
+                "second_machine_waiver",
+                "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
+                "I_ACK_SECOND_MACHINE_NOT_RUN",
+                "MAINTAINER_WAIVER",
+            ):
+                if marker in semantic_text:
+                    raise ContractError(
+                        f"Round 16 RC linked contract retains forbidden waiver marker: {relative}: {marker}"
+                    )
 
 
 def validate_round9_independent_audit_reviewed_script(
@@ -12842,9 +12916,9 @@ def validate_workflow_layout(root: Path) -> None:
         safe_gate_test_text = read_regular_text(safe_gate_test_path, root)
         if (
             hashlib.sha256(safe_gate_test_text.encode("utf-8")).hexdigest()
-            != ROUND14_SAFE_GATE_TEST_SHA256
+            != ROUND16_SAFE_GATE_TEST_SHA256
         ):
-            raise ContractError("Round14 safe-gate test suite differs from reviewed contract")
+            raise ContractError("Round16 safe-gate test suite differs from reviewed contract")
 
     archive_path = root / ARCHIVED_RC_WORKFLOW_PATH
     archive_text = read_regular_text(archive_path, root)
@@ -12955,29 +13029,29 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 inspected_scripts.add(relative)
                 continue
             if (
-                relative in ROUND14_RC_LINKED_CONTRACT_SHA256
+                relative in ROUND16_RC_LINKED_CONTRACT_SHA256
                 and Path(relative).suffix.lower() in {".py", ".sh"}
             ):
                 script_path = root / relative
                 script_text = read_regular_text(script_path, root)
-                expected_hash = ROUND14_RC_LINKED_CONTRACT_SHA256[relative]
+                expected_hash = ROUND16_RC_LINKED_CONTRACT_SHA256[relative]
                 if hashlib.sha256(script_text.encode("utf-8")).hexdigest() != expected_hash:
                     raise ContractError(
-                        f"Round 14 RC linked contract changed outside review: {relative}"
+                        f"Round 16 RC linked contract changed outside review: {relative}"
                     )
                 inspected_scripts.add(relative)
                 continue
-            if relative == ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT:
+            if relative == ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT:
                 script_path = root / relative
                 script_text = read_regular_text(script_path, root)
-                validate_round14_doc_fixture_wrapper_script(script_text, script_path, root)
+                validate_round16_doc_fixture_wrapper_script(script_text, script_path, root)
                 inspected_scripts.add(relative)
-                inspected_scripts.update(ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256)
+                inspected_scripts.update(ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256)
                 continue
             if relative == "scripts/release-doc-consistency.sh":
                 script_path = root / relative
                 script_text = read_regular_text(script_path, root)
-                expected_hash = ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256[relative]
+                expected_hash = ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256[relative]
                 if hashlib.sha256(script_text.encode("utf-8")).hexdigest() != expected_hash:
                     raise ContractError(
                         "real release document gate changed outside the reviewed contract"
@@ -12989,7 +13063,7 @@ def audit(root: Path, entrypoints: list[Path]) -> tuple[set[str], set[str]]:
                 script_text = read_regular_text(script_path, root)
                 if (
                     hashlib.sha256(script_text.encode("utf-8")).hexdigest()
-                    == ROUND14_SAFE_GATE_TEST_SHA256
+                    == ROUND16_SAFE_GATE_TEST_SHA256
                 ):
                     inspected_scripts.add(relative)
                     continue

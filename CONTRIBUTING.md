@@ -1,22 +1,23 @@
 # Contributing
 
 Contributions are welcome through pull requests. This project is a Linux amd64
-CPA plugin and currently targets Go 1.26.6 and CPA v7.2.137 at
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa` as the only active source/compile
-and Host contract, with C ABI 1 and RPC schema 3.
+CPA plugin and currently targets Go 1.26.6 and CPA v7.2.145 at
+`d9cea8904b14fbbebb77ef26e98ef08f6b48a724` as the only active source/compile
+and Host contract, with C ABI 1 and RPC schema 4.
 Windows, macOS, musl/Alpine, local deployment, and production deployment are
 outside the ordinary contribution and validation scope.
 
-Round 14 is the active compatibility/admission round and does not authorize a
-release. Round 13 v7.2.125/schema 2 and all older green results retain their
-original historical identities and cannot transfer a PASS. The green
-historical `main@21267e742b624b29a75bd3683fd6914f76c764b5` engineering baseline does not
-transfer to a later pull-request commit; the final candidate requires its own
+Round 17 is the active compatibility/admission round and does not authorize a
+release by itself. Round 15 v7.2.142/schema 3 and all older green results retain
+their original historical identities and cannot transfer a PASS. The green
+historical `main@21267e742b624b29a75bd3683fd6914f76c764b5` engineering baseline
+does not transfer to a later pull-request commit; the final candidate requires its own
 GitHub checks and second-machine execution. Protected Host, independent
 attestation, production approval, and release readiness remain `NOT_PROVIDED`.
 The root README status block and
-[Round 14 status](docs/ROUND14_STATUS.md) are the active v7.2.137 boundary;
-all v7.2.124 and earlier results are explicitly historical and non-transferable.
+[Round 17 task book](docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md) and the active
+[Round 17 status](docs/ROUND16_STATUS.md) are the v7.2.145 compatibility boundary;
+all v7.2.142 and earlier results are explicitly historical and non-transferable.
 
 Every `/v1/realtime*` route currently bypasses CAG `RequestInterceptor`,
 `ModelRouter`, and request lifecycle. Treat it as **OUT_OF_SCOPE /
@@ -53,12 +54,12 @@ make round6-script-test
 
 Run `make round6-benchmark` for classifier, extraction, audit, queueing,
 management-response, or other performance-sensitive changes. Changes to CPA
-integration must update the exact v7.2.137 pin deliberately. CPA v7.2.137
+integration must update the exact v7.2.145 pin deliberately. CPA v7.2.145
 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
 `RequestInterceptor`, so integration changes must include a regression for the
-rewritten tool-schema/tool-payload boundary. Historical v7.2.124 and earlier
-CI, second-machine, and five-repository data cannot satisfy that check. Do not claim
-Windows, macOS, production,
+rewritten tool-schema/tool-payload boundary. Historical v7.2.142 and earlier
+CI, second-machine, and five-repository data cannot satisfy that check. Do not
+claim Windows, macOS, production,
 real-Host, or release validation from these checks.
 
 ## Pull requests
@@ -83,8 +84,8 @@ must not push release tags, dispatch publication workflows, publish artifacts,
 or change release evidence to claim external Host, audit, evaluation, or
 production approval.
 
-The current Round 14 scope is compatibility/admission only and authorizes no
-tag or Release. It does not authorize `v1.0.0-rc.2`, stable `v1.0.0`, production
-deployment, or an independent-attestation claim. The owner-run input diagnostic is not an independent
+The current Round 17 scope is compatibility/admission only and authorizes no
+tag or Release until its gates close. It does not authorize stable `v1.0.0`,
+production deployment, or an independent-attestation claim. The owner-run input diagnostic is not an independent
 attestation and must not be relabelled as the pending final-candidate
 second-machine result.

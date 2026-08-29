@@ -77,13 +77,13 @@ func (p *Plugin) callModelRoute(raw []byte) (response []byte, returnCode int) {
 }
 
 // callModelRouteRequest shares the existing classifier, audit, subject-risk,
-// and failure semantics with schema-v3 request interception without encoding
+// and failure semantics with schema-v4 request interception without encoding
 // and decoding a second full request body. The returned failureRecorded bit
 // tells the interceptor adapter whether the router layer already accounted for
 // an operational failure, avoiding duplicate router_errors increments.
 func (p *Plugin) callModelRouteRequest(request pluginapi.ModelRouteRequest) (result modelRouteCallResult) {
-	// CPA v7.2.137 still routes Codex Alpha Search exclusively through the
-	// ModelRouter surface. For ordinary Host-originated requests, schema-v3
+	// CPA v7.2.145 still routes Codex Alpha Search exclusively through the
+	// ModelRouter surface. For ordinary Host-originated requests, schema-v4
 	// RequestInterceptor is the production enforcement path and this registered
 	// router must be an O(1) no-op to avoid duplicate classification. Direct
 	// calls without PluginID remain available to the legacy executor contract and
@@ -95,6 +95,24 @@ func (p *Plugin) callModelRouteRequest(request pluginapi.ModelRouteRequest) (res
 	}
 
 	p.opMu.RLock()
+	// The outer Call gate is only a fast path. Quiesce can publish its flag
+	// while a callback is waiting for opMu, so recheck under the read lock
+	// before allowing work to touch the runtime being retired.
+	if p.quiescing.Load() {
+		policy := decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())
+		p.opMu.RUnlock()
+		result.response = p.modelRouteFailureWithPolicy(
+			"plugin_quiesced",
+			"cyber_abuse_guard_quiesced",
+			policy,
+		)
+		result.policy = policy
+		result.failureRecorded = true
+		if policy.failClosed {
+			result.blockCategory = "inspection_failure"
+		}
+		return result
+	}
 	state := p.runtime.Load()
 	result.policy = modelRoutePolicyFromState(state)
 	if state == nil && p.shutdown.Load() {
@@ -174,7 +192,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 				nil,
 				finalRouteDispositionIncompleteFailClosed,
 			)
-			p.recordUnknownSourceBlock(state, hash, subjectHash, request.Stream, request.Body, time.Since(started))
+			p.recordUnknownSourceBlock(state, hash, subjectHash, request.Stream, time.Since(started))
 			p.pending.put(hash, "unknown_source_format")
 			return blockedRouteEnvelope("cyber_abuse_guard_unknown_source_format"), "unknown_source_format", nil
 		}
@@ -401,7 +419,7 @@ func (p *Plugin) route(state *runtimeState, request pluginapi.ModelRouteRequest)
 	}
 
 	if persistDecision {
-		p.recordDecision(state, request, &requestHash, subjectHash, extracted.TextBytesScanned, result, csamResult, csamPrivacyTainted, decision, incompleteReasons, subjectReason, request.Body, time.Since(started))
+		p.recordDecision(state, request, &requestHash, subjectHash, extracted.TextBytesScanned, result, csamResult, csamPrivacyTainted, extracted.OpaqueMedia, decision, incompleteReasons, subjectReason, request.Body, time.Since(started))
 	}
 	recordFinalCoverage := func() {
 		p.recordStreamingCoverageWithFinalDisposition(
@@ -531,7 +549,7 @@ func extractionProfile(format string) (extract.RequestProfile, bool) {
 	case "interactions":
 		profile.Source = extract.SourceProfileInteractions
 	case audit.SourceFormatCodexAlphaSearch:
-		// CPA v7.2.137 exposes Alpha Search model payloads only to ModelRouter.
+		// CPA v7.2.145 exposes Alpha Search model payloads only to ModelRouter.
 		// They have no chat-role envelope, so treat their model-visible strings as
 		// direct untrusted text while retaining a distinct structural profile.
 		profile.Source = extract.SourceProfileCodexAlphaSearch
@@ -878,7 +896,7 @@ func (p *Plugin) recordStreamingCountersLocked(extracted extract.Result, result 
 	}
 }
 
-func (p *Plugin) recordUnknownSourceBlock(state *runtimeState, requestHash, subjectHash string, stream bool, rawRequest []byte, latency time.Duration) {
+func (p *Plugin) recordUnknownSourceBlock(state *runtimeState, requestHash, subjectHash string, stream bool, latency time.Duration) {
 	if state == nil || state.audit == nil || !state.config.Audit.Enabled {
 		return
 	}
@@ -904,11 +922,10 @@ func (p *Plugin) recordUnknownSourceBlock(state *runtimeState, requestHash, subj
 	if state.config.Audit.LogSubjectHash {
 		event.SubjectHash = subjectHash
 	}
-	if state.config.Audit.RawCapture.Enabled {
-		p.recordAuditEventWithRawCapture(state, event, rawRequest)
-	} else {
-		p.recordAuditEvent(state, event)
-	}
+	// Unknown source formats are structurally incomplete and may contain an
+	// arbitrary, untrusted envelope. Keep the decision metadata for review, but
+	// never persist its request body through the opt-in Raw Capture path.
+	p.recordAuditEvent(state, event)
 }
 
 func (p *Plugin) recordIncompleteCounters(reasons []extract.IncompleteReason, decision inspectionDecision) {
@@ -1011,7 +1028,7 @@ func (p *Plugin) recordIncompleteCounters(reasons []extract.IncompleteReason, de
 	}
 }
 
-func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRouteRequest, requestHash *requestHashMemo, subjectHash string, scanned int, result classifier.Result, csamResult csamtext.Result, csamPrivacyTainted bool, decision inspectionDecision, incompleteReasons []extract.IncompleteReason, subjectReason string, rawRequest []byte, latency time.Duration) {
+func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRouteRequest, requestHash *requestHashMemo, subjectHash string, scanned int, result classifier.Result, csamResult csamtext.Result, csamPrivacyTainted bool, opaqueMedia bool, decision inspectionDecision, incompleteReasons []extract.IncompleteReason, subjectReason string, rawRequest []byte, latency time.Duration) {
 	if state == nil || state.audit == nil || !state.config.Audit.Enabled || state.config.Mode == config.ModeObserve {
 		return
 	}
@@ -1101,10 +1118,14 @@ func (p *Plugin) recordDecision(state *runtimeState, request pluginapi.ModelRout
 		event.SubjectHash = subjectHash
 	}
 	if decision.Block && state.config.Audit.RawCapture.Enabled {
-		if csamPrivacyTainted || validCSAMTextResult(csamResult) {
+		if len(incompleteReasons) != 0 || csamPrivacyTainted || validCSAMTextResult(csamResult) || opaqueMedia {
 			// A candidate, positive, or side-car coverage loss must never persist
 			// request text, even when a stronger legacy/incomplete/opaque decision
-			// wins. The taint is request-level and contains no source material.
+			// wins. The taint is request-level and contains no source material. An
+			// incomplete main extractor result is equally untrusted: its bounded
+			// preview could omit the very bytes needed to explain the decision. Opaque
+			// media is also excluded because the body may contain uninspected binary
+			// or image data that redaction cannot safely interpret.
 			p.recordAuditEvent(state, event)
 			return
 		}

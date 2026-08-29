@@ -2,12 +2,82 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
-Source-tree status updated: 2026-08-25 (Asia/Shanghai)
+Source-tree status updated: 2026-08-29 (Asia/Shanghai)
 
-## Unreleased - v1.0.0-rc.2
+## Unreleased - v1.0.0-rc.3
+
+- Close the CPA v7.2.145 hot-reload boundary for oversized RPC callbacks: once
+  `plugin.quiesce` begins, oversized model-route, request-interceptor and
+  executor calls now follow the same quiesced response policy as normal calls
+  and cannot reach the retiring runtime or create duplicate incomplete events.
+  Registration/reconfiguration remains the explicit restoration path.
+
+- Recheck the quiesce state under the operation read lock for normal and
+  oversized model/interceptor paths, closing the race where a callback could
+  pass the outer fast gate while waiting behind a hot-reload writer.
+
+- Correct the bounded request-lifecycle fingerprint at the CPA v7.2.145
+  before/after boundary. It now hashes source format, the effective client
+  requested model (`RequestedModel`, with a defensive `Model` fallback), stream,
+  exact ordered headers, and body. CPA's post-auth selected `Model`/`ToFormat`
+  projections and best-effort transport metadata are deliberately excluded
+  because they are not CAG decision inputs; this prevents normal after-auth
+  callbacks from being classified twice. Client-intent model changes still
+  invalidate the cache, and an unencodable/oversized field disables the optional
+  cache and forces reclassification.
+
+- Bound lifecycle `RequestID` values to 256 UTF-8 bytes without control
+  characters before they can enter the cache or completion path, preventing
+  malformed Host envelopes from amplifying retained state. Extend opt-in Raw
+  Capture redaction to generic `token`, `id_token`, `oauth_token`,
+  `credential(s)`, and `private_key` fields.
+
+- Tighten the opt-in Raw Capture privacy boundary: structurally incomplete or
+  unknown-format blocks now persist only bounded decision metadata, matching the
+  existing CSAM-taint rule; no unverified request body is captured. Complete
+  opaque-media blocks are metadata-only as well because their binary/media body
+  is outside the local inspection boundary.
+
+- Make Raw Capture purge compensation reject any unexpected row on the fresh
+  verification connection, including rows appearing after the expected snapshot
+  is exhausted; an exact row-set match is now required before clearing the
+  maintenance fault.
+
+- Require a healthy final subject-persistence snapshot before reporting
+  `plugin.quiesce` success. A blocked/degraded snapshot now keeps the instance
+  quiesced and returns an error, preventing a CPA replacement from retiring an
+  instance while silently losing rolling subject-risk state.
+
+- Bound CPA compatibility preflight and the full cpalatest command separately:
+  ordinary Go probes use the five-minute default while the known cold-cache
+  cpalatest suite receives an explicit ten-minute cap inside the 25-minute
+  aggregate lane.
+
+- Refresh the repository-owned audit receipt to `316/316 PASS / ZERO_SKIPS`
+  after adding an explicit loader/credential-free subprocess environment
+  allowlist. Host `LD_*`, shell-startup, proxy and credential variables can no
+  longer alter the reviewed snapshot execution.
+
+- Upgrade the sole active CPA target to
+  `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4,
+  module sum `h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=` and unchanged go.mod
+  sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux
+  amd64 archive is 21,226,153 bytes / SHA-256
+  `ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
+  the official checksums file SHA-256 is
+  `df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`;
+  its binary is 64,207,528 bytes / SHA-256
+  `576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
+  CAG deliberately does not register the new WebSocket response observer.
+
+- Retain and revalidate the CPA `plugin.quiesce` contract at v7.2.145 and accept the Host's exact-config
+  `plugin.reconfigure` rollback for already-registered retired instances. A
+  failed replacement now restores the retained runtime instead of leaving it
+  quiesced; config drift remains rejected. The CSAM text closure advances to
+  `csam-text-policy-v1` / `cf5ec76e6d5ac7a50decebd5d74b1a5f81fb6d077693b8a2f5736591ca1211b3`.
 
 - Retire the immutable, unpublished `v1.0.0-rc.1` tag after its admission
   correctly failed closed when GitHub added platform-owned Dependabot workflows
@@ -53,7 +123,7 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   duplicate paths, links, special members and extra entries, and hashes the
   exact sole candidate SO in memory, avoiding root-owned `0700` trees when
   Docker is invoked through passwordless sudo.
-- Eliminate Round 14 CSAM false positives for coordinated protective outputs
+- Eliminate CSAM false positives for coordinated protective outputs
   such as reporting guides, hotline/platform notices, safety/protection
   checklists, prevention resources, and quoted security-research detections.
   The exact 21-case benign live denominator is now a three-mode unit
@@ -77,7 +147,7 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   mixed-policy winners, keep tainted blocks out of Raw Capture, treat coverage
   exhaustion as Balanced audit / Strict fail-closed, and add legal/compliance/
   reporting false-positive regressions. The resulting policy identity is
-  `csam-text-policy-v1` / `c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f`.
+  `csam-text-policy-v1` / `f3c35a6f01750d756cb4bb40bf9407d76ac0c974fd1ba1ad4799d5958cdeaa17`.
 - Close the provider multipart symbol-leet gap for bounded single-character
   `@`/`!`/`$` fragments in batch and streaming paths without joining ordinary
   independent fields, including bounded uneven fragments around an isolated
@@ -86,7 +156,7 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   ties retain the same winner, while keeping authoritative aggregate
   replacement intact. The active classifier identity
   remains `classifier-policy-v20` and advances to SHA-256
-  `1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d`.
+  `974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683`.
 - Degrade audit readiness on queue admission loss until a post-loss durable
   write and explicit Flush barrier close the loss generation. Reject unknown
   Raw Capture indexes/triggers before any v6-to-v7 backup or DDL so migration
@@ -95,42 +165,27 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   protection and Actions policy, squash-only merge governance, immutable
   Releases and a no-bypass RC tag ruleset; revalidate governance and main tip
   before both draft creation and final publication.
-- Close the Round 14 release-document contract around Audit SQLite schema 7,
+- Close the Round 16 release-document contract around Audit SQLite schema 7,
   CSAM text policy `csam-text-policy-v1` / SHA-256
-  `c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f`,
+  `f3c35a6f01750d756cb4bb40bf9407d76ac0c974fd1ba1ad4799d5958cdeaa17`,
   second-machine release admission v3, the exact four repository-workflow
   inventory, and the bounded GitHub Dependabot dynamic-workflow allowlist.
-  RC publication is allowed only after every applicable acceptance gate passes
-  through `release-rc.yml`; the current pending state cannot publish.
-- Start Round 14 by moving the sole active CPA contract to official
-  CLIProxyAPI `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, module sum
-  `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`, unchanged go.mod sum
-  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1 and RPC schema 3.
-  The official Linux amd64 archive `CLIProxyAPI_7.2.137_linux_amd64.tar.gz`
-  is 21072175 bytes with SHA-256
-  `ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
-  its 63738088-byte binary has SHA-256
-  `aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`,
-  and the checksums file has SHA-256
-  `9ae7dee90cd717a373acb58fad0163264891d5a76b27fb15d4c88bd10467012e`.
-  Because the classifier-policy protected summary includes the root
-  `go.mod`/`go.sum`, this module-pin change updates the active
-  `classifier-policy-v20` SHA-256 to
-  `d7aac3618ad2f8f7c0354db721150f8e6bcb0bf8d269fd91bb7fede12fb2750e`;
-  the policy version remains v20.
-- Record the current audit-tool development result as `315/315 PASS` with zero
+  RC publication is allowed only after every applicable acceptance gate,
+  including the mandatory real second-machine v3 admission, passes through
+  `release-rc.yml`; the current pending state cannot publish.
+- Record the current audit-tool development result as `316/316 PASS` with zero
   skips on WSL Linux/x86_64 under Go 1.26.6. A canonical repository-owned development
   self-check receipt records unittest stderr, command and time window plus the
-  315 test IDs, every tested implementation/test source byte, and receipt fields
-  `runner_bundle=49512adde24e013e8c79cac0ef33dcbd51b975144cb20eb4542c582905af4e3c`,
-  `audit_contract=7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642`,
-  `run_source=434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665`,
-  `machine_schema=3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e`,
-  `test_sources=94c47cb2e1dac34dfdf8a5a7f8d1777f00c93537a7e12f8850cbb6dcd1a373a1`,
-  `test_ids=54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f`,
-  and `receipt_sha256=b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c`.
+  316 test IDs, every tested implementation/test source byte, and receipt fields
+  `runner_bundle=60d1035c0411c8980e964688594f411590b946e8ae793d958750db4595be3cad`,
+  `audit_contract=3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77`,
+  `run_source=44ea0e8519db3dd936de76db56a3f758d8046ff85e49562a254e0cf2ae27dc16`,
+  `machine_schema=428d55f9b0f0fc42441ae0366031b4177d3e8d802e98c3dee4f813b660aa4658`,
+  `test_sources=57a811111725a99257fc9a96f9d1bd18f49b22ba736dfd3553e00845a85baf12`,
+  `test_ids=0ae17691c4961cbb30a05c36577176af9a9d684351784f22b3f57c647216ae86`,
+  and `receipt_sha256=4121883b94d6186bc6a086cf7486556664bf33e43de22e972f7c14ac6047ae5b`.
   It is unsigned and cannot
-  replace exact-commit CI or independent evidence. Five schema-3 Host fixture
+  replace exact-commit CI or independent evidence. Five schema-4 Host fixture
   tests, the targeted CAG RPC schema test under WSL, and one upstream
   hook/no-copy/auth/realtime source-contract test also pass. Complete Linux,
   exact-candidate CI,
@@ -147,26 +202,27 @@ Source-tree status updated: 2026-08-25 (Asia/Shanghai)
   not transfer: its Host A/B run failed at CPA+CAG concurrency 4 / repetition 3
   with `queue_sample:MissedDeadline`, and the current fix still requires new
   exact-commit CI and Host verification.
-- Per operator instruction, all second-machine execution for this round is
-  canceled: no SSH, remote container, provider, or Host-performance task was
-  started and no remote evidence exists. The mandatory second-machine release
-  gates remain unsatisfied; the release workflow's fail-closed admission
-  contract is unchanged.
-- Add an explicit maintainer-only second-machine waiver path to the fixed RC
-  workflow. It requires `second_machine_waiver=true`, the exact acknowledgment
-  `I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded reason and the `yujianwudi` actor.
-  The resulting status is `SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED`; it
-  never claims a Host, independent-audit or production PASS.
-- Declare CPA v7.2.137 `/v1/realtime*` explicitly
+- Require a fresh real second-machine execution and canonical, non-expired v3
+  admission report bound to the exact RC candidate. Missing remote execution,
+  cancellation, an old report, or a local maintainer assertion fails closed and
+  leaves publication blocked.
+- Declare CPA v7.2.145 `/v1/realtime*` explicitly
   `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE` because it bypasses CAG. Freeze
-  all Round 13 v7.2.125 and Round 12 or earlier results as historical,
+  all Round 15 v7.2.142 and earlier results as historical,
   superseded evidence without relabelling or transferring any old PASS.
+- Bound every CPA compatibility child process to a validated absolute Go
+  toolchain, Linux/amd64 target, sanitized environment, bounded output, and
+  per-command/aggregate deadlines; a timeout is a fail-closed diagnostic, never
+  a PASS.
+- Harden the release-document gate to include the tracked Round 17 task book,
+  and make the generic `clean` target refuse a `DIST_DIR` outside the repository
+  `dist/` directory.
 
 ### Frozen Round 13 v7.2.125 development history
 
 Everything below this heading, up to the next top-level version section, is
 historical Round 13 or earlier evidence. It does not describe the active Round
-14 v7.2.137/schema 3 result and transfers no PASS.
+14 v7.2.142/schema 3 result and transfers no PASS.
 
 - Correct the supplemental Codex archive oracle without changing the production
   classifier policy. Target authorization/ownership and model-control

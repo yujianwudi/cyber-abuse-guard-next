@@ -25,9 +25,6 @@ from release_rc_github_admission import (  # noqa: E402
     FIXTURE_NOW_ENV,
     SECOND_MACHINE_ASSET_NAME,
     SECOND_MACHINE_TAG,
-    SECOND_MACHINE_WAIVER_ACK,
-    SECOND_MACHINE_WAIVER_SCHEMA,
-    SECOND_MACHINE_WAIVER_STATUS,
     main,
     validate,
 )
@@ -114,6 +111,14 @@ class GitHubAdmissionTests(unittest.TestCase):
     def test_rejects_wrong_release_id(self) -> None:
         self.assert_rejected(lambda value: value["release"].__setitem__("id", RELEASE_ID + 1))  # type: ignore[union-attr]
 
+    def test_requires_real_second_machine_coordinates(self) -> None:
+        self.assert_rejected(lambda value: value.__setitem__("release_id", 0))
+        self.assert_rejected(lambda value: value.__setitem__("asset_id", 0))
+        self.assert_rejected(lambda value: value.__setitem__("asset_sha256", ""))
+        self.assert_rejected(lambda value: value.__setitem__("release", None))
+        self.assert_rejected(lambda value: value.__setitem__("release_assets", None))
+        self.assert_rejected(lambda value: value.__setitem__("asset", None))
+
     def test_rejects_non_draft_or_wrong_target(self) -> None:
         self.assert_rejected(lambda value: value["release"].__setitem__("draft", False))  # type: ignore[union-attr]
         self.assert_rejected(lambda value: value["release"].__setitem__("target_commitish", "9" * 40))  # type: ignore[union-attr]
@@ -160,59 +165,6 @@ class GitHubAdmissionTests(unittest.TestCase):
         self.assert_rejected(lambda value: value["candidate_artifacts"]["artifacts"][0]["workflow_run"].__setitem__("head_sha", "8" * 40))  # type: ignore[index,union-attr]
         self.assert_rejected(lambda value: value["candidate_artifacts"]["artifacts"][0].__setitem__("digest", "not-a-digest"))  # type: ignore[index,union-attr]
         self.assert_rejected(lambda value: value["candidate_artifacts"]["artifacts"][0].__setitem__("size_in_bytes", 0))  # type: ignore[index,union-attr]
-
-    def test_accepts_explicit_maintainer_waiver_without_remote_release(self) -> None:
-        value = fixture()
-        value.update(
-            {
-                "release": None,
-                "release_assets": None,
-                "asset": None,
-                "release_id": 0,
-                "asset_id": 0,
-                "asset_sha256": "",
-                "waiver": True,
-                "waiver_authorized_by": "yujianwudi",
-                "waiver_acknowledgment": SECOND_MACHINE_WAIVER_ACK,
-                "waiver_reason": "Maintainer explicitly accepts no second-machine execution for this RC.",
-                "waiver_cpa_version": "v7.2.137",
-                "waiver_cpa_commit": "4" * 40,
-                "waiver_cpa_c_abi": 1,
-                "waiver_cpa_rpc_schema": 3,
-                "waiver_cpa_binary_sha256": "5" * 64,
-                "waiver_tree": "6" * 40,
-            }
-        )
-        result = validate(**value)
-        self.assertEqual(result["second_machine_status"], SECOND_MACHINE_WAIVER_STATUS)
-        self.assertEqual(result["second_machine_release_id"], 0)
-        self.assertEqual(result["second_machine_report"]["schema"], SECOND_MACHINE_WAIVER_SCHEMA)
-        self.assertFalse(result["second_machine_report"]["executed"])
-
-    def test_waiver_rejects_wrong_acknowledgment_or_actor(self) -> None:
-        value = fixture()
-        value.update(
-            {
-                "release": None,
-                "release_assets": None,
-                "asset": None,
-                "release_id": 0,
-                "asset_id": 0,
-                "asset_sha256": "",
-                "waiver": True,
-                "waiver_authorized_by": "not-the-maintainer",
-                "waiver_acknowledgment": SECOND_MACHINE_WAIVER_ACK,
-                "waiver_reason": "Maintainer explicitly accepts no second-machine execution for this RC.",
-                "waiver_cpa_version": "v7.2.137",
-                "waiver_cpa_commit": "4" * 40,
-                "waiver_cpa_c_abi": 1,
-                "waiver_cpa_rpc_schema": 3,
-                "waiver_cpa_binary_sha256": "5" * 64,
-                "waiver_tree": "6" * 40,
-            }
-        )
-        with self.assertRaises(AdmissionError):
-            validate(**value)
 
     def test_cli_now_override_requires_explicit_fixture_opt_in(self) -> None:
         value = fixture()

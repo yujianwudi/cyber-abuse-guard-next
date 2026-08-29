@@ -56,9 +56,9 @@ from round6_safe_gate_contract import (
     RC_SOURCE_ARCHIVE_TEST_BINARY_PATH_PATTERN,
     RC_SOURCE_ARCHIVE_SAFE_TEST_SOURCE_PATTERN,
     ROUND13_RC_LINKED_CONTRACT_SHA256,
-    ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256,
-    ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
-    ROUND14_RC_LINKED_CONTRACT_SHA256,
+    ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256,
+    ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
+    ROUND16_RC_LINKED_CONTRACT_SHA256,
     ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256,
     ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
     ROUND6_SAFE_GATE_TEST_SHA256,
@@ -109,7 +109,7 @@ from round6_safe_gate_contract import (
     validate_reproducibility_wrapper_script,
     validate_rc_source_archive_transient_guard,
     validate_round6_doc_fixture_wrapper_script,
-    validate_round14_doc_fixture_wrapper_script,
+    validate_round16_doc_fixture_wrapper_script,
     validate_round6_go_safe_development_script,
     validate_round6_linux_build_script,
     validate_round6_makefile_contract,
@@ -147,7 +147,6 @@ class Round6SafeGateContractTest(unittest.TestCase):
         "test_candidate_",
         "test_formal_release_",
         "test_release_promotion_",
-        "test_round13_rc_",
         "test_round8_host_",
         "test_round9_external_host_boundary_",
         "test_round9_rc_publication_",
@@ -1979,7 +1978,7 @@ jobs:
         with self.assertRaisesRegex(ContractError, "staged, unstaged, and untracked"):
             validate_frozen_evaluation_tree_script(without_untracked, source)
 
-    def test_round6_privacy_and_round14_document_fixture_hashes_are_frozen(self):
+    def test_round6_privacy_and_round16_document_fixture_hashes_are_frozen(self):
         root = Path(__file__).parent.parent
         privacy = root / "scripts/release-evidence-privacy-test.sh"
         privacy_text = privacy.read_text(encoding="utf-8")
@@ -1989,9 +1988,9 @@ jobs:
 
         wrapper = root / "scripts/round6-doc-consistency-fixture-test.sh"
         wrapper_text = wrapper.read_text(encoding="utf-8")
-        validate_round14_doc_fixture_wrapper_script(wrapper_text, wrapper, root)
+        validate_round16_doc_fixture_wrapper_script(wrapper_text, wrapper, root)
         with self.assertRaisesRegex(ContractError, "document fixture wrapper"):
-            validate_round14_doc_fixture_wrapper_script(
+            validate_round16_doc_fixture_wrapper_script(
                 wrapper_text + "\ntrue\n", wrapper, root
             )
         for pin_name in ("expected_fixture_sha256", "expected_gate_sha256"):
@@ -2005,13 +2004,13 @@ jobs:
                 self.assertNotEqual(mutated, wrapper_text)
                 reviewed_hash = hashlib.sha256(mutated.encode("utf-8")).hexdigest()
                 with mock.patch(
-                    "round6_safe_gate_contract.ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256",
+                    "round6_safe_gate_contract.ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256",
                     reviewed_hash,
                 ):
                     with self.assertRaisesRegex(
                         ContractError, "must pin the reviewed dependency hash"
                     ):
-                        validate_round14_doc_fixture_wrapper_script(
+                        validate_round16_doc_fixture_wrapper_script(
                             mutated, wrapper, root
                         )
 
@@ -2020,13 +2019,13 @@ jobs:
             fixture_wrapper = fixture_root / "scripts/round6-doc-consistency-fixture-test.sh"
             fixture_wrapper.parent.mkdir(parents=True)
             fixture_wrapper.write_text(wrapper_text, encoding="utf-8")
-            for relative in ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256:
+            for relative in ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256:
                 target = fixture_root / relative
                 target.write_text((root / relative).read_text(encoding="utf-8"), encoding="utf-8")
-            validate_round14_doc_fixture_wrapper_script(
+            validate_round16_doc_fixture_wrapper_script(
                 fixture_wrapper.read_text(encoding="utf-8"), fixture_wrapper, fixture_root
             )
-            for relative in ROUND14_DOC_FIXTURE_DEPENDENCY_SHA256:
+            for relative in ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256:
                 with self.subTest(relative=relative):
                     dependency = fixture_root / relative
                     original = dependency.read_text(encoding="utf-8")
@@ -2034,7 +2033,7 @@ jobs:
                         original + "\n# unreviewed mutation\n", encoding="utf-8"
                     )
                     with self.assertRaisesRegex(ContractError, "dependency changed"):
-                        validate_round14_doc_fixture_wrapper_script(
+                        validate_round16_doc_fixture_wrapper_script(
                             fixture_wrapper.read_text(encoding="utf-8"),
                             fixture_wrapper,
                             fixture_root,
@@ -2074,7 +2073,7 @@ jobs:
             ROUND13_RC_LINKED_CONTRACT_SHA256,
         )
         self.assertNotEqual(
-            ROUND14_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
+            ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
             ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256,
         )
 
@@ -2113,7 +2112,7 @@ jobs:
         validate_cpa_compat_script(text, source)
         mutations = (
             text.replace(
-                'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
+                'selected_go_root="$(run_bounded_go env GOTOOLCHAIN=local "$go_launcher" -C "$root" env GOROOT)"',
                 'selected_go_root="$("$go_launcher" env GOROOT)"',
                 1,
             ),
@@ -2124,21 +2123,6 @@ jobs:
                 1,
             ),
             text.replace("export GOTOOLCHAIN=local\n", "", 1),
-            text.replace(
-                'export GOTOOLCHAIN=go1.26.6\n'
-                'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"',
-                'selected_go_root="$("$go_launcher" -C "$root" env GOROOT)"\n'
-                'export GOTOOLCHAIN=go1.26.6',
-                1,
-            ),
-            text.replace(
-                'export GOTOOLCHAIN=local\nexport GOFLAGS=-mod=readonly\n'
-                'selected_go_version="$("$go_bin" env GOVERSION)"',
-                'export GOFLAGS=-mod=readonly\n'
-                'selected_go_version="$("$go_bin" env GOVERSION)"\n'
-                'export GOTOOLCHAIN=local',
-                1,
-            ),
             text.replace("export GOFLAGS=-mod=readonly", "export GOFLAGS=-mod=mod", 1),
             text.replace(
                 '"$cpa_module/sdk/pluginabi"',
@@ -4530,7 +4514,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
         with self.assertRaisesRegex(ContractError, "exact reviewed text"):
             validate_blocked_prerelease_workflow(workflow, Path("round6-prerelease.yml"))
 
-    def test_round14_rc_release_workflow_contract_passes(self):
+    def test_round16_rc_release_workflow_contract_passes(self):
         root = Path(__file__).resolve().parent.parent
         workflow = root / ACTIVE_RC_WORKFLOW_PATH
         validate_rc_release_workflow(workflow.read_text(encoding="utf-8"), workflow)
@@ -4587,7 +4571,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 "{}\n", workflow_path
             )
 
-    def test_round13_rc_semantic_mutations_fail_after_hash_review(self):
+    def test_round16_rc_semantic_mutations_fail_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         step_headers = re.findall(r"^      - name: .+$", original, re.MULTILINE)
@@ -4667,7 +4651,16 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             original.replace('          [[ "$ACTOR_ID" == 153849069 ]]\n', "", 1),
             original.replace('          [[ "$TRIGGERING_ACTOR" == yujianwudi ]]\n', "", 1),
             original.replace("      contents: write\n", "      contents: read\n", 1),
-            original.replace("  RC_CPA_VERSION: v7.2.130\n", "  RC_CPA_VERSION: v7.2.124\n", 1),
+            original.replace("  RC_CPA_VERSION: v7.2.145\n", "  RC_CPA_VERSION: v7.2.144\n", 1),
+            original.replace(
+                "\npermissions: {}\n",
+                "\n      second_machine_waiver:\n"
+                "        description: forbidden bypass\n"
+                "        required: true\n"
+                "        type: string\n"
+                "\npermissions: {}\n",
+                1,
+            ),
             original.replace(
                 '.verification.verified == true and .verification.reason == "valid"',
                 '.verification.verified == false',
@@ -4727,7 +4720,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaises(ContractError):
                         validate_rc_release_workflow(mutation, workflow_path)
 
-    def test_round13_rc_missing_order_marker_raises_contract_error(self):
+    def test_round16_rc_missing_order_marker_raises_contract_error(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         marker = '          release_assets="$(gh api --paginate --slurp'
@@ -4747,7 +4740,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             ):
                 validate_rc_release_workflow(mutation, workflow_path)
 
-    def test_round13_rc_revalidation_reorder_mutations_fail_after_hash_review(self):
+    def test_round16_rc_revalidation_reorder_mutations_fail_after_hash_review(self):
         workflow_path = Path(__file__).resolve().parent.parent / ACTIVE_RC_WORKFLOW_PATH
         original = workflow_path.read_text(encoding="utf-8")
         call = "          revalidate_second_machine\n"
@@ -4792,7 +4785,7 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                     with self.assertRaisesRegex(ContractError, "revalidation"):
                         validate_rc_release_workflow(mutation, workflow_path)
 
-    def test_round14_rc_linked_contracts_are_exactly_pinned(self):
+    def test_round16_rc_linked_contracts_are_exactly_pinned(self):
         root = Path(__file__).resolve().parent.parent
         workflow = (root / ACTIVE_RC_WORKFLOW_PATH).read_text(encoding="utf-8")
         linked_paths = (
@@ -4841,9 +4834,9 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             "scripts/current_cpa_audit_unit_receipt.py",
             "scripts/release_rc_workflow_inventory.py",
             "scripts/release_rc_workflow_inventory_test.py",
-            "docs/reports/ROUND14_CPA_AUDIT_UNIT_RECEIPT.json",
+            "docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json",
         )
-        self.assertEqual(set(linked_paths), set(ROUND14_RC_LINKED_CONTRACT_SHA256))
+        self.assertEqual(set(linked_paths), set(ROUND16_RC_LINKED_CONTRACT_SHA256))
         runbook = (root / "tools/current-cpa-audit/README.md").read_text(
             encoding="utf-8"
         )
@@ -4875,12 +4868,12 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
                 with self.assertRaisesRegex(ContractError, "linked contract"):
                     validate_rc_release_workflow(workflow, workflow_path)
 
-    def test_round14_rc_workflow_layout_uses_resolved_source(self):
+    def test_round16_rc_workflow_layout_uses_resolved_source(self):
         root = Path(__file__).resolve().parent.parent
         workflow = (root / ACTIVE_RC_WORKFLOW_PATH).read_text(encoding="utf-8")
         with tempfile.TemporaryDirectory() as directory:
             fixture = Path(directory)
-            for relative in ROUND14_RC_LINKED_CONTRACT_SHA256:
+            for relative in ROUND16_RC_LINKED_CONTRACT_SHA256:
                 target = fixture / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(

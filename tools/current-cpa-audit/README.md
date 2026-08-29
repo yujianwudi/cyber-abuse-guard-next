@@ -1,17 +1,19 @@
 # Current CPA five-repository isolated audit
 
-This directory is the current diagnostic harness for **CPA v7.2.137** at commit
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`. The closed active upstream identity
-also binds module sum `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`,
-go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 3,
+This directory is the current diagnostic harness for **CPA v7.2.145** at commit
+`d9cea8904b14fbbebb77ef26e98ef08f6b48a724`. The closed active upstream identity
+also binds module sum `h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=`,
+go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 4,
 and the official Linux
-amd64 asset `CLIProxyAPI_7.2.137_linux_amd64.tar.gz` at exactly 21,072,175 bytes
+amd64 asset `CLIProxyAPI_7.2.145_linux_amd64.tar.gz` at exactly 21,226,153 bytes
 with SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`, and
-the 63,738,088-byte extracted binary SHA-256
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`, the
+official checksums-file SHA-256
+`df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`, and
+the 64,207,528-byte extracted binary SHA-256
+`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
 These values identify the active upstream input only; they do not relabel an
-older second-machine or CI result as a v7.2.137 PASS. The harness output claim
+older second-machine or CI result as a v7.2.145 PASS. The harness output claim
 is deliberately limited to:
 
 > SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION
@@ -73,7 +75,7 @@ It does not approve a release or a production deployment.
 - Cleanup never calls a global prune and never removes images. It stops CPA and
   Mock gracefully, checkpoints SQLite, and removes only resources carrying the
   exact run label.
-- The v7.2.137 `/v1/realtime*` source topology is separately labelled
+- The v7.2.145 `/v1/realtime*` source topology is separately labelled
   `SOURCE_TOPOLOGY_UNPROTECTED`. Runtime negative coverage supplies no
   credential and requires every fixed route to end at `AUTH_REJECTED`, without
   WebSocket upgrade, Mock/Provider/Usage activity, or any of the six fixed CAG
@@ -104,7 +106,7 @@ interface is an explicit `--supplemental-archive` input whose value names
 `/srv/cag-audit/supplemental/authorized-codex-archive.zip`, with its own source
 hash, case count, false-positive denominator, malicious-recall denominator,
 results, and cleanup status. Parser, runner, schemas, validators, and negative
-fixtures now fail closed together, but no real v7.2.137 candidate run has yet
+fixtures now fail closed together, but no real v7.2.145 candidate run has yet
 completed, so its truthful status remains `NOT_RUN`; the five-repository result
 must never be relabelled as a supplemental-archive PASS.
 
@@ -130,9 +132,9 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-24; source drift fails.
+  five-repository source identities reviewed on 2026-08-28; source drift fails.
   The fixed commit/tree pairs are Keysmith
-  `2cb7f382ea8a08e9af5a6d9c16580b45f639891a` / `0d46f7e9ffe6907b2483d9955a6f40a8f75800dd`,
+  `aef9f901aa7d14089923b54913ad1d5e47802b00` / `05ad97a17e057e37e45b2e591b670159e66b2872`,
   Codex-5.5 `ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d` /
   `e6081de4a8a56e839be2f2eb281195e314386b31`, Codex-X
   `d7610f9b12276e074c40cacf9940db3b9bdc67ff` / `d05dfcc40e96dcde4755067acf543de683a1246e`,
@@ -322,7 +324,7 @@ sbom.cdx.json
 ```
 
 Place only the reviewed upstream CPA archive at
-`/srv/artifacts/upstream/CLIProxyAPI_7.2.137_linux_amd64.tar.gz`. Do not place
+`/srv/artifacts/upstream/CLIProxyAPI_7.2.145_linux_amd64.tar.gz`. Do not place
 candidate files in the upstream directory or the CPA archive in the candidate
 directory.
 
@@ -333,8 +335,8 @@ Preload, do not pull during the audit:
    the selected merge commit/tree and report `dirty=false`; the runner rejects
    dirty development bytes. This is still an unreleased diagnostic candidate,
    not a release artifact.
-2. CPA v7.2.137 image by exact RepoDigest and image ID.
-3. The official v7.2.137 linux/amd64 asset at exactly 21,072,175 bytes and its
+2. CPA v7.2.145 image by exact RepoDigest and image ID.
+3. The official v7.2.145 linux/amd64 asset at exactly 21,226,153 bytes and its
    published SHA-256.
 4. The exact CPA binary SHA-256 expected inside that image.
 5. A counted-Mock image built from this directory with a previously reviewed,
@@ -401,10 +403,10 @@ python3 -B tools/current-cpa-audit/make_run_config.py \
   --candidate-artifact-id '<GitHub artifact-id>' \
   --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
   --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
-  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.137_linux_amd64.tar.gz" \
-  --cpa-official-asset-sha256 ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401 \
+  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.145_linux_amd64.tar.gz" \
+  --cpa-official-asset-sha256 ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37 \
   --cpa-binary-path /CLIProxyAPI \
-  --cpa-binary-sha256 aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa \
+  --cpa-binary-sha256 576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713 \
   --cpa-image-ref 'private-audit-registry/cpa@sha256:<64-hex>' \
   --cpa-image-id 'sha256:<64-hex>' \
   --mock-image-ref 'private-audit-registry/cag-counted-mock@sha256:<64-hex>' \
@@ -467,7 +469,7 @@ zero or one matching `/tmp` entry there and rejects every other bind, volume,
 or non-bind mount. The dedicated-UID condition bounds the non-atomic daemon
 handoff. The runner itself creates only an internal bridge.
 
-The private `/cag/config` bind is writable by design. CPA v7.2.137 persists a
+The private `/cag/config` bind is writable by design. CPA v7.2.145 persists a
 replacement `plugins.configs.<id>` object to `config.yaml` before applying the
 hot reload, so a read-only config bind makes every Audit/Balanced/Strict mode
 transition fail with HTTP 500. This does not expose a Host or business config:
@@ -1118,7 +1120,7 @@ summaries, denominators, and gates rather than trusting the report's `status`
 field.
 
 Create a draft staging Release with tag name
-`v1.0.0-rc.2-second-machine-admission`, set `target_commitish` to the exact
+`v1.0.0-rc.3-second-machine-admission`, set `target_commitish` to the exact
 protected `main` commit, and upload the report with the fixed asset name
 `second-machine-release-admission.json`. The report cannot contain its own
 asset ID/digest without a circular hash. `release-rc.yml` therefore closes that
@@ -1128,7 +1130,7 @@ upload state/API digest/size; downloads and rehashes the real bytes; checks the
 expiry; and runs the validator from the exact signed tag.
 
 Before that dispatch, a real authorized signer who controls the corresponding
-private key must create `v1.0.0-rc.2` as a GitHub-verified signed annotated tag
+private key must create `v1.0.0-rc.3` as a GitHub-verified signed annotated tag
 on the exact protected-main commit. An unsigned annotated tag, lightweight tag,
 Release-generated tag, unverified key, or signature that impersonates a
 maintainer is not acceptable.

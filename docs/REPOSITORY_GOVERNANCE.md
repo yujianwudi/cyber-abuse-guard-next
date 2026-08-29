@@ -4,11 +4,14 @@ This document records the desired repository-side controls for `main`. GitHub
 settings must be verified through the API; this checked-in document is not
 evidence that remote settings are currently enabled.
 
-## Round 14 gated RC publication policy
+## Round 17 gated RC publication policy
 
 Tag creation, prereleases, GitHub Releases, provenance attestations, package
 publication, and release-asset uploads remain forbidden until every applicable
-Round 14 acceptance gate passes. The executable workflow directory contains
+Round 17 acceptance gate passes. After the exact protected main checks and
+second-machine admission pass, an authorized maintainer creates and pushes the
+single signed annotated RC tag; the RC workflow only verifies and consumes that
+immutable tag. The executable workflow directory contains
 exactly these four repository-owned workflow files:
 
 | Workflow file | Display name | Required-check contexts |
@@ -25,9 +28,10 @@ admission keeps the four paths above exact, permits only a subset of those two
 GitHub dynamic paths, and fails closed on every other active path.
 
 Only `.github/workflows/release-rc.yml` may obtain the narrowly scoped write
-permissions or run tag, Release, attestation, and Release-asset operations, and
-only in its post-admission publication jobs. Manual `gh release`, altered job
-conditions, or any other workflow may not bypass that lane.
+permissions or run Release, attestation, and release-asset operations, and only
+in its post-admission publication jobs. The signed tag is a separately governed
+maintainer prerequisite; manual `gh release`, altered job conditions, unsigned
+tag creation, or any other workflow may not bypass the admission lane.
 
 CodeQL and RC Release are the two manually dispatchable active workflows.
 CodeQL keeps top-level `contents: read`; the analysis job adds only
@@ -36,8 +40,8 @@ publication permission. RC Release remains inert unless its complete,
 exact-candidate admission succeeds. CI and Policy Gate remain push/pull-request
 validation workflows with `contents: read`.
 
-The active compatibility boundary is CPA `v7.2.137` at commit
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI `1`, RPC schema `3`, Linux
+The active compatibility boundary is CPA `v7.2.145` at commit
+`d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI `1`, RPC schema `4`, Linux
 amd64 only. This identity alone is not release authorization; the full
 acceptance and RC admission contracts remain mandatory.
 
@@ -95,9 +99,13 @@ leave `cag-round9-tencent-2` or a replacement online after acceptance.
    required checks. Automatic deletion of the merged head branch is expected.
 4. Complete post-main second-machine admission and preserve only bounded,
    non-content evidence.
-5. Delete every remaining non-`main` local and remote development branch, then
+5. Close all superseded/open PRs and verify no non-main branch can be recreated
+   during the publication window (pause Dependabot updates if necessary).
+6. Delete every remaining non-`main` local and remote development branch, then
    prune local tracking refs. Tags and immutable evidence refs are not branches
    and are never moved or deleted as branch cleanup.
+7. Create and verify the signed RC tag on the final main commit, then dispatch
+   the RC workflow once after confirming no same-tag draft Release exists.
 
 The RC admission independently enumerates remote branches and registered
 self-hosted runners. It accepts exactly one branch (`main`) and zero registered

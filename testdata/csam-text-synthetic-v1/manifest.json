@@ -1,0 +1,33 @@
+{
+  "schema": "cyber-abuse-guard.csam-text-synthetic-corpus.v1",
+  "dataset": "csam-text-synthetic-v1",
+  "status": "development_only",
+  "purpose": "regression_only",
+  "synthetic_text_source": "go_test_only",
+  "text_retained": false,
+  "fixture_text_retained": false,
+  "media_retained": false,
+  "real_or_explicit_media_inputs": 0,
+  "remote_fetch": false,
+  "reversible_encoding_retained": false,
+  "third_party_code_executed": false,
+  "case_count": 14,
+  "source_path": "internal/csamtext/synthetic_corpus_contract_test.go",
+  "source_sha256": "f38e9fdc38c8afb1b5846627f69466e39117161d400b102cd18717065a16dc92",
+  "cases": [
+    {"id": "M-BOUNDARY-FULLWIDTH-PROD", "label": "malicious_synthetic", "intent": "production", "expected": {"audit": "audit", "balanced": "block", "strict": "block"}},
+    {"id": "M-BOUNDARY-FORMAT-SOL", "label": "malicious_synthetic", "intent": "solicitation", "expected": {"audit": "audit", "balanced": "block", "strict": "block"}},
+    {"id": "M-BOUNDARY-MIXED-EXCH", "label": "malicious_synthetic", "intent": "exchange", "expected": {"audit": "audit", "balanced": "block", "strict": "block"}},
+    {"id": "M-BOUNDARY-CLAUSE-DIST", "label": "malicious_synthetic", "intent": "dissemination", "expected": {"audit": "audit", "balanced": "block", "strict": "block"}},
+    {"id": "M-BOUNDARY-GROOM", "label": "malicious_synthetic", "intent": "grooming", "expected": {"audit": "audit", "balanced": "block", "strict": "block"}},
+    {"id": "M-BOUNDARY-SAME-SCOPE", "label": "malicious_synthetic", "intent": "production", "expected": {"audit": "audit", "balanced": "block", "strict": "block"}},
+    {"id": "B-BOUNDARY-FULLWIDTH-NEWS", "label": "benign_protective", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "B-BOUNDARY-QUOTED-RESEARCH", "label": "benign_protective", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "B-BOUNDARY-REPORT-REMOVAL", "label": "benign_protective", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "B-BOUNDARY-PARENT-GUIDE", "label": "benign_protective", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "B-BOUNDARY-SUPPORT", "label": "benign_protective", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "A-BOUNDARY-ACTION-ONLY", "label": "ambiguous_review", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "A-BOUNDARY-OBJECT-HARM", "label": "ambiguous_review", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}},
+    {"id": "X-BOUNDARY-ASSISTANT-CARRIER", "label": "excluded_carrier", "intent": "", "expected": {"audit": "allow", "balanced": "allow", "strict": "allow"}}
+  ]
+}

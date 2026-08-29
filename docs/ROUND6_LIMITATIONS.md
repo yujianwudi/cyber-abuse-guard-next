@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
 > **Frozen historical snapshot.** Except for the active-tree classifier identity
@@ -11,13 +11,13 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 > target are scoped only to that frozen Round 6 snapshot and are not the active
 > repository release identity.
 >
-> The current Round 14 active-tree overlay is CAG source `1.0.0`, planned
-> `v1.0.0-rc.1` on Linux amd64, and:
+> The current Round 17 active-tree overlay is CAG source `1.0.0`, planned
+> `v1.0.0-rc.3` on Linux amd64, and:
 >
 > ```text
-> current_formal_cpa: v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa
-> current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-> current_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+> current_formal_cpa: v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724
+> current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
+> current_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > ```
 >
@@ -26,7 +26,7 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 > `ModelRouter`, and request lifecycle and is **OUT_OF_SCOPE / UNPROTECTED /
 > CAG_NOT_VISIBLE**. Only registered callback paths such as chat and Responses
 > are protected; there is no all-traffic coverage claim. See
-> [Round 14 status](ROUND14_STATUS.md).
+> [Round 17 status](ROUND16_STATUS.md).
 
 Status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**; a candidate-bound
 `evaluation-v11` or later first-and-only `CONSUMED / PASS` attestation is also

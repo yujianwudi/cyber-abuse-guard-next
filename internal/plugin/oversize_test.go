@@ -90,6 +90,66 @@ func TestOversizedExecutorDoesNotTurnBalancedPassThroughIntoPolicy403(t *testing
 	}
 }
 
+func TestOversizedCallbacksHonorQuiesceGate(t *testing.T) {
+	for _, modeCase := range requestInterceptorModeCases() {
+		modeCase := modeCase
+		t.Run(modeCase.mode, func(t *testing.T) {
+			p := New()
+			defer p.Shutdown()
+			register(t, p, requestInterceptorModeConfig(modeCase.mode))
+			if err := p.Quiesce(); err != nil {
+				t.Fatalf("quiesce: %v", err)
+			}
+
+			raw, code := p.CallOversized(pluginabi.MethodModelRoute)
+			if code != 0 {
+				t.Fatalf("oversized model.route code=%d envelope=%s", code, raw)
+			}
+			var route pluginapi.ModelRouteResponse
+			decodeOKResult(t, raw, &route)
+			if route.Handled != modeCase.failClosed {
+				t.Fatalf("quiesced oversized model.route handled=%t, want %t; route=%+v", route.Handled, modeCase.failClosed, route)
+			}
+			if route.Handled && route.Reason != "cyber_abuse_guard_quiesced" {
+				t.Fatalf("quiesced oversized model.route reason=%q", route.Reason)
+			}
+
+			for _, method := range []string{pluginabi.MethodRequestInterceptBefore, pluginabi.MethodRequestInterceptAfter} {
+				raw, code = p.CallOversized(method)
+				if code != 0 {
+					t.Fatalf("%s code=%d envelope=%s", method, code, raw)
+				}
+				var response pluginapi.RequestInterceptResponse
+				decodeOKResult(t, raw, &response)
+				assertRequestInterceptorPolicyResult(t, response, modeCase.failClosed, "inspection_failure")
+			}
+
+			for _, method := range []string{pluginabi.MethodExecutorExecute, pluginabi.MethodExecutorExecuteStream, pluginabi.MethodExecutorCountTokens} {
+				raw, code = p.CallOversized(method)
+				if code != 0 {
+					t.Fatalf("%s code=%d envelope=%s", method, code, raw)
+				}
+				var envelope rpcEnvelope
+				if err := json.Unmarshal(raw, &envelope); err != nil {
+					t.Fatalf("%s invalid envelope: %v", method, err)
+				}
+				if envelope.OK || envelope.Error == nil || envelope.Error.Code != "plugin_quiesced" {
+					t.Fatalf("%s quiesced envelope=%s", method, raw)
+				}
+			}
+
+			// The oversized quiesce path has no request body to inspect and must not
+			// charge RPC-body-limit or incomplete-inspection counters.
+			if got := p.counters.incompleteInspections.Load(); got != 0 {
+				t.Fatalf("quiesced oversized callbacks recorded incomplete inspections=%d", got)
+			}
+			if got := p.counters.incompleteRPCBodyLimit.Load(); got != 0 {
+				t.Fatalf("quiesced oversized callbacks recorded rpc-body-limit=%d", got)
+			}
+		})
+	}
+}
+
 func TestOversizedNonRoutingRPCRemainsRejected(t *testing.T) {
 	p := New()
 	defer p.Shutdown()

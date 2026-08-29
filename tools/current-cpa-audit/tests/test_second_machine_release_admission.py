@@ -1178,7 +1178,7 @@ class PortableAdmissionTests(unittest.TestCase):
             ), self.assertRaisesRegex(AdmissionError, "declared size"):
                 validate_candidate_directory(root, manifest)
 
-            (root / "cyber-abuse-guard-v1.0.0-rc.2.so").write_bytes(so)
+            (root / "cyber-abuse-guard-v1.0.0-rc.3.so").write_bytes(so)
             with self.assertRaises(AdmissionError):
                 validate_candidate_directory(root, manifest)
 
@@ -1389,7 +1389,7 @@ class PortableAdmissionTests(unittest.TestCase):
                     self.assert_rejected(mutate)
 
     def test_rejects_rc_renamed_or_recompiled_so_identity(self) -> None:
-        self.assert_rejected(lambda report: report["source"]["so"].__setitem__("name", "cyber-abuse-guard-v1.0.0-rc.2.so"))  # type: ignore[index,union-attr]
+        self.assert_rejected(lambda report: report["source"]["so"].__setitem__("name", "cyber-abuse-guard-v1.0.0-rc.3.so"))  # type: ignore[index,union-attr]
 
     def test_rejects_wrong_nine_file_set(self) -> None:
         self.assert_rejected(lambda report: report["candidate"]["files"].pop())  # type: ignore[index,union-attr]

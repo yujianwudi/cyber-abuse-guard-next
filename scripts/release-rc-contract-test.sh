@@ -54,8 +54,21 @@ python3 -B ./scripts/release_rc_cpa_store_test.py
 python3 -B ./scripts/release_rc_github_admission_test.py
 python3 -B ./scripts/release_rc_workflow_inventory_test.py
 python3 -B ./tools/current-cpa-audit/tests/test_second_machine_release_admission.py
-(cd "$root/integration/pluginstorecontract" && \
-  go test ./... -run '^TestCPAReleaseCandidatePluginStoreInstallContract$' -count=1)
+origin_metadata="$work/cpa-origin.json"
+jq -cn \
+  --arg path 'github.com/router-for-me/CLIProxyAPI/v7' \
+  --arg version 'v7.2.145' \
+  --arg sum 'h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=' \
+  --arg go_mod_sum 'h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=' \
+  --arg commit 'd9cea8904b14fbbebb77ef26e98ef08f6b48a724' \
+  '{Path: $path, Version: $version, Sum: $sum, GoModSum: $go_mod_sum,
+    Origin: {VCS: "git", URL: "https://github.com/router-for-me/CLIProxyAPI",
+             Hash: $commit, Ref: ("refs/tags/" + $version)}}' >"$origin_metadata"
+(
+  export CPA_COMPAT_ORIGIN_FILE="$origin_metadata"
+  cd "$root/integration/pluginstorecontract"
+  go test ./... -run '^TestCPAReleaseCandidatePluginStoreInstallContract$' -count=1
+)
 
 python3 -B - "$root" <<'PY'
 from __future__ import annotations
@@ -100,18 +113,13 @@ for marker in (
     "bash scripts/release-rc.sh seal-candidate",
     "EXACT_PROTECTED_MAIN_CHECKS_PASS",
     "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_PASS",
-    "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
-    "I_ACK_SECOND_MACHINE_NOT_RUN",
-    "second_machine_waiver:",
-    "second_machine_waiver_acknowledgment:",
-    "second_machine_waiver_reason:",
     "SUPPLEMENTAL_ARCHIVE_PASS",
     "NATIVE_HOST_SPECIAL_PATHS_PASS",
     "RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3",
-    "RC_CPA_VERSION: v7.2.137",
-    "RC_CPA_COMMIT: 85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
+    "RC_CPA_VERSION: v7.2.145",
+    "RC_CPA_COMMIT: d9cea8904b14fbbebb77ef26e98ef08f6b48a724",
     "RC_CPA_C_ABI: '1'",
-    "RC_CPA_RPC_SCHEMA: '3'",
+    "RC_CPA_RPC_SCHEMA: '4'",
     "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
     "supplemental_archive_status=",
     "supplemental_archive_sha256=",
@@ -152,6 +160,16 @@ for marker in (
 ):
     require(marker in workflow, f"workflow is missing {marker!r}")
 
+for forbidden_marker in (
+    "second_machine_waiver",
+    "SECOND_MACHINE_OWNER_RELEASE_ADMISSION_WAIVED",
+    "I_ACK_SECOND_MACHINE_NOT_RUN",
+    "MAINTAINER_WAIVER",
+):
+    require(forbidden_marker not in workflow, f"workflow retains forbidden waiver marker {forbidden_marker!r}")
+    require(forbidden_marker not in script, f"release script retains forbidden waiver marker {forbidden_marker!r}")
+    require(forbidden_marker not in api_validator, f"admission validator retains forbidden waiver marker {forbidden_marker!r}")
+
 require(workflow.count('python3 -B scripts/release_rc_workflow_inventory.py --input "$active_workflows"') == 2,
         "workflow inventory validator must run at admission and publication")
 for marker in (
@@ -181,9 +199,6 @@ require(
         "second_machine_asset_id",
         "second_machine_asset_sha256",
         "authorize_prerelease",
-        "second_machine_waiver",
-        "second_machine_waiver_acknowledgment",
-        "second_machine_waiver_reason",
     ],
     f"RC dispatch input trust boundary changed: {dispatch_inputs!r}",
 )
@@ -214,6 +229,19 @@ require(
 )
 require('if ! jq -e' in workflow,
         "critical jq predicates must use explicit fail-closed conditionals")
+require(
+    'Every required context must occur exactly once' in workflow
+    and '($matches | length) == 1' in workflow
+    and '$matches[0].status == "completed"' in workflow
+    and '$matches[0].conclusion == "success"' in workflow,
+    "required job verification must reject duplicate or failed contexts",
+)
+require(
+    'timeout --signal=TERM --kill-after=10s 5m' in script
+    and 'GOTOOLCHAIN=local GOWORK=off GOFLAGS=-mod=readonly' in script
+    and 'release_require_commands git tar grep mktemp chmod mv rm timeout' in script,
+    "RC store verification must use a bounded, module-locked Go command",
+)
 for exact_required_run in (
     'verify_jobs "$CI_RUN_ID" quality-and-artifacts fuzz-long reproducibility',
     'verify_jobs "$CODEQL_RUN_ID" \'Analyze Go on Linux\'',
@@ -233,14 +261,11 @@ require(
         "second_machine_asset_id",
         "second_machine_asset_sha256",
         "authorize_prerelease",
-        "second_machine_waiver",
-        "second_machine_waiver_acknowledgment",
-        "second_machine_waiver_reason",
     ],
     f"dispatch input trust boundary changed: {inputs!r}",
 )
-require(len(re.findall(r"(?m)^        type:\s+(?:string|boolean)\s*$", input_block)) == 10,
-        "RC dispatch must expose exactly ten typed inputs")
+require(len(re.findall(r"(?m)^        type:\s+(?:string|boolean)\s*$", input_block)) == 7,
+        "RC dispatch must expose exactly seven typed inputs")
 for forbidden in (
     "second_machine_status:",
     "second_machine_report_sha256:",
@@ -306,7 +331,7 @@ for marker in (
     "test_source_sha256",
     "critical_tests_sha256",
     '"const": "cyber-abuse-guard.second-machine-release-admission.v3"',
-    '"rpc_schema": { "const": 3 }',
+    '"rpc_schema": { "const": 4 }',
     '"c_abi": { "const": 1 }',
     '"evidence_refs"',
 ):
@@ -315,12 +340,12 @@ for marker in (
 for marker in (
     "readonly rc_source_version='1.0.0'",
     "readonly rc_binary_version='1.0.0'",
-    "readonly rc_artifact_version='1.0.0-rc.2'",
-    "readonly rc_tag='v1.0.0-rc.2'",
-    "readonly rc_cpa_version='v7.2.137'",
-    "readonly rc_cpa_commit='85d2faddd17e6f4f8675a84ee28b131f702e8eaa'",
+    "readonly rc_artifact_version='1.0.0-rc.3'",
+    "readonly rc_tag='v1.0.0-rc.3'",
+    "readonly rc_cpa_version='v7.2.145'",
+    "readonly rc_cpa_commit='d9cea8904b14fbbebb77ef26e98ef08f6b48a724'",
     "readonly rc_cpa_c_abi='1'",
-    "readonly rc_cpa_rpc_schema='3'",
+    "readonly rc_cpa_rpc_schema='4'",
     "readonly rc_second_schema='cyber-abuse-guard.second-machine-release-admission.v3'",
     "release_assert_rc_build",
     "seal_candidate()",
@@ -385,9 +410,9 @@ for stale_identity in (
     require(stale_identity not in workflow, f"workflow retains stale release identity: {stale_identity}")
     require(stale_identity not in script, f"release script retains stale release identity: {stale_identity}")
 
-require("cyber-abuse-guard-v1.0.0-rc.2.so" not in workflow,
+require("cyber-abuse-guard-v1.0.0-rc.3.so" not in workflow,
         "workflow names an RC SO that was never audited")
-require("cyber-abuse-guard-v1.0.0-rc.2.so" not in script,
+require("cyber-abuse-guard-v1.0.0-rc.3.so" not in script,
         "release script names an RC SO that was never audited")
 
 uses_pattern = re.compile(r"(?m)^\s*uses:\s+([^\s#]+)(?:\s+#.*)?$")
@@ -395,9 +420,9 @@ uses = uses_pattern.findall(workflow)
 expected_uses = Counter(
     {
         "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0": 3,
-        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131": 3,
+        "actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131": 2,
         "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373": 1,
-        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": 2,
+        "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a": 1,
     }
 )
 require(Counter(uses) == expected_uses, f"GitHub action allowlist changed: {Counter(uses)!r}")
@@ -503,4 +528,4 @@ for failure_mode in return exit; do
 done
 printf 'release RC candidate validation faults fail closed and clean staging\n'
 
-printf 'all v1.0.0-rc.2 release contracts passed\n'
+printf 'all v1.0.0-rc.3 release contracts passed\n'

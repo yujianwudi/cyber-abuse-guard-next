@@ -1,26 +1,26 @@
 # Threat Model
 
 > [!IMPORTANT]
-> The active source is `1.0.0`, the planned prerelease is `v1.0.0-rc.2`, and
+> The active source is `1.0.0`, the planned prerelease is `v1.0.0-rc.3`, and
 > the sole Host target is CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` on Linux amd64, C ABI 1 /
-> RPC schema 3. Round 13 v7.2.125/schema 2 and older identities below are frozen
+> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724` on Linux amd64, C ABI 1 /
+> RPC schema 4. Round 13 v7.2.125/schema 2 and older identities below are frozen
 > historical evidence; their PASS results do not transfer.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
-## Active Round 14 uncovered-route threat
+## Active Round 17 uncovered-route threat
 
-CPA v7.2.137 sends all `/v1/realtime*` requests through an independent path
+CPA v7.2.145 sends all `/v1/realtime*` requests through an independent path
 that bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle.
 That route family is explicitly **OUT_OF_SCOPE / UNPROTECTED /
 CAG_NOT_VISIBLE**. An attacker using it is not screened by CAG. Only registered
 callback paths such as chat and Responses are protected, so no control or
 evidence statement may claim all-traffic coverage. See
-[Round 14 status](ROUND14_STATUS.md).
+[Round 17 status](ROUND16_STATUS.md).
 
 ## Frozen historical Round 12 threat-model body
 
@@ -83,6 +83,14 @@ verification of the current production configuration; this development work
 did not inspect or change production.
 
 ## Principal threats and controls
+
+> Round 17 active note: the before/after lifecycle cache uses the exact CAG
+> decision-input projection (request ID, canonical source format, effective
+> client `RequestedModel` with an empty-field `Model` fallback, stream, ordered
+> headers, and body). CPA post-auth selected-model/`ToFormat` projections and
+> transport metadata are not decision inputs and are excluded. The table below
+> is the frozen historical threat-model body; its older version references are
+> not current CPA evidence.
 
 | Threat | Control |
 |---|---|

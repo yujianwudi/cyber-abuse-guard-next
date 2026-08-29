@@ -10,7 +10,7 @@ and must not be used to infer a current compatibility or release result.
 |---|---|---|
 | `workflows/release-rc-v0.15-rc.2.yml` | Superseded RC workflow from an older release line | `.github/workflows/release-rc.yml` |
 | `workflows/README.md` | Historical workflow inventory and cleanup record | `.github/workflows/README.md` |
-| `v0.1.2/NEXT_VERSION.md` | Old planning note, not a build or runtime contract | `CHANGELOG.md` and the active Round 14 task book |
+| `v0.1.2/NEXT_VERSION.md` | Old planning note, not a build or runtime contract | `CHANGELOG.md` and the active Round 17 task book |
 
 ## Why the old tests remain outside this directory
 

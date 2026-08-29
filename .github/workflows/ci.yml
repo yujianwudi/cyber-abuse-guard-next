@@ -66,7 +66,11 @@ jobs:
             !/testdata/**/*[Rr][Ee][Tt][Ii][Rr][Ee][Dd]*
       - name: Recheck restricted-data and active-workflow contracts
         run: python3 -B scripts/round6_safe_gate_contract.py --root .
-      - name: Validate fixed v1.0.0-rc.2 release contract
+      - name: Verify active Round 17 task book is tracked
+        run: |
+          test -f docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md
+          git ls-files --error-unmatch -- docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md >/dev/null
+      - name: Validate fixed v1.0.0-rc.3 release contract
         run: bash scripts/release-rc-contract-test.sh
       - name: Set up pinned Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -91,7 +95,7 @@ jobs:
         run: make round6-module-verify
       - name: Historical Round 8 counted-Mock regression
         run: make round8-counted-mock-historical-regression
-      - name: CPA v7.2.137 pinned source API and SDK contract
+      - name: CPA v7.2.145 pinned source API and SDK contract
         env:
           CPA_COMPAT_PROFILE: "primary"
           CPA_COMPAT_VERIFY_REMOTE: "1"
@@ -356,8 +360,8 @@ jobs:
             printf 'artifact_path=%s artifact_bytes=%s ' "$artifact" "$(stat -c %s "$artifact")"
             sha256sum "$artifact"
           done
-          echo 'integration_summary=CPA v7.2.137 schema-3 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed'
-          echo 'cpa_primary_identity=v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa'
+          echo 'integration_summary=CPA v7.2.145 schema-4 source/fail-open, stream-body policy, no-copy, SDK ABI/API, and Linux Host .so load checks completed'
+          echo 'cpa_primary_identity=v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724'
       - name: clean-tree-check
         run: make clean-tree-check
       - name: Upload exact-merge clean audit candidate

@@ -20,6 +20,7 @@ safe_packages=(
   ./internal/audit
   ./internal/buildinfo
   ./internal/config
+  ./internal/csamtext
   ./internal/extract
   ./internal/explanation
   ./internal/fixturepublish

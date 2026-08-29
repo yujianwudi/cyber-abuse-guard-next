@@ -25,6 +25,8 @@ from audit_contract import (
     CPA_GO_MOD_SUM,
     CPA_MODULE_SUM,
     CPA_OFFICIAL_BINARY_SHA256,
+    CPA_OFFICIAL_BINARY_SIZE,
+    CPA_OFFICIAL_CHECKSUMS_SHA256,
     CPA_OFFICIAL_ASSET_NAME,
     CPA_OFFICIAL_ASSET_SHA256,
     CPA_OFFICIAL_ASSET_SIZE,
@@ -87,26 +89,34 @@ class ContractTests(unittest.TestCase):
     def test_active_cpa_identity_is_exact(self) -> None:
         self.assertEqual(
             {
+                "c_abi": CPA_C_ABI,
                 "commit": CPA_COMMIT,
                 "go_mod_sum": CPA_GO_MOD_SUM,
                 "module_sum": CPA_MODULE_SUM,
                 "official_binary_sha256": CPA_OFFICIAL_BINARY_SHA256,
+                "official_binary_size": CPA_OFFICIAL_BINARY_SIZE,
+                "official_checksums_sha256": CPA_OFFICIAL_CHECKSUMS_SHA256,
                 "official_asset_name": CPA_OFFICIAL_ASSET_NAME,
                 "official_asset_sha256": CPA_OFFICIAL_ASSET_SHA256,
                 "official_asset_size": CPA_OFFICIAL_ASSET_SIZE,
+                "rpc_schema": CPA_RPC_SCHEMA,
                 "tag": CPA_TAG,
             },
             {
-                "commit": "85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
+                "c_abi": 1,
+                "commit": "d9cea8904b14fbbebb77ef26e98ef08f6b48a724",
                 "go_mod_sum": "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
-                "module_sum": "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=",
-                "official_binary_sha256": "aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa",
-                "official_asset_name": "CLIProxyAPI_7.2.137_linux_amd64.tar.gz",
+                "module_sum": "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=",
+                "official_binary_sha256": "576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713",
+                "official_binary_size": 64_207_528,
+                "official_checksums_sha256": "df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c",
+                "official_asset_name": "CLIProxyAPI_7.2.145_linux_amd64.tar.gz",
                 "official_asset_sha256": (
-                    "ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401"
+                    "ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37"
                 ),
-                "official_asset_size": 21_072_175,
-                "tag": "v7.2.137",
+                "official_asset_size": 21_226_153,
+                "rpc_schema": 4,
+                "tag": "v7.2.145",
             },
         )
 
@@ -272,8 +282,8 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
         self.assertEqual(
             validated["reviewer"],
             {
-                "identity": "Codex Round 14 byte-identical Keysmith HEAD refresh",
-                "reviewed_at": "2026-08-24T05:26:01.910Z",
+                "identity": "Codex Round 16 byte-identical Keysmith HEAD refresh",
+                "reviewed_at": "2026-08-28T08:48:23.867Z",
                 "status": "approved",
             },
         )

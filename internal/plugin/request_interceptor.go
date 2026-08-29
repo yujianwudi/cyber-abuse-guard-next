@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
@@ -119,6 +120,11 @@ type normalizedHeaderEntry struct {
 	values       []string
 }
 
+const (
+	maxRequestFingerprintStringBytes = 4 << 10
+	maxRequestIDBytes                = 256
+)
+
 func newRequestFingerprintKey() (key [32]byte, available bool) {
 	// crypto/rand.Read crashes the process irrecoverably when the operating
 	// system random source fails on Go 1.26. Fingerprint caching is only a
@@ -152,6 +158,22 @@ func (p *Plugin) requestSecurityFingerprint(requestID string, request pluginapi.
 	writeFingerprintField(digest, []byte("cyber-abuse-guard/request-lifecycle-fingerprint/v1"))
 	writeFingerprintField(digest, []byte(requestID))
 	writeFingerprintField(digest, []byte(audit.CanonicalSourceFormat(request.SourceFormat)))
+	// CPA v7.2.145 may fill or rewrite ToFormat and the selected Model after
+	// authentication. Those are host-side projections of the same source body,
+	// not independent CAG decision inputs. Metadata is also a best-effort host
+	// context snapshot and is not consumed by the classifier or audit model
+	// projection. Hash only the effective client model (RequestedModel, falling
+	// back to Model when the client did not provide one), so an after-auth
+	// callback that merely fills the selected model remains a cache hit while a
+	// genuine client-model change is reclassified.
+	effectiveModel := effectiveClientRequestedModel(request.RequestedModel, request.Model)
+	if len(effectiveModel) > maxRequestFingerprintStringBytes {
+		// A malformed/oversized host field must not disable inspection. Returning
+		// an empty fingerprint simply turns off the optional lifecycle cache for
+		// this callback pair and forces a fresh classification.
+		return ""
+	}
+	writeFingerprintField(digest, []byte(effectiveModel))
 	writeFingerprintField(digest, request.Body)
 
 	headers := make([]normalizedHeaderEntry, 0, len(request.Headers))
@@ -200,6 +222,28 @@ func writeFingerprintField(digest hash.Hash, value []byte) {
 	_, _ = digest.Write(value)
 }
 
+// effectiveClientRequestedModel mirrors the model value used by the router.
+// CPA's RequestedModel is the client intent; Model is only a defensive fallback
+// for older or malformed Host envelopes that omit that field.
+func effectiveClientRequestedModel(requestedModel, selectedModel string) string {
+	if strings.TrimSpace(requestedModel) == "" {
+		return selectedModel
+	}
+	return requestedModel
+}
+
+func validRequestLifecycleID(requestID string) bool {
+	if requestID == "" || len(requestID) > maxRequestIDBytes || !utf8.ValidString(requestID) {
+		return false
+	}
+	for _, r := range requestID {
+		if r == '\u0000' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
 func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int) {
 	policy := p.snapshotModelRouteFailurePolicy()
 	var request pluginapi.RequestInterceptRequest
@@ -209,6 +253,9 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 	requestID := strings.TrimSpace(request.RequestID)
 	if requestID == "" {
 		return p.requestInterceptorFailureWithPolicy("missing_request_id", policy), 0
+	}
+	if !validRequestLifecycleID(requestID) {
+		return p.requestInterceptorFailureWithPolicy("invalid_request_id", policy), 0
 	}
 	fingerprint := p.requestSecurityFingerprint(requestID, request)
 
@@ -220,11 +267,18 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 		// after-auth fast path is still deciding to allow. The global lock order is
 		// opMu -> requestLifecycle.mu, matching the exclusive clear path.
 		p.opMu.RLock()
+		// A callback may have passed the cheap outer gate while Quiesce was
+		// waiting for opMu. Never turn that race into an after-auth cache hit.
+		if p.quiescing.Load() {
+			policy := decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())
+			p.opMu.RUnlock()
+			return p.requestInterceptorFailureWithPolicy("plugin_quiesced", policy), 0
+		}
 		lifecycleGeneration = p.requestLifecycle.generationToken()
 		if p.requestLifecycle.matches(requestID, fingerprint, lifecycleGeneration) {
 			response := okEnvelope(pluginapi.RequestInterceptResponse{})
 			p.opMu.RUnlock()
-			// CPA v7.2.137 passes the same RequestID to before-auth and after-auth.
+			// CPA v7.2.145 passes the same RequestID to before-auth and after-auth.
 			// Classification already ran on this exact security-relevant request
 			// representation, so the second callback performs only the bounded input
 			// fingerprint and pass-through instead of a duplicate classification,
@@ -238,16 +292,13 @@ func (p *Plugin) callRequestIntercept(raw []byte, beforeAuth bool) ([]byte, int)
 		lifecycleGeneration = p.requestLifecycle.generationToken()
 	}
 
-	// CPA v7.2.137 invokes the after-auth interceptor before request
+	// CPA v7.2.145 invokes the after-auth interceptor before request
 	// translation. ToFormat names the future upstream representation, while
 	// Body is still encoded in the original SourceFormat. This matters on the
 	// defensive cache-miss path (for example after TTL/capacity eviction): using
 	// ToFormat here would select the wrong extraction profile.
 	sourceFormat := request.SourceFormat
-	requestedModel := request.RequestedModel
-	if strings.TrimSpace(requestedModel) == "" {
-		requestedModel = request.Model
-	}
+	requestedModel := effectiveClientRequestedModel(request.RequestedModel, request.Model)
 	routeRequest := pluginapi.ModelRouteRequest{
 		SourceFormat:   sourceFormat,
 		RequestedModel: requestedModel,
@@ -284,6 +335,9 @@ func (p *Plugin) callOversizedRequestInterceptWithRoute(route func(*runtimeState
 	policy := p.snapshotModelRouteFailurePolicy()
 	p.opMu.RLock()
 	defer p.opMu.RUnlock()
+	if p.quiescing.Load() {
+		return p.requestInterceptorFailureWithPolicy("plugin_quiesced", decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())), 0
+	}
 	state := p.runtime.Load()
 	if state == nil {
 		return p.requestInterceptorFailureWithPolicy("not_initialized", policy), 0
@@ -296,6 +350,9 @@ func (p *Plugin) callOversizedRequestInterceptAfterAuth() ([]byte, int) {
 	policy := p.snapshotModelRouteFailurePolicy()
 	p.opMu.RLock()
 	defer p.opMu.RUnlock()
+	if p.quiescing.Load() {
+		return p.requestInterceptorFailureWithPolicy("plugin_quiesced", decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())), 0
+	}
 	state := p.runtime.Load()
 	if state == nil {
 		return p.requestInterceptorFailureWithPolicy("not_initialized", policy), 0
@@ -379,6 +436,10 @@ func (p *Plugin) handleRequestComplete(raw []byte) []byte {
 	if requestID == "" {
 		p.counters.requestLifecycleErrors.Add(1)
 		return errorEnvelope("invalid_request", "request completion ID is required", 0, "")
+	}
+	if !validRequestLifecycleID(requestID) {
+		p.counters.requestLifecycleErrors.Add(1)
+		return errorEnvelope("invalid_request", "request completion ID is invalid", 0, "")
 	}
 	// Duplicate or late terminal events are intentionally idempotent. The Host
 	// promises exactly-once delivery, while the plugin remains safe if a future
