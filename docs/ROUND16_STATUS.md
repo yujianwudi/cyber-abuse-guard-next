@@ -17,7 +17,7 @@ round16_second_machine_release_admission: NOT_RUN / REAL_OWNER_RUN_MANDATORY / R
 round16_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 round16_release_gate: REQUIRED_CHECKS_AND_REAL_SECOND_MACHINE_ADMISSION / NO_WAIVER / RELEASE_RC_WORKFLOW_ONLY
 round16_audit_sqlite_schema: 7 / ACTIVE_CONTRACT
-round16_csam_text_policy: csam-text-policy-v1 / cf5ec76e6d5ac7a50decebd5d74b1a5f81fb6d077693b8a2f5736591ca1211b3
+round16_csam_text_policy: csam-text-policy-v1 / f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680
 round16_active_workflows: 4 / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml
 round16_platform_dynamic_workflows: ALLOWLIST_ONLY / dynamic/dependabot/dependabot-updates / dynamic/dependabot/update-graph / ZERO_OTHER_ACTIVE_PATHS
 round16_audit_runner_bundle_sha256: d727b92a597ae7b8abf868904535910b04597a8a3ca0b346471af549481d30d6

@@ -197,3 +197,12 @@ loader/credential-free 环境白名单（仅保留 `PATH`、locale、`PYTHONDONT
   未执行仓库代码。复核确认既有 defensive/activated 语义标签与三模式期望仍成立，
   `SECURITY.md` 字节保持不变但 commit/tree 绑定同步到新 HEAD。所有旧 CI、旧 artifact
   和旧二号机结果继续不可转移，必须由更新后的签名候选重新验证。
+- 更新后的 Keysmith 防御引用在精确二号机运行中暴露了 CSAM 文本误报：一个远处的
+  普通 `request` 名词与独立保护句中的 `sexual` / `minors` 被跨 clause 拼成伪意图，
+  Strict Responses stream 因而错误返回 `block_csam_text`。修复后，粗粒度全 scope
+  三信号仍只作为 Raw Capture 隐私 taint；可执法 finding 必须有同 clause 的动作、对象
+  与伤害证据，或受严格限制的相邻 action-heading / 短指代连续性。跨 scope、跨远距离
+  clause 不再合成；同句恶意、同 scope 分段及“禁止后再明确执行”的反绕过回归继续阻断。
+  当前策略身份同步为 `csam-text-policy-v1` /
+  `f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680`；
+  所有旧 artifact、CI 和二号机证据再次不可转移。

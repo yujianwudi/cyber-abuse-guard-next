@@ -77,7 +77,7 @@ Source-tree status updated: 2026-08-29 (Asia/Shanghai)
   `plugin.reconfigure` rollback for already-registered retired instances. A
   failed replacement now restores the retained runtime instead of leaving it
   quiesced; config drift remains rejected. The CSAM text closure advances to
-  `csam-text-policy-v1` / `cf5ec76e6d5ac7a50decebd5d74b1a5f81fb6d077693b8a2f5736591ca1211b3`.
+  `csam-text-policy-v1` / `f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680`.
 
 - Retire the immutable, unpublished `v1.0.0-rc.1` tag after its admission
   correctly failed closed when GitHub added platform-owned Dependabot workflows

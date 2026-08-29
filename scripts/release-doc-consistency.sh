@@ -127,7 +127,7 @@ active_cpa_binary_sha256='576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925b
 active_cpa_version='v7.2.145'
 active_cpa_commit='d9cea8904b14fbbebb77ef26e98ef08f6b48a724'
 round16_classifier_policy_sha256='974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683'
-round16_csam_text_policy_sha256='cf5ec76e6d5ac7a50decebd5d74b1a5f81fb6d077693b8a2f5736591ca1211b3'
+round16_csam_text_policy_sha256='f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680'
 if [[ "$active_audit_receipt" == "$doc_root/$active_audit_receipt_relative" ]]; then
   verify_canonical_relative_path "$active_audit_receipt_relative"
 fi

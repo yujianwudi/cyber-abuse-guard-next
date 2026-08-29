@@ -508,6 +508,11 @@ func (c *Classifier) classifyGroup(raw string) Result {
 			continue
 		}
 		privacySensitive = true
+		if !hasScopedActionEvidence(
+			text, spec.normalizedMarkers, c.normalizedObjectMarkers, c.normalizedHarmMarkers,
+		) {
+			continue
+		}
 		if normalPurposePrepared(text, spec.normalizedMarkers, c) {
 			normalExempt = true
 			continue
@@ -704,6 +709,24 @@ func actionOccurrenceState(text string, actions, negations, references, protecti
 			if index < 0 {
 				break
 			}
+			// The conservative privacy gate deliberately composes action,
+			// protected-object, and harm signals across the whole bounded scope.
+			// Enforcement is narrower: an action occurrence must bind those
+			// signals inside its own clause. Otherwise unrelated instructions in
+			// a long defensive quotation could combine with a distant protective
+			// sentence into a false malicious intent. Preserve the explicit
+			// anaphoric continuation case (for example, a later "create it")
+			// only when the immediately preceding clause contains the complete
+			// object/harm pair.
+			if !occurrenceHasScopedEvidence(
+				text, index, index+len(action), objectMarkers, harmMarkers,
+			) {
+				start = index + len(action)
+				if start >= len(text) {
+					break
+				}
+				continue
+			}
 			found = true
 			if !occurrenceExcluded(text, index, index+len(action), negations, references, protectiveTargets, continuations, objectMarkers, harmMarkers, objectHarmMarkers) {
 				return true, true
@@ -715,6 +738,95 @@ func actionOccurrenceState(text string, actions, negations, references, protecti
 		}
 	}
 	return found, false
+}
+
+func hasScopedActionEvidence(text string, actions, objectMarkers, harmMarkers []string) bool {
+	for _, action := range actions {
+		for start := 0; ; {
+			index := markerIndex(text, action, start)
+			if index < 0 {
+				break
+			}
+			end := index + len(action)
+			if occurrenceHasScopedEvidence(text, index, end, objectMarkers, harmMarkers) {
+				return true
+			}
+			start = end
+			if start >= len(text) {
+				break
+			}
+		}
+	}
+	return false
+}
+
+func occurrenceHasScopedEvidence(text string, start, end int, objectMarkers, harmMarkers []string) bool {
+	clauseStart := strings.LastIndexByte(text[:start], '\n') + 1
+	clauseEnd := len(text)
+	if relative := strings.IndexByte(text[end:], '\n'); relative >= 0 {
+		clauseEnd = end + relative
+	}
+	clause := text[clauseStart:clauseEnd]
+	if hasAnyPrepared(clause, objectMarkers) && hasAnyPrepared(clause, harmMarkers) {
+		return true
+	}
+	// A standalone action heading followed immediately by its object clause
+	// is one syntactic unit after normalization (for example, "Exchange:"
+	// followed by the bounded object). Do not generalize this to an arbitrary
+	// action sentence: only the action marker itself may occupy the heading.
+	relativeStart := start - clauseStart
+	relativeEnd := end - clauseStart
+	headingRemainder := strings.TrimSpace(clause[:relativeStart] + " " + clause[relativeEnd:])
+	if headingRemainder == "" && clauseEnd < len(text) {
+		nextClause := currentClauseSuffix(text[clauseEnd+1:])
+		if hasAnyPrepared(nextClause, objectMarkers) && hasAnyPrepared(nextClause, harmMarkers) {
+			return true
+		}
+	}
+
+	// A short direct-object referent may carry an immediately preceding
+	// prohibited object into a new instruction. This keeps structural
+	// separators and negation from creating a "create it" bypass without
+	// allowing arbitrary distant clauses to compose evidence.
+	suffixWords := strings.Fields(currentClauseSuffix(text[end:]))
+	if len(suffixWords) == 0 || len(suffixWords) > 4 || !isScopedObjectReferent(suffixWords) || clauseStart == 0 {
+		return false
+	}
+	previous := strings.TrimSpace(text[:clauseStart-1])
+	if previous == "" {
+		return false
+	}
+	previousClause := currentClausePrefix(previous)
+	return hasAnyPrepared(previousClause, objectMarkers) &&
+		hasAnyPrepared(previousClause, harmMarkers)
+}
+
+func isScopedObjectReferent(words []string) bool {
+	if len(words) == 0 {
+		return false
+	}
+	prefixLength := 0
+	for _, referent := range [][]string{
+		{"the", "same"}, {"that", "material"}, {"this", "material"}, {"that", "content"},
+		{"this", "content"}, {"same", "material"}, {"same", "content"},
+		{"it"}, {"them"}, {"that"}, {"this"}, {"它"}, {"它们"}, {"该内容"}, {"这些内容"}, {"同一内容"},
+	} {
+		if len(words) >= len(referent) && strings.Join(words[:len(referent)], " ") == strings.Join(referent, " ") {
+			prefixLength = len(referent)
+			break
+		}
+	}
+	if prefixLength == 0 {
+		return false
+	}
+	for _, modifier := range words[prefixLength:] {
+		switch modifier {
+		case "now", "again", "immediately", "directly", "please", "现在", "再次", "立即", "直接":
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func occurrenceExcluded(text string, start, end int, negations, references, protectiveTargets, continuations, objectMarkers, harmMarkers, objectHarmMarkers []string) bool {
