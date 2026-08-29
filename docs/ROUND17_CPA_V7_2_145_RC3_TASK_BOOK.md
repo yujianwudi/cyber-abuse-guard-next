@@ -187,3 +187,13 @@ loader/credential-free 环境白名单（仅保留 `PATH`、locale、`PYTHONDONT
   变体，并由回归测试验证不泄露这些值。
 - Raw Capture 补偿校验现在要求新连接看到的行集与删除前快照严格相等；额外行（包括
   空快照时出现的任何行）会使补偿失败并保持写入熔断，不能被成功前缀匹配掩盖。
+- 受保护合并前发现 Keysmith 在 2026-08-29 更新到
+  `19ba98f79d9a2b529b658f54315843716522a67a` / tree
+  `782523b1383ca40e96d75820f8188576c86d1a01`，其中固定审查源
+  `examples/gpt-unrestricted.md` 从旧字节变为 10,981 字节、Git blob
+  `8688722b73b751d340e9698054e676e1bf1a7ef8`、SHA-256
+  `e189bc928230d327adc9c953354e1468993525e12b9de7ecbb1dd63bc3bcb190`。
+  二号机 acquisition 因旧 pin 正确 fail-closed；新字节仅作为惰性 UTF-8 文本复核，
+  未执行仓库代码。复核确认既有 defensive/activated 语义标签与三模式期望仍成立，
+  `SECURITY.md` 字节保持不变但 commit/tree 绑定同步到新 HEAD。所有旧 CI、旧 artifact
+  和旧二号机结果继续不可转移，必须由更新后的签名候选重新验证。

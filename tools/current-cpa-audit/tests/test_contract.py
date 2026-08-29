@@ -282,8 +282,8 @@ for operation in (bound.identity_problems, bound.finish_cleanup):
         self.assertEqual(
             validated["reviewer"],
             {
-                "identity": "Codex Round 16 byte-identical Keysmith HEAD refresh",
-                "reviewed_at": "2026-08-28T08:48:23.867Z",
+                "identity": "Codex Round 17 Keysmith v0.5.0 inert-text review",
+                "reviewed_at": "2026-08-29T17:34:06.930Z",
                 "status": "approved",
             },
         )

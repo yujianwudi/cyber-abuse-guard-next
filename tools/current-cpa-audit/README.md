@@ -134,7 +134,7 @@ are the explicitly audited runtime, not corpus execution.
   per-source human-review pins. The checked-in file is approved for the exact
   five-repository source identities reviewed on 2026-08-28; source drift fails.
   The fixed commit/tree pairs are Keysmith
-  `aef9f901aa7d14089923b54913ad1d5e47802b00` / `05ad97a17e057e37e45b2e591b670159e66b2872`,
+  `19ba98f79d9a2b529b658f54315843716522a67a` / `782523b1383ca40e96d75820f8188576c86d1a01`,
   Codex-5.5 `ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d` /
   `e6081de4a8a56e839be2f2eb281195e314386b31`, Codex-X
   `d7610f9b12276e074c40cacf9940db3b9bdc67ff` / `d05dfcc40e96dcde4755067acf543de683a1246e`,
