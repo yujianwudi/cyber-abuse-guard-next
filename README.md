@@ -172,7 +172,7 @@ enabling a blocking mode. Do not copy a `.so` built for another CPA ABI/schema.
 
 ## Verification
 
-The repository-owned Linux audit tool currently closes `316/316` tests with zero
+The repository-owned Linux audit tool currently closes `320/320` tests with zero
 skips. Exact GitHub CI additionally runs Go unit/vet/race, bounded fuzzing,
 policy and public-corpus contracts, dependency vulnerability checks, Linux Host
 artifact loading and reproducibility. Local receipts are traceability records,

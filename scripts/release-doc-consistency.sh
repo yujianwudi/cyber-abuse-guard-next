@@ -173,8 +173,8 @@ for digest in \
 done
 [[ "$current_audit_tool_test_count" =~ ^[1-9][0-9]*$ ]] || \
   fail "current CPA audit tool test count is invalid"
-[[ "$current_audit_tool_test_count" == 316 ]] || \
-  fail "current CPA audit harness must retain the reviewed 316-test closure"
+[[ "$current_audit_tool_test_count" == 320 ]] || \
+  fail "current CPA audit harness must retain the reviewed 320-test closure"
 [[ "$current_audit_tool_skip_count" == 0 ]] || \
   fail "current CPA audit Linux receipt must not skip tests"
 [[ "$current_audit_tool_status" == PASS ]] || \
@@ -796,8 +796,8 @@ for relative, marker in (
     ),
 ):
     active, _ = split_once(relative, marker)
-    if len(re.findall(r"(?<![0-9])316/316 PASS(?![0-9])", active)) != 1:
-        raise SystemExit(f"{relative}: active Round 16 overlay must contain exactly one 316/316 PASS result")
+    if len(re.findall(r"(?<![0-9])320/320 PASS(?![0-9])", active)) != 1:
+        raise SystemExit(f"{relative}: active Round 16 overlay must contain exactly one 320/320 PASS result")
 
 
 relative = "docs/reports/RELEASE_EVIDENCE.md"

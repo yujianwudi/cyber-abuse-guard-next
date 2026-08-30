@@ -160,7 +160,7 @@ Gemini tool array `items` 补全、scheduler successor 保持、HTTPS proxy ALPN
 
 ## 9. 本地自检回执更新
 
-当前仓库自检回执为 `316/316 PASS / ZERO_SKIPS`。回执子进程使用显式的
+当前仓库自检回执为 `320/320 PASS / ZERO_SKIPS`。回执子进程使用显式的
 loader/credential-free 环境白名单（仅保留 `PATH`、locale、`PYTHONDONTWRITEBYTECODE`
 和固定 `GOTOOLCHAIN`），以避免宿主的动态加载、Shell 启动、代理或凭据变量改变审计
 结果。该回执仍是未签名的开发自检，不能替代精确提交的 GitHub CI、二号机或独立证明。
@@ -206,3 +206,13 @@ loader/credential-free 环境白名单（仅保留 `PATH`、locale、`PYTHONDONT
   当前策略身份同步为 `csam-text-policy-v1` /
   `f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680`；
   所有旧 artifact、CI 和二号机证据再次不可转移。
+- 精确 `9f3e5a0` 二号机 Host A/B 采集连续两次在普通 cell 以
+  `queue_sample:MissedDeadline` fail-closed，且均未生成 measurements。容器始终
+  restart=0 / OOM=false，宿主 CPU idle 约 83%、steal=0、无内核/磁盘/内存故障；
+  源码复核确认 collector 的绝对 100 ms 名义槽提前判死，与 validator 已有的真实
+  gap `<200 ms`、非终态 gap `>=50 ms` 和固定样本数合同不一致。修复不修改任何
+  evidence 阈值：只记录真实管理 GET，迟到一个名义槽时不跳 slot 并立即真实追采；
+  小于 50 ms 的过密结果丢弃后重新 GET，绝不复制、等待后改时间戳或补造行；真实
+  gap `>=200 ms`、最终数量/覆盖不足仍硬失败。终态 Docker stats 期间 queue sampler
+  继续运行，join 后发现的 sampler error 也必须在发布 cell 前失败。旧性能运行与旧
+  approved tool identity 不得转移，必须在新签名候选上从全新 run 重新采集。

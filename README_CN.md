@@ -128,7 +128,7 @@ make build-linux-amd64
 
 ## 验证命令
 
-仓库 Linux 审计工具当前固定为 `316/316`、zero skips；GitHub CI 还执行 Go unit/vet/race、
+仓库 Linux 审计工具当前固定为 `320/320`、zero skips；GitHub CI 还执行 Go unit/vet/race、
 有界 fuzz、策略/语料、依赖漏洞、Linux Host `.so` 加载和 reproducibility。仓库回执是可追溯
 记录，不是独立证明。
 

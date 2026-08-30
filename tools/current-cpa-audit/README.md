@@ -895,8 +895,17 @@ Each measured cell opens one private HTTP/1.1 management connection for the
 at the cell boundary. The three timing preflight polls likewise share one
 private connection. This removes per-sample TCP handshake/TIME_WAIT churn
 without changing the 100 ms schedule, sample count, deadline, or queue source;
-a server-requested close, reconnect requirement, delayed poll, malformed
-response, or missed deadline still aborts the capture.
+a server-requested close, reconnect requirement, malformed response, a real
+sample gap of 200 ms or more, or an unrecoverable sample-count/coverage deficit
+still aborts the capture. A response that crosses one nominal 100 ms slot but
+remains inside the validator's existing `[50 ms, 200 ms)` real-sample gap
+contract for non-terminal rows triggers immediate real catch-up polling without
+skipping the nominal slot. A catch-up response closer than 50 ms is discarded
+and re-polled; it is never copied, held, or re-timestamped. Every real gap,
+including the terminal gap, must remain below 200 ms. The same private queue
+connection stays active while the terminal Docker resource sample is collected,
+then records the one real terminal row before closing. Any sampler error found
+during final drain still fails before a cell can be published.
 
 The large-payload process-RSS lane keeps its fixed 20 ms cadence and 30 ms
 sample-gap deadline. Raw monotonic sample timestamps remain in the

@@ -56,7 +56,7 @@ Source-tree status updated: 2026-08-29 (Asia/Shanghai)
   cpalatest suite receives an explicit ten-minute cap inside the 25-minute
   aggregate lane.
 
-- Refresh the repository-owned audit receipt to `316/316 PASS / ZERO_SKIPS`
+- Refresh the repository-owned audit receipt to `320/320 PASS / ZERO_SKIPS`
   after adding an explicit loader/credential-free subprocess environment
   allowlist. Host `LD_*`, shell-startup, proxy and credential variables can no
   longer alter the reviewed snapshot execution.
@@ -173,17 +173,17 @@ Source-tree status updated: 2026-08-29 (Asia/Shanghai)
   RC publication is allowed only after every applicable acceptance gate,
   including the mandatory real second-machine v3 admission, passes through
   `release-rc.yml`; the current pending state cannot publish.
-- Record the current audit-tool development result as `316/316 PASS` with zero
+- Record the current audit-tool development result as `320/320 PASS` with zero
   skips on WSL Linux/x86_64 under Go 1.26.6. A canonical repository-owned development
   self-check receipt records unittest stderr, command and time window plus the
-  316 test IDs, every tested implementation/test source byte, and receipt fields
-  `runner_bundle=60d1035c0411c8980e964688594f411590b946e8ae793d958750db4595be3cad`,
+  320 test IDs, every tested implementation/test source byte, and receipt fields
+  `runner_bundle=d803afbde371f0a4e25135827d845b8f50207a9dc761833b3b8648d03b74f078`,
   `audit_contract=3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77`,
   `run_source=44ea0e8519db3dd936de76db56a3f758d8046ff85e49562a254e0cf2ae27dc16`,
   `machine_schema=428d55f9b0f0fc42441ae0366031b4177d3e8d802e98c3dee4f813b660aa4658`,
-  `test_sources=57a811111725a99257fc9a96f9d1bd18f49b22ba736dfd3553e00845a85baf12`,
-  `test_ids=0ae17691c4961cbb30a05c36577176af9a9d684351784f22b3f57c647216ae86`,
-  and `receipt_sha256=4121883b94d6186bc6a086cf7486556664bf33e43de22e972f7c14ac6047ae5b`.
+  `test_sources=8d3ab5da2047a4619f0a9e1924ac59d4ac988f96b3c2bfeefff054c28414f879`,
+  `test_ids=ae277b0ef13bfcff5c7572e595b31cb1b1b27f737ec8e6245b953d91dfe58275`,
+  and `receipt_sha256=a694cc5b0824e5d507aa1f9ca6eeb8f3e51671918314246e91494e92fa0b53f8`.
   It is unsigned and cannot
   replace exact-commit CI or independent evidence. Five schema-4 Host fixture
   tests, the targeted CAG RPC schema test under WSL, and one upstream

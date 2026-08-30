@@ -1253,7 +1253,7 @@ ROUND16_RC_LINKED_CONTRACT_SHA256 = {
     ROUND13_RC_GITHUB_ADMISSION_TEST_SCRIPT: "869f317bc65d5916b44cc61fec9bc7056ddd145ca82cab54f95d55bda713fe01",
     ROUND13_SECOND_MACHINE_ADMISSION_SCRIPT: "6a9629bd7753ec4ec1e633b6e365e123d954d43642ccf246e63942d2f1684721",
     ROUND13_SECOND_MACHINE_ADMISSION_TEST_SCRIPT: "153b64582096af5001d319224b98ec8f95b8421d2ce69338add36c872f45dea5",
-    "tools/current-cpa-audit/README.md": "24e58cae6cf9b2420c3ddc43ba3ef5a7ced2aa0feaa7cedc913501a7f68f4d3a",
+    "tools/current-cpa-audit/README.md": "9ec185b486c49086365eb3b4147a6468faab8dd5fd62fb4be3a59606f0356610",
     "tools/current-cpa-audit/acquire.py": "806f424d6a9b9d688132d414d98a2499606a3a9f230f54836cc706410c131ec3",
     "tools/current-cpa-audit/audit_contract.py": "3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77",
     "tools/current-cpa-audit/repository-policy.json": "43cc7bc7c67ff7cfba7a4e628e0a5671cd9820466763140a458729d52e73e02d",
@@ -1271,11 +1271,11 @@ ROUND16_RC_LINKED_CONTRACT_SHA256 = {
     "tools/current-cpa-audit/tests/test_csam_text_evidence.py": "d80d3d2b324523139824b33822c2c63b4d0ae3f482be533a1b6cbaf15ec90326",
     "tools/current-cpa-audit/tests/test_lazy_read.py": "79ac4eb032a8f2c9ef68b88ff138d1a78e6e7907c8e9a2a64acf0b9850f4317a",
     "tools/current-cpa-audit/tests/test_unit_receipt.py": "d6c366b8d7c6382ebe38024a2649026d90e868c06aefb62a7f64a255672dd311",
-    "scripts/current_cpa_audit_unit_receipt.py": "556a4524a7148bb7fb778d9b20cf3107459e8f90648573a5a7ffd484186e732f",
+    "scripts/current_cpa_audit_unit_receipt.py": "3d844fccbab3402b5857bf779848534b235cb272701e8ce5ea64ef08d296df79",
     "scripts/release_rc_workflow_inventory.py": "a3166adfab479a06b6c0c756d6a7d0b5494976a33c4c10397416bbae6b55c683",
     "scripts/release_rc_workflow_inventory_test.py": "86be65f8ab7bec700b38107b5e4763550def0bd7bb55a52f1ac29504535637d0",
-    "docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json": "7ea244f6b8794e10b657ef217e919a7a5b856216a42d19f47a6eb3a05581b032",
-    "tools/current-cpa-audit/host_performance.py": "f89f2f4d0f44ea7ca8f6883273253a19d4cb69e721f7e1a15d43e1731548fd0a",
+    "docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json": "a694cc5b0824e5d507aa1f9ca6eeb8f3e51671918314246e91494e92fa0b53f8",
+    "tools/current-cpa-audit/host_performance.py": "2ccead406937344f223aa568c00149fe1f53d9c739bb51217a12f560f4b1cffc",
     "integration/host_integration_test.go": "9f18922af5e8b4a5161ea15fb14c1385ae093bb0ead4c9a0238a56b5cfea8ff7",
 }
 ROUND16_RC_INPUT_ORDER = (
@@ -1520,11 +1520,11 @@ ROUND6_DOC_FIXTURE_DEPENDENCY_SHA256 = {
 }
 ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT = ROUND6_DOC_FIXTURE_WRAPPER_SCRIPT
 ROUND16_DOC_FIXTURE_WRAPPER_SCRIPT_SHA256 = (
-    "4e617601c8c70cc5f4adb286716f89ee745fb13cc994c7fc967dfc4b874f2553"
+    "458fd0a81c125a81077365e83fdfedb81ccd808e9020ece0cec7b18e08df3fe9"
 )
 ROUND16_DOC_FIXTURE_DEPENDENCY_SHA256 = {
-    "scripts/release-doc-consistency-test.sh": "fc1378f06d963c8205d9e14748b1c94a4c387f4682b156e1950292044b2e826e",
-    "scripts/release-doc-consistency.sh": "949591be91a4813e17794de3bb3c368ac388650917fa850ed3b901f045dc63a6",
+    "scripts/release-doc-consistency-test.sh": "dd80f3fc0a6c08c7d1cb1e47ec77ecc0d81b94244fc5ee5341156b1e0a8d8b7c",
+    "scripts/release-doc-consistency.sh": "dc755f7ad46df334e1d7d94b7b6f9931ab1e31d705a1666d9176021e5c8f53ee",
 }
 ROUND6_PRIVACY_FIXTURE_SCRIPT = "scripts/release-evidence-privacy-test.sh"
 ROUND6_PRIVACY_FIXTURE_SCRIPT_SHA256 = (

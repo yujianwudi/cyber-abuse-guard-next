@@ -650,9 +650,9 @@ for mutation in \
   name="${mutation##*:}"
   fixture="$work/$name"
   cp -a "$work/round16-pass" "$fixture"
-  sed -i '0,/316\/316 PASS/s//223\/223 PASS/' "$fixture/$relative"
+  sed -i '0,/320\/320 PASS/s//223\/223 PASS/' "$fixture/$relative"
   round16_must_fail "$name" "$fixture" \
-    "$relative: active Round 16 overlay must contain exactly one 316/316 PASS result"
+    "$relative: active Round 16 overlay must contain exactly one 320/320 PASS result"
 done
 
 for mutation in \
@@ -677,7 +677,7 @@ round16_must_fail round16-missing-audit-receipt \
   'active CPA audit unit receipt is missing or unsafe: docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json'
 
 cp -a "$work/round16-pass" "$work/round16-tampered-audit-receipt"
-sed -i 's/"tests_run":316/"tests_run":296/' \
+sed -i 's/"tests_run":320/"tests_run":296/' \
   "$work/round16-tampered-audit-receipt/docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json"
 round16_must_fail round16-tampered-audit-receipt \
   "$work/round16-tampered-audit-receipt" \

@@ -27,7 +27,7 @@ the official checksums file has SHA-256
 and the contained 64,207,528-byte binary has SHA-256
 `576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
 
-The current v7.2.145-bound repository-owned development self-check now records `316/316 PASS`
+The current v7.2.145-bound repository-owned development self-check now records `320/320 PASS`
 on Linux with zero skips. The receipt records the command, time window, stderr,
 test IDs, all tested implementation/test source bytes and current runner hashes.
 It materializes those bytes into a temporary read-only snapshot and runs
@@ -70,20 +70,20 @@ its original identity only. No old PASS is relabelled or transferred to Round
 17. See [Round 17 status](../ROUND16_STATUS.md).
 
 ```text
-round16_audit_receipt_state: PASS / LINUX / 316_OF_316 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
-round16_audit_expected_test_count: 316 / EXECUTED
-round16_audit_runner_bundle_sha256: d727b92a597ae7b8abf868904535910b04597a8a3ca0b346471af549481d30d6
+round16_audit_receipt_state: PASS / LINUX / 320_OF_320 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
+round16_audit_expected_test_count: 320 / EXECUTED
+round16_audit_runner_bundle_sha256: d803afbde371f0a4e25135827d845b8f50207a9dc761833b3b8648d03b74f078
 round16_audit_contract_sha256: 3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77
 round16_audit_run_source_sha256: 44ea0e8519db3dd936de76db56a3f758d8046ff85e49562a254e0cf2ae27dc16
 round16_audit_machine_schema_sha256: 428d55f9b0f0fc42441ae0366031b4177d3e8d802e98c3dee4f813b660aa4658
-round16_audit_tool_tests: PASS / LINUX / 316_OF_316
+round16_audit_tool_tests: PASS / LINUX / 320_OF_320
 round16_audit_tool_skips: 0
-round16_audit_test_sources_sha256: d538d6e39f35f9de57c75da5303531fd8de2a516619e0a050b45c25447bc9132
-round16_audit_test_ids_sha256: 0ae17691c4961cbb30a05c36577176af9a9d684351784f22b3f57c647216ae86
-round16_audit_unit_receipt_sha256: 7ea244f6b8794e10b657ef217e919a7a5b856216a42d19f47a6eb3a05581b032
-round16_audit_unit_started_at: 2026-08-29T17:46:25.438Z
-round16_audit_unit_finished_at: 2026-08-29T17:47:01.929Z
-round16_audit_unit_elapsed_ms: 36491
+round16_audit_test_sources_sha256: 8d3ab5da2047a4619f0a9e1924ac59d4ac988f96b3c2bfeefff054c28414f879
+round16_audit_test_ids_sha256: ae277b0ef13bfcff5c7572e595b31cb1b1b27f737ec8e6245b953d91dfe58275
+round16_audit_unit_receipt_sha256: a694cc5b0824e5d507aa1f9ca6eeb8f3e51671918314246e91494e92fa0b53f8
+round16_audit_unit_started_at: 2026-08-30T04:33:44.648Z
+round16_audit_unit_finished_at: 2026-08-30T04:34:29.160Z
+round16_audit_unit_elapsed_ms: 44511
 round16_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
 ```
 

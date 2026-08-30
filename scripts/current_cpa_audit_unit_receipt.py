@@ -30,7 +30,7 @@ from typing import Any, Iterable, Iterator, NoReturn, Sequence
 
 
 SCHEMA = "cag-current-cpa-audit-unit-receipt/v1"
-REVIEWED_TEST_COUNT = 316
+REVIEWED_TEST_COUNT = 320
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 TOOL_ROOT = REPOSITORY_ROOT / "tools" / "current-cpa-audit"
 TEST_ROOT = TOOL_ROOT / "tests"

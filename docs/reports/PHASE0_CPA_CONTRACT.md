@@ -40,7 +40,7 @@ Host evidence uses prerelease attestation schema v2 fields `cpa_version`,
 `cpa_commit`, and `cpa_host_sha256`.
 
 Current Round 17 evidence is development-only. The repository-owned receipt
-now records Linux `316/316 PASS` with zero skips for the audit-tool closure;
+now records Linux `320/320 PASS` with zero skips for the audit-tool closure;
 the prior 283-test receipt remains immutable historical evidence. Five targeted
 schema-4 Host fixture tests, the targeted CAG RPC schema test in WSL, and one
 upstream hook/no-copy/auth/realtime source-contract test remain separately
