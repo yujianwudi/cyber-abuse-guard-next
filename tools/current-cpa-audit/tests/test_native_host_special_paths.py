@@ -51,6 +51,7 @@ ARTIFACT_ID = 987654321
 ARTIFACT_DIGEST = "sha256:" + "d" * 64
 ARTIFACT_SIZE = 123456
 SECRET_OUTPUT = "REQUEST-CONTENT-MUST-NOT-ENTER-REPORT"
+STORE_INSTALL_PATH = f"/tmp/cag-host-evidence/plugins/linux/amd64/{CAG_SO_NAME}"
 
 
 def _run_git(repository: Path, *arguments: str) -> str:
@@ -107,8 +108,21 @@ def _json_event(
     return event
 
 
-def passing_events(*, include_secret_output: bool = True) -> list[dict[str, Any]]:
+def store_receipt_output(store_archive_sha256: str) -> str:
+    return (
+        "    host_integration_test.go:4581: "
+        "CPA v7.2.145 Store installed real archive "
+        f"sha256={store_archive_sha256} path={STORE_INSTALL_PATH}\n"
+    )
+
+
+def passing_events(
+    *, store_archive_sha256: str, include_secret_output: bool = True
+) -> list[dict[str, Any]]:
     events = [_json_event("start"), _json_event("run", test=native.TOP_LEVEL_TEST)]
+    receipt = _json_event("output", test=native.TOP_LEVEL_TEST)
+    receipt["Output"] = store_receipt_output(store_archive_sha256)
+    events.append(receipt)
     for _, suffix in native.CRITICAL_SUBTESTS:
         name = f"{native.TOP_LEVEL_TEST}/{suffix}"
         events.extend((_json_event("run", test=name), _json_event("pass", test=name)))
@@ -150,7 +164,7 @@ class Fixture:
         self.tree = _run_git(self.checkout, "rev-parse", "HEAD^{tree}").lower()
         self.candidate.mkdir()
         self._write_candidate()
-        self.write_events(passing_events())
+        self.write_events(self.passing_events())
 
     @property
     def manifest_path(self) -> Path:
@@ -170,6 +184,20 @@ class Fixture:
     def build(self) -> dict[str, Any]:
         return native.build_report(
             **self.common(), generated_at=NOW, runtime=RUNTIME
+        )
+
+    def passing_events(
+        self, *, include_secret_output: bool = True
+    ) -> list[dict[str, Any]]:
+        return passing_events(
+            store_archive_sha256=self.store_archive_sha256,
+            include_secret_output=include_secret_output,
+        )
+
+    def parse_log(self) -> dict[str, Any]:
+        return native.parse_go_test_log(
+            self.log_path,
+            expected_store_archive_sha256=self.store_archive_sha256,
         )
 
     def validate_bundle(self, **overrides: Any) -> dict[str, Any]:
@@ -220,6 +248,9 @@ class Fixture:
             member = zipfile.ZipInfo(CAG_SO_NAME)
             member.external_attr = 0o100700 << 16
             archive.writestr(member, so_raw)
+        self.store_archive_sha256 = sha256_bytes(
+            (self.candidate / zip_name).read_bytes()
+        )
 
         metadata = {
             "cgo_enabled": True,
@@ -340,7 +371,23 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
             self.assertEqual(report["status"], native.STATUS)
             self.assertEqual(report["execution"]["required_test_count"], 36)
             self.assertEqual(len(report["execution"]["critical_tests"]), 35)
+            self.assertEqual(
+                report["execution"]["store_install"],
+                {
+                    "archive_name": native.STORE_ZIP_NAME,
+                    "archive_sha256": fixture.store_archive_sha256,
+                    "receipt_count": 1,
+                    "receipt_sha256": sha256_bytes(
+                        store_receipt_output(fixture.store_archive_sha256).encode(
+                            "utf-8"
+                        )
+                    ),
+                    "required": True,
+                    "target_name": CAG_SO_NAME,
+                },
+            )
             self.assertNotIn(SECRET_OUTPUT.encode(), canonical_bytes(report))
+            self.assertNotIn(STORE_INSTALL_PATH.encode(), canonical_bytes(report))
             native.write_exclusive(fixture.report_path, report)
             self.assertEqual(native.load_report(fixture.report_path)[0], report)
             self.assertEqual(fixture.validate_bundle(), report)
@@ -491,6 +538,24 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
                     lambda value: value["execution"]["critical_tests"].reverse(),
                 ),
                 (
+                    "Store archive coordinate",
+                    lambda value: value["execution"]["store_install"].update(
+                        {"archive_sha256": "a" * 64}
+                    ),
+                ),
+                (
+                    "Store receipt count",
+                    lambda value: value["execution"]["store_install"].update(
+                        {"receipt_count": 2}
+                    ),
+                ),
+                (
+                    "Store requirement downgrade",
+                    lambda value: value["execution"]["store_install"].update(
+                        {"required": False}
+                    ),
+                ),
+                (
                     "artifact zero digest",
                     lambda value: value["candidate"]["artifact"].update(
                         {"digest": "sha256:" + "0" * 64}
@@ -530,7 +595,7 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
 
     def test_go_jsonl_parser_rejects_closed_contract_violations(self) -> None:
         with self.fixture() as fixture:
-            base = passing_events()
+            base = fixture.passing_events()
 
             duplicate = canonical_bytes(base[0]).decode("utf-8").replace(
                 '"Action":"start"', '"Action":"start","Action":"pass"'
@@ -543,7 +608,7 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
                 newline="\n",
             )
             with self.assertRaises(ContractError):
-                native.parse_go_test_log(fixture.log_path)
+                fixture.parse_log()
 
             outside = "SomeOtherTest"
             mutations: list[tuple[str, list[dict[str, Any]]]] = []
@@ -594,7 +659,54 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
                 with self.subTest(label=label):
                     fixture.write_events(events)
                     with self.assertRaises(ContractError):
-                        native.parse_go_test_log(fixture.log_path)
+                        fixture.parse_log()
+
+            fixture.write_events(base)
+            receipt_index = next(
+                index
+                for index, event in enumerate(base)
+                if event.get("Output")
+                == store_receipt_output(fixture.store_archive_sha256)
+            )
+            self.assertEqual(
+                fixture.parse_log()["store_install"]["archive_sha256"],
+                fixture.store_archive_sha256,
+            )
+
+            missing = copy.deepcopy(base)
+            del missing[receipt_index]
+
+            wrong_sha = copy.deepcopy(base)
+            wrong_sha[receipt_index]["Output"] = store_receipt_output("e" * 64)
+
+            duplicate = copy.deepcopy(base)
+            duplicate.insert(receipt_index + 1, copy.deepcopy(duplicate[receipt_index]))
+
+            fallback = copy.deepcopy(base)
+            fallback_event = _json_event("output", test=native.TOP_LEVEL_TEST)
+            fallback_event["Output"] = f"    {native.DIRECT_SO_FALLBACK_MARKER}\n"
+            fallback.insert(receipt_index + 1, fallback_event)
+
+            wrong_action = copy.deepcopy(base)
+            wrong_action[receipt_index]["Action"] = "pass"
+
+            wrong_owner = copy.deepcopy(base)
+            wrong_owner[receipt_index]["Test"] = (
+                f"{native.TOP_LEVEL_TEST}/{native.CRITICAL_SUBTESTS[0][1]}"
+            )
+
+            for label, events in (
+                ("missing receipt", missing),
+                ("wrong candidate ZIP SHA", wrong_sha),
+                ("duplicate receipt", duplicate),
+                ("direct-SO fallback", fallback),
+                ("non-output receipt", wrong_action),
+                ("receipt outside selected top-level test", wrong_owner),
+            ):
+                with self.subTest(label=label):
+                    fixture.write_events(events)
+                    with self.assertRaises(ContractError):
+                        fixture.parse_log()
 
     def test_candidate_and_checkout_rejections(self) -> None:
         mutations = (
@@ -639,14 +751,14 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
             with self.assertRaises(ContractError):
                 fixture.validate_bundle(artifact_digest="sha256:" + "e" * 64)
 
-            altered_events = passing_events()
+            altered_events = fixture.passing_events()
             extra = _json_event("output", test=native.TOP_LEVEL_TEST)
             extra["Output"] = "harmless extra diagnostic\n"
             altered_events.insert(-2, extra)
             fixture.write_events(altered_events)
             with self.assertRaises(ContractError):
                 fixture.validate_bundle()
-            fixture.write_events(passing_events())
+            fixture.write_events(fixture.passing_events())
 
             changed = copy.deepcopy(report)
             changed["test_log"]["sha256"] = "a" * 64
@@ -665,6 +777,12 @@ class NativeHostSpecialPathsTests(unittest.TestCase):
             fixture.write_report(changed)
             with self.assertRaises(ContractError):
                 native.load_report(fixture.report_path)
+
+            changed = copy.deepcopy(report)
+            changed["execution"]["store_install"]["receipt_sha256"] = "f" * 64
+            fixture.write_report(changed)
+            with self.assertRaises(ContractError):
+                fixture.validate_bundle()
 
     def test_candidate_checkout_commit_coordinate_drift_is_rejected(self) -> None:
         with self.fixture() as fixture:

@@ -197,6 +197,26 @@
       ],
       "items": false
     },
+    "store_install": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "archive_name",
+        "archive_sha256",
+        "receipt_count",
+        "receipt_sha256",
+        "required",
+        "target_name"
+      ],
+      "properties": {
+        "archive_name": {"const": "cyber-abuse-guard_1.0.0_linux_amd64.zip"},
+        "archive_sha256": {"$ref": "#/$defs/sha256"},
+        "receipt_count": {"const": 1},
+        "receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "required": {"const": true},
+        "target_name": {"const": "cyber-abuse-guard-v1.0.0.so"}
+      }
+    },
     "critical_test": {
       "type": "object",
       "additionalProperties": false,
@@ -259,6 +279,7 @@
         "package_status",
         "required_test_count",
         "skip_count",
+        "store_install",
         "top_level_status",
         "top_level_test"
       ],
@@ -313,6 +334,7 @@
         "package_status": {"const": "PASS"},
         "required_test_count": {"const": 36},
         "skip_count": {"const": 0},
+        "store_install": {"$ref": "#/$defs/store_install"},
         "top_level_status": {"const": "PASS"},
         "top_level_test": {"const": "TestCPAPluginHostBlocksBeforeUpstream"}
       }

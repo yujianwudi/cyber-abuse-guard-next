@@ -1006,17 +1006,42 @@ required.
 
 Run the repository-owned integration selection against the same exact clean
 checkout and nine-file candidate used by the semantic and Host-performance
-lanes. The JSONL parser retains only hashes and PASS identities; it does not
-copy `go test` output strings into its report:
+lanes. Run it through the repository-owned isolated Host audit mount and force
+the CPA v7.2.145 Store to install the candidate archive. The JSONL parser retains
+only hashes, the Store receipt identity, and PASS identities; it does not copy
+`go test` output strings or the installed temporary path into its report:
 
 ```bash
 NATIVE_HOST_LOG="$EVIDENCE_DIR/native-host-special-paths-go-test.jsonl"
 NATIVE_HOST_REPORT="$EVIDENCE_DIR/native-host-special-paths.json"
+CANDIDATE_SO="$CANDIDATE_DIR/cyber-abuse-guard-v1.0.0.so"
+CANDIDATE_STORE_ZIP="$CANDIDATE_DIR/cyber-abuse-guard_1.0.0_linux_amd64.zip"
+CANDIDATE_BUILD_METADATA="$CANDIDATE_DIR/build-metadata.json"
+CAG_VERSION=1.0.0
+GO_BIN="${GO_BIN:-$(command -v go)}"
 
-go test -json -count=1 \
-  -run=^TestCPAPluginHostBlocksBeforeUpstream$ \
-  -tags=integration,sqlite_omit_load_extension \
-  ./integration >"$NATIVE_HOST_LOG"
+test -x "$GO_BIN"
+test "$("$GO_BIN" env GOVERSION)" = go1.26.6
+test "$("$GO_BIN" env GOOS)" = linux
+test "$("$GO_BIN" env GOARCH)" = amd64
+test -f "$CANDIDATE_SO"
+test -f "$CANDIDATE_STORE_ZIP"
+test -f "$CANDIDATE_BUILD_METADATA"
+export PATH="$(dirname "$GO_BIN"):$PATH"
+export GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off
+
+env -u CYBER_ABUSE_GUARD_HOST_AUDIT_DATA_DIR \
+  bash ./scripts/with-host-audit-mount.sh env \
+  CYBER_ABUSE_GUARD_PLUGIN="$CANDIDATE_SO" \
+  CYBER_ABUSE_GUARD_STORE_ARCHIVE="$CANDIDATE_STORE_ZIP" \
+  CYBER_ABUSE_GUARD_BUILD_METADATA="$CANDIDATE_BUILD_METADATA" \
+  CYBER_ABUSE_GUARD_VERSION="$CAG_VERSION" \
+  CYBER_ABUSE_GUARD_REQUIRE_STORE_INSTALL=1 \
+  CYBER_ABUSE_GUARD_REQUIRE_HOST_INTEGRATION=1 \
+  CGO_ENABLED=1 "$GO_BIN" test -json -count=1 \
+    -run=^TestCPAPluginHostBlocksBeforeUpstream$ \
+    -tags=integration,sqlite_omit_load_extension \
+    ./integration >"$NATIVE_HOST_LOG"
 
 python3 -B tools/current-cpa-audit/native_host_special_paths.py pack \
   --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
@@ -1042,8 +1067,13 @@ python3 -B tools/current-cpa-audit/native_host_special_paths.py validate \
 The report must contain exactly 35 code-owned critical subtests covering
 no-copy/body limits, Multi-Agent v2, official Codex `response.failed` and
 Originator behavior, Claude thinking replay, and ordered-tool request shapes.
-Any FAIL, SKIP, missing test, candidate drift, dirty checkout, non-Linux-amd64
-runtime, or Go-version drift rejects the report. This remains owner-run
+It must also contain exactly one Store-install receipt owned by the selected
+top-level test. The receipt's archive SHA-256 must equal the candidate Store ZIP
+SHA-256 and its installed target must be the fixed Linux amd64 candidate SO
+path. A missing, duplicate, wrong-SHA, wrong-owner, malformed receipt, or any
+direct-SO fallback marker rejects the log even when every test says PASS. Any
+FAIL, SKIP, missing test, candidate drift, dirty checkout, non-Linux-amd64
+runtime, or Go-version drift also rejects the report. This remains owner-run
 evidence, not independent proof.
 
 ## Portable owner-run release admission

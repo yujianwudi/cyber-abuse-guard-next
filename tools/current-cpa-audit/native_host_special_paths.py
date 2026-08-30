@@ -91,6 +91,16 @@ EXPECTED_CANDIDATE_FILES = (
     "ruleset.sha256",
     "sbom.cdx.json",
 )
+STORE_ZIP_NAME = f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip"
+STORE_RECEIPT = re.compile(
+    r"^[ \t]*host_integration_test\.go:[0-9]+: "
+    r"CPA v7\.2\.145 Store installed real archive "
+    r"sha256=([0-9a-f]{64}) path=([^\r\n]+)\n$"
+)
+DIRECT_SO_FALLBACK_MARKER = (
+    "direct .so fallback used; the cpa-host-blackbox Make target requires "
+    "the Store install path"
+)
 
 
 def _multi_agent_tests() -> list[tuple[str, str]]:
@@ -470,7 +480,10 @@ def _go_event(value: Any, label: str) -> dict[str, Any]:
     return value
 
 
-def parse_go_test_log(path: Path) -> dict[str, Any]:
+def parse_go_test_log(
+    path: Path, *, expected_store_archive_sha256: str
+) -> dict[str, Any]:
+    require_hex(expected_store_archive_sha256, "candidate Store archive SHA-256")
     raw = read_regular_bytes(
         path, "native Host go test JSONL", MAX_LOG_BYTES, require_single_link=True
     )
@@ -487,11 +500,33 @@ def parse_go_test_log(path: Path) -> dict[str, Any]:
     package_passes = 0
     fail_count = 0
     skip_count = 0
+    store_receipts: list[bytes] = []
     for index, encoded in enumerate(encoded_lines):
         value = load_json_bytes(encoded, f"go test event[{index}]", MAX_LOG_BYTES)
         event = _go_event(value, f"go test event[{index}]")
         action = event["Action"]
         test = event.get("Test")
+        output = event.get("Output")
+        if isinstance(output, str):
+            if DIRECT_SO_FALLBACK_MARKER in output:
+                fail("go test log used the direct-SO fallback instead of CPA Store install")
+            receipt = STORE_RECEIPT.fullmatch(output)
+            if receipt is not None:
+                if action != "output":
+                    fail("CPA Store install receipt is not a go test output event")
+                if test != TOP_LEVEL_TEST:
+                    fail("CPA Store install receipt is not owned by the selected top-level test")
+                archive_sha256, installed_path = receipt.groups()
+                if archive_sha256 != expected_store_archive_sha256:
+                    fail("CPA Store install receipt archive SHA-256 drifted from the candidate")
+                expected_suffix = f"/plugins/linux/amd64/{CAG_SO_NAME}"
+                if (
+                    not installed_path.startswith("/")
+                    or not installed_path.endswith(expected_suffix)
+                    or any(character.isspace() for character in installed_path)
+                ):
+                    fail("CPA Store install receipt path is not the fixed Linux amd64 plugin target")
+                store_receipts.append(output.encode("utf-8"))
         if action == "start":
             if test is not None:
                 fail("go test package start unexpectedly names a test")
@@ -517,6 +552,8 @@ def parse_go_test_log(path: Path) -> dict[str, Any]:
         fail("go test log contains FAIL or SKIP")
     if package_starts != 1 or package_passes != 1:
         fail("go test log does not contain one successful package execution")
+    if len(store_receipts) != 1:
+        fail("go test log must contain exactly one candidate-bound CPA Store install receipt")
     required = {TOP_LEVEL_TEST}
     required.update(f"{TOP_LEVEL_TEST}/{suffix}" for _, suffix in CRITICAL_SUBTESTS)
     missing = sorted(required - observed_tests)
@@ -543,6 +580,14 @@ def parse_go_test_log(path: Path) -> dict[str, Any]:
         "package_status": "PASS",
         "required_test_count": len(required),
         "skip_count": skip_count,
+        "store_install": {
+            "archive_name": STORE_ZIP_NAME,
+            "archive_sha256": expected_store_archive_sha256,
+            "receipt_count": 1,
+            "receipt_sha256": sha256_bytes(store_receipts[0]),
+            "required": True,
+            "target_name": CAG_SO_NAME,
+        },
         "top_level_status": "PASS",
     }
 
@@ -578,7 +623,13 @@ def build_report(
         artifact_digest=artifact_digest,
         artifact_size=artifact_size,
     )
-    tests = parse_go_test_log(go_test_jsonl)
+    store_file = next(
+        item for item in candidate["files"] if item["name"] == STORE_ZIP_NAME
+    )
+    tests = parse_go_test_log(
+        go_test_jsonl,
+        expected_store_archive_sha256=store_file["sha256"],
+    )
     observed_runtime = dict(runtime) if runtime is not None else live_runtime_identity()
     if observed_runtime != {"go_version": GO_VERSION, "platform": PLATFORM}:
         fail("runtime identity is not the fixed Linux amd64 Go toolchain")
@@ -601,6 +652,7 @@ def build_report(
             "package_status": tests["package_status"],
             "required_test_count": tests["required_test_count"],
             "skip_count": tests["skip_count"],
+            "store_install": tests["store_install"],
             "top_level_status": tests["top_level_status"],
             "top_level_test": TOP_LEVEL_TEST,
         },
@@ -781,6 +833,7 @@ def validate_report(value: Any, *, check_local_tool: bool = True) -> dict[str, A
             "package_status",
             "required_test_count",
             "skip_count",
+            "store_install",
             "top_level_status",
             "top_level_test",
         },
@@ -834,6 +887,39 @@ def validate_report(value: Any, *, check_local_tool: bool = True) -> dict[str, A
         )
     if normalized_critical != expected_critical_tests():
         fail("report critical test inventory is missing, reordered, or not PASS")
+
+    store_install = exact_object(
+        execution["store_install"],
+        {
+            "archive_name",
+            "archive_sha256",
+            "receipt_count",
+            "receipt_sha256",
+            "required",
+            "target_name",
+        },
+        "report.execution.store_install",
+    )
+    selected_store = next(
+        item for item in normalized_files if item["name"] == STORE_ZIP_NAME
+    )
+    if (
+        store_install["archive_name"] != STORE_ZIP_NAME
+        or store_install["archive_sha256"] != selected_store["sha256"]
+        or exact_int(
+            store_install["receipt_count"],
+            "report.execution.store_install.receipt_count",
+            1,
+        )
+        != 1
+        or store_install["required"] is not True
+        or store_install["target_name"] != CAG_SO_NAME
+    ):
+        fail("report CPA Store install receipt is not bound to the candidate archive")
+    require_hex(
+        store_install["receipt_sha256"],
+        "report.execution.store_install.receipt_sha256",
+    )
 
     log = exact_object(
         report["test_log"], {"bytes", "event_count", "sha256"}, "report.test_log"
