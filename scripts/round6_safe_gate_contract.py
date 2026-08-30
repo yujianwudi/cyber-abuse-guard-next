@@ -1676,7 +1676,7 @@ ROUND9_MALICIOUS_TEXT_PRODUCER_STATIC_CLOSURE_SHA256 = {
 ROUND6_SAFE_GATE_SCRIPT = "scripts/round6_safe_gate_contract.py"
 ROUND6_SAFE_GATE_TEST_SCRIPT = "scripts/round6_safe_gate_contract_test.py"
 ROUND6_SAFE_GATE_TEST_SHA256 = "d7df09aebed70991343061b2ab2146afc6aa86fd2bc60a5955fc51622fe575ef"
-ROUND16_SAFE_GATE_TEST_SHA256 = "756c46f663cfa5bba9c5f3e15d3f598085497893e29ac9421fbbf0b8b97c8db9"
+ROUND16_SAFE_GATE_TEST_SHA256 = "78d752755f94ec82436e0add46e2c09a15bc54974ab23f3dda29de6c10c74c79"
 ROUND13_SUPPLEMENTAL_TERMINAL_ACTIVATION_TESTS = (
     "TestSupplementalTerminalSkillActivationCannotBorrowSiblingField",
     "TestSupplementalTerminalSkillActivationLaterFieldCancellationParity",

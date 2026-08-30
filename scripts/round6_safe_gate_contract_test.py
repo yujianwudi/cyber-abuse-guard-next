@@ -4835,6 +4835,19 @@ command /usr/bin/git --no-pager tag v0.1.2-dev.round6
             "scripts/release_rc_workflow_inventory.py",
             "scripts/release_rc_workflow_inventory_test.py",
             "docs/reports/ROUND16_CPA_AUDIT_UNIT_RECEIPT.json",
+            "tools/current-cpa-audit/host-admission-approved-runtime-identities.json",
+            "tools/current-cpa-audit/host-admission-config.schema.json",
+            "tools/current-cpa-audit/host-admission-evidence-manifest.schema.json",
+            "tools/current-cpa-audit/host-admission-evidence.schema.json",
+            "tools/current-cpa-audit/host_admission.py",
+            "tools/current-cpa-audit/host_admission_collector.py",
+            "tools/current-cpa-audit/host_keeper_fixture/Dockerfile",
+            "tools/current-cpa-audit/host_keeper_fixture/README.md",
+            "tools/current-cpa-audit/host_keeper_fixture/keeper_fixture.py",
+            "tools/current-cpa-audit/host_keeper_fixture/keeper_fixture.py.sha256",
+            "tools/current-cpa-audit/tests/test_host_admission.py",
+            "tools/current-cpa-audit/tests/test_host_admission_collector.py",
+            "tools/current-cpa-audit/tests/test_host_keeper_fixture.py",
         )
         self.assertEqual(set(linked_paths), set(ROUND16_RC_LINKED_CONTRACT_SHA256))
         runbook = (root / "tools/current-cpa-audit/README.md").read_text(
