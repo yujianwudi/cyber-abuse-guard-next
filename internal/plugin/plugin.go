@@ -1,10 +1,11 @@
-// Package plugin implements the CPA v7.2.137 schema-v3 RPC surface for the
+// Package plugin implements the CPA v7.2.145 schema-v4 RPC surface for the
 // cyber-abuse guard. The native C boundary in cmd/cyber-abuse-guard is kept
 // deliberately thin; policy state and lifecycle semantics live here so they
 // can be race-tested without loading a shared object.
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -58,7 +59,7 @@ var metadata = pluginapi.Metadata{
 		{Name: "hard_block_even_if_authorized", Type: pluginapi.ConfigFieldTypeObject, Description: "Categories whose operational abuse remains protected from authorization score reductions."},
 		{Name: "subject_control", Type: pluginapi.ConfigFieldTypeObject, Description: "Rolling subject-risk, cooldown, and manual-block settings."},
 		{Name: "audit", Type: pluginapi.ConfigFieldTypeObject, Description: "SQLite audit settings plus an explicit default-off, block-only, redacted and truncated operator request-preview capture."},
-		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.137."},
+		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.145."},
 		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v1.0.0 and rejected."},
 	},
 }
@@ -90,6 +91,7 @@ type registrationCapabilities struct {
 	RequestLifecycle       bool                         `json:"request_lifecycle_plugin"`
 	ResponseInterceptor    bool                         `json:"response_interceptor"`
 	StreamChunkInterceptor bool                         `json:"response_stream_interceptor"`
+	WebSocketObserver      bool                         `json:"websocket_response_observer"`
 	ManagementAPI          bool                         `json:"management_api"`
 }
 
@@ -109,6 +111,7 @@ type rpcError struct {
 
 type runtimeState struct {
 	config       config.Config
+	configYAML   []byte
 	classifier   *classifier.Classifier
 	rulesVersion string
 	audit        *audit.Store
@@ -243,6 +246,9 @@ type Plugin struct {
 	migrationBackupMu        sync.Mutex
 	shutdown                 atomic.Bool
 	shutdownModelRoutePolicy atomic.Uint32
+	quiescing                atomic.Bool
+	quiesceFailed            atomic.Bool
+	quiesceModelRoutePolicy  atomic.Uint32
 
 	lastConfigError      atomic.Pointer[string]
 	lastReconfigureError atomic.Pointer[string]
@@ -298,7 +304,7 @@ func New() *Plugin {
 	}
 }
 
-// Call dispatches one schema-v3 RPC method. Controlled protocol/policy errors
+// Call dispatches one schema-v4 RPC method. Controlled protocol/policy errors
 // use a valid error envelope with return code zero. A recovered panic uses a
 // non-zero ABI return code while still returning a parseable envelope.
 func (p *Plugin) Call(method string, request []byte) (response []byte, returnCode int) {
@@ -321,6 +327,12 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 		p.Shutdown()
 		return okEnvelope(struct{}{}), 0
 	}
+	if method == pluginabi.MethodPluginQuiesce {
+		if err := p.Quiesce(); err != nil {
+			return errorEnvelope("plugin_quiesce_failed", "plugin could not quiesce cleanly", 0, ""), 0
+		}
+		return okEnvelope(struct{}{}), 0
+	}
 	if method == pluginabi.MethodRequestComplete {
 		return p.handleRequestComplete(request), 0
 	}
@@ -339,6 +351,26 @@ func (p *Plugin) Call(method string, request []byte) (response []byte, returnCod
 			), 0
 		}
 		return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, ""), 0
+	}
+	if p.quiescing.Load() && method != pluginabi.MethodPluginRegister && method != pluginabi.MethodPluginReconfigure {
+		policy := decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())
+		if method == pluginabi.MethodModelRoute {
+			return p.modelRouteFailureWithPolicy(
+				"plugin_quiesced",
+				"cyber_abuse_guard_quiesced",
+				policy,
+			), 0
+		}
+		if requestInterceptorMethod(method) {
+			return p.requestInterceptorFailureWithPolicy("plugin_quiesced", policy), 0
+		}
+		switch method {
+		case pluginabi.MethodManagementRegister, pluginabi.MethodManagementHandle:
+			// Operators may inspect the bounded lifecycle state while the Host is
+			// replacing the plugin. Management routes do not admit model work.
+		default:
+			return errorEnvelope("plugin_quiesced", "plugin is quiesced for hot reload", 0, ""), 0
+		}
 	}
 
 	switch method {
@@ -403,6 +435,30 @@ func (p *Plugin) CallOversized(method string) (response []byte, returnCode int) 
 		}
 		return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, ""), 0
 	}
+	// CallOversized is entered before Call can run its normal lifecycle gate.
+	// Keep the same quiesce contract here: once a hot-reload drain starts, an
+	// oversized callback must not admit work against the retiring runtime (or
+	// emit a duplicate incomplete-inspection event). Registration and
+	// reconfiguration remain the only lifecycle calls allowed to restore it.
+	if p.quiescing.Load() && method != pluginabi.MethodPluginRegister && method != pluginabi.MethodPluginReconfigure {
+		policy := decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())
+		if method == pluginabi.MethodModelRoute {
+			return p.modelRouteFailureWithPolicy(
+				"plugin_quiesced",
+				"cyber_abuse_guard_quiesced",
+				policy,
+			), 0
+		}
+		if requestInterceptorMethod(method) {
+			return p.requestInterceptorFailureWithPolicy("plugin_quiesced", policy), 0
+		}
+		switch method {
+		case pluginabi.MethodManagementRegister, pluginabi.MethodManagementHandle:
+			// Bounded management inspection remains available during a reload.
+		default:
+			return errorEnvelope("plugin_quiesced", "plugin is quiesced for hot reload", 0, ""), 0
+		}
+	}
 	switch method {
 	case pluginabi.MethodModelRoute:
 		return p.callOversizedModelRoute()
@@ -419,6 +475,10 @@ func (p *Plugin) CallOversized(method string) (response []byte, returnCode int) 
 
 func (p *Plugin) callOversizedExecutor() ([]byte, int) {
 	p.opMu.RLock()
+	if p.quiescing.Load() {
+		p.opMu.RUnlock()
+		return errorEnvelope("plugin_quiesced", "plugin is quiesced for hot reload", 0, ""), 0
+	}
 	state := p.runtime.Load()
 	strict := state != nil && state.config.Enabled && state.config.Mode == config.ModeStrict
 	p.opMu.RUnlock()
@@ -432,7 +492,7 @@ func (p *Plugin) callOversizedExecutor() ([]byte, int) {
 	return errorEnvelope("request_too_large", "plugin executor RPC exceeds the size limit", 413, "rpc_body_limit"), 0
 }
 
-// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v3
+// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v4
 // request-interceptor callbacks. CPA continues after an RPC error, so an
 // enforcing runtime must return a successful local block response. The
 // recovered value is never logged because it can contain attacker-controlled
@@ -466,7 +526,7 @@ func (p *Plugin) recoverCallbackPanic(method string) ([]byte, int) {
 	return errorEnvelope("panic_recovered", "plugin callback failed safely", 0, ""), 1
 }
 
-// countRPCCallback records only one of the fixed schema-v3 callback surfaces.
+// countRPCCallback records only one of the fixed schema-v4 callback surfaces.
 // It deliberately does not retain request IDs, model names, routes, headers,
 // payload sizes, or any caller-controlled label. The counters are used by the
 // isolated Host admission harness to prove both protected-path invocation and
@@ -599,6 +659,18 @@ func (p *Plugin) reportRouterFailure(code string) {
 
 func (p *Plugin) callOversizedModelRoute() (response []byte, returnCode int) {
 	p.opMu.RLock()
+	// CallOversized bypasses Call's pre-dispatch lifecycle check. Recheck the
+	// quiesce flag under opMu so a callback queued behind the quiesce writer
+	// cannot classify against the retiring runtime.
+	if p.quiescing.Load() {
+		policy := decodeModelRouteFailurePolicy(p.quiesceModelRoutePolicy.Load())
+		p.opMu.RUnlock()
+		return p.modelRouteFailureWithPolicy(
+			"plugin_quiesced",
+			"cyber_abuse_guard_quiesced",
+			policy,
+		), 0
+	}
 	state := p.runtime.Load()
 	policy := modelRoutePolicyFromState(state)
 	if state == nil && p.shutdown.Load() {
@@ -720,6 +792,13 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 			return okEnvelope(currentRegistration())
 		}
 		return errorEnvelope("unsupported_schema", fmt.Sprintf("unsupported schema version %d", request.SchemaVersion), 0, "")
+	}
+	if p.quiescing.Load() {
+		// CPA v7.2.145 keeps the retired instance marked registered and invokes
+		// plugin.reconfigure, not plugin.register, when a replacement cannot be
+		// loaded. Both lifecycle methods therefore use the same exact-byte
+		// rollback contract while quiesced. A changed config remains rejected.
+		return p.restoreQuiescedRuntime(request)
 	}
 
 	currentBeforeBuild := p.runtime.Load()
@@ -976,7 +1055,7 @@ func (p *Plugin) reportABICapabilityLimits() {
 	if !p.abiLimitLogged.CompareAndSwap(false, true) {
 		return
 	}
-	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.137 plugin ABI", map[string]any{
+	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.145 plugin ABI", map[string]any{
 		"plugin": ID,
 		"code":   "cpa_abi_conflict_detection_unavailable",
 		"request_interceptor_enumeration_supported": false,
@@ -1038,7 +1117,7 @@ func validateRuntimeConfig(cfg config.Config) error {
 		return fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
 	}
 	if cfg.TrustedProxy.Enabled {
-		return errors.New("trusted_proxy.enabled is not supported because CPA v7.2.137 request interception does not provide a verified direct peer address")
+		return errors.New("trusted_proxy.enabled is not supported because CPA v7.2.145 request interception does not provide a verified direct peer address")
 	}
 	if cfg.Audit.LogOriginalText {
 		return errors.New("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
@@ -1091,6 +1170,7 @@ func (p *Plugin) buildRuntimeWithRules(
 	now := time.Now().UTC()
 	state := &runtimeState{
 		config:       cfg,
+		configYAML:   bytes.Clone(rawConfig),
 		classifier:   preparedRules.classifier,
 		rulesVersion: preparedRules.set.Version,
 		auditStorage: disabledAuditStorageVerification(),
@@ -1419,7 +1499,7 @@ func currentRegistration() registration {
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata:      currentMetadata(),
 		Capabilities: registrationCapabilities{
-			// CPA v7.2.137 does not invoke RequestInterceptor for Alpha Search.
+			// CPA v7.2.145 does not invoke RequestInterceptor for Alpha Search.
 			// ModelRouter is registered only as that narrow compatibility entry;
 			// ordinary Host callbacks are rejected in callModelRouteRequest above.
 			ModelRouter:           true,
@@ -1430,9 +1510,11 @@ func currentRegistration() registration {
 			RequestInterceptor:    true,
 			RequestLifecycle:      true,
 			// CAG inspects requests and terminal lifecycle state only. It must not
-			// join CPA's successful response or stream-chunk rewrite chains.
+			// join CPA's successful response, stream-chunk rewrite, or schema-4
+			// upstream WebSocket observation chains.
 			ResponseInterceptor:    false,
 			StreamChunkInterceptor: false,
+			WebSocketObserver:      false,
 			ManagementAPI:          true,
 		},
 	}
@@ -1480,6 +1562,105 @@ func (p *Plugin) loadRuntime() (*runtimeState, error) {
 	return state, nil
 }
 
+// Quiesce is the reversible CPA v7.2.145 hot-reload boundary. It publishes a
+// mode-aware terminal policy before closing admission, waits for already
+// admitted callbacks behind opMu, persists the current subject snapshot, and
+// drains accepted audit work without closing or replacing the runtime. CPA may
+// subsequently call plugin.register with the exact prior config to roll back a
+// failed replacement; shutdown remains the only irreversible lifecycle call.
+func (p *Plugin) Quiesce() error {
+	if p == nil {
+		return errors.New("plugin is unavailable")
+	}
+	p.lifecycleMu.Lock()
+	defer p.lifecycleMu.Unlock()
+	if p.shutdown.Load() {
+		return nil
+	}
+	if p.quiescing.Load() {
+		if p.quiesceFailed.Load() {
+			return errors.New("plugin quiesce previously failed")
+		}
+		return nil
+	}
+	initialState := p.runtime.Load()
+	if initialState == nil {
+		return errors.New("plugin is not registered")
+	}
+	terminalPolicy := modelRoutePolicyFromState(initialState)
+	terminalPolicy.initialized = true
+	p.quiesceModelRoutePolicy.Store(encodeModelRouteFailurePolicy(terminalPolicy))
+	p.quiesceFailed.Store(false)
+	p.quiescing.Store(true)
+	p.counters.quiesceTransitions.Add(1)
+
+	p.opMu.Lock()
+	defer p.opMu.Unlock()
+	state := p.runtime.Load()
+	if state == nil {
+		return nil
+	}
+	state.saveSubjectPersistence(p)
+	// A successful quiesce is the hand-off point at which CPA may retire this
+	// runtime. If subject persistence was enabled but its final snapshot was
+	// rejected or failed, retiring now would silently lose rolling risk state.
+	// Keep the runtime quiesced and require an explicit retry/repair instead of
+	// reporting a false lifecycle success.
+	if state.persistence != nil {
+		persistence := state.persistence.status()
+		if persistence.WritesBlocked || persistence.Degraded {
+			p.quiesceFailed.Store(true)
+			p.counters.quiesceFailures.Add(1)
+			p.log("error", "cyber-abuse-guard could not persist subject state during hot reload", map[string]any{
+				"plugin": ID,
+				"code":   "plugin_quiesce_subject_persistence_failed",
+			})
+			return errors.New("subject persistence is degraded")
+		}
+	}
+	if state.audit == nil || !state.audit.IsActive() {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err := state.audit.Flush(ctx)
+	cancel()
+	if err != nil {
+		p.quiesceFailed.Store(true)
+		p.counters.quiesceFailures.Add(1)
+		p.log("error", "cyber-abuse-guard could not drain audit work during hot reload", map[string]any{
+			"plugin": ID,
+			"code":   "plugin_quiesce_audit_drain_failed",
+		})
+		return err
+	}
+	return nil
+}
+
+// restoreQuiescedRuntime accepts only CPA's rollback lifecycle call with the
+// exact config bytes that produced the still-live runtime. CPA v7.2.145 uses
+// plugin.reconfigure for an already-registered retired instance. It does not
+// rebuild or reopen SQLite and therefore cannot race the old Store with a
+// second handle.
+func (p *Plugin) restoreQuiescedRuntime(request lifecycleRequest) []byte {
+	p.opMu.Lock()
+	defer p.opMu.Unlock()
+	if p.shutdown.Load() {
+		return errorEnvelope("plugin_shutdown", "plugin has shut down", 0, "")
+	}
+	state := p.runtime.Load()
+	if state == nil || !p.quiescing.Load() {
+		return errorEnvelope("plugin_quiesce_restore_unavailable", "quiesced runtime is unavailable", 0, "")
+	}
+	if !bytes.Equal(request.ConfigYAML, state.configYAML) {
+		p.counters.quiesceRestoreRejected.Add(1)
+		return errorEnvelope("plugin_quiesce_restore_mismatch", "rollback registration does not match the quiesced runtime", 0, "")
+	}
+	p.quiesceFailed.Store(false)
+	p.quiescing.Store(false)
+	p.counters.quiesceRestores.Add(1)
+	return okEnvelope(currentRegistration())
+}
+
 // Shutdown is idempotent. It prevents new callbacks, waits for callbacks that
 // hold the operation read lock, flushes audit work, and closes the store.
 func (p *Plugin) Shutdown() {
@@ -1491,7 +1672,7 @@ func (p *Plugin) Shutdown() {
 		p.lifecycleMu.Unlock()
 		return
 	}
-	// Publish one terminal enforcement policy before shutdown. CPA v7.2.137
+	// Publish one terminal enforcement policy before shutdown. CPA v7.2.145
 	// continues after interceptor RPC errors, so late callbacks must receive a
 	// successful direct response. An enforcing runtime remains fail-closed;
 	// observe/audit/off remains an intentional pass-through.
@@ -1566,6 +1747,10 @@ type counters struct {
 	requestInterceptorAfterCalls     atomic.Uint64
 	requestLifecycleCompletions      atomic.Uint64
 	requestLifecycleErrors           atomic.Uint64
+	quiesceTransitions               atomic.Uint64
+	quiesceFailures                  atomic.Uint64
+	quiesceRestores                  atomic.Uint64
+	quiesceRestoreRejected           atomic.Uint64
 	modelRouterCalls                 atomic.Uint64
 	executorCalls                    atomic.Uint64
 	managementTests                  atomic.Uint64
@@ -1636,6 +1821,10 @@ func (c *counters) snapshot() map[string]uint64 {
 		"rpc_request_after_calls":              c.requestInterceptorAfterCalls.Load(),
 		"rpc_request_complete_calls":           c.requestLifecycleCompletions.Load(),
 		"rpc_request_complete_errors":          c.requestLifecycleErrors.Load(),
+		"rpc_quiesce_transitions":              c.quiesceTransitions.Load(),
+		"rpc_quiesce_failures":                 c.quiesceFailures.Load(),
+		"rpc_quiesce_restores":                 c.quiesceRestores.Load(),
+		"rpc_quiesce_restore_rejected":         c.quiesceRestoreRejected.Load(),
 		"rpc_model_route_calls":                c.modelRouterCalls.Load(),
 		"rpc_executor_calls":                   c.executorCalls.Load(),
 		"management_tests":                     c.managementTests.Load(),

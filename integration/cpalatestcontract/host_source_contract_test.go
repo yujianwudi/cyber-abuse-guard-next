@@ -2,14 +2,18 @@ package cpalatestcontract
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
@@ -23,6 +27,8 @@ const (
 	cpaLatestSessionPackage    = cpaLatestModulePath + "/sdk/cliproxy/session"
 	cpaLatestMultiAgentPackage = cpaLatestModulePath + "/internal/client/codex/optimize-multi-agent-v2"
 	cpaLatestUtilityPackage    = cpaLatestModulePath + "/internal/util"
+	cpaLatestManagementPackage = cpaLatestModulePath + "/internal/api/handlers/management"
+	cpaLatestProxyUtilPackage  = cpaLatestModulePath + "/sdk/proxyutil"
 	cpaLatestAntigravityGemini = cpaLatestModulePath + "/internal/translator/antigravity/gemini"
 	cpaLatestGeminiTranslator  = cpaLatestModulePath + "/internal/translator/gemini/gemini"
 	cpaLatestCachePackage      = cpaLatestModulePath + "/internal/cache"
@@ -33,15 +39,50 @@ const (
 	cpaLatestTranslatorSDK     = cpaLatestModulePath + "/sdk/translator"
 	cpaLatestAPIPackage        = cpaLatestModulePath + "/internal/api"
 	cpaLatestCodexLive         = cpaLatestModulePath + "/internal/client/codex/live"
-	cpaLatestFixtureSHA256     = "e44a808ee3fbcdd7d75c0ccd4575a19590ffd85ee434be6535674bc113525b35"
+	cpaLatestFixtureSHA256     = "271390c596d31fe5db0022b2364375fa80e49ddc0f59c06da4b5532ab33aab13"
 
 	cpaCompatibilityProfileEnv = "CPA_COMPAT_PROFILE"
 	cpaCompatibilityModfileEnv = "CPA_COMPAT_MODFILE"
 	cpaCompatibilityCommitEnv  = "CPA_COMPAT_EXPECTED_COMMIT"
 	cpaCompatibilityOriginEnv  = "CPA_COMPAT_ORIGIN_FILE"
+	cpaCompatibilityTimeoutEnv = "CPA_COMPAT_COMMAND_TIMEOUT"
 	cpaPrimaryProfile          = "primary"
 	cpaOfficialOriginURL       = "https://github.com/router-for-me/CLIProxyAPI"
+
+	// Every upstream Go invocation is an external process (and can therefore
+	// hang independently of the contract test binary). Keep the default long
+	// enough for a cold module cache while imposing a hard upper bound that CI
+	// cannot accidentally disable with an unbounded environment value.
+	cpaCompatibilityCommandTimeoutDefault = 5 * time.Minute
+	cpaCompatibilityCommandTimeoutMin     = time.Second
+	cpaCompatibilityCommandTimeoutMax     = 10 * time.Minute
+	cpaCompatibilityOutputLimit           = 8 * 1024 * 1024
 )
+
+var errCPACompatibilityOutputLimit = errors.New("CPA compatibility command output exceeded the bounded limit")
+
+type boundedCommandOutput struct {
+	bytes.Buffer
+	limit    int
+	exceeded bool
+}
+
+func (output *boundedCommandOutput) Write(data []byte) (int, error) {
+	if output.exceeded {
+		return 0, errCPACompatibilityOutputLimit
+	}
+	remaining := output.limit - output.Len()
+	if remaining <= 0 {
+		output.exceeded = true
+		return 0, errCPACompatibilityOutputLimit
+	}
+	if len(data) > remaining {
+		_, _ = output.Buffer.Write(data[:remaining])
+		output.exceeded = true
+		return remaining, errCPACompatibilityOutputLimit
+	}
+	return output.Buffer.Write(data)
+}
 
 type cpaCompatibilityProfile struct {
 	Name      string
@@ -53,9 +94,9 @@ type cpaCompatibilityProfile struct {
 
 var cpaPinnedProfile = cpaCompatibilityProfile{
 	Name:      cpaPrimaryProfile,
-	Version:   "v7.2.137",
-	Commit:    "85d2faddd17e6f4f8675a84ee28b131f702e8eaa",
-	ModuleSum: "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=",
+	Version:   "v7.2.145",
+	Commit:    "d9cea8904b14fbbebb77ef26e98ef08f6b48a724",
+	ModuleSum: "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=",
 	GoModSum:  "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
 }
 
@@ -74,9 +115,12 @@ var latestCriticalCPAHostTests = []string{
 	"TestRegisterRPCPluginSendsHostSchemaVersion",
 	"TestRequestInterceptorTerminationStopsChain",
 	"TestRPCCapabilitiesAndAdapterIncludeRequestLifecycle",
+	"TestRegisterRPCPluginRegistersWebSocketResponseObserver",
+	"TestObserveWebSocketResponseEventRPCSanitizesMetadata",
 	"TestRPCInterceptorsIncludeHostCallbackID",
 	"TestSanitizePluginRequestRemovesNonJSONMetadata",
 	"TestStreamChunkRequestBodyPolicyBySchemaVersion",
+	"TestObserveWebSocketResponseEventClonesPayloadAndMetadata",
 	"TestServeManagementHTMLEscapesJSONResponseStrings",
 	"TestHostRouteModelAllowsExplicitExecutorPluginTarget",
 	"TestHostRouteModelClonesPluginMetadata",
@@ -274,7 +318,7 @@ func TestLatestCPAResponsesAdditionalToolsSourceContract(t *testing.T) {
 		}
 	}
 
-	// CPA v7.2.137 keeps request normalization split out of the websocket transport
+	// CPA v7.2.145 keeps request normalization split out of the websocket transport
 	// file. Pin the semantic implementation file while the upstream behavior
 	// tests above continue to guard the public contract.
 	handlerSourcePath := filepath.Join(module.Dir, "sdk", "api", "handlers", "openai", "openai_responses_websocket_requests.go")
@@ -471,6 +515,89 @@ func TestLatestCPAPluginHookNoCopyAuthAndRealtimeBoundaryContract(t *testing.T) 
 	}
 }
 
+// TestLatestCPAV145ChangedBehaviorContract is intentionally separate from the
+// stable schema contract. CPA v7.2.145 changed several non-ABI behaviors; each
+// named upstream regression must remain present and passing before a CAG
+// candidate can claim compatibility with this exact release.
+func TestLatestCPAV145ChangedBehaviorContract(t *testing.T) {
+	goBinary, moduleArguments, module := prepareLatestCPAModule(t)
+	testGroups := []struct {
+		packagePath string
+		tests       []string
+	}{
+		{
+			packagePath: cpaLatestManagementPackage,
+			tests: []string{
+				"TestSaveTokenRecord_PostPersistHookReceivesCanonicalClaudeOAuth",
+			},
+		},
+		{
+			packagePath: cpaLatestUtilityPackage,
+			tests: []string{
+				"TestCleanJSONSchema_ToolArraysMissingItems",
+				"TestCleanJSONSchema_ResponseArrayMissingItemsUnchanged",
+			},
+		},
+		{
+			packagePath: cpaLatestAuthPackage,
+			tests: []string{
+				"TestReadyViewRoundRobinPreservesSuccessorAcrossRebuild",
+				"TestScheduledSuccessorIndex_WrapsAndSkipsFilteredCandidates",
+				"TestManagerRoundRobinPreservesSuccessorAcrossCooldown",
+				"TestSchedulerPick_RoundRobinPreservesWebsocketSuccessorAcrossCooldown",
+			},
+		},
+		{
+			packagePath: cpaLatestProxyUtilPackage,
+			tests: []string{
+				"TestBuildHTTPTransportHTTPSProxyInheritsDefaultTransportSettings",
+				"TestBuildHTTPTransportHTTPSProxyH2Negotiation",
+				"TestBuildHTTPTransportHTTPSProxyHTTPTarget",
+				"TestBuildDialerHTTPSProxyCONNECT",
+				"TestBuildHTTPTransportHTTPSProxyTLSHandshakeTimeout",
+				"TestBuildHTTPTransportHTTPSProxyClonedTransport",
+			},
+		},
+	}
+	for _, group := range testGroups {
+		listed := runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-list", "^Test", group.packagePath,
+		)
+		for _, name := range group.tests {
+			if !linePresent(listed, name) {
+				t.Fatalf("CPA v7.2.145 package %s no longer lists required regression %q", group.packagePath, name)
+			}
+		}
+		runLatestGoCommand(t, goBinary,
+			"test", moduleArguments[0], moduleArguments[1], "-count=1", "-v",
+			"-run", "^("+strings.Join(group.tests, "|")+")$", group.packagePath,
+		)
+	}
+
+	// v7.2.145 deliberately restores the fixed Home listener port. Bind the
+	// source shape so a later reintroduction of a remotely supplied port cannot
+	// silently change the deployment contract.
+	serverSource, err := os.ReadFile(filepath.Join(module.Dir, "cmd", "server", "main.go"))
+	if err != nil {
+		t.Fatalf("read CPA v7.2.145 server source: %v", err)
+	}
+	if count := bytes.Count(serverSource, []byte("parsed.Port = 8317")); count != 1 {
+		t.Fatalf("CPA v7.2.145 Home port assignment count=%d, want exactly one", count)
+	}
+	authSource, err := os.ReadFile(filepath.Join(module.Dir, "internal", "api", "handlers", "management", "auth_files_fields.go"))
+	if err != nil {
+		t.Fatalf("read CPA v7.2.145 auth persistence source: %v", err)
+	}
+	for _, marker := range [][]byte{
+		[]byte("synthesizer.SynthesizeAuthFile"),
+		[]byte("h.postAuthPersistHook(ctx, persistedRecord)"),
+	} {
+		if count := bytes.Count(authSource, marker); count != 1 {
+			t.Fatalf("CPA v7.2.145 auth persistence marker %q count=%d, want exactly one", marker, count)
+		}
+	}
+}
+
 // assertRealtimeSourceBoundary binds the negative-coverage claim to the exact
 // upstream handler source, rather than relying only on an unauthenticated HTTP
 // probe. Realtime is intentionally registered outside the protected v1 group
@@ -482,14 +609,14 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 	read := func(relative string) []byte {
 		data, err := os.ReadFile(filepath.Join(moduleDir, filepath.FromSlash(relative)))
 		if err != nil {
-			t.Fatalf("read CPA v7.2.137 realtime source %s: %v", relative, err)
+			t.Fatalf("read CPA v7.2.145 realtime source %s: %v", relative, err)
 		}
 		return data
 	}
 
 	routes := read("internal/api/server_routes.go")
 	for _, marker := range [][]byte{
-		// Keep one source marker for every v7.2.137 /v1/realtime* registration.
+		// Keep one source marker for every v7.2.145 /v1/realtime* registration.
 		// These routes intentionally do not inherit the protected v1 group.
 		[]byte(`s.engine.GET("/v1/realtime", realtimeAuth, s.codexLiveHandler.HandleRealtimeWebsocket)`),
 		[]byte(`s.engine.POST("/v1/realtime", realtimeAuth, s.codexLiveHandler.Handle)`),
@@ -507,7 +634,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 		[]byte(`s.engine.POST("/v1/realtime/calls/:call_id/refer", standardAuth, s.codexLiveHandler.HandleSIPControl)`),
 	} {
 		if count := bytes.Count(routes, marker); count != 1 {
-			t.Fatalf("CPA v7.2.137 realtime route source marker %q occurs %d times, want exactly once", marker, count)
+			t.Fatalf("CPA v7.2.145 realtime route source marker %q occurs %d times, want exactly once", marker, count)
 		}
 	}
 	for _, marker := range [][]byte{
@@ -515,7 +642,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 		[]byte(`standardAuth := realtimeStandardAuthMiddleware(s.accessManager)`),
 	} {
 		if count := bytes.Count(routes, marker); count != 1 {
-			t.Fatalf("CPA v7.2.137 realtime auth source marker %q occurs %d times, want exactly once", marker, count)
+			t.Fatalf("CPA v7.2.145 realtime auth source marker %q occurs %d times, want exactly once", marker, count)
 		}
 	}
 
@@ -524,7 +651,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 	v1Start := bytes.Index(routes, []byte(`v1 := s.engine.Group("/v1")`))
 	realtimeStart := bytes.Index(routes, []byte(`realtimeAuth := realtimeAuthMiddleware`))
 	if v1Start < 0 || realtimeStart < 0 || realtimeStart <= v1Start {
-		t.Fatal("CPA v7.2.137 realtime routes are not visibly registered after the protected v1 group")
+		t.Fatal("CPA v7.2.145 realtime routes are not visibly registered after the protected v1 group")
 	}
 
 	for _, relative := range []string{
@@ -553,7 +680,7 @@ func assertRealtimeSourceBoundary(t *testing.T, moduleDir string) {
 			[]byte("CAG"),
 		} {
 			if bytes.Contains(source, forbidden) {
-				t.Fatalf("CPA v7.2.137 realtime handler %s unexpectedly contains plugin-aware execution marker %q", relative, forbidden)
+				t.Fatalf("CPA v7.2.145 realtime handler %s unexpectedly contains plugin-aware execution marker %q", relative, forbidden)
 			}
 		}
 	}
@@ -606,10 +733,7 @@ func TestLatestCPAHostFailOpenFixtureContract(t *testing.T) {
 func prepareLatestCPAModule(t *testing.T) (string, []string, latestResolvedCPAModule) {
 	t.Helper()
 	profile := selectedCPACompatibilityProfile(t)
-	goBinary, errLookPath := exec.LookPath("go")
-	if errLookPath != nil {
-		t.Fatalf("locate go tool: %v", errLookPath)
-	}
+	goBinary := latestCPAAbsoluteGoBinary(t, latestCPAConfiguredGoBinary())
 	sourceModfile := strings.TrimSpace(os.Getenv(cpaCompatibilityModfileEnv))
 	if sourceModfile == "" {
 		sourceModfile = "go.mod"
@@ -620,6 +744,15 @@ func prepareLatestCPAModule(t *testing.T) (string, []string, latestResolvedCPAMo
 			t.Fatalf("resolve CPA compatibility modfile: %v", errAbs)
 		}
 		sourceModfile = absoluteModfile
+	}
+	workingDirectory, errWorkingDirectory := os.Getwd()
+	if errWorkingDirectory != nil {
+		t.Fatalf("resolve CPA compatibility working directory: %v", errWorkingDirectory)
+	}
+	expectedModfile := filepath.Join(workingDirectory, "go.mod")
+	if filepath.Clean(sourceModfile) != filepath.Clean(expectedModfile) {
+		t.Fatalf("%s must resolve to the checked-in contract go.mod %q, got %q",
+			cpaCompatibilityModfileEnv, expectedModfile, sourceModfile)
 	}
 	if filepath.Ext(sourceModfile) != ".mod" {
 		t.Fatalf("CPA compatibility modfile must end in .mod: %s", sourceModfile)
@@ -761,17 +894,214 @@ func runLatestGoCommand(t *testing.T, goBinary string, arguments ...string) stri
 	return runLatestGoCommandInDir(t, "", goBinary, arguments...)
 }
 
+func cpaCompatibilityCommandTimeout(t *testing.T) time.Duration {
+	t.Helper()
+	raw := strings.TrimSpace(os.Getenv(cpaCompatibilityTimeoutEnv))
+	if raw == "" {
+		return cpaCompatibilityCommandTimeoutDefault
+	}
+	timeout, err := time.ParseDuration(raw)
+	if err != nil || timeout < cpaCompatibilityCommandTimeoutMin || timeout > cpaCompatibilityCommandTimeoutMax {
+		t.Fatalf("%s must be a duration in [%s,%s] (for example 120s), got %q",
+			cpaCompatibilityTimeoutEnv,
+			cpaCompatibilityCommandTimeoutMin,
+			cpaCompatibilityCommandTimeoutMax,
+			raw,
+		)
+	}
+	return timeout
+}
+
+func latestCPACommandTimedOut(ctx context.Context) bool {
+	return ctx.Err() == context.DeadlineExceeded
+}
+
+func latestCPAAbsoluteGoBinary(t *testing.T, goBinary string) string {
+	t.Helper()
+	resolved := strings.TrimSpace(goBinary)
+	if resolved == "" {
+		t.Fatal("CPA compatibility Go binary path is empty")
+	}
+	if !filepath.IsAbs(resolved) {
+		var err error
+		resolved, err = exec.LookPath(resolved)
+		if err != nil {
+			t.Fatalf("locate Go tool %q: %v", goBinary, err)
+		}
+	}
+	if !filepath.IsAbs(resolved) {
+		absolute, err := filepath.Abs(resolved)
+		if err != nil {
+			t.Fatalf("resolve absolute Go tool path %q: %v", resolved, err)
+		}
+		resolved = absolute
+	}
+	info, err := os.Stat(resolved)
+	if err != nil || info.IsDir() || (info.Mode().Perm()&0o111) == 0 {
+		t.Fatalf("CPA compatibility Go tool is not an executable file: %q (%v)", resolved, err)
+	}
+	return filepath.Clean(resolved)
+}
+
+func latestCPAConfiguredGoBinary() string {
+	if configured := strings.TrimSpace(os.Getenv("CPA_COMPAT_GO_BINARY")); configured != "" {
+		return configured
+	}
+	return "go"
+}
+
+func latestCPAEnvironmentWithOverrides(overrides map[string]string) []string {
+	// Force the child Go command into the already-selected toolchain, target
+	// platform, and checked-in module mode. Caller-specific values (for example
+	// GOPROXY=off) are layered on top without allowing duplicate, case-variant
+	// variables. Do not pass credentials, Git repository-routing/configuration
+	// variables, or provider tokens into an upstream test process.
+	defaults := map[string]string{
+		"GOTOOLCHAIN":   "local",
+		"GOWORK":        "off",
+		"GOENV":         "off",
+		"GOFLAGS":       "-mod=readonly",
+		"GOOS":          "linux",
+		"GOARCH":        "amd64",
+		"CGO_ENABLED":   "1",
+		"GOVCS":         "public:git|https",
+		"GOPRIVATE":     "",
+		"GONOSUMDB":     "",
+		"GONOPROXY":     "",
+		"GOSUMDB":       "sum.golang.org",
+		"GOPROXY":       "https://proxy.golang.org,direct",
+		"HTTP_PROXY":    "",
+		"HTTPS_PROXY":   "",
+		"ALL_PROXY":     "",
+		"http_proxy":    "",
+		"https_proxy":   "",
+		"all_proxy":     "",
+		"NO_PROXY":      "*",
+		"no_proxy":      "*",
+		"PATH":          "/usr/bin:/bin",
+		"SSH_AUTH_SOCK": "",
+	}
+	if value := strings.TrimSpace(os.Getenv("CPA_COMPAT_GOSUMDB")); value != "" {
+		defaults["GOSUMDB"] = value
+	}
+	if value := strings.TrimSpace(os.Getenv("CPA_COMPAT_GOROOT")); value != "" {
+		defaults["GOROOT"] = value
+	}
+	if value := strings.TrimSpace(os.Getenv("CPA_COMPAT_GOMODCACHE")); value != "" {
+		defaults["GOMODCACHE"] = value
+	}
+	if value := strings.TrimSpace(os.Getenv("CPA_COMPAT_HOME")); value != "" {
+		defaults["HOME"] = value
+	} else {
+		defaults["HOME"] = os.TempDir()
+	}
+	for key, value := range overrides {
+		defaults[key] = value
+	}
+	environment := make([]string, 0, len(os.Environ())+len(defaults))
+	for _, entry := range os.Environ() {
+		key, _, _ := strings.Cut(entry, "=")
+		upperKey := strings.ToUpper(key)
+		if strings.HasPrefix(upperKey, "GIT_") ||
+			strings.HasPrefix(upperKey, "AWS_") ||
+			strings.HasPrefix(upperKey, "AZURE_") ||
+			strings.HasPrefix(upperKey, "GOOGLE_APPLICATION_CREDENTIALS") ||
+			strings.HasPrefix(upperKey, "DOCKER_") ||
+			strings.HasPrefix(upperKey, "KUBECONFIG") ||
+			strings.Contains(upperKey, "TOKEN") ||
+			strings.Contains(upperKey, "SECRET") ||
+			strings.Contains(upperKey, "PASSWORD") ||
+			strings.Contains(upperKey, "CREDENTIAL") ||
+			upperKey == "GH_TOKEN" || strings.HasPrefix(upperKey, "GITHUB_") {
+			continue
+		}
+		if _, replaced := defaults[key]; replaced {
+			continue
+		}
+		replaced := false
+		for override := range defaults {
+			if strings.EqualFold(key, override) {
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			environment = append(environment, entry)
+		}
+	}
+	for key, value := range defaults {
+		environment = append(environment, key+"="+value)
+	}
+	return environment
+}
+
+func latestCPACommandStage(arguments ...string) string {
+	if len(arguments) == 0 {
+		return "unknown"
+	}
+	switch arguments[0] {
+	case "test":
+		for _, argument := range arguments[1:] {
+			if argument == "-list" || strings.HasPrefix(argument, "-list=") {
+				return "test-list"
+			}
+		}
+		for _, argument := range arguments[1:] {
+			if argument == "-run" || strings.HasPrefix(argument, "-run=") {
+				return "test-selected"
+			}
+		}
+		return "test-package"
+	case "mod":
+		if len(arguments) > 1 && arguments[1] == "download" {
+			return "module-download"
+		}
+		return "go-mod"
+	case "list":
+		return "module-list"
+	default:
+		return "go-command"
+	}
+}
+
+func latestCPACommandLabel(directory, goBinary string, arguments ...string) string {
+	label := strings.TrimSpace(goBinary + " " + strings.Join(arguments, " "))
+	if directory == "" {
+		return fmt.Sprintf("stage=%s command=%s", latestCPACommandStage(arguments...), label)
+	}
+	return fmt.Sprintf("stage=%s dir=%q command=%s", latestCPACommandStage(arguments...), directory, label)
+}
+
 func runLatestGoJSONCommand(t *testing.T, goBinary string, arguments ...string) string {
 	t.Helper()
-	command := exec.Command(goBinary, arguments...)
-	command.Env = append(os.Environ(), "GOWORK=off")
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
+	return runLatestGoJSONCommandWithEnv(t, "", goBinary, nil, arguments...)
+}
+
+func runLatestGoJSONCommandWithEnv(t *testing.T, directory, goBinary string, overrides map[string]string, arguments ...string) string {
+	t.Helper()
+	timeout := cpaCompatibilityCommandTimeout(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	absoluteGoBinary := latestCPAAbsoluteGoBinary(t, goBinary)
+	command := exec.CommandContext(ctx, absoluteGoBinary, arguments...)
+	command.Dir = directory
+	command.Env = latestCPAEnvironmentWithOverrides(overrides)
+	command.WaitDelay = 5 * time.Second
+	stdout := &boundedCommandOutput{limit: cpaCompatibilityOutputLimit}
+	stderr := &boundedCommandOutput{limit: cpaCompatibilityOutputLimit}
+	command.Stdout = stdout
+	command.Stderr = stderr
 	if errRun := command.Run(); errRun != nil {
+		if stdout.exceeded || stderr.exceeded || errors.Is(errRun, errCPACompatibilityOutputLimit) {
+			t.Fatalf("CPA compatibility command exceeded output limit %d bytes: %s\nstdout:\n%s\nstderr:\n%s",
+				cpaCompatibilityOutputLimit, latestCPACommandLabel(command.Dir, absoluteGoBinary, arguments...), stdout.String(), stderr.String())
+		}
+		if latestCPACommandTimedOut(ctx) {
+			t.Fatalf("CPA compatibility command timed out after %s: %s\nstdout:\n%s\nstderr:\n%s",
+				timeout, latestCPACommandLabel(command.Dir, absoluteGoBinary, arguments...), stdout.String(), stderr.String())
+		}
 		t.Fatalf("%s %s failed: %v\nstdout:\n%s\nstderr:\n%s",
-			goBinary, strings.Join(arguments, " "), errRun, stdout.String(), stderr.String())
+			absoluteGoBinary, strings.Join(arguments, " "), errRun, stdout.String(), stderr.String())
 	}
 	if stderr.Len() > 0 {
 		t.Logf("%s", stderr.String())
@@ -781,14 +1111,27 @@ func runLatestGoJSONCommand(t *testing.T, goBinary string, arguments ...string) 
 
 func runLatestGoCommandInDir(t *testing.T, directory, goBinary string, arguments ...string) string {
 	t.Helper()
-	command := exec.Command(goBinary, arguments...)
+	timeout := cpaCompatibilityCommandTimeout(t)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	absoluteGoBinary := latestCPAAbsoluteGoBinary(t, goBinary)
+	command := exec.CommandContext(ctx, absoluteGoBinary, arguments...)
 	command.Dir = directory
-	command.Env = append(os.Environ(), "GOWORK=off")
-	var output bytes.Buffer
-	command.Stdout = &output
-	command.Stderr = &output
+	command.Env = latestCPAEnvironmentWithOverrides(nil)
+	command.WaitDelay = 5 * time.Second
+	output := &boundedCommandOutput{limit: cpaCompatibilityOutputLimit}
+	command.Stdout = output
+	command.Stderr = output
 	if errRun := command.Run(); errRun != nil {
-		t.Fatalf("%s %s failed: %v\n%s", goBinary, strings.Join(arguments, " "), errRun, output.String())
+		if output.exceeded || errors.Is(errRun, errCPACompatibilityOutputLimit) {
+			t.Fatalf("CPA compatibility command exceeded output limit %d bytes: %s\n%s",
+				cpaCompatibilityOutputLimit, latestCPACommandLabel(directory, absoluteGoBinary, arguments...), output.String())
+		}
+		if latestCPACommandTimedOut(ctx) {
+			t.Fatalf("CPA compatibility command timed out after %s: %s\n%s",
+				timeout, latestCPACommandLabel(directory, absoluteGoBinary, arguments...), output.String())
+		}
+		t.Fatalf("%s %s failed: %v\n%s", absoluteGoBinary, strings.Join(arguments, " "), errRun, output.String())
 	}
 	t.Logf("%s", output.String())
 	return output.String()

@@ -2,22 +2,22 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
 > **Frozen historical snapshot.** The classifier identity above is active-tree
 > navigation metadata only. The body below preserves the Round 6 /
 > v0.15 handoff, including its `classifier-policy-v5` values and any CPA v7.2.95
 > wording such as "current release target"; those statements are historical only
-> and are not the active repository release identity. The current Round 14
-> overlay is CAG source `1.0.0`, planned `v1.0.0-rc.1` on Linux amd64, and
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa` (C ABI 1 / RPC schema 3).
+> and are not the active repository release identity. The current Round 17
+> overlay is CAG source `1.0.0`, planned `v1.0.0-rc.3` on Linux amd64, and
+> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724` (C ABI 1 / RPC schema 4).
 > Round 13 v7.2.125/schema 2 evidence retains its historical identity and does
 > not transfer a PASS. Every `/v1/realtime*` route currently bypasses CAG
 > `RequestInterceptor`, `ModelRouter`, and request lifecycle and is
 > **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE**. Only registered callback
 > paths such as chat and Responses are protected; there is no all-traffic
-> coverage claim. See [Round 14 status](ROUND14_STATUS.md).
+> coverage claim. See [Round 17 status](ROUND16_STATUS.md).
 
 Historical status: **BLOCKED / PENDING HOST AND INDEPENDENT AUDIT**
 

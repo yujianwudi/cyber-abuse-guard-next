@@ -1,0 +1,396 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cyber-abuse-guard.invalid/schemas/current-cpa-host-admission-config-v1.json",
+  "title": "CAG current CPA tracked Host admission collector config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approved_tool_identities",
+    "approved_runtime_identities",
+    "approved_runtime_identities_sha256",
+    "artifacts",
+    "candidate_manifest_sha256",
+    "identities",
+    "input_sha256",
+    "network",
+    "paths",
+    "plan",
+    "probe_contract",
+    "roles",
+    "run_config_sha256",
+    "run_id",
+    "schema",
+    "sqlite",
+    "usage_source"
+  ],
+  "properties": {
+    "schema": {"const": "cag-current-cpa-host-admission-config/v1"},
+    "run_id": {"$ref": "#/$defs/run_id"},
+    "run_config_sha256": {"$ref": "#/$defs/sha256"},
+    "candidate_manifest_sha256": {"$ref": "#/$defs/sha256"},
+    "approved_tool_identities": {"$ref": "#/$defs/tool_identities"},
+    "approved_runtime_identities": {"$ref": "#/$defs/approved_runtime_identities"},
+    "approved_runtime_identities_sha256": {"$ref": "#/$defs/sha256"},
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["store_zip_name", "store_zip_sha256"],
+      "properties": {
+        "store_zip_name": {"const": "cyber-abuse-guard_1.0.0_linux_amd64.zip"},
+        "store_zip_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate", "cag", "cpa", "keeper", "mock"],
+      "properties": {
+        "candidate": {"$ref": "#/$defs/candidate_identity"},
+        "cag": {"$ref": "#/$defs/cag_identity"},
+        "cpa": {"$ref": "#/$defs/cpa_identity"},
+        "mock": {"$ref": "#/$defs/mock_identity"},
+        "keeper": {"$ref": "#/$defs/keeper_identity"}
+      }
+    },
+    "input_sha256": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "corpus_manifest",
+        "approved_runtime_identities",
+        "approved_tool_identities",
+        "machine_evidence",
+        "supplemental_manifest",
+        "supplemental_policy",
+        "supplemental_results",
+        "transport_results"
+      ],
+      "properties": {
+        "corpus_manifest": {"$ref": "#/$defs/sha256"},
+        "approved_runtime_identities": {"$ref": "#/$defs/sha256"},
+        "approved_tool_identities": {"$ref": "#/$defs/sha256"},
+        "machine_evidence": {"$ref": "#/$defs/sha256"},
+        "supplemental_manifest": {"$ref": "#/$defs/sha256"},
+        "supplemental_policy": {"$ref": "#/$defs/sha256"},
+        "supplemental_results": {"$ref": "#/$defs/sha256"},
+        "transport_results": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attachable", "internal", "member_count", "name", "real_provider_forbidden"],
+      "properties": {
+        "attachable": {"const": false},
+        "internal": {"const": true},
+        "member_count": {"const": 3},
+        "name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{2,62}-host-net$"},
+        "real_provider_forbidden": {"const": true}
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_sqlite_database",
+        "approved_runtime_identities",
+        "approved_tool_identities",
+        "candidate_manifest",
+        "candidate_store_zip",
+        "corpus_manifest",
+        "host_admission_directory",
+        "machine_evidence",
+        "run_config",
+        "runtime_root",
+        "supplemental_manifest",
+        "supplemental_policy",
+        "supplemental_results",
+        "transport_results"
+      ],
+      "properties": {
+        "audit_sqlite_database": {"$ref": "#/$defs/absolute_path"},
+        "approved_runtime_identities": {"$ref": "#/$defs/absolute_path"},
+        "approved_tool_identities": {"$ref": "#/$defs/absolute_path"},
+        "candidate_manifest": {"$ref": "#/$defs/absolute_path"},
+        "candidate_store_zip": {"$ref": "#/$defs/absolute_path"},
+        "corpus_manifest": {"$ref": "#/$defs/absolute_path"},
+        "host_admission_directory": {"$ref": "#/$defs/absolute_path"},
+        "machine_evidence": {"$ref": "#/$defs/absolute_path"},
+        "run_config": {"$ref": "#/$defs/absolute_path"},
+        "runtime_root": {"$ref": "#/$defs/absolute_path"},
+        "supplemental_manifest": {"$ref": "#/$defs/absolute_path"},
+        "supplemental_policy": {"$ref": "#/$defs/absolute_path"},
+        "supplemental_results": {"$ref": "#/$defs/absolute_path"},
+        "transport_results": {"$ref": "#/$defs/absolute_path"}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "allow_probe_executions",
+        "block_probe_executions",
+        "maximum_sample_interval_ms",
+        "minimum_sample_interval_ms",
+        "probe_endpoint",
+        "realtime_route_count",
+        "required_mode",
+        "sample_interval_ms",
+        "stability_basis",
+        "windows"
+      ],
+      "properties": {
+        "allow_probe_executions": {"const": 2},
+        "block_probe_executions": {"const": 1},
+        "maximum_sample_interval_ms": {"const": 2000},
+        "minimum_sample_interval_ms": {"const": 500},
+        "probe_endpoint": {"const": "/v1/chat/completions"},
+        "realtime_route_count": {"const": 14},
+        "required_mode": {"const": "balanced"},
+        "sample_interval_ms": {"const": 1000},
+        "stability_basis": {"const": "DEDICATED_HOST_3600S_WINDOW"},
+        "windows": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "prefixItems": [
+            {"const": {"duration_seconds": 300, "name": "host_300s", "sample_count": 301}},
+            {"const": {"duration_seconds": 3600, "name": "host_3600s", "sample_count": 3601}}
+          ],
+          "items": false
+        }
+      }
+    },
+    "probe_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allow_request_sha256s", "block_request_sha256", "model", "stream"],
+      "properties": {
+        "allow_request_sha256s": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {"$ref": "#/$defs/sha256"},
+          "uniqueItems": true
+        },
+        "block_request_sha256": {"$ref": "#/$defs/sha256"},
+        "model": {"const": "current-cpa-audit-model"},
+        "stream": {"const": false}
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpa", "keeper", "mock"],
+      "properties": {
+        "cpa": {"$ref": "#/$defs/role"},
+        "keeper": {"$ref": "#/$defs/role"},
+        "mock": {"$ref": "#/$defs/role"}
+      }
+    },
+    "sqlite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_mode", "quick_check", "schema_version"],
+      "properties": {
+        "checkpoint_mode": {"const": "TRUNCATE"},
+        "quick_check": {"const": "PRAGMA quick_check"},
+        "schema_version": {"const": 7}
+      }
+    },
+    "usage_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "field", "kind", "monotonic"],
+      "properties": {
+        "endpoint": {"const": "/keeper/stats"},
+        "field": {"const": "usage_records"},
+        "kind": {"const": "keeper_sqlite_persisted_records"},
+        "monotonic": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^(?!0{64}$)[0-9a-f]{64}$"},
+    "sha256_digest": {"type": "string", "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$"},
+    "repo_digest": {"type": "string", "pattern": "^(?:[A-Za-z0-9._-]+(?::[1-9][0-9]{0,4})?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?@sha256:(?!0{64}$)[0-9a-f]{64}$", "maxLength": 512},
+    "run_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{2,62}$"},
+    "absolute_path": {"type": "string", "minLength": 2, "maxLength": 4096, "pattern": "^/"},
+    "sha1": {"type": "string", "pattern": "^(?!0{40}$)[0-9a-f]{40}$"},
+    "positive_decimal": {"type": "string", "pattern": "^[1-9][0-9]*$", "maxLength": 20},
+    "cag_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "so_name", "so_sha256", "source_version", "tree"],
+      "properties": {
+        "commit": {"$ref": "#/$defs/sha1"},
+        "so_name": {"const": "cyber-abuse-guard-v1.0.0.so"},
+        "so_sha256": {"$ref": "#/$defs/sha256"},
+        "source_version": {"const": "1.0.0"},
+        "tree": {"$ref": "#/$defs/sha1"}
+      }
+    },
+    "candidate_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "event", "head_branch", "head_sha", "manifest_sha256", "repository", "run_attempt", "run_id", "schema", "source", "so", "status", "workflow"],
+      "properties": {
+        "artifact": {
+          "type": "object", "additionalProperties": false,
+          "required": ["digest", "id", "name"],
+          "properties": {
+            "digest": {"$ref": "#/$defs/sha256_digest"},
+            "id": {"$ref": "#/$defs/positive_decimal"},
+            "name": {"const": "cyber-abuse-guard-linux-amd64-audit-candidate"}
+          }
+        },
+        "event": {"enum": ["pull_request", "push"]},
+        "head_branch": {"type": "string", "minLength": 1, "maxLength": 255},
+        "head_sha": {"$ref": "#/$defs/sha1"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "repository": {"const": "yujianwudi/cyber-abuse-guard-next"},
+        "run_attempt": {"$ref": "#/$defs/positive_decimal"},
+        "run_id": {"$ref": "#/$defs/positive_decimal"},
+        "schema": {"const": "cyber-abuse-guard.audit-candidate-manifest.v1"},
+        "source": {
+          "type": "object", "additionalProperties": false,
+          "required": ["commit", "dirty", "tree", "version"],
+          "properties": {
+            "commit": {"$ref": "#/$defs/sha1"},
+            "dirty": {"const": false},
+            "tree": {"$ref": "#/$defs/sha1"},
+            "version": {"const": "1.0.0"}
+          }
+        },
+        "so": {
+          "type": "object", "additionalProperties": false,
+          "required": ["name", "sha256"],
+          "properties": {
+            "name": {"const": "cyber-abuse-guard-v1.0.0.so"},
+            "sha256": {"$ref": "#/$defs/sha256"}
+          }
+        },
+        "status": {"const": "UNRELEASED / SECOND-MACHINE AUDIT CANDIDATE / NOT RELEASE"},
+        "workflow": {
+          "type": "object", "additionalProperties": false,
+          "required": ["name", "path"],
+          "properties": {
+            "name": {"const": "CI"},
+            "path": {"const": ".github/workflows/ci.yml"}
+          }
+        }
+      }
+    },
+    "cpa_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary_path", "binary_sha256", "c_abi", "commit", "image_id", "image_ref", "official_asset_name", "official_asset_sha256", "repo_digest", "rpc_schema", "tag"],
+      "properties": {
+        "binary_path": {"$ref": "#/$defs/absolute_path"},
+        "binary_sha256": {"const": "576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713"},
+        "c_abi": {"const": 1},
+        "commit": {"const": "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"},
+        "image_id": {"$ref": "#/$defs/sha256_digest"},
+        "image_ref": {"$ref": "#/$defs/repo_digest"},
+        "official_asset_name": {"const": "CLIProxyAPI_7.2.145_linux_amd64.tar.gz"},
+        "official_asset_sha256": {"const": "ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37"},
+        "repo_digest": {"$ref": "#/$defs/repo_digest"},
+        "rpc_schema": {"const": 4},
+        "tag": {"const": "v7.2.145"}
+      }
+    },
+    "mock_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract", "image_id", "image_ref", "repo_digest", "source_sha256"],
+      "properties": {
+        "contract": {"const": "cag-current-cpa-counted-mock/v1"},
+        "image_id": {"$ref": "#/$defs/sha256_digest"},
+        "image_ref": {"$ref": "#/$defs/repo_digest"},
+        "repo_digest": {"$ref": "#/$defs/repo_digest"},
+        "source_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "keeper_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["base_image_ref", "contract", "expected_executor", "expected_mode", "expected_model", "expected_provider", "image_id", "image_ref", "port", "repo_digest", "source_path", "source_sha256"],
+      "properties": {
+        "base_image_ref": {"$ref": "#/$defs/repo_digest"},
+        "contract": {"const": "cag-current-cpa-host-keeper/v1"},
+        "expected_executor": {"const": "OpenAICompatExecutor"},
+        "expected_mode": {"const": "balanced"},
+        "expected_model": {"const": "current-cpa-audit-model"},
+        "expected_provider": {"const": "openai-compatible-current-cpa-counted-mock"},
+        "image_id": {"$ref": "#/$defs/sha256_digest"},
+        "image_ref": {"$ref": "#/$defs/repo_digest"},
+        "port": {"const": 18081},
+        "repo_digest": {"$ref": "#/$defs/repo_digest"},
+        "source_path": {"const": "/opt/cag-host-keeper/keeper_fixture.py"},
+        "source_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["container_name", "label"],
+      "properties": {
+        "container_name": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{2,62}-host-(?:cpa|keeper|mock)$"},
+        "label": {"enum": ["host-admission-cpa", "host-admission-keeper", "host-admission-mock"]}
+      }
+    },
+    "tool_identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approved_runtime_identities_sha256",
+        "audit_contract_sha256",
+        "bundle_sha256",
+        "collector_source_sha256",
+        "config_schema_sha256",
+        "evidence_manifest_schema_sha256",
+        "host_admission_schema_sha256",
+        "host_admission_source_sha256",
+        "keeper_source_sha256",
+        "release_admission_source_sha256",
+        "run_source_sha256",
+        "validator_sha256"
+      ],
+      "properties": {
+        "approved_runtime_identities_sha256": {"$ref": "#/$defs/sha256"},
+        "audit_contract_sha256": {"$ref": "#/$defs/sha256"},
+        "bundle_sha256": {"$ref": "#/$defs/sha256"},
+        "collector_source_sha256": {"$ref": "#/$defs/sha256"},
+        "config_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "evidence_manifest_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "host_admission_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "host_admission_source_sha256": {"$ref": "#/$defs/sha256"},
+        "keeper_source_sha256": {"$ref": "#/$defs/sha256"},
+        "release_admission_source_sha256": {"$ref": "#/$defs/sha256"},
+        "run_source_sha256": {"$ref": "#/$defs/sha256"},
+        "validator_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+    ,
+    "approved_runtime_identities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["keeper", "schema"],
+      "properties": {
+        "schema": {"const": "cag-current-cpa-host-admission-approved-runtime-identities/v1"},
+        "keeper": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_image_ref", "contract", "image_id", "image_ref", "source_sha256"],
+          "properties": {
+            "base_image_ref": {"$ref": "#/$defs/repo_digest"},
+            "contract": {"const": "cag-current-cpa-host-keeper/v1"},
+            "image_id": {"$ref": "#/$defs/sha256_digest"},
+            "image_ref": {"$ref": "#/$defs/repo_digest"},
+            "source_sha256": {"$ref": "#/$defs/sha256"}
+          }
+        }
+      }
+    }
+  }
+}

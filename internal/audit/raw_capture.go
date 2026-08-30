@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -186,7 +187,7 @@ var rawCaptureRedactors = []rawCaptureRedactor{
 		replacement: `${1}"[REDACTED]"`,
 	},
 	{
-		expression:  regexp.MustCompile(`(?i)(["']?(?:auth|authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|password|passwd|secret|client[-_]?secret)["']?[\t ]*[:=][\t ]*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;&}\]]+)`),
+		expression:  regexp.MustCompile(`(?i)(["']?(?:auth|authorization|proxy[-_]?authorization|cookie|set[-_]?cookie|api[-_]?key|apikey|access[-_]?token|refresh[-_]?token|session[-_]?token|oauth[-_]?token|id[-_]?token|token|password|passwd|secret|client[-_]?secret|private[-_]?key|credential|credentials)["']?[\t ]*[:=][\t ]*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n,;&}\]]+)`),
 		replacement: `${1}"[REDACTED]"`,
 	},
 	{
@@ -1063,12 +1064,19 @@ func rawCapturePurgeSnapshotVisible(ctx context.Context, conn *sql.Conn, snapsho
 		}
 		if snapshotIndex >= len(snapshot) {
 			wipeBytes(current.rawPreview)
-			continue
+			// Every row in the fresh view must belong to the exact pre-delete
+			// snapshot. Once all expected rows have been matched, any additional
+			// row is evidence of a concurrent or external sensitive write and must
+			// invalidate compensation rather than being silently ignored.
+			return false, nil
 		}
 		wanted := snapshot[snapshotIndex]
 		if current.id < wanted.id {
 			wipeBytes(current.rawPreview)
-			continue
+			// The snapshot contains the complete table in primary-key order;
+			// an unaccounted lower-ID row is just as much a row-set mismatch as
+			// an extra trailing row.
+			return false, nil
 		}
 		if current.id > wanted.id {
 			wipeBytes(current.rawPreview)
@@ -1359,6 +1367,11 @@ func rawCaptureRedactionWindow(raw []byte, maxBytes int) ([]byte, bool) {
 }
 
 func redactRawCapture(value string) (string, int) {
+	// Decode only the bounded JSON-style Unicode escapes before applying the
+	// key/value redactors. This closes the common `p\\u0061ssword` key spelling
+	// without parsing or retaining an unbounded request object; malformed escapes
+	// remain unchanged and are still covered by the ordinary best-effort rules.
+	value = decodeRawCaptureUnicodeEscapes(value)
 	hits := 0
 	for _, rule := range rawCaptureRedactors {
 		matches := rule.expression.FindAllStringSubmatchIndex(value, -1)
@@ -1378,6 +1391,30 @@ func redactRawCapture(value string) (string, int) {
 		hits += len(matches)
 	}
 	return value, hits
+}
+
+func decodeRawCaptureUnicodeEscapes(value string) string {
+	if !strings.Contains(value, `\u`) {
+		return value
+	}
+	var decoded strings.Builder
+	decoded.Grow(len(value))
+	for index := 0; index < len(value); {
+		if value[index] == '\\' && index+5 < len(value) && value[index+1] == 'u' {
+			code, err := strconv.ParseUint(value[index+2:index+6], 16, 16)
+			if err == nil {
+				runeValue := rune(code)
+				if utf8.ValidRune(runeValue) && !(runeValue >= 0xD800 && runeValue <= 0xDFFF) {
+					decoded.WriteRune(runeValue)
+					index += 6
+					continue
+				}
+			}
+		}
+		decoded.WriteByte(value[index])
+		index++
+	}
+	return decoded.String()
 }
 
 func truncateUTF8(value string, maxBytes int) (string, bool) {

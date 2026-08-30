@@ -88,6 +88,7 @@ func TestCSAMAuditPersistenceDoesNotBorrowLegacyRiskScore(t *testing.T) {
 				legacyResult,
 				csamResult,
 				true,
+				false,
 				testCase.decision,
 				nil,
 				"",
@@ -153,7 +154,7 @@ func TestForgedCSAMTextResultCannotPersist(t *testing.T) {
 	}
 	p.recordDecision(
 		state, request, &requestHashMemo{body: request.Body}, "", len(request.Body),
-		classifier.Result{}, forgedCSAMTextTestResult(), false, decision, nil, "", request.Body, 0,
+		classifier.Result{}, forgedCSAMTextTestResult(), false, false, decision, nil, "", request.Body, 0,
 	)
 	if err := state.audit.Flush(context.Background()); err != nil {
 		t.Fatalf("flush forged CSAM result: %v", err)
@@ -200,7 +201,7 @@ func TestMixedLegacyAndCSAMBlockNeverWritesRawCapture(t *testing.T) {
 	}
 	p.recordDecision(
 		state, request, &requestHashMemo{body: request.Body}, "", len(request.Body),
-		legacy, csamResult, true, decision, nil, "", request.Body, 0,
+		legacy, csamResult, true, false, decision, nil, "", request.Body, 0,
 	)
 	if err := state.audit.Flush(context.Background()); err != nil {
 		t.Fatalf("flush mixed event: %v", err)
@@ -259,7 +260,7 @@ func TestPositiveThenExhaustedCSAMStreamTaintSuppressesLegacyRawCapture(t *testi
 	request := pluginapi.ModelRouteRequest{SourceFormat: "openai", RequestedModel: "synthetic-csam-exhaustion", Body: []byte(rawCanary)}
 	p.recordDecision(
 		state, request, &requestHashMemo{body: request.Body}, "", len(request.Body),
-		legacy, csamResult, sink.PrivacyTainted(), decision, nil, "", request.Body, 0,
+		legacy, csamResult, sink.PrivacyTainted(), false, decision, nil, "", request.Body, 0,
 	)
 	if err := state.audit.Flush(context.Background()); err != nil {
 		t.Fatal(err)

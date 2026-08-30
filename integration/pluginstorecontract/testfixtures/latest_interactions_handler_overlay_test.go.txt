@@ -34,11 +34,11 @@ func TestCyberAbuseGuardInteractionsTranslatorRegistryContract(t *testing.T) {
 }
 
 func TestCyberAbuseGuardInteractionsHandlerRequestInterceptorContract(t *testing.T) {
-	if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 3 {
-		t.Fatalf("CPA plugin versions = ABI %d schema %d, want 1/3", pluginabi.ABIVersion, pluginabi.SchemaVersion)
+	if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 4 {
+		t.Fatalf("CPA plugin versions = ABI %d schema %d, want 1/4", pluginabi.ABIVersion, pluginabi.SchemaVersion)
 	}
 	gin.SetMode(gin.TestMode)
-	const registryClientID = "cyber-abuse-guard-interactions-schema3-contract"
+	const registryClientID = "cyber-abuse-guard-interactions-schema4-contract"
 	registry.GetGlobalRegistry().RegisterClient(registryClientID, "gemini", []*registry.ModelInfo{{ID: "gemini-3.5-flash"}})
 	t.Cleanup(func() {
 		registry.GetGlobalRegistry().UnregisterClient(registryClientID)
@@ -47,7 +47,7 @@ func TestCyberAbuseGuardInteractionsHandlerRequestInterceptorContract(t *testing
 	const inputCanary = "INTERACTIONS_REQUEST_INTERCEPTOR_CANARY"
 	body := `{"model":"models/gemini-3.5-flash","input":[{"type":"user_input","content":[{"type":"text","text":"` + inputCanary + `"}]}]}`
 	host := &interactionsRequestLifecycleContractHost{}
-	recorder := runInteractionsContractRequest(t, host, body, "schema3-session")
+	recorder := runInteractionsContractRequest(t, host, body, "schema4-session")
 
 	if recorder.Code != http.StatusUnavailableForLegalReasons {
 		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusUnavailableForLegalReasons, recorder.Body.String())

@@ -10,7 +10,7 @@ const CSAMTextPolicyVersion = "csam-text-policy-v1"
 // explanation, persistence, counters, and management projection sources listed
 // in policy_identity_test.go. The declaration file itself stays outside the
 // digest so the compiled hash is not recursive.
-const CSAMTextPolicySHA256 = "c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f"
+const CSAMTextPolicySHA256 = "f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680"
 
 // PolicyIdentity contains only stable, low-sensitivity compiled identifiers.
 // It never contains request text, evidence spans, offsets, or request hashes.

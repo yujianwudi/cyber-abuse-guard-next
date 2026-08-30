@@ -1,30 +1,33 @@
-# CPA v7.2.137 schema-3 active contract and frozen historical validation
+# CPA v7.2.145 schema-4 active contract and frozen historical validation
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
-## Round 14 active compatibility overlay
+## Round 16 active compatibility overlay
+
+> Round 17 overlay: this legacy heading and the `round16_*` field names are
+> retained for parser compatibility; all values in this block bind CPA v7.2.145.
 
 The active classifier remains `classifier-policy-v20`. Its protected summary
 includes the root `go.mod`/`go.sum` together with the bounded multipart and
-streaming implementation, so the CPA v7.2.137 pin plus the current symbol-leet
+streaming implementation, so the CPA v7.2.145 pin plus the current symbol-leet
 and winner-order fixes produce SHA-256
-`1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d`.
+`974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683`.
 
 The sole active source/compile target is CLIProxyAPI
-`v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3,
-module sum `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`, and go.mod sum
+`v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4,
+module sum `h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
-asset `CLIProxyAPI_7.2.137_linux_amd64.tar.gz` is 21,072,175 bytes with
-SHA-256 `ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`;
+asset `CLIProxyAPI_7.2.145_linux_amd64.tar.gz` is 21,226,153 bytes with
+SHA-256 `ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
 the official checksums file has SHA-256
-`9ae7dee90cd717a373acb58fad0163264891d5a76b27fb15d4c88bd10467012e`,
-and the contained 63,738,088-byte binary has SHA-256
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`,
+and the contained 64,207,528-byte binary has SHA-256
+`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
 
-The current repository-owned development self-check now records `315/315 PASS`
+The current v7.2.145-bound repository-owned development self-check now records `320/320 PASS`
 on Linux with zero skips. The receipt records the command, time window, stderr,
 test IDs, all tested implementation/test source bytes and current runner hashes.
 It materializes those bytes into a temporary read-only snapshot and runs
@@ -32,15 +35,15 @@ isolated Python against that snapshot; it is not inferred from test discovery
 or a mutable source-tree subprocess. It is repository-authored and unsigned,
 so it cannot replace exact-commit GitHub CI or independent evidence. The prior
 283-test receipt remains immutable historical evidence and is not relabelled.
-Five targeted schema-3 Host fixture tests, the targeted CAG RPC schema test
-under WSL, and one new upstream hook/no-copy/auth/realtime source-contract test
-also pass as dirty-worktree development evidence.
+The v7.2.145 changed-behavior source contract is present but requires the
+Linux compatibility job to execute its named upstream regressions; no local
+Windows result is promoted to a CPA145 PASS.
 The complete Linux matrix, remote/exact-candidate CI, exact-fix second-machine,
 five-repository and supplemental-ZIP audits, false-positive gate, Host
 performance/soak, independent attestation, and release gates are not all
-closed. The operator canceled all second-machine execution for this round, so
-there is no remote evidence and those mandatory gates are
-`CANCELLED_BY_OPERATOR / NO_REMOTE_EXECUTION`. The prior exact `a216395` candidate passed its named
+closed. A fresh real second-machine run and its canonical, non-expired v3
+admission report are mandatory for the exact candidate and remain pending. The
+prior exact `a216395` candidate passed its named
 GitHub, semantic, CSAM and native-Host lanes, but its Host A/B run failed closed
 at CPA+CAG concurrency 4 / repetition 3 with
 `queue_sample:MissedDeadline`. The current fix uses one private persistent
@@ -48,11 +51,11 @@ management connection per measured cell without changing the 100 ms cadence or
 any admission threshold. The old candidate transfers no PASS after the
 collector bytes changed. The RC lane may publish only after all applicable acceptance gates
 pass; the current pending state does not yet authorize a tag or Release.
-The upstream v7.2.137 tag/commit and a fresh Linux download of the official
-archive, checksums file, and contained binary were rechecked on 2026-08-21;
+The upstream v7.2.145 tag/commit and a fresh Linux download of the official
+archive, checksums file, and contained binary were rechecked on 2026-08-29;
 those checks close only upstream identity, not Host execution or release admission.
 
-CPA v7.2.137 `/v1/realtime*` uses a path that bypasses CAG. It is explicitly
+CPA v7.2.145 `/v1/realtime*` uses a path that bypasses CAG. It is explicitly
 `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE`; protected-route results must not
 be described as all-traffic coverage. This source-topology conclusion is
 reported separately as `SOURCE_TOPOLOGY_UNPROTECTED`. The isolated dynamic
@@ -64,24 +67,24 @@ authenticated handler/provider-path proof.
 Everything below this overlay, including every Round 13 v7.2.125 PASS and
 Round 12 or earlier record, is immutable `HISTORICAL / SUPERSEDED` evidence for
 its original identity only. No old PASS is relabelled or transferred to Round
-14. See [Round 14 status](../ROUND14_STATUS.md).
+17. See [Round 17 status](../ROUND16_STATUS.md).
 
 ```text
-round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
-round14_audit_expected_test_count: 315 / EXECUTED
-round14_audit_runner_bundle_sha256: 49512adde24e013e8c79cac0ef33dcbd51b975144cb20eb4542c582905af4e3c
-round14_audit_contract_sha256: 7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642
-round14_audit_run_source_sha256: 434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665
-round14_audit_machine_schema_sha256: 3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e
-round14_audit_tool_tests: PASS / LINUX / 315_OF_315
-round14_audit_tool_skips: 0
-round14_audit_test_sources_sha256: 94c47cb2e1dac34dfdf8a5a7f8d1777f00c93537a7e12f8850cbb6dcd1a373a1
-round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round14_audit_unit_receipt_sha256: b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c
-round14_audit_unit_started_at: 2026-08-25T10:18:13.842Z
-round14_audit_unit_finished_at: 2026-08-25T10:18:49.358Z
-round14_audit_unit_elapsed_ms: 35516
-round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
+round16_audit_receipt_state: PASS / LINUX / 320_OF_320 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
+round16_audit_expected_test_count: 320 / EXECUTED
+round16_audit_runner_bundle_sha256: d803afbde371f0a4e25135827d845b8f50207a9dc761833b3b8648d03b74f078
+round16_audit_contract_sha256: 3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77
+round16_audit_run_source_sha256: 44ea0e8519db3dd936de76db56a3f758d8046ff85e49562a254e0cf2ae27dc16
+round16_audit_machine_schema_sha256: 428d55f9b0f0fc42441ae0366031b4177d3e8d802e98c3dee4f813b660aa4658
+round16_audit_tool_tests: PASS / LINUX / 320_OF_320
+round16_audit_tool_skips: 0
+round16_audit_test_sources_sha256: 8d3ab5da2047a4619f0a9e1924ac59d4ac988f96b3c2bfeefff054c28414f879
+round16_audit_test_ids_sha256: ae277b0ef13bfcff5c7572e595b31cb1b1b27f737ec8e6245b953d91dfe58275
+round16_audit_unit_receipt_sha256: a694cc5b0824e5d507aa1f9ca6eeb8f3e51671918314246e91494e92fa0b53f8
+round16_audit_unit_started_at: 2026-08-30T04:33:44.648Z
+round16_audit_unit_finished_at: 2026-08-30T04:34:29.160Z
+round16_audit_unit_elapsed_ms: 44511
+round16_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
 ```
 
 ## Frozen Round 13 compatibility overlay — historical / superseded

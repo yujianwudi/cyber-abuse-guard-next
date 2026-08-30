@@ -6,8 +6,8 @@
   ],
   "max_blob_bytes": 2097152,
   "reviewer": {
-    "identity": "Codex Round 14 byte-identical Keysmith HEAD refresh",
-    "reviewed_at": "2026-08-24T05:26:01.910Z",
+    "identity": "Codex Round 17 Keysmith v0.5.0 inert-text review",
+    "reviewed_at": "2026-08-29T17:34:06.930Z",
     "status": "approved"
   },
   "repositories": [
@@ -21,11 +21,11 @@
           "kind": "text",
           "archive_member": null,
           "reviewed_source": {
-            "blob_sha1": "dee05f309e305373d7c9ebb478c632a0c4b99c35",
-            "commit": "2cb7f382ea8a08e9af5a6d9c16580b45f639891a",
-            "source_sha256": "2c2c9f0e008c492bfc9487170a7a08daedeb8b0625af1f85617ab2d1bd3f35c0",
-            "text_sha256": "2c2c9f0e008c492bfc9487170a7a08daedeb8b0625af1f85617ab2d1bd3f35c0",
-            "tree": "0d46f7e9ffe6907b2483d9955a6f40a8f75800dd"
+            "blob_sha1": "8688722b73b751d340e9698054e676e1bf1a7ef8",
+            "commit": "19ba98f79d9a2b529b658f54315843716522a67a",
+            "source_sha256": "e189bc928230d327adc9c953354e1468993525e12b9de7ecbb1dd63bc3bcb190",
+            "text_sha256": "e189bc928230d327adc9c953354e1468993525e12b9de7ecbb1dd63bc3bcb190",
+            "tree": "782523b1383ca40e96d75820f8188576c86d1a01"
           },
           "semantic_cases": [
             {
@@ -64,10 +64,10 @@
           "archive_member": null,
           "reviewed_source": {
             "blob_sha1": "866401a756f07afc2fc14dcdee23347f73c4762a",
-            "commit": "2cb7f382ea8a08e9af5a6d9c16580b45f639891a",
+            "commit": "19ba98f79d9a2b529b658f54315843716522a67a",
             "source_sha256": "ca645e063499b238999b5652f2eaa932d4f1b1e896b0866bb1584c0c5ac0a778",
             "text_sha256": "ca645e063499b238999b5652f2eaa932d4f1b1e896b0866bb1584c0c5ac0a778",
-            "tree": "0d46f7e9ffe6907b2483d9955a6f40a8f75800dd"
+            "tree": "782523b1383ca40e96d75820f8188576c86d1a01"
           },
           "semantic_cases": [
             {

@@ -1,45 +1,47 @@
-# Test Report — CPA v7.2.137 Round 14 and frozen historical evidence
+# Test Report — CPA v7.2.145 Round 17 and frozen historical evidence
 
-## Round 14 current test boundary
+## Round 16 current test boundary
+
+> Round 17 overlay: this legacy heading and the `round16_*` field names are
+> retained for parser compatibility; all values in this block bind CPA v7.2.145.
 
 ```text
-round14_cpa: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa / C_ABI_1 / RPC_SCHEMA_3
-round14_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
-round14_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
-round14_schema3_host_fixture_targeted: PASS / 5_TESTS
-round14_cag_rpc_schema_targeted: PASS / WSL
-round14_upstream_hook_no_copy_auth_realtime_targeted: PASS / 1_TEST
-round14_audit_receipt_state: PASS / LINUX / 315_OF_315 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
-round14_audit_expected_test_count: 315 / EXECUTED
-round14_audit_runner_bundle_sha256: 49512adde24e013e8c79cac0ef33dcbd51b975144cb20eb4542c582905af4e3c
-round14_audit_contract_sha256: 7ad1afd590e896a85361782679edf5928774fe7a22d617364df389bc11586642
-round14_audit_run_source_sha256: 434fde361ab915bdd5aeb41bc9794eb21b0b561dec1dc9e236705f2cce388665
-round14_audit_machine_schema_sha256: 3d24c24777e60d57bc9ab0fc8feaac659b9cc494e9c56c3e19d6b3e9e2ec8e4e
-round14_audit_tool_tests: PASS / LINUX / 315_OF_315
-round14_audit_tool_skips: 0
-round14_audit_test_sources_sha256: 94c47cb2e1dac34dfdf8a5a7f8d1777f00c93537a7e12f8850cbb6dcd1a373a1
-round14_audit_test_ids_sha256: 54d9dd02e597487c54e9264724410f446fdaf6fbf1711a935ce918379b3f5f3f
-round14_audit_unit_receipt_sha256: b4b8b228a749835667e5024a0b54186370dd304a0fe770516bba1d05167dbd7c
-round14_audit_unit_started_at: 2026-08-25T10:18:13.842Z
-round14_audit_unit_finished_at: 2026-08-25T10:18:49.358Z
-round14_audit_unit_elapsed_ms: 35516
-round14_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
-round14_complete_linux: NOT_RUN / PENDING
-round14_exact_candidate_ci: NOT_RUN / PENDING
-round14_second_machine_five_repository_zip_false_positive: EXACT_FIX_NOT_RUN / PARENT_20D6268_PASS_DOES_NOT_TRANSFER
-round14_host_performance_and_soak: EXACT_FIX_NOT_RUN / V1.44_ONE_SHOT_COLLECTOR_LOCAL_TEST_PASS
-round14_release: NOT_CREATED / ALLOWED_ONLY_AFTER_ALL_ACCEPTANCE_GATES_PASS / RELEASE_RC_WORKFLOW_ONLY
-round14_realtime: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
+round16_cpa: v7.2.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724 / C_ABI_1 / RPC_SCHEMA_4
+round16_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
+round16_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
+round16_schema4_host_fixture_targeted: NOT_RUN / CPA145_LINUX_REQUIRED
+round16_cag_rpc_schema_targeted: NOT_RUN / CPA145_LINUX_REQUIRED
+round16_upstream_hook_no_copy_auth_realtime_targeted: NOT_RUN / CPA145_LINUX_REQUIRED
+round16_audit_receipt_state: PASS / LINUX / 320_OF_320 / ZERO_SKIPS / UNSIGNED_DEVELOPMENT_SELF_CHECK
+round16_audit_expected_test_count: 320 / EXECUTED
+round16_audit_runner_bundle_sha256: d803afbde371f0a4e25135827d845b8f50207a9dc761833b3b8648d03b74f078
+round16_audit_contract_sha256: 3b601c004a4996f90777ed989d9642cafb237db4dcf000b461a6f86047439c77
+round16_audit_run_source_sha256: 44ea0e8519db3dd936de76db56a3f758d8046ff85e49562a254e0cf2ae27dc16
+round16_audit_machine_schema_sha256: 428d55f9b0f0fc42441ae0366031b4177d3e8d802e98c3dee4f813b660aa4658
+round16_audit_tool_tests: PASS / LINUX / 320_OF_320
+round16_audit_tool_skips: 0
+round16_audit_test_sources_sha256: 8d3ab5da2047a4619f0a9e1924ac59d4ac988f96b3c2bfeefff054c28414f879
+round16_audit_test_ids_sha256: ae277b0ef13bfcff5c7572e595b31cb1b1b27f737ec8e6245b953d91dfe58275
+round16_audit_unit_receipt_sha256: a694cc5b0824e5d507aa1f9ca6eeb8f3e51671918314246e91494e92fa0b53f8
+round16_audit_unit_started_at: 2026-08-30T04:33:44.648Z
+round16_audit_unit_finished_at: 2026-08-30T04:34:29.160Z
+round16_audit_unit_elapsed_ms: 44511
+round16_audit_unit_command: /usr/bin/python3.14 -I -B -m unittest discover -s tools/current-cpa-audit/tests -p test_*.py
+round16_complete_linux: NOT_RUN / PENDING
+round16_exact_candidate_ci: NOT_RUN / PENDING
+round16_second_machine_five_repository_zip_false_positive: NOT_RUN / REAL_SECOND_MACHINE_MANDATORY / PARENT_20D6268_PASS_DOES_NOT_TRANSFER
+round16_host_performance_and_soak: NOT_RUN / CPA145_EXACT_CANDIDATE_REQUIRED
+round16_release: NOT_CREATED / ALLOWED_ONLY_AFTER_ALL_ACCEPTANCE_GATES_AND_REAL_SECOND_MACHINE_ADMISSION / RELEASE_RC_WORKFLOW_ONLY
+round16_realtime: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
 ```
 
-These local result groups are the complete current Round 14 fix claim. The
-audit-tool receipt now records Linux `315/315 PASS` with zero skips; it is not
+These local result groups are the complete current Round 17 fix claim. The
+audit-tool receipt now records Linux `320/320 PASS` with zero skips; it is not
 signed or independently anchored and cannot replace exact-commit CI. No CI,
 exact-fix CI, second-machine, five-repository/ZIP, false-positive, Host
 performance, or release result exists yet for the persistent-connection fix.
-The operator canceled all second-machine execution for this round, so the
-remote gates are explicitly `CANCELLED_BY_OPERATOR / NO_REMOTE_EXECUTION` and
-remain unsatisfied.
+A fresh real second-machine run for the exact candidate and its canonical,
+non-expired v3 admission report are mandatory and remain pending.
 The prior exact `a216395` candidate passed its named GitHub, semantic, CSAM and
 native-Host lanes, but Host A/B failed closed at CPA+CAG concurrency 4 /
 repetition 3 with `queue_sample:MissedDeadline`. None of those old-candidate
@@ -49,7 +51,7 @@ coverage claim.
 
 All Round 13 v7.2.125 results and all Round 12 or earlier results below are
 immutable `HISTORICAL / SUPERSEDED` evidence. Their PASS labels retain their
-original meaning and are not Round 14 PASS claims.
+original meaning and are not Round 17 PASS claims.
 
 ## Frozen Round 13 test boundary — historical / superseded
 

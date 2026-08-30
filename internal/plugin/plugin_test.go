@@ -47,11 +47,12 @@ func TestRegistrationMatchesTargetCPAContract(t *testing.T) {
 			RequestLifecycle       bool     `json:"request_lifecycle_plugin"`
 			ResponseInterceptor    bool     `json:"response_interceptor"`
 			StreamChunkInterceptor bool     `json:"response_stream_interceptor"`
+			WebSocketObserver      bool     `json:"websocket_response_observer"`
 			ManagementAPI          bool     `json:"management_api"`
 		}
 	}
 	decodeOKResult(t, raw, &result)
-	if pluginabi.SchemaVersion != 3 || result.SchemaVersion != pluginabi.SchemaVersion {
+	if pluginabi.SchemaVersion != 4 || result.SchemaVersion != pluginabi.SchemaVersion {
 		t.Fatalf("schema_version = %d, want %d", result.SchemaVersion, pluginabi.SchemaVersion)
 	}
 	if result.Metadata.Name == "" || result.Metadata.Version == "" || result.Metadata.Author == "" || result.Metadata.GitHubRepository == "" {
@@ -63,9 +64,9 @@ func TestRegistrationMatchesTargetCPAContract(t *testing.T) {
 	if !result.Capabilities.ModelRouter || !result.Capabilities.Executor ||
 		!result.Capabilities.RequestInterceptor || !result.Capabilities.RequestLifecycle ||
 		!result.Capabilities.ManagementAPI {
-		t.Fatalf("schema-v3 capabilities mismatch: %+v", result.Capabilities)
+		t.Fatalf("schema-v4 capabilities mismatch: %+v", result.Capabilities)
 	}
-	if result.Capabilities.ResponseInterceptor || result.Capabilities.StreamChunkInterceptor {
+	if result.Capabilities.ResponseInterceptor || result.Capabilities.StreamChunkInterceptor || result.Capabilities.WebSocketObserver {
 		t.Fatalf("CAG must not register response interceptor chains: %+v", result.Capabilities)
 	}
 	if result.Capabilities.ExecutorModelScope != "static" {

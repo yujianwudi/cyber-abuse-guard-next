@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
 [English](README.md) | 简体中文
@@ -11,40 +11,36 @@ current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f
 
 ```text
 current_source_version: 1.0.0
-current_rc_tag: v1.0.0-rc.2
-current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
-current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-current_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+current_rc_tag: v1.0.0-rc.3
+current_cpa_target: v7.2.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
+current_cpa_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7
-current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
+current_csam_text_policy: csam-text-policy-v1 / f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
-current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
+current_status: ROUND17_ADMISSION_INCOMPLETE / REAL_SECOND_MACHINE_REQUIRED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next（CAG）是面向
 [CLIProxyAPI（CPA）](https://github.com/router-for-me/CLIProxyAPI) 的本地、确定性、
 路由前请求风控与审计插件。项目目标是降低网络滥用风险，同时保护普通编码、
 防御性安全、事件响应、合规和授权运维请求不被关键词误伤。当前唯一维护分支是
-`main`，唯一兼容目标是 CPA `v7.2.137` / RPC schema 3。
+`main`，唯一兼容目标是 CPA `v7.2.145` / RPC schema 4。
 
 RC1 基线已经合并到 `main`，合并后的 Linux CI 也已通过。GitHub 开始在 Actions
 库存中暴露平台自有 Dependabot workflow 后，不可变的 `v1.0.0-rc.1` tag 未产生
-Release；`v1.0.0-rc.2` 在不放宽四个仓库 YAML 白名单的前提下修正该准入合同，
-目前仍未发布。发行合同支持真实二号机准入报告，也支持下方明确的维护者豁免路径。不能用旧候选、
-本地回执或历史 PASS 替代当前候选身份。
-
-RC workflow 现在支持由维护者明确豁免已取消的二号机环节。必须设置
-`second_machine_waiver=true`、填写 `I_ACK_SECOND_MACHINE_NOT_RUN`、提供有界原因，
-且执行者必须是 `yujianwudi`。豁免发行版会明确标注未执行二号机，不代表独立 Host
-证明或生产批准。
+Release；RC2 tag 也已成为不可变历史记录。当前 `v1.0.0-rc.3` 在不放宽四个仓库
+YAML 白名单的前提下升级 CPA/schema 与准入合同。发行合同强制要求一份由真实二号机
+执行、与精确候选绑定且未过期的 v3 准入报告。取消执行、缺少远程运行、旧候选、
+本地回执或历史 PASS 均不能关闭 RC 发行门禁。
 
 ## 请求处理链路
 
 ```text
-CPA schema-3 请求
+CPA schema-4 请求
       |
       v
 before-auth RequestInterceptor
@@ -97,11 +93,14 @@ CPA 认证 -> Provider/Router -> Usage/SSE/上游
 
 CSAM 检测只处理文本策略。预防指南、热线/平台通知、举报说明和安全研究引用均有
 良性回归；仓库测试不需要真实媒体、Provider 凭据、OAuth 会话，也不执行第三方代码。
+`testdata/csam-text-synthetic-v1/` 是仅元数据的边界回归契约，通过哈希绑定临时 Go
+测试配方，只保存案例 ID 和期望处置，不保存请求原文或媒体。它仅用于开发回归，不是
+盲测集，也不能单独作为发行准入证据；可运行 `go test ./internal/csamtext -count=1` 校验。
 
 ## CPA 与 Host 兼容性
 
-当前固定目标为 CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`、C ABI 1、
-RPC schema 3。schema 3 仅在 header-init 保留 `OriginalRequest` / `RequestBody`，
+当前固定目标为 CPA `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`、C ABI 1、
+RPC schema 4。schema 4 仅在 header-init 保留 `OriginalRequest` / `RequestBody`，
 payload chunk 不重复携带；插件不注册 successful-response 或 stream-chunk interceptor。
 
 Host 性能采集仅支持 Linux。Docker Engine API 使用有界 v1.44 读取；队列采样在每个
@@ -114,7 +113,7 @@ inspect 验证、彼此不同的两个 RFC1918 bridge IPv4；任何 Host binding
 
 ## Linux amd64 构建
 
-需要 Go 1.26.6、Linux amd64 工具链、CPA v7.2.137，以及支持 C ABI 1 / RPC schema 3 的 CPA loader。
+需要 Go 1.26.6、Linux amd64 工具链、CPA v7.2.145，以及支持 C ABI 1 / RPC schema 4 的 CPA loader。
 
 ```bash
 git clone https://github.com/yujianwudi/cyber-abuse-guard-next.git
@@ -129,7 +128,7 @@ make build-linux-amd64
 
 ## 验证命令
 
-仓库 Linux 审计工具当前固定为 `315/315`、zero skips；GitHub CI 还执行 Go unit/vet/race、
+仓库 Linux 审计工具当前固定为 `320/320`、zero skips；GitHub CI 还执行 Go unit/vet/race、
 有界 fuzz、策略/语料、依赖漏洞、Linux Host `.so` 加载和 reproducibility。仓库回执是可追溯
 记录，不是独立证明。
 
@@ -140,8 +139,8 @@ python3 -B scripts/round6_safe_gate_contract.py --root .
 make repository-secret-scan
 ```
 
-五仓和 supplemental ZIP 测试按身份绑定、分母隔离且不执行第三方代码。二号机测试取消后，
-它不能关闭 RC 发行门禁。
+五仓和 supplemental ZIP 测试按身份绑定、分母隔离且不执行第三方代码。精确候选的
+真实二号机运行是强制门禁且仍待执行；其准入报告通过前，RC 发行门禁保持关闭。
 
 ## 仓库布局与归档原则
 
@@ -162,9 +161,9 @@ make repository-secret-scan
 
 ## 关键文档
 
-- [第十四轮任务书](docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)
-- [第十四轮执行与 RC 验收](docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md)
-- [第十四轮状态](docs/ROUND14_STATUS.md)
+- [第十七轮 CPA v7.2.145 任务书](docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md)
+- [第十七轮状态](docs/ROUND16_STATUS.md)
+- [历史第十五轮 CPA v7.2.142 状态](docs/ROUND15_STATUS.md)
 - [发行策略](docs/RELEASE_POLICY.md)
 - [仓库治理](docs/REPOSITORY_GOVERNANCE.md)
 - [安全策略](SECURITY.md)

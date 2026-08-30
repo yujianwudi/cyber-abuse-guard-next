@@ -16,8 +16,8 @@ import (
 )
 
 func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
-	t.Run("guard-rpc-registers-schema3-request-lifecycle", func(t *testing.T) {
-		plugin := contractSchema3RequestLifecyclePlugin("cyber-abuse-guard", func(_ context.Context, _ pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	t.Run("guard-rpc-registers-schema4-request-lifecycle", func(t *testing.T) {
+		plugin := contractSchema4RequestLifecyclePlugin("cyber-abuse-guard", func(_ context.Context, _ pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 			return contractTermination("cyber-abuse-guard"), nil
 		}, nil)
 		plugin.Capabilities.ModelRouter = modelRouterFunc(func(_ context.Context, request pluginapi.ModelRouteRequest) (pluginapi.ModelRouteResponse, error) {
@@ -30,21 +30,24 @@ func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
 
 		registered, errRegister := registerRPCPlugin(context.Background(), nil, "cyber-abuse-guard", lookup, pluginabi.MethodPluginRegister, []byte("mode: enforce"))
 		if errRegister != nil {
-			t.Fatalf("register schema-3 Guard: %v", errRegister)
+			t.Fatalf("register schema-4 Guard: %v", errRegister)
 		}
-		if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 3 || lookup.lastLifecycle.SchemaVersion != 3 {
-			t.Fatalf("Guard registration versions = ABI %d host schema %d lifecycle schema %d, want 1/3/3",
+		if pluginabi.ABIVersion != 1 || pluginabi.SchemaVersion != 4 || lookup.lastLifecycle.SchemaVersion != 4 {
+			t.Fatalf("Guard registration versions = ABI %d host schema %d lifecycle schema %d, want 1/4/4",
 				pluginabi.ABIVersion, pluginabi.SchemaVersion, lookup.lastLifecycle.SchemaVersion)
 		}
 		if registered.Capabilities.RequestInterceptor == nil || registered.Capabilities.RequestLifecyclePlugin == nil {
-			t.Fatalf("schema-3 Guard capabilities = %#v, want request interceptor and lifecycle plugin", registered.Capabilities)
+			t.Fatalf("schema-4 Guard capabilities = %#v, want request interceptor and lifecycle plugin", registered.Capabilities)
+		}
+		if registered.Capabilities.WebSocketResponseObserver != nil {
+			t.Fatalf("schema-4 Guard unexpectedly registered WebSocket response observation: %#v", registered.Capabilities)
 		}
 		if registered.Capabilities.ModelRouter == nil {
-			t.Fatal("schema-3 Guard omitted the Alpha Search compatibility ModelRouter")
+			t.Fatal("schema-4 Guard omitted the Alpha Search compatibility ModelRouter")
 		}
 		ordinary, errOrdinary := registered.Capabilities.ModelRouter.RouteModel(context.Background(), pluginapi.ModelRouteRequest{SourceFormat: "openai"})
 		if errOrdinary != nil || ordinary.Handled {
-			t.Fatalf("ordinary schema-3 Guard ModelRouter callback = %#v, %v; want unhandled", ordinary, errOrdinary)
+			t.Fatalf("ordinary schema-4 Guard ModelRouter callback = %#v, %v; want unhandled", ordinary, errOrdinary)
 		}
 		alpha, errAlpha := registered.Capabilities.ModelRouter.RouteModel(context.Background(), pluginapi.ModelRouteRequest{SourceFormat: "codex-alpha-search"})
 		if errAlpha != nil || !alpha.Handled || alpha.TargetKind != pluginapi.ModelRouteTargetSelf {
@@ -244,7 +247,7 @@ func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
 		}
 	})
 
-	t.Run("request-lifecycle-reports-all-schema3-outcomes", func(t *testing.T) {
+	t.Run("request-lifecycle-reports-all-schema4-outcomes", func(t *testing.T) {
 		completions := make(chan pluginapi.RequestCompletion, 1)
 		host := newHostWithRecords(contractRequestLifecycleRecord(
 			"cyber-abuse-guard",
@@ -295,7 +298,7 @@ func TestCyberAbuseGuardHostFailOpenFixtureMatrix(t *testing.T) {
 			t.Fatal("schema-1 compatibility ModelRouter = nil")
 		}
 		if registered.Capabilities.RequestInterceptor != nil || registered.Capabilities.RequestLifecyclePlugin != nil {
-			t.Fatal("schema-1 compatibility Router unexpectedly exposes schema-3 request lifecycle capabilities")
+			t.Fatal("schema-1 compatibility Router unexpectedly exposes schema-4 request lifecycle capabilities")
 		}
 		response, errRoute := registered.Capabilities.ModelRouter.RouteModel(context.Background(), pluginapi.ModelRouteRequest{RequestedModel: "legacy-model"})
 		if errRoute != nil || !response.Handled || response.Target != "legacy-provider" {
@@ -400,7 +403,7 @@ func (c *contractCAGClient) lifecycleState() contractCAGLifecycleState {
 }
 
 func contractCAGRetainedRegistration() rpcRegistration {
-	plugin := contractSchema3RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	plugin := contractSchema4RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 		return contractTermination("cyber-abuse-guard"), nil
 	}, nil)
 	return rpcRegistration{
@@ -493,11 +496,11 @@ func contractRequestLifecycleRecord(
 	return capabilityRecord{
 		id:       id,
 		priority: priority,
-		plugin:   contractSchema3RequestLifecyclePlugin(id, intercept, complete),
+		plugin:   contractSchema4RequestLifecyclePlugin(id, intercept, complete),
 	}
 }
 
-func contractSchema3RequestLifecyclePlugin(
+func contractSchema4RequestLifecyclePlugin(
 	name string,
 	intercept func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error),
 	complete func(context.Context, pluginapi.RequestCompletion),
@@ -546,7 +549,7 @@ func assertLifecycleFallback(t *testing.T, scenario string) {
 	enabled := true
 	disabled := false
 	loader := newTestSymbolLoader()
-	fixturePlugin := contractSchema3RequestLifecyclePlugin("fixture", func(_ context.Context, req pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	fixturePlugin := contractSchema4RequestLifecyclePlugin("fixture", func(_ context.Context, req pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 		return pluginapi.RequestInterceptResponse{
 			Headers: http.Header{"X-Fixture-Fallback": []string{"zzz-interceptor"}},
 			Body:    append(req.Body, []byte("|fallback")...),
@@ -556,7 +559,7 @@ func assertLifecycleFallback(t *testing.T, scenario string) {
 	fixtureLookup := newTestSymbolLookup(fixture)
 	loader.lookups["zzz-interceptor"] = fixtureLookup
 
-	guardPlugin := contractSchema3RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
+	guardPlugin := contractSchema4RequestLifecyclePlugin("cyber-abuse-guard", func(context.Context, pluginapi.RequestInterceptRequest) (pluginapi.RequestInterceptResponse, error) {
 		return contractTermination("cyber-abuse-guard"), nil
 	}, nil)
 	guard := &testPlugin{registerResult: guardPlugin, reconfigureResult: guardPlugin}
@@ -586,8 +589,8 @@ func assertLifecycleFallback(t *testing.T, scenario string) {
 	}})
 
 	assertContractFallback(t, host)
-	if fixtureLookup.lastLifecycle.SchemaVersion != 3 {
-		t.Fatalf("fallback interceptor lifecycle schema_version = %d, want 3", fixtureLookup.lastLifecycle.SchemaVersion)
+	if fixtureLookup.lastLifecycle.SchemaVersion != 4 {
+		t.Fatalf("fallback interceptor lifecycle schema_version = %d, want 4", fixtureLookup.lastLifecycle.SchemaVersion)
 	}
 	if host.PluginRegistered("cyber-abuse-guard") {
 		t.Fatalf("Guard unexpectedly registered in scenario %q", scenario)

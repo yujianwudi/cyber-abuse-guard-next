@@ -12,9 +12,9 @@ import (
 
 const (
 	cpaModulePath        = "github.com/router-for-me/CLIProxyAPI/v7"
-	cpaPinnedVersion     = "v7.2.137"
-	cpaPinnedCommit      = "85d2faddd17e6f4f8675a84ee28b131f702e8eaa"
-	cpaPinnedModuleSum   = "h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w="
+	cpaPinnedVersion     = "v7.2.145"
+	cpaPinnedCommit      = "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"
+	cpaPinnedModuleSum   = "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o="
 	cpaPinnedGoModSum    = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 	cpaPluginHostPackage = cpaModulePath + "/internal/pluginhost"
 	cpaHandlersPackage   = cpaModulePath + "/sdk/api/handlers"
@@ -38,9 +38,12 @@ var criticalCPAHostTests = []string{
 	"TestRegisterRPCPluginSendsHostSchemaVersion",
 	"TestRequestInterceptorTerminationStopsChain",
 	"TestRPCCapabilitiesAndAdapterIncludeRequestLifecycle",
+	"TestRegisterRPCPluginRegistersWebSocketResponseObserver",
+	"TestObserveWebSocketResponseEventRPCSanitizesMetadata",
 	"TestRPCInterceptorsIncludeHostCallbackID",
 	"TestSanitizePluginRequestRemovesNonJSONMetadata",
 	"TestStreamChunkRequestBodyPolicyBySchemaVersion",
+	"TestObserveWebSocketResponseEventClonesPayloadAndMetadata",
 	"TestServeManagementHTMLEscapesJSONResponseStrings",
 	"TestHostRouteModelAllowsExplicitExecutorPluginTarget",
 	"TestHostRouteModelClonesPluginMetadata",

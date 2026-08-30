@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 1580f71d77cbb4bf58d3a734ae3a3994dfe2472478ed5f2dc1f18c86fa004b2d
+current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
 ```
 
 English | [简体中文](README_CN.md)
@@ -11,40 +11,36 @@ English | [简体中文](README_CN.md)
 
 ```text
 current_source_version: 1.0.0
-current_rc_tag: v1.0.0-rc.2
-current_cpa_target: v7.2.137 / 85d2faddd17e6f4f8675a84ee28b131f702e8eaa
-current_cpa_contract: C_ABI_1 / RPC_SCHEMA_3
-current_cpa_module_sum: h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=
+current_rc_tag: v1.0.0-rc.3
+current_cpa_target: v7.2.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
+current_cpa_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7
-current_csam_text_policy: csam-text-policy-v1 / c338d97927489237c5413574489febbaa0468154ba61e8012fd1ecfcfc5a120f
+current_csam_text_policy: csam-text-policy-v1 / f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
-current_status: RC1_TAG_IMMUTABLE_UNPUBLISHED / RC2_PLATFORM_DRIFT_FIX / SECOND_MACHINE_WAIVER_SUPPORTED / RC_NOT_PUBLISHED
+current_status: ROUND17_ADMISSION_INCOMPLETE / REAL_SECOND_MACHINE_REQUIRED / RC_NOT_PUBLISHED
 ```
 
 Cyber-Abuse-Guard Next (CAG) is a native, deterministic, pre-routing policy and
 audit plugin for [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAPI).
 It is designed to reduce cyber-abuse risk while preserving ordinary coding,
 defensive security, incident-response, compliance and authorized operations.
-The active source line is `main`. CPA `v7.2.137` with RPC schema 3 is the only
-supported compatibility target in this tree.
+The intended protected source line is `main`; this RC3 candidate is currently
+being reviewed on `audit/cpa-v7.2.145-rc3` and has not yet updated `main`. CPA
+`v7.2.145` with RPC schema 4 is the only supported compatibility target in this
+tree.
 
 The RC1 base code is merged on `main` and its exact post-merge Linux CI passed.
 The immutable `v1.0.0-rc.1` tag produced no Release after GitHub began exposing
-platform-owned Dependabot workflows in the Actions inventory. `v1.0.0-rc.2`
-updates that admission contract without weakening the four repository-owned
-workflow allowlist and is intentionally not published yet. The reviewed workflow
-accepts either a real second-machine admission report or the explicit maintainer
-waiver described below. No release claim is inferred from an old candidate or
-from local self-checks.
-
-The RC workflow now supports an explicit maintainer waiver for the canceled
-second-machine lane. It requires `second_machine_waiver=true`,
-`I_ACK_SECOND_MACHINE_NOT_RUN`, a bounded reason and the `yujianwudi` actor. A
-waived Release is clearly marked as having no second-machine execution; it is
-not an independent Host attestation or production approval.
+platform-owned Dependabot workflows in the Actions inventory. The immutable RC2
+tag is also historical; `v1.0.0-rc.3` updates the active CPA/schema and admission
+contracts without weakening the four repository-owned workflow allowlist. The
+reviewed workflow requires a canonical, non-expired real second-machine v3
+admission report bound to the exact candidate. Cancellation, a missing remote
+run, an old candidate, or a local self-check cannot satisfy the RC release gate.
 
 ## What the plugin does
 
@@ -63,7 +59,7 @@ where CPA actually invokes the registered plugin callbacks.
 ## Runtime architecture
 
 ```text
-CPA schema-3 request
+CPA schema-4 request
         |
         v
 RequestInterceptor (before-auth)
@@ -131,10 +127,16 @@ notices, reporting instructions and quoted safety research are regression cases.
 No real media input, provider credential, OAuth session or third-party repository
 code is required by the repository tests.
 
+The metadata-only `testdata/csam-text-synthetic-v1/` contract binds a small
+boundary matrix to transient Go test recipes by hash. It stores case IDs and
+expected dispositions, never prompt text or media. The contract is development
+regression evidence only; it is not a blind evaluation set or a release gate
+by itself. Run `go test ./internal/csamtext -count=1` to verify it.
+
 ## CPA and Host compatibility
 
-The active contract is CPA `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`,
-C ABI 1 and RPC schema 3. Schema 3 retains `OriginalRequest` and `RequestBody`
+The active contract is CPA `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`,
+C ABI 1 and RPC schema 4. schema 4 retains `OriginalRequest` and `RequestBody`
 only in header-init; payload chunks omit them. The plugin does not register a
 successful-response or stream-chunk interceptor.
 
@@ -153,8 +155,8 @@ any Host binding, additional container, or non-internal network as inadmissible.
 
 ## Build and install (Linux amd64)
 
-Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.137, and a CPA plugin
-loader compatible with C ABI 1 / RPC schema 3.
+Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.145, and a CPA plugin
+loader compatible with C ABI 1 / RPC schema 4.
 
 ```bash
 git clone https://github.com/yujianwudi/cyber-abuse-guard-next.git
@@ -170,7 +172,7 @@ enabling a blocking mode. Do not copy a `.so` built for another CPA ABI/schema.
 
 ## Verification
 
-The repository-owned Linux audit tool currently closes `315/315` tests with zero
+The repository-owned Linux audit tool currently closes `320/320` tests with zero
 skips. Exact GitHub CI additionally runs Go unit/vet/race, bounded fuzzing,
 policy and public-corpus contracts, dependency vulnerability checks, Linux Host
 artifact loading and reproducibility. Local receipts are traceability records,
@@ -184,9 +186,9 @@ make repository-secret-scan
 ```
 
 The five-repository and supplemental ZIP lanes are identity-bound, do not
-execute third-party code, and are separate from ordinary unit tests. The last
-operator-requested second-machine run was canceled; therefore it cannot satisfy
-the RC release gate.
+execute third-party code, and are separate from ordinary unit tests. A fresh
+real second-machine run for the exact candidate is mandatory and remains
+pending; without its admitted report, the RC release gate stays closed.
 
 ## Repository layout and archive policy
 
@@ -210,9 +212,9 @@ the authoritative map. No generated reports, credentials, raw prompts or local
 
 ## Documentation and governance
 
-- [Round 14 task book](docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md)
-- [Round 14 execution and RC acceptance](docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md)
-- [Round 14 status and evidence boundary](docs/ROUND14_STATUS.md)
+- [Round 17 CPA v7.2.145 task book](docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md)
+- [Round 17 status and evidence boundary](docs/ROUND16_STATUS.md)
+- [Historical Round 15 CPA v7.2.142 status](docs/ROUND15_STATUS.md)
 - [Release policy](docs/RELEASE_POLICY.md)
 - [Repository governance](docs/REPOSITORY_GOVERNANCE.md)
 - [Security policy](SECURITY.md)

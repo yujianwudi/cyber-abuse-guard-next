@@ -195,7 +195,7 @@ class CPAStoreReleaseTests(unittest.TestCase):
         mutations = {
             "stable-only": lambda root, payload: (root / RC_ZIP).unlink(),
             "base-version-entry": lambda root, payload: self.write_zip(root / RC_ZIP, {SO_NAME: payload}),
-            "rc-standalone": lambda root, payload: (root / "cyber-abuse-guard-v1.0.0-rc.2.so").write_bytes(payload),
+            "rc-standalone": lambda root, payload: (root / "cyber-abuse-guard-v1.0.0-rc.3.so").write_bytes(payload),
             "subdirectory": lambda root, payload: self.write_zip(root / RC_ZIP, {"nested/" + ENTRY_NAME: payload}),
             "second-so": lambda root, payload: self.write_zip(root / RC_ZIP, {ENTRY_NAME: payload, "other.so": payload}),
             "payload-drift": lambda root, payload: self.write_zip(root / RC_ZIP, {ENTRY_NAME: payload + b"drift"}),

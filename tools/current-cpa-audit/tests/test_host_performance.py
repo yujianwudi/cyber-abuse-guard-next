@@ -29,6 +29,7 @@ from host_performance import (
     PerformanceError,
     QUEUE_STATUS_PATH,
     _QueueStatusPoller,
+    _queue_sample_schedule,
     _fail_cell_sampler,
     _validate_plugin_archive,
     _require_logical_cpu_count,
@@ -1228,6 +1229,161 @@ class HostPerformanceContractTests(unittest.TestCase):
         queue_poller.close.assert_called_once_with()
         self._assert_queue_status_poller_reuses_one_private_connection()
         self._assert_queue_status_poller_rejects_public_or_closing_connections()
+
+    def test_queue_sample_schedule_uses_real_bounded_catch_up(self) -> None:
+        interval = 0.1
+        record, nominal = _queue_sample_schedule(10.0, 10.0, None, 10.099, interval)
+        self.assertTrue(record)
+        self.assertAlmostEqual(nominal, 10.1)
+
+        # One slow real response crosses the next nominal boundary, but its
+        # 101 ms gap is valid under the closed <200 ms continuity contract.
+        record, nominal = _queue_sample_schedule(
+            10.0, nominal, 10.099, 10.200, interval
+        )
+        self.assertTrue(record)
+        self.assertAlmostEqual(nominal, 10.2)
+
+        # A fast immediate catch-up GET is real but too dense to record. The
+        # caller must wait and take a new GET; the old observation is not
+        # re-timestamped or counted.
+        record, retry_at = _queue_sample_schedule(
+            10.0, nominal, 10.200, 10.205, interval
+        )
+        self.assertFalse(record)
+        self.assertAlmostEqual(retry_at, 10.250)
+        record, nominal = _queue_sample_schedule(
+            10.0, nominal, 10.200, 10.255, interval
+        )
+        self.assertTrue(record)
+        self.assertAlmostEqual(nominal, 10.3)
+
+    def test_queue_sample_schedule_keeps_closed_deadlines(self) -> None:
+        interval = 0.1
+        invalid = (
+            (10.0, 10.0, None, 10.101),
+            (10.0, 10.1, 10.0, 10.201),
+            (10.0, 10.1, 10.2, 10.19),
+            (10.0, 10.1, 10.0, 10.31),
+        )
+        for started, nominal, previous, completed in invalid:
+            with self.subTest(completed=completed), self.assertRaises(TimeoutError):
+                _queue_sample_schedule(
+                    started, nominal, previous, completed, interval
+                )
+
+    def test_queue_loop_repolls_too_dense_real_catch_up(self) -> None:
+        class Clock:
+            current = 0.0
+
+            def monotonic(self) -> float:
+                return self.current
+
+        class Stop:
+            def __init__(self, clock: Clock) -> None:
+                self.clock = clock
+                self.stopped = False
+
+            def is_set(self) -> bool:
+                return self.stopped
+
+            def set(self) -> None:
+                self.stopped = True
+
+            def wait(self, seconds: float) -> bool:
+                self.clock.current += max(0.0, seconds)
+                return self.stopped
+
+        clock = Clock()
+        stop = Stop(clock)
+        costs = iter((0.099, 0.100, 0.005, 0.005, 0.005))
+
+        class Poller:
+            calls = 0
+            closed = False
+
+            def snapshot(self) -> tuple[int, int]:
+                self.calls += 1
+                clock.current += next(costs)
+                if self.calls == 4:
+                    stop.set()
+                return self.calls, 4096
+
+            def close(self) -> None:
+                self.closed = True
+
+        poller = Poller()
+        collector = object.__new__(LinuxHostCollector)
+        collector.config = {"plan": {"queue_sample_interval_ms": 100}}
+        collector._queue_poller = mock.Mock(return_value=poller)
+        rows: list[dict[str, object]] = []
+        errors: list[str] = []
+        with mock.patch("host_performance.time.monotonic", side_effect=clock.monotonic):
+            collector._queue_loop(0.0, stop, rows, errors)  # type: ignore[arg-type]
+
+        self.assertEqual(errors, [])
+        self.assertTrue(poller.closed)
+        self.assertEqual(poller.calls, 5)
+        self.assertEqual(
+            [round(float(row["elapsed_ms"])) for row in rows],
+            [99, 200, 255, 270],
+        )
+        self.assertEqual([row["depth"] for row in rows], [1, 2, 4, 5])
+        self.assertEqual(
+            [row["final_sample"] for row in rows], [False, False, False, True]
+        )
+
+    def test_measure_cell_queue_start_failure_drains_resource_sampler(self) -> None:
+        class FakeThread:
+            def __init__(self, start_error: BaseException | None = None) -> None:
+                self.start_error = start_error
+                self.started = False
+                self.joined = False
+                self.alive = False
+
+            def start(self) -> None:
+                self.started = True
+                if self.start_error is not None:
+                    raise self.start_error
+                self.alive = True
+
+            def join(self, timeout: float | None = None) -> None:
+                del timeout
+                self.joined = True
+                self.alive = False
+
+            def is_alive(self) -> bool:
+                return self.alive
+
+        resource_thread = FakeThread()
+        queue_thread = FakeThread(RuntimeError("queue thread start failed"))
+        collector = object.__new__(LinuxHostCollector)
+        collector.workloads = {"fixed_workload": []}
+        collector.config = {
+            "plan": {"measurement_seconds": 120, "min_success_samples_per_cell": 1000}
+        }
+        collector._verify_arm_configuration = mock.Mock()
+        collector._warmup = mock.Mock(return_value=(0, []))
+        collector._reset_mock = mock.Mock()
+        collector._mock_snapshot = mock.Mock(return_value={key: 0 for key in ("auth", "mock", "provider")})
+        collector._reset_docker_stats_baseline = mock.Mock()
+
+        with (
+            mock.patch(
+                "host_performance.threading.Thread",
+                side_effect=(resource_thread, queue_thread),
+            ),
+            mock.patch("host_performance._read_proc_cpu", return_value=(1, 1, 0)),
+            mock.patch("host_performance._read_self_cpu_ticks", return_value=1),
+            self.assertRaisesRegex(RuntimeError, "queue thread start failed"),
+        ):
+            collector._measure_cell("cpa_cag", "fixed_workload", 1, 1, "paired_ab", 0)
+
+        self.assertTrue(resource_thread.started)
+        self.assertTrue(resource_thread.joined)
+        self.assertFalse(resource_thread.is_alive())
+        self.assertTrue(queue_thread.started)
+        self.assertFalse(queue_thread.joined)
 
     def _assert_queue_status_poller_reuses_one_private_connection(self) -> None:
         status = canonical_bytes(

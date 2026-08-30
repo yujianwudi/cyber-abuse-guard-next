@@ -666,6 +666,7 @@ func TestRequestInterceptorAfterAuthSameRequestIDDoesNotRepeatWork(t *testing.T)
 		RequestedModel: "gpt-test",
 		Headers:        http.Header{"content-type": []string{"application/json"}},
 		Body:           []byte(maliciousRequest),
+		Metadata:       map[string]any{"host_phase": "after-auth"},
 	}
 	afterRaw, err := json.Marshal(afterRequest)
 	if err != nil {
@@ -704,6 +705,121 @@ func TestRequestInterceptorAfterAuthSameIDBodyMutationIsReclassified(t *testing.
 	after := callRequestInterceptor(t, p, pluginabi.MethodRequestInterceptAfter,
 		requestInterceptPayload(t, requestID, []byte(maliciousRequest)))
 	assertRequestInterceptorBlocked(t, after, "credential_theft")
+}
+
+func TestRequestInterceptorAfterAuthEmptyRequestedModelUsesModelFallback(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	hashCalls := countRequestHashes(p)
+	register(t, p, requestInterceptorModeConfig("balanced"))
+
+	requestID := "request-after-auth-empty-requested-model"
+	beforeRequest := pluginapi.RequestInterceptRequest{
+		RequestID: requestID, SourceFormat: "openai", Model: "gpt-client-model",
+		Body: []byte(maliciousRequest), Headers: http.Header{"Content-Type": []string{"application/json"}},
+	}
+	beforeRaw, err := json.Marshal(beforeRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := callRequestInterceptor(t, p, pluginabi.MethodRequestInterceptBefore, beforeRaw)
+	assertRequestInterceptorBlocked(t, before, "credential_theft")
+	if *hashCalls != 1 {
+		t.Fatalf("before-auth request hash calls=%d, want 1", *hashCalls)
+	}
+
+	// CPA may replace Model after authentication when RequestedModel was absent.
+	// That host-side projection must not be mistaken for the client's effective
+	// model, but a genuinely different fallback model must still invalidate the
+	// lifecycle cache and be inspected again.
+	afterRequest := beforeRequest
+	afterRequest.Model = "gpt-selected-upstream-model"
+	afterRequest.Metadata = map[string]any{"host_phase": "after-auth"}
+	afterRaw, err := json.Marshal(afterRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := callRequestInterceptor(t, p, pluginabi.MethodRequestInterceptAfter, afterRaw)
+	assertRequestInterceptorBlocked(t, after, "credential_theft")
+	if *hashCalls != 2 {
+		t.Fatalf("fallback model mutation request hash calls=%d, want 2", *hashCalls)
+	}
+}
+
+func TestRequestInterceptorAfterAuthMetadataMutationDoesNotRepeatWork(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	hashCalls := countRequestHashes(p)
+	register(t, p, requestInterceptorModeConfig("balanced"))
+
+	requestID := "request-after-auth-metadata-only"
+	beforeRequest := pluginapi.RequestInterceptRequest{
+		RequestID: requestID, SourceFormat: "openai", Model: "gpt-selected",
+		RequestedModel: "gpt-client", Headers: http.Header{"Content-Type": []string{"application/json"}},
+		Body: []byte(maliciousRequest),
+	}
+	beforeRaw, err := json.Marshal(beforeRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := callRequestInterceptor(t, p, pluginabi.MethodRequestInterceptBefore, beforeRaw)
+	assertRequestInterceptorBlocked(t, before, "credential_theft")
+	if *hashCalls != 1 {
+		t.Fatalf("before-auth request hash calls=%d, want 1", *hashCalls)
+	}
+	totalBefore := p.counters.snapshot()["total"]
+
+	// Host metadata is an observational context snapshot and is not consumed by
+	// CAG's classifier or audit projection. Its mutation must not trigger a
+	// second classification of the same client request.
+	afterRequest := beforeRequest
+	afterRequest.Metadata = map[string]any{"trace_id": "host-populated-after-auth"}
+	afterRaw, err := json.Marshal(afterRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := callRequestInterceptor(t, p, pluginabi.MethodRequestInterceptAfter, afterRaw)
+	assertRequestInterceptorPassThrough(t, after)
+	if *hashCalls != 1 {
+		t.Fatalf("metadata-only after-auth request hash calls=%d, want unchanged 1", *hashCalls)
+	}
+	if got := p.counters.snapshot()["total"]; got != totalBefore {
+		t.Fatalf("metadata-only after-auth changed classification total=%d, want %d", got, totalBefore)
+	}
+}
+
+func TestRequestInterceptorRejectsUnboundedLifecycleRequestIDs(t *testing.T) {
+	for _, modeCase := range requestInterceptorModeCases() {
+		modeCase := modeCase
+		t.Run(modeCase.mode, func(t *testing.T) {
+			p := New()
+			t.Cleanup(p.Shutdown)
+			register(t, p, requestInterceptorModeConfig(modeCase.mode))
+			requestID := strings.Repeat("r", maxRequestIDBytes+1)
+			raw := requestInterceptPayload(t, requestID, []byte(benignRequestInterceptBody))
+			response := callRequestInterceptor(t, p, pluginabi.MethodRequestInterceptBefore, raw)
+			assertRequestInterceptorPolicyResult(t, response, modeCase.failClosed, "inspection_failure")
+			if p.requestLifecycle.contains(requestID) {
+				t.Fatal("invalid request ID entered lifecycle cache")
+			}
+		})
+	}
+}
+
+func TestRequestCompletionRejectsUnboundedLifecycleRequestIDs(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	raw, code := p.Call(pluginabi.MethodRequestComplete, []byte(`{"RequestID":"`+strings.Repeat("r", maxRequestIDBytes+1)+`"}`))
+	if code != 0 {
+		t.Fatalf("invalid completion code=%d envelope=%s", code, raw)
+	}
+	var envelope rpcEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.OK || envelope.Error == nil || envelope.Error.Code != "invalid_request" {
+		t.Fatalf("invalid completion envelope=%s", raw)
+	}
 }
 
 func TestRequestInterceptorAfterAuthSameIDHeaderMutationIsReclassified(t *testing.T) {
@@ -801,6 +917,9 @@ func TestRequestSecurityFingerprintNormalizesInputsAndDetectsSecurityMutations(t
 		"stream": func(request *pluginapi.RequestInterceptRequest) {
 			request.Stream = true
 		},
+		"requested-model": func(request *pluginapi.RequestInterceptRequest) {
+			request.RequestedModel = "different-requested-model"
+		},
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
@@ -810,6 +929,44 @@ func TestRequestSecurityFingerprintNormalizesInputsAndDetectsSecurityMutations(t
 				t.Fatalf("mutation did not change fingerprint: %q", got)
 			}
 		})
+	}
+}
+
+func TestRequestSecurityFingerprintUsesEffectiveClientModel(t *testing.T) {
+	p := New()
+	t.Cleanup(p.Shutdown)
+	requestID := "request-fingerprint-effective-model"
+	base := pluginapi.RequestInterceptRequest{
+		SourceFormat:   "openai",
+		Model:          "gpt-selected-before-auth",
+		RequestedModel: "gpt-client-requested",
+		Body:           []byte(benignRequestInterceptBody),
+	}
+	baseFingerprint := p.requestSecurityFingerprint(requestID, base)
+
+	selectedAfterAuth := base
+	selectedAfterAuth.Model = "gpt-selected-after-auth"
+	if got := p.requestSecurityFingerprint(requestID, selectedAfterAuth); got != baseFingerprint {
+		t.Fatalf("selected model rewrite changed fingerprint: got %q want %q", got, baseFingerprint)
+	}
+
+	metadataAfterAuth := base
+	metadataAfterAuth.Metadata = map[string]any{"trace": "host-populated"}
+	if got := p.requestSecurityFingerprint(requestID, metadataAfterAuth); got != baseFingerprint {
+		t.Fatalf("host metadata change changed fingerprint: got %q want %q", got, baseFingerprint)
+	}
+
+	fallbackBeforeAuth := base
+	fallbackBeforeAuth.RequestedModel = ""
+	fallbackBeforeAuth.Model = "gpt-client-requested"
+	if got := p.requestSecurityFingerprint(requestID, fallbackBeforeAuth); got != baseFingerprint {
+		t.Fatalf("effective-model fallback changed fingerprint: got %q want %q", got, baseFingerprint)
+	}
+
+	changedClientModel := base
+	changedClientModel.RequestedModel = "gpt-different-client-request"
+	if got := p.requestSecurityFingerprint(requestID, changedClientModel); got == baseFingerprint {
+		t.Fatal("client requested-model mutation did not change fingerprint")
 	}
 }
 

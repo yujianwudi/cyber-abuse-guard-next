@@ -1,15 +1,15 @@
 # Blocked-request review capture
 
 > [!IMPORTANT]
-> The active Round 14 Host identity is CPA
-> `v7.2.137@85d2faddd17e6f4f8675a84ee28b131f702e8eaa`, C ABI 1 / RPC schema 3.
-> Round 13 v7.2.125/schema 2 and older capture observations retain their exact
+> The active Round 17 Host identity is CPA
+> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4.
+> Round 15 v7.2.142/schema 3 and older capture observations retain their exact
 > historical identities and transfer no PASS. Every `/v1/realtime*` route
 > bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle, so it
 > is **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE** and cannot produce a CAG
 > blocked-request capture. Capture applies only to protected registered callback
 > paths such as chat and Responses; it is not evidence of all-traffic coverage.
-> The exact v7.2.137 / CAG `1.0.0` lane must revalidate it before any current
+> The exact v7.2.145 / CAG `1.0.0` lane must revalidate it before any current
 > transport or capture claim is admitted.
 
 The raw-capture facility exists only for operator review of false-positive
@@ -52,7 +52,17 @@ unbounded copy of every prompt.
 - Scope: only requests whose final Guard disposition prevents upstream routing
   (`block`, including subject `cooldown`).
   `only_blocked: false` is rejected.
+- Privacy boundary: structurally incomplete/unknown-format decisions and any
+  CSAM-text or side-car-tainted request write only the metadata event; their
+  request body is never entered into Raw Capture, even when the enforcement
+  mode returns a block. Complete `opaque_media` blocks are excluded for the
+  same reason: the body may contain uninspected binary/media bytes.
 - Redaction: mandatory. `redact_secrets: false` is rejected.
+- The built-in redaction key set includes authorization/cookie/API-key/token
+  variants, `id_token`, `oauth_token`, `credential(s)`, `password`, `secret`,
+  and `private_key`, in both JSON/form-style key assignments and common prose
+  forms. This remains best-effort: custom, encoded, or fragmented secrets may
+  require disabling capture or additional perimeter controls.
 - Processing: queue capacity is reserved before request-derived capture work.
   SHA-256 still covers the complete original request, while secret redaction is
   bounded to `max_bytes + 64 KiB` of prefix/overlap; the resulting preview is

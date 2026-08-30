@@ -3524,6 +3524,51 @@ def _require_runtime_secret(value: Any, label: str) -> str:
     return value
 
 
+def _queue_sample_schedule(
+    started: float,
+    nominal_sample: float,
+    previous_sample: float | None,
+    completed: float,
+    interval: float,
+) -> tuple[bool, float]:
+    """Decide whether one real queue observation may be recorded.
+
+    ``nominal_sample`` remains on the fixed 100 ms grid. A response that
+    completes after the next nominal boundary is not automatically invalid:
+    the closed evidence validator permits real gaps below two intervals and
+    requires enough rows to cover the window. We therefore take real catch-up
+    polls without skipping a nominal slot. A too-dense result is discarded and
+    re-polled after the 50 ms minimum; it is never copied or re-timestamped.
+    """
+
+    if (
+        not all(
+            math.isfinite(value)
+            for value in (started, nominal_sample, completed, interval)
+        )
+        or interval <= 0
+    ):
+        raise TimeoutError("queue sample missed its fixed deadline")
+    if previous_sample is None:
+        if completed < started or completed-started > interval:
+            raise TimeoutError("queue sample missed its fixed deadline")
+    else:
+        if not math.isfinite(previous_sample) or completed <= previous_sample:
+            raise TimeoutError("queue sample missed its fixed deadline")
+        gap = completed - previous_sample
+        if gap >= interval * 2:
+            raise TimeoutError("queue sample missed its fixed deadline")
+        if gap < interval / 2:
+            return False, previous_sample + interval/2
+
+    next_nominal = nominal_sample + interval
+    # More than one whole nominal slot of backlog cannot be recovered without
+    # violating the closed sample-count or continuity contract.
+    if completed-next_nominal >= interval:
+        raise TimeoutError("queue sample missed its fixed deadline")
+    return True, next_nominal
+
+
 class LinuxHostCollector:
     """Acquire raw RT13-06 measurements from three pre-created isolated containers.
 
@@ -4572,15 +4617,62 @@ class LinuxHostCollector:
         errors: list[str],
     ) -> None:
         interval = self.config["plan"]["queue_sample_interval_ms"] / 1000.0
-        next_sample = started
+        nominal_sample = started
+        retry_not_before: float | None = None
+        previous_sample: float | None = None
         poller: _QueueStatusPoller | None = None
         try:
             poller = self._queue_poller()
-            while not stop.is_set():
-                now = time.monotonic()
-                if now >= next_sample:
+            while True:
+                if stop.is_set():
                     depth, capacity = poller.snapshot()
-                    elapsed = max(0.0, time.monotonic() - started) * 1000.0
+                    completed = time.monotonic()
+                    if previous_sample is None:
+                        if completed < started or completed-started > interval:
+                            raise TimeoutError(
+                                "queue sample missed its fixed deadline"
+                            )
+                    elif (
+                        completed <= previous_sample
+                        or completed-previous_sample >= interval*2
+                    ):
+                        raise TimeoutError(
+                            "queue sample missed its fixed deadline"
+                        )
+                    queues.append(
+                        {
+                            "capacity": capacity,
+                            "depth": depth,
+                            "elapsed_ms": max(0.0, completed-started) * 1000.0,
+                            "final_sample": True,
+                        }
+                    )
+                    return
+                now = time.monotonic()
+                due = (
+                    retry_not_before
+                    if retry_not_before is not None
+                    else nominal_sample
+                )
+                if now >= due:
+                    depth, capacity = poller.snapshot()
+                    completed = time.monotonic()
+                    record, next_deadline = _queue_sample_schedule(
+                        started,
+                        nominal_sample,
+                        previous_sample,
+                        completed,
+                        interval,
+                    )
+                    if not record:
+                        # This was still a real, bounded management GET, but
+                        # recording it would violate the validator's 50 ms
+                        # minimum gap. Discard the observation and take a new
+                        # one at the returned monotonic deadline. Never copy a
+                        # row or move an old observation's timestamp.
+                        retry_not_before = next_deadline
+                        continue
+                    elapsed = max(0.0, completed - started) * 1000.0
                     queues.append(
                         {
                             "capacity": capacity,
@@ -4589,10 +4681,15 @@ class LinuxHostCollector:
                             "final_sample": False,
                         }
                     )
-                    next_sample += interval
-                    if time.monotonic() >= next_sample:
-                        raise TimeoutError("queue sample missed its fixed deadline")
-                stop.wait(max(0.001, min(0.01, next_sample - time.monotonic())))
+                    previous_sample = completed
+                    nominal_sample = next_deadline
+                    retry_not_before = None
+                next_due = (
+                    retry_not_before
+                    if retry_not_before is not None
+                    else nominal_sample
+                )
+                stop.wait(max(0.001, min(0.01, next_due - time.monotonic())))
         except Exception as exc:
             error_name = (
                 "MissedDeadline"
@@ -4605,7 +4702,6 @@ class LinuxHostCollector:
         finally:
             if poller is not None:
                 poller.close()
-
     def _append_final_samples(
         self,
         arm: str,
@@ -4668,19 +4764,6 @@ class LinuxHostCollector:
                     "steal_cpu_percent": steal_cpu,
                 }
             )
-            if arm == "cpa_cag":
-                depth, capacity = self._queue_snapshot()
-                queue_marker = (time.monotonic() - started) * 1000.0
-                if queues and queue_marker <= queues[-1]["elapsed_ms"]:
-                    queue_marker = queues[-1]["elapsed_ms"] + 0.001
-                queues.append(
-                    {
-                        "capacity": capacity,
-                        "depth": depth,
-                        "elapsed_ms": queue_marker,
-                        "final_sample": True,
-                    }
-                )
         return elapsed
 
     def _warmup(self, arm: str, requests: Sequence[Mapping[str, Any]], concurrency: int) -> tuple[int, list[str]]:
@@ -4739,15 +4822,9 @@ class LinuxHostCollector:
             kwargs={"warm": False},
             daemon=True,
         )
-        sampler.start()
+        sampler_started = False
         queue_sampler: threading.Thread | None = None
-        if arm == "cpa_cag":
-            queue_sampler = threading.Thread(
-                target=self._queue_loop,
-                args=(started, queue_stop, queues, sampler_errors),
-                daemon=True,
-            )
-            queue_sampler.start()
+        queue_sampler_started = False
         latencies: list[float] = []
         unexpected = warmup_unexpected
         infra = list(warmup_infra)
@@ -4758,6 +4835,16 @@ class LinuxHostCollector:
         elapsed = 0.0
         completed_at = ""
         try:
+            sampler.start()
+            sampler_started = True
+            if arm == "cpa_cag":
+                queue_sampler = threading.Thread(
+                    target=self._queue_loop,
+                    args=(started, queue_stop, queues, sampler_errors),
+                    daemon=True,
+                )
+                queue_sampler.start()
+                queue_sampler_started = True
             with concurrent.futures.ThreadPoolExecutor(max_workers=concurrency) as executor:
                 while time.monotonic() - started < target_seconds:
                     if sampler_errors:
@@ -4774,23 +4861,50 @@ class LinuxHostCollector:
                             unexpected += 1
                         if success:
                             latencies.append(latency)
-        finally:
             resource_stop.set()
             sampler.join(timeout=30)
-            if queue_sampler is not None:
+            if sampler.is_alive():
+                fail("Host performance sampler thread did not stop")
+            if sampler_errors:
+                _fail_cell_sampler(sampler_errors)
+            self._append_final_samples(
+                arm,
+                started,
+                resources,
+                queues,
+                cpu_state,
+                process_cpu_state,
+                warm=False,
+            )
+        finally:
+            active_error = sys.exc_info()[1]
+            cleanup_errors: list[str] = []
+            if sampler_started:
+                resource_stop.set()
+                sampler.join(timeout=30)
+                if sampler.is_alive():
+                    cleanup_errors.append("resource sampler thread did not stop")
+            if queue_sampler_started and queue_sampler is not None:
                 queue_stop.set()
                 queue_sampler.join(timeout=30)
-        if sampler.is_alive() or (queue_sampler is not None and queue_sampler.is_alive()):
-            fail("Host performance sampler thread did not stop")
-        self._append_final_samples(
-            arm,
-            started,
-            resources,
-            queues,
-            cpu_state,
-            process_cpu_state,
-            warm=False,
-        )
+                if queue_sampler.is_alive():
+                    cleanup_errors.append("queue sampler thread did not stop")
+            if sampler_errors:
+                cleanup_errors.append(
+                    "sampler errors during final drain: "
+                    + ",".join(sorted(set(sampler_errors)))
+                )
+            if cleanup_errors:
+                if active_error is None:
+                    if sampler_started and sampler.is_alive():
+                        fail("Host performance sampler thread did not stop")
+                    if queue_sampler_started and queue_sampler is not None and queue_sampler.is_alive():
+                        fail("Host performance queue sampler thread did not stop")
+                    _fail_cell_sampler(sampler_errors)
+                add_note = getattr(active_error, "add_note", None)
+                if callable(add_note):
+                    for message in cleanup_errors:
+                        add_note(message)
         elapsed = time.monotonic() - started
         completed_at = _now_iso()
         infra.extend(sampler_errors)
@@ -5117,6 +5231,8 @@ class LinuxHostCollector:
             sampler.join(timeout=30)
         if sampler.is_alive():
             fail("Host performance warm RSS sampler thread did not stop")
+        if errors:
+            _fail_cell_sampler(errors)
         infra.extend(errors)
         self._append_final_samples(
             arm,

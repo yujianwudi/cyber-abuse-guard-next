@@ -1,17 +1,19 @@
 # Current CPA five-repository isolated audit
 
-This directory is the current diagnostic harness for **CPA v7.2.137** at commit
-`85d2faddd17e6f4f8675a84ee28b131f702e8eaa`. The closed active upstream identity
-also binds module sum `h1:CYYByMn7/NwnsCJEMiLI2F8kIJMTb5jRrLaIK6H0c0w=`,
-go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 3,
+This directory is the current diagnostic harness for **CPA v7.2.145** at commit
+`d9cea8904b14fbbebb77ef26e98ef08f6b48a724`. The closed active upstream identity
+also binds module sum `h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=`,
+go.mod sum `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`, C ABI 1, RPC schema 4,
 and the official Linux
-amd64 asset `CLIProxyAPI_7.2.137_linux_amd64.tar.gz` at exactly 21,072,175 bytes
+amd64 asset `CLIProxyAPI_7.2.145_linux_amd64.tar.gz` at exactly 21,226,153 bytes
 with SHA-256
-`ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401`, and
-the 63,738,088-byte extracted binary SHA-256
-`aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa`.
+`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`, the
+official checksums-file SHA-256
+`df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`, and
+the 64,207,528-byte extracted binary SHA-256
+`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
 These values identify the active upstream input only; they do not relabel an
-older second-machine or CI result as a v7.2.137 PASS. The harness output claim
+older second-machine or CI result as a v7.2.145 PASS. The harness output claim
 is deliberately limited to:
 
 > SECOND-MACHINE DIAGNOSTIC; NOT INDEPENDENT ATTESTATION
@@ -73,7 +75,7 @@ It does not approve a release or a production deployment.
 - Cleanup never calls a global prune and never removes images. It stops CPA and
   Mock gracefully, checkpoints SQLite, and removes only resources carrying the
   exact run label.
-- The v7.2.137 `/v1/realtime*` source topology is separately labelled
+- The v7.2.145 `/v1/realtime*` source topology is separately labelled
   `SOURCE_TOPOLOGY_UNPROTECTED`. Runtime negative coverage supplies no
   credential and requires every fixed route to end at `AUTH_REJECTED`, without
   WebSocket upgrade, Mock/Provider/Usage activity, or any of the six fixed CAG
@@ -104,7 +106,7 @@ interface is an explicit `--supplemental-archive` input whose value names
 `/srv/cag-audit/supplemental/authorized-codex-archive.zip`, with its own source
 hash, case count, false-positive denominator, malicious-recall denominator,
 results, and cleanup status. Parser, runner, schemas, validators, and negative
-fixtures now fail closed together, but no real v7.2.137 candidate run has yet
+fixtures now fail closed together, but no real v7.2.145 candidate run has yet
 completed, so its truthful status remains `NOT_RUN`; the five-repository result
 must never be relabelled as a supplemental-archive PASS.
 
@@ -130,9 +132,9 @@ are the explicitly audited runtime, not corpus execution.
   exact candidate-text discard.
 - `repository-policy.json` — fixed repository/path/ground-truth metadata and
   per-source human-review pins. The checked-in file is approved for the exact
-  five-repository source identities reviewed on 2026-08-24; source drift fails.
+  five-repository source identities reviewed on 2026-08-28; source drift fails.
   The fixed commit/tree pairs are Keysmith
-  `2cb7f382ea8a08e9af5a6d9c16580b45f639891a` / `0d46f7e9ffe6907b2483d9955a6f40a8f75800dd`,
+  `19ba98f79d9a2b529b658f54315843716522a67a` / `782523b1383ca40e96d75820f8188576c86d1a01`,
   Codex-5.5 `ed0b6dc37d1994e93788d92f7af63f58bf0b9e2d` /
   `e6081de4a8a56e839be2f2eb281195e314386b31`, Codex-X
   `d7610f9b12276e074c40cacf9940db3b9bdc67ff` / `d05dfcc40e96dcde4755067acf543de683a1246e`,
@@ -161,6 +163,18 @@ are the explicitly audited runtime, not corpus execution.
   supplemental archive or executes third-party content.
 - `host-performance-evidence.schema.json` — closed JSON Schema 2020-12 for
   the derived Host performance evidence.
+- `host_admission_collector.py` — the only production Host-admission
+  acquisition entry point. It closes the reviewed runtime/config, samples real
+  CPA/Keeper/Mock observations, drives the code-owned probes, and publishes no
+  PASS until cleanup and the independent validator close.
+- `host-admission-config.schema.json` and
+  `host-admission-evidence-manifest.schema.json` — closed config and raw
+  acquisition manifests for the tracked Host collector.
+- `host-admission-approved-runtime-identities.json` — the canonical,
+  repository-owned sole approval policy for the isolated Host Keeper runtime.
+- `host_keeper_fixture/` — the source-hash/image-bound, SQLite-backed isolated
+  Keeper used only by the Host-admission lane. It consumes authenticated CPA
+  usage with PopOldest and persists only bounded counter/dedup metadata.
 - `tests/` — standard-library unit tests plus an optional `jsonschema` Draft
   2020-12 fixture check when that package is installed; no live Provider or
   GitHub access.
@@ -322,7 +336,7 @@ sbom.cdx.json
 ```
 
 Place only the reviewed upstream CPA archive at
-`/srv/artifacts/upstream/CLIProxyAPI_7.2.137_linux_amd64.tar.gz`. Do not place
+`/srv/artifacts/upstream/CLIProxyAPI_7.2.145_linux_amd64.tar.gz`. Do not place
 candidate files in the upstream directory or the CPA archive in the candidate
 directory.
 
@@ -333,8 +347,8 @@ Preload, do not pull during the audit:
    the selected merge commit/tree and report `dirty=false`; the runner rejects
    dirty development bytes. This is still an unreleased diagnostic candidate,
    not a release artifact.
-2. CPA v7.2.137 image by exact RepoDigest and image ID.
-3. The official v7.2.137 linux/amd64 asset at exactly 21,072,175 bytes and its
+2. CPA v7.2.145 image by exact RepoDigest and image ID.
+3. The official v7.2.145 linux/amd64 asset at exactly 21,226,153 bytes and its
    published SHA-256.
 4. The exact CPA binary SHA-256 expected inside that image.
 5. A counted-Mock image built from this directory with a previously reviewed,
@@ -401,10 +415,10 @@ python3 -B tools/current-cpa-audit/make_run_config.py \
   --candidate-artifact-id '<GitHub artifact-id>' \
   --candidate-artifact-name cyber-abuse-guard-linux-amd64-audit-candidate \
   --candidate-artifact-digest 'sha256:<GitHub artifact-digest>' \
-  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.137_linux_amd64.tar.gz" \
-  --cpa-official-asset-sha256 ae68c776e124dbc8c8c5b86c501fc6906efa180cc5e35383adb26d05c2c91401 \
+  --cpa-official-asset "$UPSTREAM_DIR/CLIProxyAPI_7.2.145_linux_amd64.tar.gz" \
+  --cpa-official-asset-sha256 ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37 \
   --cpa-binary-path /CLIProxyAPI \
-  --cpa-binary-sha256 aac02193aee085542f2452e02606a0ab0e3c3c65ace6216bd39bc48e733c37fa \
+  --cpa-binary-sha256 576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713 \
   --cpa-image-ref 'private-audit-registry/cpa@sha256:<64-hex>' \
   --cpa-image-id 'sha256:<64-hex>' \
   --mock-image-ref 'private-audit-registry/cag-counted-mock@sha256:<64-hex>' \
@@ -467,7 +481,7 @@ zero or one matching `/tmp` entry there and rejects every other bind, volume,
 or non-bind mount. The dedicated-UID condition bounds the non-atomic daemon
 handoff. The runner itself creates only an internal bridge.
 
-The private `/cag/config` bind is writable by design. CPA v7.2.137 persists a
+The private `/cag/config` bind is writable by design. CPA v7.2.145 persists a
 replacement `plugins.configs.<id>` object to `config.yaml` before applying the
 hot reload, so a read-only config bind makes every Audit/Balanced/Strict mode
 transition fail with HTTP 500. This does not expose a Host or business config:
@@ -893,8 +907,17 @@ Each measured cell opens one private HTTP/1.1 management connection for the
 at the cell boundary. The three timing preflight polls likewise share one
 private connection. This removes per-sample TCP handshake/TIME_WAIT churn
 without changing the 100 ms schedule, sample count, deadline, or queue source;
-a server-requested close, reconnect requirement, delayed poll, malformed
-response, or missed deadline still aborts the capture.
+a server-requested close, reconnect requirement, malformed response, a real
+sample gap of 200 ms or more, or an unrecoverable sample-count/coverage deficit
+still aborts the capture. A response that crosses one nominal 100 ms slot but
+remains inside the validator's existing `[50 ms, 200 ms)` real-sample gap
+contract for non-terminal rows triggers immediate real catch-up polling without
+skipping the nominal slot. A catch-up response closer than 50 ms is discarded
+and re-polled; it is never copied, held, or re-timestamped. Every real gap,
+including the terminal gap, must remain below 200 ms. The same private queue
+connection stays active while the terminal Docker resource sample is collected,
+then records the one real terminal row before closing. Any sampler error found
+during final drain still fails before a cell can be published.
 
 The large-payload process-RSS lane keeps its fixed 20 ms cadence and 30 ms
 sample-gap deadline. Raw monotonic sample timestamps remain in the
@@ -991,21 +1014,186 @@ standalone validator rejects it as a gate result. No Host measurement or PASS
 report is checked into this directory; a real second-machine run is still
 required.
 
+## Tracked post-main Host admission acquisition
+
+Host admission is a separate real-acquisition lane. The generated unit
+fixtures in `tests/test_host_admission.py` test only the validator and must
+never be copied, edited, or supplied to this lane. The Host-performance
+`warm_rss_60m` series is also not Host-admission evidence and cannot replace
+either dedicated window.
+
+Before setup, an independent review step must create canonical, single-link,
+mode-0600 `approved-host-admission-tool-identities.json` from the checked-out
+tracked tool bytes. The repository file
+`host-admission-approved-runtime-identities.json` is the one and only Host
+Keeper runtime approval authority. It is canonical JSON plus one newline and
+contains exactly:
+
+```json
+{"keeper":{"base_image_ref":"python:3.12-slim@sha256:09f7da3bc104798d0afb40bc08d23ab2da20a76130cec1f2ef170848f5d85217","contract":"cag-current-cpa-host-keeper/v1","image_id":"sha256:b0d862b6e297ac66d36d15105c30301f0c0db88bceb37231607272571b84769e","image_ref":"127.0.0.1:15017/cag-host-keeper@sha256:b0d862b6e297ac66d36d15105c30301f0c0db88bceb37231607272571b84769e","source_sha256":"f618a20e9149d876df951bff8fe9db8b144f862129673d45ec973d1f641fd881"},"schema":"cag-current-cpa-host-admission-approved-runtime-identities/v1"}
+```
+
+Its SHA-256 is
+`80c78aa85e6db25e4878abb6012c5e496ef7bc0c239c6912e4f9aa2ebc3e7bd1`.
+The Host operator must copy these bytes, not author or regenerate an approval:
+
+```bash
+install -m 0600 tools/current-cpa-audit/host-admission-approved-runtime-identities.json \
+  /srv/cag-audit/approved-host-admission-runtime-identities.json
+cmp --silent tools/current-cpa-audit/host-admission-approved-runtime-identities.json \
+  /srv/cag-audit/approved-host-admission-runtime-identities.json
+```
+
+The reviewed tool-identity bundle includes
+`approved_runtime_identities_sha256`, so it also binds this tracked policy.
+Both `make-config` and later config validation reject the transferred approval
+unless its bytes exactly equal the tracked file. The Host operator may not
+choose replacement image identities to fit the running container. Build and
+verify the Keeper only against the fixed base, RepoDigest, image ID, source,
+contract, and labels above. Config retains the original absolute approval-file
+path and SHA-256; standalone validation and the release packer reread it. Do
+not pull during collection.
+
+Create one private mode-0700 runtime directory named
+`$EVIDENCE_DIR/../$RUN_ID-host-runtime` with exactly `plugins`, `config`,
+`auth`, `audit`, `secrets`, and `keeper-secrets`. Create the fixed three
+containers and internal network as:
+
+```text
+<run_id>-host-cpa       label role=host-admission-cpa, network alias cpa
+<run_id>-host-keeper    label role=host-admission-keeper, network alias keeper
+<run_id>-host-mock      label role=host-admission-mock, network alias mock
+<run_id>-host-net       label role=host-admission-network
+```
+
+All three containers must run as the same dedicated non-root collector
+`AUDIT_UID:AUDIT_GID`, with positive Memory/NanoCPUs/PIDs and one identical,
+non-empty cpuset. They require read-only roots, `cap-drop=ALL`, no added caps,
+`no-new-privileges:true`, restart=no, no Host ports, and empty proxy variables.
+CPA must have only `/cag/{plugins,config,auth,audit,secrets}` binds below the
+fixed runtime root; plugin/secrets are read-only and the other three writable.
+Mock has no Host bind. Keeper has only `/tmp` and its data tmpfs plus the two
+read-only, collector-owned secret-file binds described by
+`host_keeper_fixture/README.md`. The collector mechanically verifies all these
+properties and the exact Entrypoint/Cmd; documentation is not the gate.
+
+Keeper requires exactly `CAG_KEEPER_RUN_ID`, `CAG_KEEPER_CPA_ORIGIN`,
+`CAG_KEEPER_EXPECTED_MODE`, `CAG_KEEPER_EXPECTED_CAG_COMMIT`,
+`CAG_KEEPER_CONTROL_TOKEN_FILE`, and `CAG_KEEPER_CPA_MANAGEMENT_KEY_FILE`.
+`CAG_KEEPER_EXPECTED_EXECUTOR`, `CAG_KEEPER_EXPECTED_MODEL`, and
+`CAG_KEEPER_EXPECTED_PROVIDER` may be absent or equal their code-owned expected
+values; `CAG_KEEPER_POLL_INTERVAL_SECONDS` may be absent or exactly `0.1`.
+No other role-specific Keeper environment key is allowed. Mock must receive
+`CAG_MOCK_CONTROL_TOKEN` from `CAG_HOST_ADMISSION_MOCK_CONTROL_TOKEN` and
+`CAG_MOCK_UPSTREAM_KEY` from `CAG_HOST_ADMISSION_UPSTREAM_KEY`; the CPA
+`current-cpa-counted-mock` provider API key must equal that same upstream key.
+
+After the containers are ready, generate the immutable config. The SQLite path
+must be the real CPA `/cag/audit` source plus `/events.db`, and the output must
+be the original run's fixed Host path:
+
+```bash
+python3 -B tools/current-cpa-audit/host_admission_collector.py make-config \
+  --run-config "$EVIDENCE_DIR/run-config.json" \
+  --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
+  --approved-tool-identities /srv/cag-audit/approved-host-admission-tool-identities.json \
+  --approved-runtime-identities /srv/cag-audit/approved-host-admission-runtime-identities.json \
+  --candidate-store-zip "$CANDIDATE_DIR/cyber-abuse-guard_1.0.0_linux_amd64.zip" \
+  --corpus-manifest "$EVIDENCE_DIR/corpus-manifest.json" \
+  --machine-evidence "$EVIDENCE_DIR/machine-evidence.json" \
+  --transport-results "$EVIDENCE_DIR/transport-results.jsonl" \
+  --supplemental-manifest "$EVIDENCE_DIR/supplemental-zip-manifest.json" \
+  --supplemental-policy "$EVIDENCE_DIR/supplemental-zip-policy.json" \
+  --supplemental-results "$EVIDENCE_DIR/supplemental-zip-results.jsonl" \
+  --audit-sqlite-database "$RUNTIME_ROOT/audit/events.db" \
+  --runtime-root "$RUNTIME_ROOT" \
+  --output "$EVIDENCE_DIR/host-admission/config.json"
+```
+
+Run the only real acquisition entry point with five mutually distinct run-random values
+of at least 32 UTF-8 bytes. Secrets are process environment only and are never
+written to config, evidence, argv, or logs:
+
+```bash
+export CAG_HOST_ADMISSION_CLIENT_KEY='<private-client-key>'
+export CAG_HOST_ADMISSION_MANAGEMENT_KEY='<private-management-key>'
+export CAG_HOST_ADMISSION_MOCK_CONTROL_TOKEN='<same-private-Mock-control-token>'
+export CAG_HOST_ADMISSION_KEEPER_CONTROL_TOKEN='<same-private-Keeper-control-token>'
+export CAG_HOST_ADMISSION_UPSTREAM_KEY='<same-private-counted-Mock-upstream-key>'
+python3 -B tools/current-cpa-audit/host_admission_collector.py collect \
+  --config "$EVIDENCE_DIR/host-admission/config.json"
+unset CAG_HOST_ADMISSION_CLIENT_KEY CAG_HOST_ADMISSION_MANAGEMENT_KEY \
+  CAG_HOST_ADMISSION_MOCK_CONTROL_TOKEN CAG_HOST_ADMISSION_KEEPER_CONTROL_TOKEN \
+  CAG_HOST_ADMISSION_UPSTREAM_KEY
+```
+
+`collect` obtains exactly 301 and 3,601 real one-second rows with actual UTC
+and monotonic completion clocks; it never copies a row, retimestamps a delayed
+sample, skips a slot, or accepts a gap outside `[500 ms, 2000 ms]`. During each
+window it executes the two code-owned benign probes and one malicious probe and
+checks RPC/Mock/Keeper Usage conservation. It then sends all 14 fixed realtime
+requests with no credentials and requires authentication rejection with no
+state change. It stops Keeper/CPA/Mock, checkpoints and verifies SQLite schema
+7, preserves a bound evidence copy, deletes only the exact descriptor-bound
+runtime root and four labeled Docker resources, and writes `evidence.json`
+last. Any error can leave diagnostic residuals but cannot publish PASS.
+
+Validate the original bundle, including config and evidence manifest:
+
+```bash
+python3 -B tools/current-cpa-audit/validate.py host-admission \
+  --evidence "$EVIDENCE_DIR/host-admission/evidence.json" \
+  --samples-300s "$EVIDENCE_DIR/host-admission/host-300s-samples.jsonl" \
+  --samples-3600s "$EVIDENCE_DIR/host-admission/host-3600s-samples.jsonl" \
+  --realtime-routes "$EVIDENCE_DIR/host-admission/realtime-auth-boundary-routes.jsonl" \
+  --config "$EVIDENCE_DIR/host-admission/config.json" \
+  --evidence-manifest "$EVIDENCE_DIR/host-admission/evidence-manifest.json" \
+  --expected-candidate "$EVIDENCE_DIR/host-admission/expected-candidate.json"
+```
+
+This lane is post-main owner-run admission, not independent attestation or
+production approval.
+
 ## Native CPA Host special-path evidence
 
 Run the repository-owned integration selection against the same exact clean
 checkout and nine-file candidate used by the semantic and Host-performance
-lanes. The JSONL parser retains only hashes and PASS identities; it does not
-copy `go test` output strings into its report:
+lanes. Run it through the repository-owned isolated Host audit mount and force
+the CPA v7.2.145 Store to install the candidate archive. The JSONL parser retains
+only hashes, the Store receipt identity, and PASS identities; it does not copy
+`go test` output strings or the installed temporary path into its report:
 
 ```bash
 NATIVE_HOST_LOG="$EVIDENCE_DIR/native-host-special-paths-go-test.jsonl"
 NATIVE_HOST_REPORT="$EVIDENCE_DIR/native-host-special-paths.json"
+CANDIDATE_SO="$CANDIDATE_DIR/cyber-abuse-guard-v1.0.0.so"
+CANDIDATE_STORE_ZIP="$CANDIDATE_DIR/cyber-abuse-guard_1.0.0_linux_amd64.zip"
+CANDIDATE_BUILD_METADATA="$CANDIDATE_DIR/build-metadata.json"
+CAG_VERSION=1.0.0
+GO_BIN="${GO_BIN:-$(command -v go)}"
 
-go test -json -count=1 \
-  -run=^TestCPAPluginHostBlocksBeforeUpstream$ \
-  -tags=integration,sqlite_omit_load_extension \
-  ./integration >"$NATIVE_HOST_LOG"
+test -x "$GO_BIN"
+test "$("$GO_BIN" env GOVERSION)" = go1.26.6
+test "$("$GO_BIN" env GOOS)" = linux
+test "$("$GO_BIN" env GOARCH)" = amd64
+test -f "$CANDIDATE_SO"
+test -f "$CANDIDATE_STORE_ZIP"
+test -f "$CANDIDATE_BUILD_METADATA"
+export PATH="$(dirname "$GO_BIN"):$PATH"
+export GOTOOLCHAIN=local GOENV=off GOPROXY=off GOSUMDB=off
+
+env -u CYBER_ABUSE_GUARD_HOST_AUDIT_DATA_DIR \
+  bash ./scripts/with-host-audit-mount.sh env \
+  CYBER_ABUSE_GUARD_PLUGIN="$CANDIDATE_SO" \
+  CYBER_ABUSE_GUARD_STORE_ARCHIVE="$CANDIDATE_STORE_ZIP" \
+  CYBER_ABUSE_GUARD_BUILD_METADATA="$CANDIDATE_BUILD_METADATA" \
+  CYBER_ABUSE_GUARD_VERSION="$CAG_VERSION" \
+  CYBER_ABUSE_GUARD_REQUIRE_STORE_INSTALL=1 \
+  CYBER_ABUSE_GUARD_REQUIRE_HOST_INTEGRATION=1 \
+  CGO_ENABLED=1 "$GO_BIN" test -json -count=1 \
+    -run=^TestCPAPluginHostBlocksBeforeUpstream$ \
+    -tags=integration,sqlite_omit_load_extension \
+    ./integration >"$NATIVE_HOST_LOG"
 
 python3 -B tools/current-cpa-audit/native_host_special_paths.py pack \
   --candidate-manifest "$CANDIDATE_DIR/audit-candidate-manifest.json" \
@@ -1031,8 +1219,13 @@ python3 -B tools/current-cpa-audit/native_host_special_paths.py validate \
 The report must contain exactly 35 code-owned critical subtests covering
 no-copy/body limits, Multi-Agent v2, official Codex `response.failed` and
 Originator behavior, Claude thinking replay, and ordered-tool request shapes.
-Any FAIL, SKIP, missing test, candidate drift, dirty checkout, non-Linux-amd64
-runtime, or Go-version drift rejects the report. This remains owner-run
+It must also contain exactly one Store-install receipt owned by the selected
+top-level test. The receipt's archive SHA-256 must equal the candidate Store ZIP
+SHA-256 and its installed target must be the fixed Linux amd64 candidate SO
+path. A missing, duplicate, wrong-SHA, wrong-owner, malformed receipt, or any
+direct-SO fallback marker rejects the log even when every test says PASS. Any
+FAIL, SKIP, missing test, candidate drift, dirty checkout, non-Linux-amd64
+runtime, or Go-version drift also rejects the report. This remains owner-run
 evidence, not independent proof.
 
 ## Portable owner-run release admission
@@ -1118,7 +1311,7 @@ summaries, denominators, and gates rather than trusting the report's `status`
 field.
 
 Create a draft staging Release with tag name
-`v1.0.0-rc.2-second-machine-admission`, set `target_commitish` to the exact
+`v1.0.0-rc.3-second-machine-admission`, set `target_commitish` to the exact
 protected `main` commit, and upload the report with the fixed asset name
 `second-machine-release-admission.json`. The report cannot contain its own
 asset ID/digest without a circular hash. `release-rc.yml` therefore closes that
@@ -1128,7 +1321,7 @@ upload state/API digest/size; downloads and rehashes the real bytes; checks the
 expiry; and runs the validator from the exact signed tag.
 
 Before that dispatch, a real authorized signer who controls the corresponding
-private key must create `v1.0.0-rc.2` as a GitHub-verified signed annotated tag
+private key must create `v1.0.0-rc.3` as a GitHub-verified signed annotated tag
 on the exact protected-main commit. An unsigned annotated tag, lightweight tag,
 Release-generated tag, unverified key, or signature that impersonates a
 maintainer is not acceptable.
@@ -1167,6 +1360,8 @@ python3 -B -m py_compile \
   tools/current-cpa-audit/acquire.py \
   tools/current-cpa-audit/audit_contract.py \
   tools/current-cpa-audit/counted_mock.py \
+  tools/current-cpa-audit/host_admission_collector.py \
+  tools/current-cpa-audit/host_keeper_fixture/keeper_fixture.py \
   tools/current-cpa-audit/host_performance.py \
   tools/current-cpa-audit/host_performance_workloads.py \
   tools/current-cpa-audit/native_host_special_paths.py \
@@ -1184,6 +1379,8 @@ python -B -m py_compile `
   tools/current-cpa-audit/acquire.py `
   tools/current-cpa-audit/audit_contract.py `
   tools/current-cpa-audit/counted_mock.py `
+  tools/current-cpa-audit/host_admission_collector.py `
+  tools/current-cpa-audit/host_keeper_fixture/keeper_fixture.py `
   tools/current-cpa-audit/host_performance.py `
   tools/current-cpa-audit/host_performance_workloads.py `
   tools/current-cpa-audit/native_host_special_paths.py `
