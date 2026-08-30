@@ -56,6 +56,7 @@ from audit_contract import (
     iter_jsonl_bytes,
     load_json_bytes,
     read_regular_bytes,
+    require_repo_digest,
     require_safe_relative,
     sha256_bytes,
     validate_candidate_manifest_file,
@@ -85,8 +86,8 @@ MAX_CLOCK_SKEW = timedelta(minutes=5)
 MAX_REPORT_BYTES = 8 * 1024 * 1024
 MAX_CANDIDATE_FILE_BYTES = 512 * 1024 * 1024
 HEX40 = re.compile(r"[0-9a-f]{40}")
-HEX64 = re.compile(r"[0-9a-f]{64}")
-DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+HEX64 = re.compile(r"(?!0{64})[0-9a-f]{64}")
+DIGEST = re.compile(r"sha256:(?!0{64})[0-9a-f]{64}")
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9_.-]{2,62}")
 UTC = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z"
@@ -112,6 +113,9 @@ INPUT_HASH_KEYS = (
     "host_performance_evidence_sha256",
     "host_performance_measurements_sha256",
     "host_admission_evidence_sha256",
+    "host_admission_config_sha256",
+    "host_admission_evidence_manifest_sha256",
+    "host_admission_sqlite_sha256",
     "host_admission_300s_samples_sha256",
     "host_admission_3600s_samples_sha256",
     "host_admission_realtime_routes_sha256",
@@ -950,7 +954,7 @@ def validate_supplemental_evidence_copies(
 
 def local_tool_identities() -> dict[str, Any]:
     from host_performance import tool_identities as host_tool_identities
-    import host_admission
+    from host_admission_collector import tool_identities as host_admission_tool_identities
     import native_host_special_paths
     from run import runner_identities
 
@@ -961,24 +965,13 @@ def local_tool_identities() -> dict[str, Any]:
         "native Host integration test source",
         8 * 1024 * 1024,
     )
-    host_admission_source_sha, _, _ = sha256_file(
-        TOOL_DIR / "host_admission.py", "Host admission validator", 2 * 1024 * 1024
-    )
-    host_admission_schema_sha, _, _ = sha256_file(
-        TOOL_DIR / "host-admission-evidence.schema.json",
-        "Host admission schema",
-        2 * 1024 * 1024,
-    )
     return {
         "admission": {
             "schema_sha256": schema_sha,
             "source_sha256": source_sha,
         },
         "host_performance": host_tool_identities(),
-        "host_admission": {
-            "schema_sha256": host_admission_schema_sha,
-            "source_sha256": host_admission_source_sha,
-        },
+        "host_admission": host_admission_tool_identities(),
         "machine": runner_identities(),
         "native_host_special_paths": {
             **native_host_special_paths.tool_identity(),
@@ -1542,6 +1535,11 @@ def build_report(
     performance: Mapping[str, Any],
     performance_raw: bytes,
     host_admission: Mapping[str, Any],
+    host_admission_config: Mapping[str, Any],
+    host_admission_config_raw: bytes,
+    host_admission_manifest_raw: bytes,
+    host_admission_sqlite_sha256: str,
+    host_admission_approved_runtime: Mapping[str, Any],
     host_admission_raw: bytes,
     host_admission_300s_raw: bytes,
     host_admission_3600s_raw: bytes,
@@ -1571,6 +1569,48 @@ def build_report(
         fail("Host admission raw bytes differ from the validated object")
     if host_admission["run_id"] != machine["run"]["run_id"]:
         fail("Host admission run_id differs from machine evidence run_id")
+    # Re-run the complete production Host binding inside the only PASS
+    # producer.  Callers cannot turn a hand-written config/manifest into a
+    # portable PASS merely by invoking build_report() directly and bypassing
+    # load_validated_inputs().
+    import host_admission as host_validator
+    import host_admission_collector as host_collector
+
+    (
+        validated_host_config,
+        validated_host_manifest,
+        validated_host_candidate,
+    ) = host_collector.validate_production_bindings(
+        host_admission_config_raw,
+        host_admission_manifest_raw,
+        host_admission_300s_raw,
+        host_admission_3600s_raw,
+        host_admission_realtime_raw,
+    )
+    if dict(host_admission_config) != validated_host_config:
+        fail("Host admission config differs from its production-validated bytes")
+    if (
+        dict(host_admission_approved_runtime)
+        != validated_host_config["approved_runtime_identities"]
+    ):
+        fail("Host admission runtime approval differs from the validated config")
+    if (
+        require_hex(
+            host_admission_sqlite_sha256,
+            "Host admission preserved SQLite SHA-256",
+        )
+        != validated_host_manifest["sqlite"]["database_sha256"]
+    ):
+        fail("Host admission preserved SQLite differs from the validated manifest")
+    validated_host_evidence = host_validator.validate_host_admission(
+        host_admission,
+        host_admission_300s_raw,
+        host_admission_3600s_raw,
+        host_admission_realtime_raw,
+        validated_host_candidate,
+    )
+    if dict(host_admission) != validated_host_evidence:
+        fail("Host admission projection differs from its production-validated evidence")
     lazy_phase_value, _ = load_canonical_bytes(
         lazy_read_phase_boundary_raw, "lazy-read phase boundary"
     )
@@ -1651,6 +1691,9 @@ def build_report(
         "host_performance_evidence_sha256": sha256_bytes(performance_raw),
         "host_performance_measurements_sha256": sha256_bytes(measurements_raw),
         "host_admission_evidence_sha256": sha256_bytes(host_admission_raw),
+        "host_admission_config_sha256": sha256_bytes(host_admission_config_raw),
+        "host_admission_evidence_manifest_sha256": sha256_bytes(host_admission_manifest_raw),
+        "host_admission_sqlite_sha256": host_admission_sqlite_sha256,
         "host_admission_300s_samples_sha256": sha256_bytes(host_admission_300s_raw),
         "host_admission_3600s_samples_sha256": sha256_bytes(host_admission_3600s_raw),
         "host_admission_realtime_routes_sha256": sha256_bytes(host_admission_realtime_raw),
@@ -1701,10 +1744,30 @@ def build_report(
     }
     host_candidate = host_admission["candidate"]
     host_windows = host_admission["windows"]
+    approved_keeper = host_admission_approved_runtime["keeper"]
+    projected_keeper = {
+        "base_image_ref": host_admission_config["identities"]["keeper"]["base_image_ref"],
+        "contract": host_admission_config["identities"]["keeper"]["contract"],
+        "image_id": host_admission_config["identities"]["keeper"]["image_id"],
+        "image_ref": host_admission_config["identities"]["keeper"]["image_ref"],
+        "source_sha256": host_admission_config["identities"]["keeper"]["source_sha256"],
+    }
+    if approved_keeper != projected_keeper:
+        fail("Host admission Keeper projection differs from independently approved runtime identities")
+    observed_keeper = host_admission["runtime_identity"]["keeper"]
+    if (
+        observed_keeper["image_id"] != approved_keeper["image_id"]
+        or observed_keeper["image_digest"] != approved_keeper["image_ref"]
+    ):
+        fail("Host admission observed Keeper runtime differs from its independent approval")
     host_projection = {
+        "approved_runtime_identities_sha256": host_admission_config[
+            "approved_runtime_identities_sha256"
+        ],
         "evidence_sha256": input_hashes["host_admission_evidence_sha256"],
         "candidate_artifact_digest": host_candidate["artifacts"]["candidate_artifact_digest"],
         "candidate_manifest_sha256": host_candidate["artifacts"]["candidate_manifest_sha256"],
+        "config_sha256": host_candidate["artifacts"]["config_sha256"],
         "claim_boundary": host_admission["claim_boundary"],
         "cpa_commit": host_candidate["cpa"]["commit"],
         "cpa_rpc_schema": host_candidate["cpa"]["rpc_schema"],
@@ -1713,6 +1776,13 @@ def build_report(
         "host_300s_samples_sha256": host_windows[0]["samples_sha256"],
         "host_3600s_sample_count": host_windows[1]["sample_count"],
         "host_3600s_samples_sha256": host_windows[1]["samples_sha256"],
+        "evidence_manifest_sha256": host_candidate["artifacts"]["evidence_manifest_sha256"],
+        "keeper_base_image_ref": host_admission_config["identities"]["keeper"]["base_image_ref"],
+        "keeper_contract": host_admission_config["identities"]["keeper"]["contract"],
+        "keeper_image_id": host_admission_config["identities"]["keeper"]["image_id"],
+        "keeper_image_ref": host_admission_config["identities"]["keeper"]["image_ref"],
+        "keeper_source_sha256": host_admission_config["identities"]["keeper"]["source_sha256"],
+        "sqlite_sha256": input_hashes["host_admission_sqlite_sha256"],
         "platform": host_admission["platform"],
         "realtime_route_count": host_admission["tail_verification"]["realtime"]["route_count"],
         "realtime_routes_sha256": host_admission["tail_verification"]["realtime"]["routes_sha256"],
@@ -2022,20 +2092,34 @@ def validate_report(
     host_section = exact_object(
         report["host_admission"],
         {
-            "candidate_artifact_digest", "candidate_manifest_sha256", "claim_boundary",
-            "evidence_sha256",
+            "approved_runtime_identities_sha256", "candidate_artifact_digest", "candidate_manifest_sha256", "claim_boundary",
+            "config_sha256", "evidence_manifest_sha256", "evidence_sha256",
             "cpa_commit", "cpa_rpc_schema", "cpa_tag", "host_300s_sample_count",
             "host_300s_samples_sha256", "host_3600s_sample_count",
-            "host_3600s_samples_sha256", "platform", "realtime_route_count",
+            "host_3600s_samples_sha256", "keeper_base_image_ref", "keeper_contract", "keeper_image_id",
+            "keeper_image_ref", "keeper_source_sha256", "platform", "realtime_route_count",
             "realtime_routes_sha256", "run_id", "schema", "so_sha256",
-            "source_commit", "source_tree", "status", "store_zip_sha256",
+            "source_commit", "source_tree", "sqlite_sha256", "status", "store_zip_sha256",
         },
         "report.host_admission",
     )
     if host_section["schema"] != "cag-current-cpa-host-admission-evidence/v1" or host_section["status"] != "PASS":
         fail("Host admission schema/status is invalid")
+    expected_host_claim = (
+        "SECOND-MACHINE OWNER HOST ADMISSION; EXACT CANDIDATE AND PROTECTED "
+        "ROUTES ONLY; NOT INDEPENDENT ATTESTATION"
+    )
+    if host_section["claim_boundary"] != expected_host_claim:
+        fail("Host admission claim boundary is invalid")
     if host_section["evidence_sha256"] != inputs["host_admission_evidence_sha256"]:
         fail("Host admission projection differs from its bound raw evidence")
+    if (
+        host_section["config_sha256"] != inputs["host_admission_config_sha256"]
+        or host_section["evidence_manifest_sha256"]
+        != inputs["host_admission_evidence_manifest_sha256"]
+        or host_section["sqlite_sha256"] != inputs["host_admission_sqlite_sha256"]
+    ):
+        fail("Host admission tracked config/manifest/SQLite inputs differ from its projection")
     if host_section["platform"] != "linux/amd64" or host_section["cpa_tag"] != CPA_TAG or host_section["cpa_commit"] != CPA_COMMIT or exact_int(host_section["cpa_rpc_schema"], "report.host_admission.cpa_rpc_schema") != CPA_RPC_SCHEMA:
         fail("Host admission platform/CPA identity is invalid")
     if host_section["source_commit"] != source["commit"]:
@@ -2048,12 +2132,42 @@ def validate_report(
         fail("Host admission artifact digest differs from the portable candidate")
     if host_section["candidate_manifest_sha256"] != candidate["manifest_sha256"]:
         fail("Host admission manifest differs from the portable candidate")
+    store_name = f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip"
+    file_store = next(item for item in files if item["name"] == store_name)
+    if host_section["store_zip_sha256"] != file_store["sha256"]:
+        fail("Host admission Store ZIP differs from the sealed candidate file")
     if host_section["cpa_commit"] != report["cpa"]["commit"]:
         fail("Host admission CPA differs from the portable CPA")
     for key in ("source_commit", "source_tree"):
         require_hex(host_section[key], f"report.host_admission.{key}", HEX40)
-    for key in ("candidate_manifest_sha256", "host_300s_samples_sha256", "host_3600s_samples_sha256", "realtime_routes_sha256", "so_sha256", "store_zip_sha256"):
+    for key in ("approved_runtime_identities_sha256", "candidate_manifest_sha256", "config_sha256", "evidence_manifest_sha256", "host_300s_samples_sha256", "host_3600s_samples_sha256", "keeper_source_sha256", "realtime_routes_sha256", "so_sha256", "sqlite_sha256", "store_zip_sha256"):
         require_hex(host_section[key], f"report.host_admission.{key}")
+    require_digest(host_section["keeper_image_id"], "report.host_admission.keeper_image_id")
+    if host_section["keeper_contract"] != "cag-current-cpa-host-keeper/v1":
+        fail("report Host Keeper contract is invalid")
+    require_repo_digest(host_section["keeper_image_ref"], "report.host_admission.keeper_image_ref")
+    require_repo_digest(host_section["keeper_base_image_ref"], "report.host_admission.keeper_base_image_ref")
+    portable_runtime_approval = {
+        "keeper": {
+            "base_image_ref": host_section["keeper_base_image_ref"],
+            "contract": host_section["keeper_contract"],
+            "image_id": host_section["keeper_image_id"],
+            "image_ref": host_section["keeper_image_ref"],
+            "source_sha256": host_section["keeper_source_sha256"],
+        },
+        "schema": "cag-current-cpa-host-admission-approved-runtime-identities/v1",
+    }
+    from host_admission_collector import load_tracked_approved_runtime_identities
+
+    tracked_runtime_approval, tracked_runtime_approval_raw = (
+        load_tracked_approved_runtime_identities()
+    )
+    if portable_runtime_approval != tracked_runtime_approval:
+        fail("report Host Keeper identity differs from the tracked runtime approval")
+    if host_section["approved_runtime_identities_sha256"] != sha256_bytes(
+        tracked_runtime_approval_raw
+    ):
+        fail("report Host Keeper fields do not bind the tracked runtime approval SHA")
     require_digest(host_section["candidate_artifact_digest"], "report.host_admission.candidate_artifact_digest")
     exact_run_id(host_section["run_id"], "report.host_admission.run_id")
     if exact_int(host_section["host_300s_sample_count"], "report.host_admission.host_300s_sample_count") != 301 or exact_int(host_section["host_3600s_sample_count"], "report.host_admission.host_3600s_sample_count") != 3601 or exact_int(host_section["realtime_route_count"], "report.host_admission.realtime_route_count") != 14:
@@ -2547,6 +2661,8 @@ def validate_report(
         == tools["native_host_special_paths"]["test_source_sha256"]
     ):
         fail("report native Host projection differs from its tool bundle identity")
+    if host_section["keeper_source_sha256"] != tools["host_admission"]["keeper_source_sha256"]:
+        fail("report Host Keeper source differs from the tracked Host-admission tool bundle")
     if tools != local_tool_identities():
         fail("report tool bundle hashes differ from the checked-out tag validator")
 
@@ -2734,6 +2850,17 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
         fail("native Host go test JSONL changed after full bundle reconstruction")
 
     import host_admission as host
+    import host_admission_collector as host_collector
+
+    for supplied, relative, label in (
+        (args.host_admission, "host-admission/evidence.json", "Host admission evidence"),
+        (args.host_admission_300s, "host-admission/host-300s-samples.jsonl", "Host admission 300-second samples"),
+        (args.host_admission_3600s, "host-admission/host-3600s-samples.jsonl", "Host admission 3600-second samples"),
+        (args.host_admission_realtime, "host-admission/realtime-auth-boundary-routes.jsonl", "Host admission Realtime routes"),
+        (args.host_admission_config, "host-admission/config.json", "Host admission config"),
+        (args.host_admission_evidence_manifest, "host-admission/evidence-manifest.json", "Host admission evidence manifest"),
+    ):
+        _strict_evidence_path(supplied, evidence_directory, relative, label)
 
     host_admission_raw = read_regular_bytes(
         args.host_admission, "Host admission evidence", host.MAX_EVIDENCE_BYTES,
@@ -2760,6 +2887,27 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
         args.host_admission_evidence_manifest, "Host admission evidence manifest",
         8 * 1024 * 1024, require_single_link=True,
     )
+    host_config, host_evidence_manifest, rebuilt_host_candidate = (
+        host_collector.validate_production_bindings(
+            host_config_raw,
+            host_evidence_manifest_raw,
+            host_admission_300s_raw,
+            host_admission_3600s_raw,
+            host_admission_realtime_raw,
+        )
+    )
+    host_sqlite_path = _strict_evidence_path(
+        Path(host_config["paths"]["host_admission_directory"]) / "audit-events.sqlite3",
+        evidence_directory,
+        "host-admission/audit-events.sqlite3",
+        "Host admission preserved audit SQLite",
+    )
+    host_sqlite_sha256, _, _host_sqlite_raw = sha256_file(
+        host_sqlite_path, "Host admission preserved audit SQLite", 512 * 1024 * 1024
+    )
+    del _host_sqlite_raw
+    if host_sqlite_sha256 != host_evidence_manifest["sqlite"]["database_sha256"]:
+        fail("Host admission preserved SQLite differs from its tracked evidence manifest")
     store_zip = next(
         item for item in candidate_files
         if item["name"] == f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip"
@@ -2792,6 +2940,8 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
             "tag": CPA_TAG,
         },
     }
+    if rebuilt_host_candidate != expected_host_candidate:
+        fail("Host admission config/manifest reconstruction differs from release inputs")
     validated_host_admission = host.parse_host_admission(
         host_admission_raw,
         host_admission_300s_raw,
@@ -2898,6 +3048,11 @@ def load_validated_inputs(args: argparse.Namespace) -> dict[str, Any]:
         "performance_config_raw": performance_config_raw,
         "performance_raw": performance_raw,
         "host_admission": validated_host_admission,
+        "host_admission_config": host_config,
+        "host_admission_approved_runtime": host_config["approved_runtime_identities"],
+        "host_admission_config_raw": host_config_raw,
+        "host_admission_manifest_raw": host_evidence_manifest_raw,
+        "host_admission_sqlite_sha256": host_sqlite_sha256,
         "host_admission_raw": host_admission_raw,
         "host_admission_300s_raw": host_admission_300s_raw,
         "host_admission_3600s_raw": host_admission_3600s_raw,
@@ -2934,17 +3089,47 @@ def write_exclusive(path: Path, value: Mapping[str, Any]) -> None:
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
     descriptor = os.open(path, flags, 0o600)
-    handle = os.fdopen(descriptor, "wb", closefd=True)
+    created_identity: tuple[int, int] | None = None
     try:
-        handle.write(raw)
-        handle.flush()
-        os.fsync(handle.fileno())
-        info = os.fstat(handle.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size != len(raw):
-            fail("new admission output is not a complete single-link regular file")
-    finally:
-        if not handle.closed:
-            handle.close()
+        created = path.lstat()
+        created_identity = (created.st_dev, created.st_ino)
+        initial = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(initial.st_mode)
+            or initial.st_nlink != 1
+            or initial.st_size != 0
+            or (initial.st_dev, initial.st_ino) != created_identity
+        ):
+            fail("new admission output is not a fresh single-link regular file")
+        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+            descriptor = -1
+            handle.write(raw)
+            handle.flush()
+            os.fsync(handle.fileno())
+            info = os.fstat(handle.fileno())
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_nlink != 1
+                or info.st_size != len(raw)
+                or (info.st_dev, info.st_ino) != created_identity
+            ):
+                fail("new admission output is not a complete single-link regular file")
+    except BaseException:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        try:
+            current = path.lstat()
+            if created_identity is None or (
+                current.st_dev,
+                current.st_ino,
+            ) == created_identity:
+                path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def parser() -> argparse.ArgumentParser:

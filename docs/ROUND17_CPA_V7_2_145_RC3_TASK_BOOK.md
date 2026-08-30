@@ -160,7 +160,7 @@ Gemini tool array `items` 补全、scheduler successor 保持、HTTPS proxy ALPN
 
 ## 9. 本地自检回执更新
 
-当前仓库自检回执为 `320/320 PASS / ZERO_SKIPS`。回执子进程使用显式的
+当前仓库自检回执为 `362/362 PASS / ZERO_SKIPS`。回执子进程使用显式的
 loader/credential-free 环境白名单（仅保留 `PATH`、locale、`PYTHONDONTWRITEBYTECODE`
 和固定 `GOTOOLCHAIN`），以避免宿主的动态加载、Shell 启动、代理或凭据变量改变审计
 结果。该回执仍是未签名的开发自检，不能替代精确提交的 GitHub CI、二号机或独立证明。
@@ -216,3 +216,23 @@ loader/credential-free 环境白名单（仅保留 `PATH`、locale、`PYTHONDONT
   gap `>=200 ms`、最终数量/覆盖不足仍硬失败。终态 Docker stats 期间 queue sampler
   继续运行，join 后发现的 sampler error 也必须在发布 cell 前失败。旧性能运行与旧
   approved tool identity 不得转移，必须在新签名候选上从全新 run 重新采集。
+
+- 本次 Host 准入终审将 Keeper runtime approval 固定为仓库内唯一的
+  `host-admission-approved-runtime-identities.json`。其 base image、镜像 ID、
+  RepoDigest、Keeper source SHA 和 canonical 文件摘要同时进入 tool-identity
+  bundle；`make-config`、collector、便携 packer 和 standalone validator 都要求
+  外部回执逐字匹配该锚点，不能通过重算报告摘要自我批准替换镜像。
+- Host collector 的环境契约现在区分 required 与 optional：Keeper 的 executor/model/
+  provider/poll interval 可省略但若出现必须等于代码默认值；禁止 `LD_PRELOAD`、
+  `PYTHONPATH` 等注入变量。CPA counted-Mock provider API key、Mock upstream
+  环境和第五个 run-random secret 必须是同一内存值，五个 secret 仍必须互异且不进入
+  argv、配置、日志、SQLite 或 evidence。
+- portable `build_report()` 在生成 PASS 前会再次执行完整 Host config、manifest、
+  preserved-SQLite 和 evidence validator；失败写入采用独占文件并在 write/flush/fsync/
+  identity 任一步失败时删除残留，防止磁盘留下可误认的 `status=PASS` 文件。所有
+  Host 摘要 SHA 拒绝全零值。
+- 当前本地 Linux 回执为 `362/362 PASS / ZERO_SKIPS`（CPA v7.2.145，回执 SHA
+  `9e8ec8d329e1d1409b1b16102d3e4b944f23a8193df098afac7c0cd53504f512`）；Host collector
+  18 项（Linux 零跳过）、Keeper 21 项、portable 37 项均通过，Safe Gate 通过。上述
+  仅是源码/单测门禁，不替代新候选对应的 GitHub required checks 与二号机真实 301/3601
+  秒采集。

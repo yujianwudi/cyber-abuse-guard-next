@@ -85,6 +85,8 @@ def parser() -> argparse.ArgumentParser:
     host.add_argument("--samples-300s", type=Path, required=True)
     host.add_argument("--samples-3600s", type=Path, required=True)
     host.add_argument("--realtime-routes", type=Path, required=True)
+    host.add_argument("--config", type=Path, required=True)
+    host.add_argument("--evidence-manifest", type=Path, required=True)
     host.add_argument("--expected-candidate", type=Path, required=True)
     lazy = commands.add_parser(
         "lazy-read", help="validate Round 14 lazy-read phase and request bindings"
@@ -211,12 +213,51 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         elif args.command == "host-admission":
             import host_admission as host
+            import host_admission_collector as collector
 
             evidence_raw = read_regular_bytes(
-                args.evidence, "Host admission evidence", host.MAX_EVIDENCE_BYTES
+                args.evidence, "Host admission evidence", host.MAX_EVIDENCE_BYTES,
+                require_single_link=True,
             )
+            raw_300 = read_regular_bytes(
+                args.samples_300s, "Host admission 300-second samples",
+                301 * host.MAX_SAMPLE_LINE_BYTES, require_single_link=True,
+            )
+            raw_3600 = read_regular_bytes(
+                args.samples_3600s, "Host admission 3600-second samples",
+                3_601 * host.MAX_SAMPLE_LINE_BYTES, require_single_link=True,
+            )
+            realtime_raw = read_regular_bytes(
+                args.realtime_routes, "Host admission Realtime routes",
+                len(host.REALTIME_ROUTE_CONTRACT) * host.MAX_SAMPLE_LINE_BYTES,
+                require_single_link=True,
+            )
+            config_raw = read_regular_bytes(
+                args.config, "Host admission config", 2 * 1024 * 1024,
+                require_single_link=True,
+            )
+            manifest_raw = read_regular_bytes(
+                args.evidence_manifest, "Host admission evidence manifest", 8 * 1024 * 1024,
+                require_single_link=True,
+            )
+            config, _manifest, rebuilt_candidate = collector.validate_production_bindings(
+                config_raw, manifest_raw, raw_300, raw_3600, realtime_raw
+            )
+            host_directory = Path(config["paths"]["host_admission_directory"])
+            fixed_paths = {
+                args.evidence: host_directory / "evidence.json",
+                args.samples_300s: host_directory / "host-300s-samples.jsonl",
+                args.samples_3600s: host_directory / "host-3600s-samples.jsonl",
+                args.realtime_routes: host_directory / "realtime-auth-boundary-routes.jsonl",
+                args.config: host_directory / "config.json",
+                args.evidence_manifest: host_directory / "evidence-manifest.json",
+                args.expected_candidate: host_directory / "expected-candidate.json",
+            }
+            if any(supplied != expected for supplied, expected in fixed_paths.items()):
+                raise ContractError("Host admission inputs are not the original fixed evidence paths")
             expected_raw = read_regular_bytes(
-                args.expected_candidate, "trusted Host candidate identity", 2 * 1024 * 1024
+                args.expected_candidate, "trusted Host candidate identity", 2 * 1024 * 1024,
+                require_single_link=True,
             )
             expected_candidate = load_json_bytes(
                 expected_raw, "trusted Host candidate identity"
@@ -225,21 +266,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise ContractError(
                     "trusted Host candidate identity is not canonical JSON with one terminal newline"
                 )
+            if expected_candidate != rebuilt_candidate:
+                raise ContractError(
+                    "trusted Host candidate identity differs from config/manifest reconstruction"
+                )
             validated_host = host.parse_host_admission(
                 evidence_raw,
-                read_regular_bytes(
-                    args.samples_300s, "Host admission 300-second samples",
-                    301 * host.MAX_SAMPLE_LINE_BYTES,
-                ),
-                read_regular_bytes(
-                    args.samples_3600s, "Host admission 3600-second samples",
-                    3_601 * host.MAX_SAMPLE_LINE_BYTES,
-                ),
-                read_regular_bytes(
-                    args.realtime_routes, "Host admission Realtime routes",
-                    len(host.REALTIME_ROUTE_CONTRACT) * host.MAX_SAMPLE_LINE_BYTES,
-                ),
-                expected_candidate,
+                raw_300,
+                raw_3600,
+                realtime_raw,
+                rebuilt_candidate,
             )
             output = {
                 "host_300s_samples": validated_host["windows"][0]["sample_count"],

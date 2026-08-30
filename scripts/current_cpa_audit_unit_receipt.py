@@ -30,7 +30,7 @@ from typing import Any, Iterable, Iterator, NoReturn, Sequence
 
 
 SCHEMA = "cag-current-cpa-audit-unit-receipt/v1"
-REVIEWED_TEST_COUNT = 320
+REVIEWED_TEST_COUNT = 362
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 TOOL_ROOT = REPOSITORY_ROOT / "tools" / "current-cpa-audit"
 TEST_ROOT = TOOL_ROOT / "tests"
@@ -46,7 +46,15 @@ TESTED_TOOL_FILES = (
     "csam_text_runner.py",
     "host-performance-evidence.schema.json",
     "host-admission-evidence.schema.json",
+    "host-admission-config.schema.json",
+    "host-admission-evidence-manifest.schema.json",
+    "host-admission-approved-runtime-identities.json",
     "host_admission.py",
+    "host_admission_collector.py",
+    "host_keeper_fixture/Dockerfile",
+    "host_keeper_fixture/README.md",
+    "host_keeper_fixture/keeper_fixture.py",
+    "host_keeper_fixture/keeper_fixture.py.sha256",
     "host_performance.py",
     "host_performance_workloads.py",
     "lazy_read.py",

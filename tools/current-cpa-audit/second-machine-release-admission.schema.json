@@ -101,9 +101,12 @@
     "host_admission": {
       "additionalProperties": false,
       "properties": {
+        "approved_runtime_identities_sha256": { "$ref": "#/$defs/sha256" },
         "candidate_artifact_digest": { "$ref": "#/$defs/digest" },
         "candidate_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
         "evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_manifest_sha256": { "$ref": "#/$defs/sha256" },
         "claim_boundary": { "const": "SECOND-MACHINE OWNER HOST ADMISSION; EXACT CANDIDATE AND PROTECTED ROUTES ONLY; NOT INDEPENDENT ATTESTATION" },
          "cpa_commit": { "const": "d9cea8904b14fbbebb77ef26e98ef08f6b48a724" },
         "cpa_rpc_schema": { "const": 4 },
@@ -112,6 +115,11 @@
         "host_300s_samples_sha256": { "$ref": "#/$defs/sha256" },
         "host_3600s_sample_count": { "const": 3601 },
         "host_3600s_samples_sha256": { "$ref": "#/$defs/sha256" },
+        "keeper_base_image_ref": { "pattern": "^(?:[A-Za-z0-9._-]+(?::[1-9][0-9]{0,4})?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?@sha256:(?!0{64}$)[0-9a-f]{64}$", "type": "string" },
+        "keeper_contract": { "const": "cag-current-cpa-host-keeper/v1" },
+        "keeper_image_id": { "$ref": "#/$defs/digest" },
+        "keeper_image_ref": { "pattern": "^(?:[A-Za-z0-9._-]+(?::[1-9][0-9]{0,4})?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?@sha256:(?!0{64}$)[0-9a-f]{64}$", "type": "string" },
+        "keeper_source_sha256": { "$ref": "#/$defs/sha256" },
         "platform": { "const": "linux/amd64" },
         "realtime_route_count": { "const": 14 },
         "realtime_routes_sha256": { "$ref": "#/$defs/sha256" },
@@ -120,10 +128,11 @@
         "so_sha256": { "$ref": "#/$defs/sha256" },
         "source_commit": { "$ref": "#/$defs/hex40" },
         "source_tree": { "$ref": "#/$defs/hex40" },
+        "sqlite_sha256": { "$ref": "#/$defs/sha256" },
         "status": { "const": "PASS" },
         "store_zip_sha256": { "$ref": "#/$defs/sha256" }
       },
-      "required": ["candidate_artifact_digest", "candidate_manifest_sha256", "claim_boundary", "cpa_commit", "cpa_rpc_schema", "cpa_tag", "evidence_sha256", "host_300s_sample_count", "host_300s_samples_sha256", "host_3600s_sample_count", "host_3600s_samples_sha256", "platform", "realtime_route_count", "realtime_routes_sha256", "run_id", "schema", "so_sha256", "source_commit", "source_tree", "status", "store_zip_sha256"],
+      "required": ["approved_runtime_identities_sha256", "candidate_artifact_digest", "candidate_manifest_sha256", "claim_boundary", "config_sha256", "cpa_commit", "cpa_rpc_schema", "cpa_tag", "evidence_manifest_sha256", "evidence_sha256", "host_300s_sample_count", "host_300s_samples_sha256", "host_3600s_sample_count", "host_3600s_samples_sha256", "keeper_base_image_ref", "keeper_contract", "keeper_image_id", "keeper_image_ref", "keeper_source_sha256", "platform", "realtime_route_count", "realtime_routes_sha256", "run_id", "schema", "so_sha256", "source_commit", "source_tree", "sqlite_sha256", "status", "store_zip_sha256"],
       "type": "object"
     },
     "realtime": {
@@ -301,14 +310,14 @@
         "image_id": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
          "official_asset_name": { "const": "CLIProxyAPI_7.2.145_linux_amd64.tar.gz" },
          "official_asset_sha256": { "const": "ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37" },
-        "repo_digest": { "pattern": "^[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}$", "type": "string" },
+        "repo_digest": { "pattern": "^(?:[A-Za-z0-9._-]+(?::[1-9][0-9]{0,4})?/)?[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?@sha256:(?!0{64}$)[0-9a-f]{64}$", "type": "string" },
         "rpc_schema": { "const": 4 },
          "tag": { "const": "v7.2.145" }
       },
       "required": ["binary_path", "binary_sha256", "c_abi", "commit", "image_id", "official_asset_name", "official_asset_sha256", "repo_digest", "rpc_schema", "tag"],
       "type": "object"
     },
-    "digest": { "pattern": "^sha256:[0-9a-f]{64}$", "type": "string" },
+    "digest": { "pattern": "^sha256:(?!0{64}$)[0-9a-f]{64}$", "type": "string" },
     "gate": {
       "additionalProperties": false,
       "properties": {
@@ -348,6 +357,9 @@
         "host_performance_evidence_sha256": { "$ref": "#/$defs/sha256" },
         "host_performance_measurements_sha256": { "$ref": "#/$defs/sha256" },
         "host_admission_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_config_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_evidence_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_sqlite_sha256": { "$ref": "#/$defs/sha256" },
         "host_admission_300s_samples_sha256": { "$ref": "#/$defs/sha256" },
         "host_admission_3600s_samples_sha256": { "$ref": "#/$defs/sha256" },
         "host_admission_realtime_routes_sha256": { "$ref": "#/$defs/sha256" },
@@ -365,7 +377,7 @@
         "supplemental_results_sha256": { "$ref": "#/$defs/sha256" },
         "transport_results_sha256": { "$ref": "#/$defs/sha256" }
       },
-      "required": ["candidate_manifest_sha256", "csam_text_fixture_manifest_sha256", "csam_text_privacy_cleanup_sha256", "csam_text_results_sha256", "csam_text_summary_sha256", "corpus_manifest_sha256", "host_performance_config_sha256", "host_performance_evidence_sha256", "host_performance_measurements_sha256", "host_admission_evidence_sha256", "host_admission_300s_samples_sha256", "host_admission_3600s_samples_sha256", "host_admission_realtime_routes_sha256", "lazy_read_phase_boundary_sha256", "lazy_read_runtime_read_summary_sha256", "lazy_read_runtime_read_trace_sha256", "machine_evidence_sha256", "native_host_go_test_log_sha256", "native_host_special_paths_report_sha256", "performance_workload_manifest_sha256", "run_config_sha256", "supplemental_archive_sha256", "supplemental_manifest_sha256", "supplemental_policy_sha256", "supplemental_results_sha256", "transport_results_sha256"],
+      "required": ["candidate_manifest_sha256", "csam_text_fixture_manifest_sha256", "csam_text_privacy_cleanup_sha256", "csam_text_results_sha256", "csam_text_summary_sha256", "corpus_manifest_sha256", "host_performance_config_sha256", "host_performance_evidence_sha256", "host_performance_measurements_sha256", "host_admission_evidence_sha256", "host_admission_config_sha256", "host_admission_evidence_manifest_sha256", "host_admission_sqlite_sha256", "host_admission_300s_samples_sha256", "host_admission_3600s_samples_sha256", "host_admission_realtime_routes_sha256", "lazy_read_phase_boundary_sha256", "lazy_read_runtime_read_summary_sha256", "lazy_read_runtime_read_trace_sha256", "machine_evidence_sha256", "native_host_go_test_log_sha256", "native_host_special_paths_report_sha256", "performance_workload_manifest_sha256", "run_config_sha256", "supplemental_archive_sha256", "supplemental_manifest_sha256", "supplemental_policy_sha256", "supplemental_results_sha256", "transport_results_sha256"],
       "type": "object"
     },
     "native_host_candidate": {
@@ -723,15 +735,7 @@
           "type": "object"
         },
         "host_performance": { "$ref": "#/$defs/host_tool_hashes" },
-        "host_admission": {
-          "additionalProperties": false,
-          "properties": {
-            "schema_sha256": { "$ref": "#/$defs/sha256" },
-            "source_sha256": { "$ref": "#/$defs/sha256" }
-          },
-          "required": ["schema_sha256", "source_sha256"],
-          "type": "object"
-        },
+        "host_admission": { "$ref": "#/$defs/host_admission_tool_hashes" },
         "machine": { "$ref": "#/$defs/machine_tool_hashes" },
         "native_host_special_paths": {
           "additionalProperties": false,
@@ -758,6 +762,25 @@
         "run_source_sha256": { "$ref": "#/$defs/sha256" }
       },
       "required": ["audit_contract_sha256", "bundle_sha256", "machine_schema_sha256", "mock_source_sha256", "policy_sha256", "run_source_sha256"],
+      "type": "object"
+    },
+    "host_admission_tool_hashes": {
+      "additionalProperties": false,
+      "properties": {
+        "approved_runtime_identities_sha256": { "$ref": "#/$defs/sha256" },
+        "audit_contract_sha256": { "$ref": "#/$defs/sha256" },
+        "bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "collector_source_sha256": { "$ref": "#/$defs/sha256" },
+        "config_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "evidence_manifest_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_schema_sha256": { "$ref": "#/$defs/sha256" },
+        "host_admission_source_sha256": { "$ref": "#/$defs/sha256" },
+        "keeper_source_sha256": { "$ref": "#/$defs/sha256" },
+        "release_admission_source_sha256": { "$ref": "#/$defs/sha256" },
+        "run_source_sha256": { "$ref": "#/$defs/sha256" },
+        "validator_sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "required": ["approved_runtime_identities_sha256", "audit_contract_sha256", "bundle_sha256", "collector_source_sha256", "config_schema_sha256", "evidence_manifest_schema_sha256", "host_admission_schema_sha256", "host_admission_source_sha256", "keeper_source_sha256", "release_admission_source_sha256", "run_source_sha256", "validator_sha256"],
       "type": "object"
     },
     "zip_source": {

@@ -47,6 +47,7 @@ from audit_contract import (  # noqa: E402
 from host_performance import EVIDENCE_SCHEMA, THRESHOLDS  # noqa: E402
 import native_host_special_paths as native  # noqa: E402
 import host_admission as host  # noqa: E402
+import host_admission_collector as host_collector  # noqa: E402
 import test_host_admission as host_fixture  # noqa: E402
 from second_machine_release_admission import (  # noqa: E402
     AdmissionError,
@@ -76,6 +77,7 @@ from second_machine_release_admission import (  # noqa: E402
     validate_lazy_read_evidence,
     validate_lazy_read_bindings,
     validate_candidate_directory,
+    write_exclusive,
 )
 from fixtures import (  # noqa: E402
     audit_candidate_manifest,
@@ -423,16 +425,24 @@ def valid_report() -> dict[str, object]:
         "generated_at": NOW.isoformat().replace("+00:00", "Z"),
         "inputs": {key: f"{(index % 6) + 9:x}" * 64 for index, key in enumerate(INPUT_HASH_KEYS)},
         "host_admission": {
+            "approved_runtime_identities_sha256": "1" * 64,
             "candidate_artifact_digest": "sha256:" + "5" * 64,
             "candidate_manifest_sha256": MANIFEST_SHA,
             "claim_boundary": host.CLAIM_BOUNDARY,
+            "config_sha256": "2" * 64,
             "cpa_commit": CPA_COMMIT,
             "cpa_rpc_schema": CPA_RPC_SCHEMA,
             "cpa_tag": CPA_TAG,
+            "evidence_manifest_sha256": "3" * 64,
             "host_300s_sample_count": 301,
             "host_300s_samples_sha256": hashlib.sha256(host_fixture.RAW_300).hexdigest(),
             "host_3600s_sample_count": 3601,
             "host_3600s_samples_sha256": hashlib.sha256(host_fixture.RAW_3600).hexdigest(),
+            "keeper_base_image_ref": "registry.example/python@sha256:" + "4" * 64,
+            "keeper_contract": "cag-current-cpa-host-keeper/v1",
+            "keeper_image_id": "sha256:" + "5" * 64,
+            "keeper_image_ref": "registry.example/keeper@sha256:" + "6" * 64,
+            "keeper_source_sha256": "7" * 64,
             "platform": "linux/amd64",
             "realtime_route_count": 14,
             "realtime_routes_sha256": hashlib.sha256(host_fixture.RAW_REALTIME_ROUTES).hexdigest(),
@@ -441,6 +451,7 @@ def valid_report() -> dict[str, object]:
             "so_sha256": SO_SHA,
             "source_commit": COMMIT,
             "source_tree": TREE,
+            "sqlite_sha256": "8" * 64,
             "status": host.STATUS,
             "store_zip_sha256": "7" * 64,
         },
@@ -470,7 +481,7 @@ def valid_report() -> dict[str, object]:
             "observed_test_count": len(native.CRITICAL_SUBTESTS) + 1,
             "platform": native.PLATFORM,
             "report_schema": native.SCHEMA,
-            "report_sha256": "0" * 64,
+            "report_sha256": "b" * 64,
             "required_test_count": len(native.CRITICAL_SUBTESTS) + 1,
             "schema_sha256": local_tool_identities()["native_host_special_paths"][
                 "schema_sha256"
@@ -587,12 +598,38 @@ def valid_report() -> dict[str, object]:
     report["inputs"]["supplemental_manifest_sha256"] = "2" * 64  # type: ignore[index]
     report["inputs"]["supplemental_policy_sha256"] = SUPPLEMENTAL_ZIP_POLICY_SHA256  # type: ignore[index]
     report["inputs"]["supplemental_results_sha256"] = "3" * 64  # type: ignore[index]
-    report["inputs"]["native_host_special_paths_report_sha256"] = "0" * 64  # type: ignore[index]
+    report["inputs"]["native_host_special_paths_report_sha256"] = "b" * 64  # type: ignore[index]
     report["inputs"]["native_host_go_test_log_sha256"] = "f" * 64  # type: ignore[index]
     report["inputs"]["host_admission_300s_samples_sha256"] = report["host_admission"]["host_300s_samples_sha256"]  # type: ignore[index]
     report["inputs"]["host_admission_3600s_samples_sha256"] = report["host_admission"]["host_3600s_samples_sha256"]  # type: ignore[index]
     report["inputs"]["host_admission_realtime_routes_sha256"] = report["host_admission"]["realtime_routes_sha256"]  # type: ignore[index]
     report["host_admission"]["evidence_sha256"] = report["inputs"]["host_admission_evidence_sha256"]  # type: ignore[index]
+    report["host_admission"]["config_sha256"] = report["inputs"]["host_admission_config_sha256"]  # type: ignore[index]
+    report["host_admission"]["evidence_manifest_sha256"] = report["inputs"]["host_admission_evidence_manifest_sha256"]  # type: ignore[index]
+    report["host_admission"]["sqlite_sha256"] = report["inputs"]["host_admission_sqlite_sha256"]  # type: ignore[index]
+    report["host_admission"]["keeper_source_sha256"] = report["tool_bundles"]["host_admission"]["keeper_source_sha256"]  # type: ignore[index]
+    store_name = f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip"
+    report["host_admission"]["store_zip_sha256"] = next(  # type: ignore[index]
+        item["sha256"]
+        for item in report["candidate"]["files"]  # type: ignore[index]
+        if item["name"] == store_name
+    )
+    portable_runtime_approval, portable_runtime_approval_raw = (
+        host_collector.load_tracked_approved_runtime_identities()
+    )
+    approved_keeper = portable_runtime_approval["keeper"]
+    report["host_admission"].update(  # type: ignore[union-attr]
+        {
+            "keeper_base_image_ref": approved_keeper["base_image_ref"],
+            "keeper_contract": approved_keeper["contract"],
+            "keeper_image_id": approved_keeper["image_id"],
+            "keeper_image_ref": approved_keeper["image_ref"],
+            "keeper_source_sha256": approved_keeper["source_sha256"],
+        }
+    )
+    report["host_admission"]["approved_runtime_identities_sha256"] = hashlib.sha256(  # type: ignore[index]
+        portable_runtime_approval_raw
+    ).hexdigest()
     report["performance"]["config_sha256"] = report["inputs"]["host_performance_config_sha256"]  # type: ignore[index]
     report["performance"]["evidence_sha256"] = report["inputs"]["host_performance_evidence_sha256"]  # type: ignore[index]
     report["performance"]["measurements_sha256"] = report["inputs"]["host_performance_measurements_sha256"]  # type: ignore[index]
@@ -850,6 +887,41 @@ class PortableAdmissionTests(unittest.TestCase):
             }
             native_report_raw = canonical_bytes(native_report) + b"\n"
             host_report = host_fixture.evidence()
+            host_approved_runtime, _host_approved_runtime_raw = (
+                host_collector.load_tracked_approved_runtime_identities()
+            )
+            approved_keeper = host_approved_runtime["keeper"]
+            host_config = {
+                "approved_runtime_identities_sha256": "1" * 64,
+                "identities": {
+                    "keeper": {
+                        "base_image_ref": approved_keeper["base_image_ref"],
+                        "contract": approved_keeper["contract"],
+                        "image_id": approved_keeper["image_id"],
+                        "image_ref": approved_keeper["image_ref"],
+                        "source_sha256": approved_keeper["source_sha256"],
+                    }
+                },
+            }
+            host_config_raw = canonical_bytes(host_config) + b"\n"
+            host_manifest_raw = canonical_bytes({"tracked": True}) + b"\n"
+            host_keeper_runtime = host_report["runtime_identity"]["keeper"]
+            host_keeper_runtime.update(
+                {
+                    "image_digest": host_config["identities"]["keeper"]["image_ref"],
+                    "image_id": host_config["identities"]["keeper"]["image_id"],
+                }
+            )
+            host_report["tail_verification"]["runtime_identity_before_cleanup"][
+                "keeper"
+            ] = copy.deepcopy(host_keeper_runtime)
+            host_config["approved_runtime_identities_sha256"] = hashlib.sha256(
+                canonical_bytes(host_approved_runtime) + b"\n"
+            ).hexdigest()
+            host_config["approved_runtime_identities"] = copy.deepcopy(
+                host_approved_runtime
+            )
+            host_config_raw = canonical_bytes(host_config) + b"\n"
             # The synthetic machine bundle uses its own deterministic run ID;
             # rebuild every run-bound Host input just as a real same-run
             # acquisition would. A top-level-only rewrite would create a bundle
@@ -859,6 +931,7 @@ class PortableAdmissionTests(unittest.TestCase):
             host_rows_3600 = copy.deepcopy(host_fixture.ROWS_3600)
             for row in (*host_rows_300, *host_rows_3600):
                 row["run_id"] = host_run_id
+                row["runtime_identity"]["keeper"] = copy.deepcopy(host_keeper_runtime)
             host_300s_raw = host_fixture.jsonl(host_rows_300)
             host_3600s_raw = host_fixture.jsonl(host_rows_3600)
             host_realtime_raw = host_fixture.RAW_REALTIME_ROUTES
@@ -869,6 +942,8 @@ class PortableAdmissionTests(unittest.TestCase):
             host_report["tail_verification"]["host_3600s_samples_sha256"] = hashlib.sha256(host_3600s_raw).hexdigest()
             host_report["candidate"]["artifacts"]["candidate_artifact_digest"] = candidate["artifact"]["digest"]
             host_report["candidate"]["artifacts"]["candidate_manifest_sha256"] = hashlib.sha256(candidate_raw).hexdigest()
+            host_report["candidate"]["artifacts"]["config_sha256"] = hashlib.sha256(host_config_raw).hexdigest()
+            host_report["candidate"]["artifacts"]["evidence_manifest_sha256"] = hashlib.sha256(host_manifest_raw).hexdigest()
             host_report["candidate"]["cag"].update(
                 {
                     "commit": cag["commit"],
@@ -973,7 +1048,13 @@ class PortableAdmissionTests(unittest.TestCase):
             )
 
             def pack(raw: bytes) -> dict[str, Any]:
-                return build_report(
+                validated_manifest = {"sqlite": {"database_sha256": "5" * 64}}
+                validated_candidate = copy.deepcopy(host_report["candidate"])
+                with mock.patch(
+                    "host_admission_collector.validate_production_bindings",
+                    return_value=(host_config, validated_manifest, validated_candidate),
+                ) as revalidate:
+                    value = build_report(
                     manifest=manifest,
                     manifest_raw=canonical_bytes(manifest) + b"\n",
                     machine=machine,
@@ -995,6 +1076,11 @@ class PortableAdmissionTests(unittest.TestCase):
                     performance=performance,
                     performance_raw=canonical_bytes(performance) + b"\n",
                     host_admission=host_report,
+                    host_admission_config=host_config,
+                    host_admission_config_raw=host_config_raw,
+                    host_admission_manifest_raw=host_manifest_raw,
+                    host_admission_sqlite_sha256="5" * 64,
+                    host_admission_approved_runtime=host_approved_runtime,
                     host_admission_raw=host_report_raw,
                     host_admission_300s_raw=host_300s_raw,
                     host_admission_3600s_raw=host_3600s_raw,
@@ -1016,8 +1102,16 @@ class PortableAdmissionTests(unittest.TestCase):
                     supplemental_manifest_raw=supplemental_manifest_raw,
                     supplemental_policy_raw=supplemental_policy_raw,
                     supplemental_results_raw=supplemental_results_raw,
-                    generated_at=NOW,
+                        generated_at=NOW,
+                    )
+                revalidate.assert_called_once_with(
+                    host_config_raw,
+                    host_manifest_raw,
+                    host_300s_raw,
+                    host_3600s_raw,
+                    host_realtime_raw,
                 )
+                return value
 
             report = pack(results_raw)
             self.assertEqual(report["status"], STATUS)
@@ -1610,8 +1704,71 @@ class PortableAdmissionTests(unittest.TestCase):
 
     def test_rejects_unbound_host_and_performance_raw_hashes(self) -> None:
         self.assert_rejected(lambda report: report["host_admission"].__setitem__("evidence_sha256", "0" * 64))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["host_admission"].__setitem__("claim_boundary", "I_AM_INDEPENDENT_ATTESTATION"))  # type: ignore[union-attr]
+        self.assert_rejected(lambda report: report["host_admission"].__setitem__("store_zip_sha256", "9" * 64))  # type: ignore[union-attr]
         self.assert_rejected(lambda report: report["performance"].__setitem__("evidence_sha256", "0" * 64))  # type: ignore[union-attr]
         self.assert_rejected(lambda report: report["performance"].__setitem__("measurements_sha256", "0" * 64))  # type: ignore[union-attr]
+
+    def test_rejects_resealed_zero_host_input_hashes(self) -> None:
+        pairs = (
+            ("config_sha256", "host_admission_config_sha256"),
+            ("evidence_manifest_sha256", "host_admission_evidence_manifest_sha256"),
+            ("sqlite_sha256", "host_admission_sqlite_sha256"),
+        )
+        for section_key, input_key in pairs:
+            with self.subTest(section_key=section_key):
+                def mutate(report, section_key=section_key, input_key=input_key) -> None:  # type: ignore[no-untyped-def]
+                    report["host_admission"][section_key] = "0" * 64
+                    report["inputs"][input_key] = "0" * 64
+
+                self.assert_rejected(mutate)
+
+    def test_write_exclusive_removes_partial_pass_on_sync_or_identity_failure(self) -> None:
+        for failure in ("fsync", "initial_fstat", "final_fstat"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                output = Path(directory) / "admission.json"
+                if failure == "fsync":
+                    patches = mock.patch(
+                        "second_machine_release_admission.os.fsync",
+                        side_effect=OSError("injected fsync failure"),
+                    )
+                else:
+                    real_fstat = os.fstat
+                    calls = 0
+
+                    def fail_final_fstat(descriptor: int):  # type: ignore[no-untyped-def]
+                        nonlocal calls
+                        calls += 1
+                        if calls == (1 if failure == "initial_fstat" else 2):
+                            raise OSError("injected fstat failure")
+                        return real_fstat(descriptor)
+
+                    patches = mock.patch(
+                        "second_machine_release_admission.os.fstat",
+                        side_effect=fail_final_fstat,
+                    )
+                with patches, self.assertRaises(OSError):
+                    write_exclusive(output, {"status": STATUS})
+                self.assertFalse(output.exists())
+
+    def test_rejects_zero_keeper_runtime_digest_even_when_approval_hash_is_resealed(self) -> None:
+        def mutate(report) -> None:  # type: ignore[no-untyped-def]
+            report["host_admission"]["keeper_image_id"] = "sha256:" + "0" * 64
+            approval = {
+                "keeper": {
+                    "base_image_ref": report["host_admission"]["keeper_base_image_ref"],
+                    "contract": report["host_admission"]["keeper_contract"],
+                    "image_id": report["host_admission"]["keeper_image_id"],
+                    "image_ref": report["host_admission"]["keeper_image_ref"],
+                    "source_sha256": report["host_admission"]["keeper_source_sha256"],
+                },
+                "schema": "cag-current-cpa-host-admission-approved-runtime-identities/v1",
+            }
+            report["host_admission"]["approved_runtime_identities_sha256"] = hashlib.sha256(
+                canonical_bytes(approval) + b"\n"
+            ).hexdigest()
+
+        self.assert_rejected(mutate)
 
     def test_rejects_tool_bundle_drift(self) -> None:
         self.assert_rejected(lambda report: report["tool_bundles"]["admission"].__setitem__("source_sha256", "0" * 64))  # type: ignore[index,union-attr]

@@ -256,7 +256,12 @@ HEX64 = re.compile(r"[0-9a-f]{64}")
 HEX8 = re.compile(r"[0-9a-f]{8}")
 IMAGE_ID = re.compile(r"sha256:[0-9a-f]{64}")
 SHA256_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
-REPO_DIGEST = re.compile(r"[A-Za-z0-9._/-]+@sha256:[0-9a-f]{64}")
+REPO_DIGEST = re.compile(
+    r"(?:[A-Za-z0-9._-]+(?::[1-9][0-9]{0,4})?/)?"
+    r"[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*"
+    r"(?::[A-Za-z0-9_][A-Za-z0-9._-]{0,127})?"
+    r"@sha256:[0-9a-f]{64}"
+)
 SAFE_ID = re.compile(r"[a-z0-9][a-z0-9_.-]{2,62}")
 REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 GITHUB_BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}")
