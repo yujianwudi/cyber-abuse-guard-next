@@ -95,7 +95,7 @@
         "official_asset_sha256": {"const": "942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218"},
         "official_asset_size": {"const": 21733175},
         "official_binary_sha256": {"const": "2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7"},
-        "official_binary_size": {"const": 64207528},
+        "official_binary_size": {"const": 65704424},
         "platform": {"const": "linux/amd64"},
         "rpc_schema": {"const": 6},
         "tag": {"const": "v7.2.159"}
