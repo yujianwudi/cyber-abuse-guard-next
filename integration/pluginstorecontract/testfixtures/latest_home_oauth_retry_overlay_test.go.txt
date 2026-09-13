@@ -39,8 +39,10 @@ func (*cagHomeOAuthRetryDispatcher) HeartbeatOK() bool { return true }
 func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel, _ string, _ http.Header, _ int) ([]byte, error) {
 	call := d.calls.Add(1)
 	token := cagHomeOAuthStaleToken
+	authID := cagHomeOAuthRetryAuthID + "-stale"
 	if call > 1 {
 		token = cagHomeOAuthFreshToken
+		authID = cagHomeOAuthRetryAuthID + "-fresh"
 	}
 	d.mu.Lock()
 	d.requestedModel = requestedModel
@@ -53,15 +55,16 @@ func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel
 	}{
 		Model:     requestedModel,
 		Provider:  cagHomeOAuthRetryProvider,
-		AuthIndex: cagHomeOAuthRetryAuthID,
+		AuthIndex: authID,
+		RequestRetry: func() *int { value := 1; return &value }(),
 		Auth: coreauth.Auth{
-			ID:       cagHomeOAuthRetryAuthID,
+			ID:       authID,
 			Provider: cagHomeOAuthRetryProvider,
 			Status:   coreauth.StatusActive,
 			Attributes: map[string]string{
 				coreauth.AttributeAuthKind: coreauth.AuthKindOAuth,
 			},
-			Metadata: map[string]any{"access_token": token},
+			Metadata: map[string]any{"access_token": token, "request_retry": 1},
 		},
 	})
 }
