@@ -1034,7 +1034,7 @@ class HostAdmissionCollectorContractTests(unittest.TestCase):
             candidate = collector.expected_candidate_from_bindings(config, config_raw, manifest_raw)
             self.assertEqual(candidate["artifacts"]["config_sha256"], sha256_bytes(config_raw))
             self.assertEqual(candidate["artifacts"]["evidence_manifest_sha256"], sha256_bytes(manifest_raw))
-            self.assertEqual(candidate["cpa"]["tag"], "v7.2.145")
+        self.assertEqual(candidate["cpa"]["tag"], "v7.2.159")
 
     def test_source_has_no_synthetic_or_warm_lane_fallback(self) -> None:
         source = (TOOL_DIR / "host_admission_collector.py").read_text("utf-8")

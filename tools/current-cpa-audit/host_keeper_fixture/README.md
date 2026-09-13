@@ -5,12 +5,12 @@ admission lane. It is not a production usage service and it must never be
 connected to a real Provider, an OAuth store, a production database, or a
 public/host-published port.
 
-The source consumes only CPA v7.2.145's authenticated destructive endpoint
+The source consumes only the active CPA v7.2.159 authenticated destructive endpoint
 `GET /v0/management/usage-queue?count=100`. Every popped item must be the exact
 successful internal provider `openai-compatible-current-cpa-counted-mock` /
 model `current-cpa-audit-model` record with the counted-Mock token result
 `5 + 3 = 8`. The CPA YAML display name remains `current-cpa-counted-mock`;
-CPA v7.2.145 deliberately turns it into the prefixed internal executor/provider
+CPA v7.2.159 deliberately turns it into the prefixed internal executor/provider
 identity before publishing usage. The fixture persists only:
 
 - a sequence and monotonic `usage_records` count;
@@ -159,7 +159,7 @@ successful usage-queue poll and while every current probe passes:
 `cpa_root` is a private-network `GET /` with status 200.
 `cpa_unauthorized_models` is a private-network `GET /v1/models` with no
 Authorization header and status 401. `cag_status` is the authenticated CAG
-status endpoint bound to CPA v7.2.145, the exact CAG commit and expected mode,
+status endpoint bound to CPA v7.2.159, the exact CAG commit and expected mode,
 ready enforcement/operations, healthy schema-7 persistence, no degraded state,
 zero audit dropped/failed/rejected counters, and Raw Capture disabled, combined
 with an authenticated runtime-config check:

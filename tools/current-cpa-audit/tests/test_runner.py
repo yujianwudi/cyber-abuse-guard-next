@@ -710,7 +710,7 @@ class RunnerPureTests(unittest.TestCase):
                     "cpa": {
                         "c_abi": 1,
                         "commit": CPA_COMMIT,
-                        "rpc_schema": 4,
+                        "rpc_schema": 6,
                         "tag": CPA_TAG,
                 },
             }

@@ -474,6 +474,34 @@ class HostAdmissionTests(unittest.TestCase):
             Draft202012Validator.check_schema(schema)
             Draft202012Validator(schema).validate(evidence())
 
+    def test_schema_cpa_identity_matches_active_contract(self) -> None:
+        """Keep the active JSON schema pins synchronized with audit_contract.
+
+        This deliberately excludes historical evidence schemas and the module
+        sums, which are not fields in this evidence schema. Any future CPA
+        release update must change the shared active constants and this schema
+        together, rather than allowing a stale binary size/hash to survive.
+        """
+        schema = json.loads(
+            (TOOL_DIR / "host-admission-evidence.schema.json").read_text(encoding="utf-8")
+        )
+        properties = schema["$defs"]["cpa"]["properties"]
+        expected = {
+            "c_abi": CPA_C_ABI,
+            "commit": CPA_COMMIT,
+            "official_asset_name": CPA_OFFICIAL_ASSET_NAME,
+            "official_asset_sha256": CPA_OFFICIAL_ASSET_SHA256,
+            "official_asset_size": CPA_OFFICIAL_ASSET_SIZE,
+            "official_binary_sha256": CPA_OFFICIAL_BINARY_SHA256,
+            "official_binary_size": CPA_OFFICIAL_BINARY_SIZE,
+            "platform": "linux/amd64",
+            "rpc_schema": CPA_RPC_SCHEMA,
+            "tag": CPA_TAG,
+        }
+        for name, value in expected.items():
+            with self.subTest(name=name):
+                self.assertEqual(properties[name]["const"], value)
+
     def test_requires_canonical_report_and_jsonl(self) -> None:
         report = evidence()
         pretty = json.dumps(report, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
@@ -859,7 +887,7 @@ else:
     def test_rejects_candidate_or_report_identity_drift(self) -> None:
         report = evidence()
         report["candidate"]["cpa"]["rpc_schema"] = 2
-        with self.assertRaisesRegex(host.HostAdmissionError, "frozen v7.2.145"):
+        with self.assertRaisesRegex(host.HostAdmissionError, "frozen v7.2.159"):
             validate_report(report)
         report = evidence()
         report["runtime_identity"]["mock"]["init_pid"] = 404

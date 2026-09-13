@@ -1,21 +1,21 @@
 # Cyber Abuse Guard Next design
 
 > [!IMPORTANT]
-> The active Round 17 source is `1.0.0`, targets CPA
-> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724` on Linux amd64 with C ABI 1
-> and RPC schema 4. The detailed Round 12/13 text below is frozen historical
+> The active source is `1.0.0`, targets CPA
+> `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d` on Linux amd64 with C ABI 1
+> and RPC schema 6. The detailed Round 12/13 text below is frozen historical
 > design; [Round 17](ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md) supersedes its
 > version, release, compatibility, and evidence-status claims.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
 ## Active Round 17 route boundary
 
 The registered CAG request callbacks protect routes such as chat and Responses.
-CPA v7.2.145 sends all `/v1/realtime*` traffic through an independent path that
+CPA v7.2.159 sends all `/v1/realtime*` traffic through an independent path that
 bypasses `RequestInterceptor`, `ModelRouter`, and request lifecycle. Realtime is
 therefore **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE**, and the design makes
 no all-traffic coverage claim. Round 13 v7.2.125/schema 2 and every older PASS

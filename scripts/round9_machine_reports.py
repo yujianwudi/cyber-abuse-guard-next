@@ -26,17 +26,17 @@ from typing import Any
 HEX40 = re.compile(r"[0-9a-f]{40}")
 HEX64 = re.compile(r"[0-9a-f]{64}")
 POLICY_VERSION = re.compile(
-    r'^const ClassifierPolicyVersion = "([A-Za-z0-9._-]+)"$', re.MULTILINE
+    r'^const ClassifierPolicyVersion = "([A-Za-z0-9._-]+)"\r?$', re.MULTILINE
 )
 POLICY_SHA256 = re.compile(
-    r'^const ClassifierPolicySHA256 = "([0-9a-f]{64})"$', re.MULTILINE
+    r'^const ClassifierPolicySHA256 = "([0-9a-f]{64})"\r?$', re.MULTILINE
 )
-RULESET_VERSION = re.compile(r'^version: "([0-9]+[.][0-9]+[.][0-9]+)"$', re.MULTILINE)
+RULESET_VERSION = re.compile(r'^version: "([0-9]+[.][0-9]+[.][0-9]+)"\r?$', re.MULTILINE)
 AUDIT_SCHEMA_VERSION = re.compile(
-    r"^const currentSchemaVersion = ([0-9]+)$", re.MULTILINE
+    r"^const currentSchemaVersion = ([0-9]+)\r?$", re.MULTILINE
 )
 RAW_CAPTURE_SCHEMA_VERSION = re.compile(
-    r"^\s*managementRawCaptureSchema\s*=\s*([0-9]+)$", re.MULTILINE
+    r"^\s*managementRawCaptureSchema\s*=\s*([0-9]+)\r?$", re.MULTILINE
 )
 PUBLIC_RESULT = re.compile(
     r"round9 public corpus PASS: payload_records=(?P<payload_records>[0-9]+) "

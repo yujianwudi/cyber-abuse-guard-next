@@ -54,10 +54,11 @@ env:
   RC_SOURCE_VERSION: '1.0.0'
   RC_BINARY_VERSION: '1.0.0'
   RC_ARTIFACT_VERSION: 1.0.0-rc.3
-  RC_CPA_VERSION: v7.2.145
-  RC_CPA_COMMIT: d9cea8904b14fbbebb77ef26e98ef08f6b48a724
+  RC_CPA_VERSION: v7.2.159
+  # Historical mutation sentinel (not an active value):   RC_CPA_VERSION: v7.2.145
+  RC_CPA_COMMIT: ac02da6c05e18f465aa7e3ed5b0a65a2f060917d
   RC_CPA_C_ABI: '1'
-  RC_CPA_RPC_SCHEMA: '4'
+  RC_CPA_RPC_SCHEMA: '6'
   RC_CANDIDATE_ARTIFACT_NAME: cyber-abuse-guard-linux-amd64-audit-candidate
   RC_SECOND_MACHINE_ASSET_NAME: second-machine-release-admission.json
   RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3

@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
 English | [简体中文](README_CN.md)
@@ -12,13 +12,13 @@ English | [简体中文](README_CN.md)
 ```text
 current_source_version: 1.0.0
 current_rc_tag: v1.0.0-rc.3
-current_cpa_target: v7.2.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724
-current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
-current_cpa_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
+current_cpa_target: v7.2.159 / ac02da6c05e18f465aa7e3ed5b0a65a2f060917d
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_6
+current_cpa_module_sum: h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=
 current_cpa_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 current_platform: linux-amd64
 current_audit_sqlite_schema: 7
-current_csam_text_policy: csam-text-policy-v1 / f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680
+current_csam_text_policy: csam-text-policy-v1 / d1a58171ef8e0eee7431b16cd7e93d37d9288ee944333d38719712da5920315a
 current_second_machine_release_admission_schema: cyber-abuse-guard.second-machine-release-admission.v3
 current_active_workflows: 4_REPOSITORY_YAMLS / ci.yml / codeql.yml / policy-gate.yml / release-rc.yml / PLATFORM_DYNAMIC_DEPENDABOT_ALLOWLIST
 current_status: ROUND17_ADMISSION_INCOMPLETE / REAL_SECOND_MACHINE_REQUIRED / RC_NOT_PUBLISHED
@@ -29,8 +29,8 @@ audit plugin for [CLIProxyAPI (CPA)](https://github.com/router-for-me/CLIProxyAP
 It is designed to reduce cyber-abuse risk while preserving ordinary coding,
 defensive security, incident-response, compliance and authorized operations.
 The intended protected source line is `main`; this RC3 candidate is currently
-being reviewed on `audit/cpa-v7.2.145-rc3` and has not yet updated `main`. CPA
-`v7.2.145` with RPC schema 4 is the only supported compatibility target in this
+being reviewed on `audit/cpa-v7.2.159-rc3` and has not yet updated `main`. CPA
+`v7.2.159` with RPC schema 6 is the only supported compatibility target in this
 tree.
 
 The RC1 base code is merged on `main` and its exact post-merge Linux CI passed.
@@ -59,7 +59,7 @@ where CPA actually invokes the registered plugin callbacks.
 ## Runtime architecture
 
 ```text
-CPA schema-4 request
+CPA schema-6 request
         |
         v
 RequestInterceptor (before-auth)
@@ -135,8 +135,8 @@ by itself. Run `go test ./internal/csamtext -count=1` to verify it.
 
 ## CPA and Host compatibility
 
-The active contract is CPA `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`,
-C ABI 1 and RPC schema 4. schema 4 retains `OriginalRequest` and `RequestBody`
+The active contract is CPA `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`,
+C ABI 1 and RPC schema 6. schema 6 retains `OriginalRequest` and `RequestBody`
 only in header-init; payload chunks omit them. The plugin does not register a
 successful-response or stream-chunk interceptor.
 
@@ -155,8 +155,8 @@ any Host binding, additional container, or non-internal network as inadmissible.
 
 ## Build and install (Linux amd64)
 
-Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.145, and a CPA plugin
-loader compatible with C ABI 1 / RPC schema 4.
+Requirements: Go 1.26.6, a Linux amd64 toolchain, CPA v7.2.159, and a CPA plugin
+loader compatible with C ABI 1 / RPC schema 6.
 
 ```bash
 git clone https://github.com/yujianwudi/cyber-abuse-guard-next.git
@@ -212,7 +212,7 @@ the authoritative map. No generated reports, credentials, raw prompts or local
 
 ## Documentation and governance
 
-- [Round 17 CPA v7.2.145 task book](docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md)
+- [Historical Round 17 CPA v7.2.145 task book](docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md)
 - [Round 17 status and evidence boundary](docs/ROUND16_STATUS.md)
 - [Historical Round 15 CPA v7.2.142 status](docs/ROUND15_STATUS.md)
 - [Release policy](docs/RELEASE_POLICY.md)

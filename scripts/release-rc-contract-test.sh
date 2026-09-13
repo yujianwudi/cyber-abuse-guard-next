@@ -57,10 +57,10 @@ python3 -B ./tools/current-cpa-audit/tests/test_second_machine_release_admission
 origin_metadata="$work/cpa-origin.json"
 jq -cn \
   --arg path 'github.com/router-for-me/CLIProxyAPI/v7' \
-  --arg version 'v7.2.145' \
-  --arg sum 'h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=' \
+  --arg version 'v7.2.159' \
+  --arg sum 'h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=' \
   --arg go_mod_sum 'h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=' \
-  --arg commit 'd9cea8904b14fbbebb77ef26e98ef08f6b48a724' \
+  --arg commit 'ac02da6c05e18f465aa7e3ed5b0a65a2f060917d' \
   '{Path: $path, Version: $version, Sum: $sum, GoModSum: $go_mod_sum,
     Origin: {VCS: "git", URL: "https://github.com/router-for-me/CLIProxyAPI",
              Hash: $commit, Ref: ("refs/tags/" + $version)}}' >"$origin_metadata"
@@ -116,10 +116,10 @@ for marker in (
     "SUPPLEMENTAL_ARCHIVE_PASS",
     "NATIVE_HOST_SPECIAL_PATHS_PASS",
     "RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3",
-    "RC_CPA_VERSION: v7.2.145",
-    "RC_CPA_COMMIT: d9cea8904b14fbbebb77ef26e98ef08f6b48a724",
+    "RC_CPA_VERSION: v7.2.159",
+    "RC_CPA_COMMIT: ac02da6c05e18f465aa7e3ed5b0a65a2f060917d",
     "RC_CPA_C_ABI: '1'",
-    "RC_CPA_RPC_SCHEMA: '4'",
+    "RC_CPA_RPC_SCHEMA: '6'",
     "23000a55f3922c9c2daf04e27d4bdf49d5f95109dd76ba25fa0b3f834c67ed1c",
     "supplemental_archive_status=",
     "supplemental_archive_sha256=",
@@ -331,7 +331,7 @@ for marker in (
     "test_source_sha256",
     "critical_tests_sha256",
     '"const": "cyber-abuse-guard.second-machine-release-admission.v3"',
-    '"rpc_schema": { "const": 4 }',
+    '"rpc_schema": { "const": 6 }',
     '"c_abi": { "const": 1 }',
     '"evidence_refs"',
 ):
@@ -342,10 +342,10 @@ for marker in (
     "readonly rc_binary_version='1.0.0'",
     "readonly rc_artifact_version='1.0.0-rc.3'",
     "readonly rc_tag='v1.0.0-rc.3'",
-    "readonly rc_cpa_version='v7.2.145'",
-    "readonly rc_cpa_commit='d9cea8904b14fbbebb77ef26e98ef08f6b48a724'",
+    "readonly rc_cpa_version='v7.2.159'",
+    "readonly rc_cpa_commit='ac02da6c05e18f465aa7e3ed5b0a65a2f060917d'",
     "readonly rc_cpa_c_abi='1'",
-    "readonly rc_cpa_rpc_schema='4'",
+    "readonly rc_cpa_rpc_schema='6'",
     "readonly rc_second_schema='cyber-abuse-guard.second-machine-release-admission.v3'",
     "release_assert_rc_build",
     "seal_candidate()",

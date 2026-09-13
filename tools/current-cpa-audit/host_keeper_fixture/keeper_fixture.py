@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Isolated counted-Mock-only Keeper fixture for Host admission.
 
-The fixture consumes the authenticated CPA v7.2.145 usage PopOldest queue,
+The fixture consumes the authenticated CPA v7.2.159 usage PopOldest queue,
 validates the exact successful counted-Mock usage shape, and persists only a
 monotonic observation count plus keyed, non-reversible event identities.  It
 never accepts operator-authored usage records and never stores CPA response
@@ -43,11 +43,11 @@ DEFAULT_DATABASE = "/var/lib/cag-host-keeper/keeper.sqlite3"
 SOURCE_PATH = "/opt/cag-host-keeper/keeper_fixture.py"
 SOURCE_HASH_PATH = SOURCE_PATH + ".sha256"
 
-CPA_TAG = "v7.2.145"
-CPA_COMMIT = "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"
+CPA_TAG = "v7.2.159"
+CPA_COMMIT = "ac02da6c05e18f465aa7e3ed5b0a65a2f060917d"
 CAG_AUDIT_SCHEMA_VERSION = 7
 EXPECTED_MODEL = "current-cpa-audit-model"
-# CPA v7.2.145 turns the configured OpenAI-compatibility name
+# CPA v7.2.159 turns the configured OpenAI-compatibility name
 # ``current-cpa-counted-mock`` into this internal executor/provider identity.
 # The usage reporter publishes executor.Identifier(), not the display name.
 EXPECTED_PROVIDER = "openai-compatible-current-cpa-counted-mock"

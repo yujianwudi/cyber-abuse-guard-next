@@ -39,7 +39,7 @@ const (
 	defaultManagementRawCaptureLimit    = 20
 	maxManagementRawCaptureLimit        = 100
 	maxManagementRawPreviewBytes        = audit.RawCaptureQueryPreviewBudgetBytes
-	managementRawPreviewTransport       = "cpa-json-html-escaped-utf8"
+	managementRawPreviewTransport       = "cpa-json-raw-utf8"
 	managementRawPreviewB64Encoding     = "base64-standard-utf8"
 	managementRawPreviewRendering       = "text-only-never-html"
 	managementRawCaptureSchema          = 4
@@ -47,8 +47,8 @@ const (
 	managementStartupPrivacyProofPath   = managementBasePath + "/health/startup-privacy-proof"
 	startupPrivacyProofResourcePath     = "/v0/resource/plugins/" + ID + "/health/startup-privacy-proof"
 	managementMigrationBackupPurgePath  = managementBasePath + "/migration-backups/purge"
-	managementAuthDocumentation         = "CPA v7.2.145 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
-	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 4 RequestInterceptor protocol-path failures"
+	managementAuthDocumentation         = "CPA v7.2.159 management middleware is authoritative; the plugin additionally rejects callbacks without a management credential header"
+	routerErrorsDocumentation           = "compatibility aggregate for legacy ModelRouter and RPC schema 6 RequestInterceptor protocol-path failures"
 	migrationBackupDeleteConfirmation   = "DELETE_ALL_MIGRATION_BACKUPS"
 	migrationBackupRollbackConfirmation = "ACKNOWLEDGE_OLD_SO_ROLLBACK_REQUIRES_EXTERNAL_BACKUP"
 )
@@ -67,9 +67,9 @@ type resourceRoute struct {
 }
 
 // managementRawCapture preserves the readable preview for existing operators
-// and adds a canonical transport-safe representation. CPA v7.2.145 HTML-escapes
-// every JSON string returned by ServeManagementHTTP, so raw_preview_b64 is the
-// only byte-stable representation across the plugin/Host boundary.
+// and adds a canonical transport-safe representation. CPA v7.2.159 schema 6
+// preserves the plugin's JSON response body across ServeManagementHTTP; the
+// base64 field remains the byte-stable representation across that boundary.
 type managementRawCapture struct {
 	audit.RawRequestCapture
 	RawPreviewB64 string `json:"raw_preview_b64"`
@@ -537,7 +537,7 @@ func (p *Plugin) managementStatus(state *runtimeState) []byte {
 			"request_interceptor_enumeration_supported": false,
 			"router_enumeration_supported":              false,
 			"duplicate_plugin_binary_scan_supported":    false,
-			"reason":                                    "CPA v7.2.145 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
+			"reason":                                    "CPA v7.2.159 plugin ABI exposes neither the loaded request-interceptor ordering nor the plugin directory inventory",
 		},
 	}
 	if state != nil {
@@ -742,7 +742,7 @@ func managementRawCaptureResponseDefaults(enabled bool, requestedLimit int) mana
 }
 
 // managementBoundRawCaptureResponse selects the largest newest-first prefix
-// whose complete CPA v7.2.145 Host-visible JSON body fits the fixed response
+// whose complete CPA v7.2.159 Host-visible JSON body fits the fixed response
 // budget. Each sensitive row is counted once; only the small metadata envelope
 // is re-encoded while the prefix grows.
 func managementBoundRawCaptureResponse(page audit.RawCapturePage, requestedLimit int) (managementRawCaptureResponse, error) {
@@ -825,29 +825,9 @@ func managementEncodedJSONStringBytes(value string) int {
 }
 
 func managementCPAHostEncodedJSONStringBytes(value string) int {
-	encodedBytes := 0
-	for len(value) != 0 {
-		runeValue, size := utf8.DecodeRuneInString(value)
-		value = value[size:]
-		switch {
-		case runeValue == utf8.RuneError && size == 1:
-			encodedBytes += utf8.RuneLen(utf8.RuneError)
-		case runeValue == '&' || runeValue == '\'' || runeValue == '"':
-			// html.EscapeString emits &amp;, &#39;, and &#34; respectively.
-			encodedBytes += 5
-		case runeValue == '<' || runeValue == '>':
-			encodedBytes += 4
-		case runeValue == '\\':
-			encodedBytes += 2
-		case runeValue == '\b' || runeValue == '\f' || runeValue == '\n' || runeValue == '\r' || runeValue == '\t':
-			encodedBytes += 2
-		case runeValue < 0x20 || runeValue == '\u2028' || runeValue == '\u2029':
-			encodedBytes += 6
-		default:
-			encodedBytes += size
-		}
-	}
-	return encodedBytes
+	// CPA v7.2.159 schema 6 preserves JSON management response strings without
+	// the legacy HTML entity transform used by schema versions below 6.
+	return managementEncodedJSONStringBytes(value)
 }
 
 func managementRawCaptureResponseEnvelope(response managementRawCaptureResponse) []byte {
@@ -954,16 +934,12 @@ func managementRawCaptureResponseBodies(response managementRawCaptureResponse) (
 	if err != nil {
 		return nil, 0, err
 	}
-	hostBody, ok := managementCPAHostSanitizeJSON(body)
-	if !ok {
-		return nil, 0, errors.New("CPA Host JSON sanitizer rejected the raw capture response")
-	}
-	return body, len(hostBody), nil
+	// CPA v7.2.159 schema 6 preserves the JSON response body verbatim.
+	return body, len(body), nil
 }
 
-// managementCPAHostSanitizeJSON mirrors CPA v7.2.145
-// internal/htmlsanitize.JSONBody. The compatibility contract module compares
-// this prediction with the real Host ServeManagementHTTP behavior.
+// managementCPAHostSanitizeJSON is retained for historical schema fixtures.
+// CPA v7.2.159 schema 6 no longer applies this transform.
 func managementCPAHostSanitizeJSON(body []byte) ([]byte, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(bytes.TrimSpace(body)))
 	decoder.UseNumber()

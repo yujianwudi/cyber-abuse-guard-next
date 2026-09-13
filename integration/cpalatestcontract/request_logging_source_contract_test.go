@@ -174,7 +174,7 @@ func TestLatestCPAStartupPrivacyResourceDispatchSourceContract(t *testing.T) {
 		`forceLog := w.logOnErrorOnly && hasAPIError && !w.logger.IsEnabled()`,
 		"disabled logger forced error artifact")
 
-	// CPA v7.2.145 keeps the error-only admission policy in a helper. Keep
+	// CPA v7.2.159 keeps the error-only admission policy in a helper. Keep
 	// the semantic guard explicit: API errors always qualify, client-closed
 	// requests do not, cancellation only qualifies for an error status, and
 	// all remaining HTTP errors qualify. This prevents a source refactor from

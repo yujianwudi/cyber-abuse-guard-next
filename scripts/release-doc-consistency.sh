@@ -119,15 +119,15 @@ if [[ "$fixture_mode" == 1 && "$current_release_version" != 1.0.0 ]]; then
   # still binds the current reviewed tool closure from the real source tree.
   active_audit_receipt="$root/$active_audit_receipt_relative"
 fi
-active_cpa_module_sum='h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o='
+active_cpa_module_sum='h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA='
 active_cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
-active_cpa_archive_sha256='ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37'
-active_cpa_checksums_sha256='df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c'
-active_cpa_binary_sha256='576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713'
-active_cpa_version='v7.2.145'
-active_cpa_commit='d9cea8904b14fbbebb77ef26e98ef08f6b48a724'
-round16_classifier_policy_sha256='974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683'
-round16_csam_text_policy_sha256='f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680'
+active_cpa_archive_sha256='942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218'
+active_cpa_checksums_sha256='c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23'
+active_cpa_binary_sha256='2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7'
+active_cpa_version='v7.2.159'
+active_cpa_commit='ac02da6c05e18f465aa7e3ed5b0a65a2f060917d'
+round16_classifier_policy_sha256='21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46'
+round16_csam_text_policy_sha256='d1a58171ef8e0eee7431b16cd7e93d37d9288ee944333d38719712da5920315a'
 if [[ "$active_audit_receipt" == "$doc_root/$active_audit_receipt_relative" ]]; then
   verify_canonical_relative_path "$active_audit_receipt_relative"
 fi
@@ -279,8 +279,8 @@ verify_round16_repository_contracts() {
     fail "release-rc.yml lost the exact CPA $active_cpa_version commit"
   grep -Fqx '  RC_CPA_C_ABI: '\''1'\''' "$doc_root/.github/workflows/release-rc.yml" ||
     fail "release-rc.yml lost C ABI 1"
-  grep -Fqx '  RC_CPA_RPC_SCHEMA: '\''4'\''' "$doc_root/.github/workflows/release-rc.yml" ||
-    fail "release-rc.yml lost active RPC schema 4"
+  grep -Fqx '  RC_CPA_RPC_SCHEMA: '\''6'\''' "$doc_root/.github/workflows/release-rc.yml" ||
+    fail "release-rc.yml lost active RPC schema 6"
   grep -Fqx '  RC_SECOND_MACHINE_SCHEMA: cyber-abuse-guard.second-machine-release-admission.v3' \
     "$doc_root/.github/workflows/release-rc.yml" ||
     fail "release-rc.yml lost second-machine admission schema v3"
@@ -346,8 +346,6 @@ if [[
     docs/ROUND14_CPA_V7_2_130_SCHEMA3_TASK_BOOK.md
     docs/ROUND14_EXECUTION_AND_RC1_ACCEPTANCE.md
     docs/ROUND14_STATUS.md
-    docs/ROUND16_CPA_V7_2_144_TASK_BOOK.md
-    docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md
     docs/ROUND16_STATUS.md
     docs/THREAT_MODEL.md
     docs/reports/CPA_INTEGRATION.md
@@ -428,7 +426,7 @@ if [[
     fail "RELEASE_POLICY.md lost make_latest=false"
   grep -Fq '## Unreleased - v1.0.0-rc.3' "$doc_root/CHANGELOG.md" || \
     fail "CHANGELOG.md lost the active v1.0.0-rc.3 section"
-  grep -Fqx "round16_cpa_target: $active_cpa_version / $active_cpa_commit / C_ABI_1 / RPC_SCHEMA_4" \
+  grep -Fqx "round16_cpa_target: $active_cpa_version / $active_cpa_commit / C_ABI_1 / RPC_SCHEMA_6" \
     "$doc_root/docs/ROUND16_STATUS.md" ||
     fail "ROUND16_STATUS.md lost the exact active CPA identity"
   for relative in \
@@ -540,8 +538,6 @@ if [[
   round16_identity_documents=(
     CHANGELOG.md
     docs/README.md
-    docs/ROUND16_CPA_V7_2_144_TASK_BOOK.md
-    docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md
     docs/ROUND16_STATUS.md
     docs/reports/CPA_INTEGRATION.md
     docs/reports/PHASE0_CPA_CONTRACT.md
@@ -564,12 +560,8 @@ if [[
   round16_overlay_documents=(
     docs/DESIGN.md
     docs/INSTALL_DOCKER.md
-    docs/ROUND6_DEVELOPMENT_HANDOFF.md
-    docs/ROUND6_LIMITATIONS.md
-    docs/ROUND6_RELEASE_GATE.md
     docs/THREAT_MODEL.md
     docs/reports/PROMPT_INJECTION_REVIEW.md
-    docs/reports/ROUND8_RELEASE_READINESS.md
   )
   for relative in "${round16_overlay_documents[@]}"; do
     document="$doc_root/$relative"
@@ -631,7 +623,7 @@ from pathlib import Path
 
 root = Path(sys.argv[1])
 relatives = sys.argv[2:]
-stale = re.compile(r"v7\.2\.(?!145(?:\D|$))[0-9]+", re.IGNORECASE)
+stale = re.compile(r"v7\.2\.(?!159(?:\D|$))[0-9]+", re.IGNORECASE)
 active = re.compile(r"\b(?:active|current)\b|(?:活动|当前)", re.IGNORECASE)
 historical = re.compile(
     r"\b(?:frozen|historical|retained|non-transferable|superseded)\b|(?:冻结|历史|保留|不可转移|旧)",
@@ -669,7 +661,7 @@ for relative in relatives:
     if relative == "docs/README.md":
         for index, line in enumerate(lines, 1):
             if stale.search(line) and re.search(
-                r"\[Active\s+v7\.2\.(?!145(?:\D|$))[0-9]+|active\s+v7\.2\.(?!145(?:\D|$))[0-9]+\s+boundary",
+                r"\[Active\s+v7\.2\.(?!159(?:\D|$))[0-9]+|active\s+v7\.2\.(?!159(?:\D|$))[0-9]+\s+boundary",
                 line,
                 re.IGNORECASE,
             ):
@@ -718,7 +710,7 @@ if problems:
     raise SystemExit(1)
 PY
   then
-    fail "Round 17 active document allowlist contains an unfrozen current/active non-v7.2.145 claim"
+    fail "active document allowlist contains an unfrozen current/active non-v7.2.159 claim"
   fi
 
   for relative in \
@@ -804,13 +796,13 @@ relative = "docs/reports/RELEASE_EVIDENCE.md"
 marker = "## Frozen Round 13 release boundary"
 active, frozen = split_once(relative, marker)
 expected_target = (
-    "round16_cpa_target: v7.2.145 / "
-    "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"
+    "round16_cpa_target: v7.2.159 / "
+    "ac02da6c05e18f465aa7e3ed5b0a65a2f060917d"
 )
 active_target = re.compile(r"(?m)^[ \t]*" + re.escape(expected_target) + r"[ \t]*$")
 if len(active_target.findall(active)) != 1:
     raise SystemExit(
-        f"{relative}: active boundary must contain exactly one exact v7.2.145 round16_cpa_target"
+        f"{relative}: active boundary must contain exactly one exact v7.2.159 round16_cpa_target"
     )
 if len(re.findall(r"(?m)^[ \t]*round16_cpa_target[ \t]*:", active)) != 1:
     raise SystemExit(f"{relative}: active boundary contains a duplicate or conflicting round16_cpa_target")

@@ -13,7 +13,7 @@ stale_round9_policy_version="classifier-policy-v8"
 stale_round9_policy_sha256="b3f1e751bf648d426023e4207b8b562fe3aac91d48fa74c1462c79e08fa49dde"
 stale_abbreviated_policy_sha256="dc869ac9...e045"
 round16_classifier_policy_version="classifier-policy-v20"
-round16_classifier_policy_sha256="974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683"
+round16_classifier_policy_sha256="21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46"
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 python3_bin=""
@@ -625,17 +625,17 @@ printf 'Round 13 release document consistency allowed explicit frozen v7.2.124 h
 
 cp -a "$work/round16-pass" "$work/round16-binary-sha"
 sed -i \
-  's/576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  's/2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7/0000000000000000000000000000000000000000000000000000000000000000/g' \
   "$work/round16-binary-sha/docs/reports/PHASE0_CPA_CONTRACT.md"
 round16_must_fail round16-binary-sha "$work/round16-binary-sha" \
-  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.145 binary SHA-256'
+  'docs/reports/PHASE0_CPA_CONTRACT.md lost the exact CPA v7.2.159 binary SHA-256'
 
 cp -a "$work/round16-pass" "$work/round16-checksums-sha"
 sed -i \
-  's/df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c/0000000000000000000000000000000000000000000000000000000000000000/g' \
+  's/c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23/0000000000000000000000000000000000000000000000000000000000000000/g' \
   "$work/round16-checksums-sha/tools/current-cpa-audit/README.md"
 round16_must_fail round16-checksums-sha "$work/round16-checksums-sha" \
-  'tools/current-cpa-audit/README.md lost the exact CPA v7.2.145 checksums-file SHA-256'
+  'tools/current-cpa-audit/README.md lost the exact CPA v7.2.159 checksums-file SHA-256'
 
 cp -a "$work/round16-pass" "$work/round13-cag-version"
 sed -i 's/cyber-abuse-guard-v1\.0\.0\.so/cyber-abuse-guard-v0.16.so/g' \
@@ -764,15 +764,15 @@ sed -i '/^round16_cpa_target:/a round16_cpa_target: v7.2.145 / d9cea8904b14fbbeb
   "$work/round16-duplicate-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
 round16_must_fail round16-duplicate-active-cpa-target \
   "$work/round16-duplicate-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.145 round16_cpa_target'
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.159 round16_cpa_target'
 
 cp -a "$work/round16-pass" "$work/round16-conflicting-active-cpa-target"
 sed -i \
-  's|^round16_cpa_target: v7\.2\.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724$|round16_cpa_target: v7.2.145 / 197f520426374e514218ed155933ac546c98d345|' \
+  's|^round16_cpa_target: v7\.2\.159 / ac02da6c05e18f465aa7e3ed5b0a65a2f060917d$|round16_cpa_target: v7.2.159 / 197f520426374e514218ed155933ac546c98d345|' \
   "$work/round16-conflicting-active-cpa-target/docs/reports/RELEASE_EVIDENCE.md"
 round16_must_fail round16-conflicting-active-cpa-target \
   "$work/round16-conflicting-active-cpa-target" \
-  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.145 round16_cpa_target'
+  'docs/reports/RELEASE_EVIDENCE.md: active boundary must contain exactly one exact v7.2.159 round16_cpa_target'
 
 cp -a "$work/round16-pass" "$work/round12-active-key-in-frozen-block"
 printf '\nactive_cpa_remote_latest: PASS\n' \

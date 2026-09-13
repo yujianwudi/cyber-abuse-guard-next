@@ -94,7 +94,7 @@ type mockUpstreamRequest struct {
 }
 
 // countingProviderExecutor wraps CPA's real configured provider executor after
-// service readiness. CPA v7.2.145 replaces a Host-owned executor adapter with
+// service readiness. CPA v7.2.159 replaces a Host-owned executor adapter with
 // its native executor when OwnsExecutor reports true. The wrapper observes the
 // retained native execution path without changing the request, auth, response,
 // retry, translation, or upstream behavior.
@@ -1191,7 +1191,7 @@ func assertHostPluginForwardedCounterDelta(t *testing.T, before, after map[strin
 	}
 	if after["total"] < before["total"] || after["executor_blocks"] < before["executor_blocks"] ||
 		after["router_errors"] < before["router_errors"] {
-		t.Fatalf("schema-v4 direct-path counters decreased; before=%v after=%v", before, after)
+		t.Fatalf("schema-v6 direct-path counters decreased; before=%v after=%v", before, after)
 	}
 	if totalDelta := after["total"] - before["total"]; totalDelta != 1 {
 		t.Fatalf("forwarded request classification delta=%d want=1; before=%v after=%v", totalDelta, before, after)
@@ -1460,7 +1460,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 	work := t.TempDir()
 	pluginsDir := filepath.Join(work, "plugins")
 	pluginTarget := installPluginForHost(t, pluginsDir)
-	t.Logf("CPA v7.2.145 schema-v4 Host plugin path: %s", pluginTarget)
+	t.Logf("CPA v7.2.159 schema-v6 Host plugin path: %s", pluginTarget)
 
 	upstream := newMockUpstream(t)
 	port := freePort(t)
@@ -1485,7 +1485,7 @@ func TestCPAPluginHostBlocksBeforeUpstream(t *testing.T) {
 		t.Fatalf("create isolated CPA auth directory: %v", err)
 	}
 	// A file-backed synthetic OAuth record makes CPA register its embedded
-	// v7.2.145 Codex model catalog for this client. The executor is replaced by
+	// v7.2.159 Codex model catalog for this client. The executor is replaced by
 	// the networkless probe before any Alpha Search request is sent, so no real
 	// credential or Provider endpoint is ever touched.
 	if err := os.WriteFile(
@@ -2215,7 +2215,7 @@ openai-compatibility:
 		{"openai-tool-name-payload", "/v1/chat/completions", fmt.Sprintf(`{"model":"%s","messages":[{"role":"assistant","tool_calls":[{"id":"call_2","type":"function","function":{"name":"execute","arguments":%q}}]},{"role":"user","content":%q}]}`, modelName, toolNameArguments, currentUserActivation), "cyber_abuse_guard_blocked"},
 		{"openai-negation-scope", "/v1/chat/completions", fmt.Sprintf(`{"model":"%s","messages":[{"role":"user","content":%q}]}`, modelName, negationScope), "cyber_abuse_guard_blocked"},
 		{"openai-responses", "/v1/responses", fmt.Sprintf(`{"model":"%s","input":%q}`, modelName, malicious), "cyber_abuse_guard_blocked"},
-		// CPA v7.2.145 normalizes direct interceptor terminations into Anthropic's native
+		// CPA v7.2.159 normalizes direct interceptor terminations into Anthropic's native
 		// error envelope and drops custom code/category fields.
 		{"anthropic", "/v1/messages", fmt.Sprintf(`{"model":"%s","max_tokens":64,"messages":[{"role":"user","content":%q}]}`, modelName, malicious), "policy_violation"},
 		{"anthropic-tool-use-input", "/v1/messages", fmt.Sprintf(`{"model":"%s","max_tokens":64,"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"safe_wrapper","input":{"name":%q}}]},{"role":"user","content":%q}]}`, modelName, malicious, currentUserActivation), "policy_violation"},
@@ -2308,7 +2308,7 @@ openai-compatibility:
 			if !bytes.Contains(response.Body, []byte("cyber_abuse_guard_blocked")) {
 				t.Fatalf("openai-image 403 body lacks guard marker: %s", response.Body)
 			}
-			// This is also the executable Host proof that the schema-v4 interceptor
+			// This is also the executable Host proof that the schema-v6 interceptor
 			// receives CPA's openai-image SourceFormat before provider selection.
 			assertNoProviderSideEffects(t, response.Header, upstream, providerProbe, upstreamBefore, providerBefore,
 				authSelector, selectorBefore)
@@ -2370,7 +2370,7 @@ openai-compatibility:
 		providerBefore := providerProbe.calls.Load()
 		selectorBefore := authSelectionSnapshot(t, authSelector)
 		// This test-only adapter proves ProviderExecutor.HttpRequest error-to-HTTP
-		// normalization only. CPA v7.2.145 exposes no generic public HTTP route for
+		// normalization only. CPA v7.2.159 exposes no generic public HTTP route for
 		// this plugin executor method, so a final official-handler HTTP 405 is not
 		// available and is not claimed by this assertion.
 		assertGuardHTTPRequestAdapter405(t, guardExecutor)
@@ -2937,7 +2937,7 @@ openai-compatibility:
 			providerDelta, scenario.wantProviderExecution)
 	}
 	if scenario.wantUsageProvider != "" {
-		// CPA v7.2.145 publishes a usage record for successful plugin Executor
+		// CPA v7.2.159 publishes a usage record for successful plugin Executor
 		// responses. Keep that Host-local accounting distinct from Provider,
 		// Auth Selector, and Mock-upstream execution.
 		assertUsageQueueProviderAndDrain(t, baseURL, scenario.wantUsageProvider,
@@ -2949,7 +2949,7 @@ openai-compatibility:
 	}
 	if scenario.wantGuardRegistered {
 		// The schema-v1 fixture remains the selected ModelRouter for ready modes,
-		// but schema-v4 CAG interception terminates before its executor callback.
+		// but schema-v6 CAG interception terminates before its executor callback.
 		assertGuardExecutorIdle(t, guardExecutorProbe, guardExecutorBefore)
 		assertHostPluginCounterDelta(t, countersBefore, hostPluginCounterSnapshot(t, baseURL), map[string]uint64{
 			"blocked": 1, "coverage_complete": 1,
@@ -3933,7 +3933,7 @@ func assertHostRawCaptureEnvelope(
 		response.ExplanationSchemaSemantics != "decision-explanation-v2" {
 		t.Fatalf("Raw Capture schema identity=%+v", response)
 	}
-	if response.RawPreviewTransport != "cpa-json-html-escaped-utf8" ||
+	if response.RawPreviewTransport != "cpa-json-raw-utf8" ||
 		response.RawPreviewB64Encoding != "base64-standard-utf8" ||
 		response.RawPreviewRendering != "text-only-never-html" ||
 		!response.RawPreviewDeprecated || !response.EncodedPreviewBytesDeprecated ||
@@ -4572,13 +4572,13 @@ func installPluginForHost(t *testing.T, pluginsDir string) string {
 			GOARCH:     "amd64",
 		})
 		if errInstall != nil {
-			t.Fatalf("CPA v7.2.145 Store install: %v", errInstall)
+			t.Fatalf("CPA v7.2.159 Store install: %v", errInstall)
 		}
 		expected := filepath.Join(pluginsDir, "linux", "amd64", "cyber-abuse-guard-v"+version+".so")
 		if result.ID != "cyber-abuse-guard" || result.Version != version || result.Path != expected || result.Overwritten || result.Skipped {
 			t.Fatalf("CPA Store install result = %#v, want first install at %s", result, expected)
 		}
-		t.Logf("CPA v7.2.145 Store installed real archive sha256=%x path=%s", checksum, result.Path)
+		t.Logf("CPA v7.2.159 Store installed real archive sha256=%x path=%s", checksum, result.Path)
 		return result.Path
 	}
 

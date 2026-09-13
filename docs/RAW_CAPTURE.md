@@ -1,15 +1,15 @@
 # Blocked-request review capture
 
 > [!IMPORTANT]
-> The active Round 17 Host identity is CPA
-> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4.
+> The active Host identity is CPA
+> `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI 1 / RPC schema 6.
 > Round 15 v7.2.142/schema 3 and older capture observations retain their exact
 > historical identities and transfer no PASS. Every `/v1/realtime*` route
 > bypasses CAG `RequestInterceptor`, `ModelRouter`, and request lifecycle, so it
 > is **OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE** and cannot produce a CAG
 > blocked-request capture. Capture applies only to protected registered callback
 > paths such as chat and Responses; it is not evidence of all-traffic coverage.
-> The exact v7.2.145 / CAG `1.0.0` lane must revalidate it before any current
+> The exact v7.2.159 / CAG `1.0.0` lane must revalidate it before any current
 > transport or capture claim is admitted.
 
 The raw-capture facility exists only for operator review of false-positive
@@ -204,7 +204,7 @@ size of that complete CPA Host-visible body:
   "response_preview_budget_bytes": 8388608,
   "cpa_host_response_budget_bytes": 8388608,
   "cpa_host_response_bytes": 1189,
-  "raw_preview_transport": "cpa-json-html-escaped-utf8",
+  "raw_preview_transport": "cpa-json-raw-utf8",
   "raw_preview_b64_encoding": "base64-standard-utf8",
   "raw_preview_rendering": "text-only-never-html",
   "raw_preview_deprecated": true,
@@ -368,7 +368,7 @@ illustrative; the live field is exact for the live body:
   "response_preview_budget_bytes": 8388608,
   "cpa_host_response_budget_bytes": 8388608,
   "cpa_host_response_bytes": 636,
-  "raw_preview_transport": "cpa-json-html-escaped-utf8",
+  "raw_preview_transport": "cpa-json-raw-utf8",
   "raw_preview_b64_encoding": "base64-standard-utf8",
   "raw_preview_rendering": "text-only-never-html",
   "raw_preview_deprecated": true,

@@ -1,9 +1,9 @@
 # Contributing
 
 Contributions are welcome through pull requests. This project is a Linux amd64
-CPA plugin and currently targets Go 1.26.6 and CPA v7.2.145 at
-`d9cea8904b14fbbebb77ef26e98ef08f6b48a724` as the only active source/compile
-and Host contract, with C ABI 1 and RPC schema 4.
+CPA plugin and currently targets Go 1.26.6 and CPA v7.2.159 at
+`ac02da6c05e18f465aa7e3ed5b0a65a2f060917d` as the only active source/compile
+and Host contract, with C ABI 1 and RPC schema 6.
 Windows, macOS, musl/Alpine, local deployment, and production deployment are
 outside the ordinary contribution and validation scope.
 
@@ -16,7 +16,7 @@ GitHub checks and second-machine execution. Protected Host, independent
 attestation, production approval, and release readiness remain `NOT_PROVIDED`.
 The root README status block and
 [Round 17 task book](docs/ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md) and the active
-[Round 17 status](docs/ROUND16_STATUS.md) are the v7.2.145 compatibility boundary;
+[Round 17 status](docs/ROUND16_STATUS.md) are the v7.2.159 compatibility boundary;
 all v7.2.142 and earlier results are explicitly historical and non-transferable.
 
 Every `/v1/realtime*` route currently bypasses CAG `RequestInterceptor`,
@@ -54,7 +54,7 @@ make round6-script-test
 
 Run `make round6-benchmark` for classifier, extraction, audit, queueing,
 management-response, or other performance-sensitive changes. Changes to CPA
-integration must update the exact v7.2.145 pin deliberately. CPA v7.2.145
+integration must update the exact v7.2.159 pin deliberately. CPA v7.2.159
 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
 `RequestInterceptor`, so integration changes must include a regression for the
 rewritten tool-schema/tool-payload boundary. Historical v7.2.142 and earlier

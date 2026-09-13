@@ -105,13 +105,13 @@ func TestABIEnvelopeRegistrationAndModeAwareOversize(t *testing.T) {
 		} `json:"result"`
 	}
 	if err := json.Unmarshal(raw, &registerEnvelope); err != nil || !registerEnvelope.OK ||
-		pluginabi.SchemaVersion != 4 || registerEnvelope.Result.SchemaVersion != pluginabi.SchemaVersion {
+		pluginabi.SchemaVersion != 6 || registerEnvelope.Result.SchemaVersion != pluginabi.SchemaVersion {
 		t.Fatalf("invalid registration envelope %s: %v", raw, err)
 	}
 	capabilities := registerEnvelope.Result.Capabilities
 	if !capabilities.ModelRouter || !capabilities.Executor || !capabilities.RequestInterceptor ||
 		!capabilities.RequestLifecycle || !capabilities.ManagementAPI {
-		t.Fatalf("invalid schema-v4 registration capabilities: %+v", capabilities)
+		t.Fatalf("invalid schema-v6 registration capabilities: %+v", capabilities)
 	}
 	if capabilities.ResponseInterceptor || capabilities.StreamChunkInterceptor || capabilities.WebSocketObserver {
 		t.Fatalf("native registration unexpectedly enables response interceptor chains: %+v", capabilities)

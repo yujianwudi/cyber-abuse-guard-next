@@ -15,16 +15,16 @@ current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fd
 > amd64. This is a compatibility/admission round, not a release result:
 >
 > ```text
-> current_formal_cpa: v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724
-> current_cpa_plugin_c_abi_rpc_schema: 1 / 4
-> current_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
+> current_formal_cpa: v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d
+> current_cpa_plugin_c_abi_rpc_schema: 1 / 6
+> current_module_sum: h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=
 > current_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 > current_realtime_boundary: OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE
 > current_complete_linux_ci_host_release: NOT_RUN / PENDING / NO_RELEASE_THIS_ROUND
 > ```
 >
 > `/v1/realtime*` bypasses CAG. Historical review PASS statements below do not
-> establish v7.2.145/schema-4, realtime, Host, candidate, or release PASS.
+> establish v7.2.159/schema-6, realtime, Host, candidate, or release PASS.
 
 ## Round 6 CPA pinned-compatibility addendum
 

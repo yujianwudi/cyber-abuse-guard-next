@@ -104,19 +104,19 @@ class ContractTests(unittest.TestCase):
             },
             {
                 "c_abi": 1,
-                "commit": "d9cea8904b14fbbebb77ef26e98ef08f6b48a724",
+                "commit": "ac02da6c05e18f465aa7e3ed5b0a65a2f060917d",
                 "go_mod_sum": "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=",
-                "module_sum": "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=",
-                "official_binary_sha256": "576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713",
-                "official_binary_size": 64_207_528,
-                "official_checksums_sha256": "df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c",
-                "official_asset_name": "CLIProxyAPI_7.2.145_linux_amd64.tar.gz",
+                "module_sum": "h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=",
+                "official_binary_sha256": "2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7",
+                "official_binary_size": 65_704_424,
+                "official_checksums_sha256": "c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23",
+                "official_asset_name": "CLIProxyAPI_7.2.159_linux_amd64.tar.gz",
                 "official_asset_sha256": (
-                    "ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37"
+                    "942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218"
                 ),
-                "official_asset_size": 21_226_153,
-                "rpc_schema": 4,
-                "tag": "v7.2.145",
+                "official_asset_size": 21_733_175,
+                "rpc_schema": 6,
+                "tag": "v7.2.159",
             },
         )
 

@@ -94,7 +94,7 @@ EXPECTED_CANDIDATE_FILES = (
 STORE_ZIP_NAME = f"cyber-abuse-guard_{CAG_SOURCE_VERSION}_linux_amd64.zip"
 STORE_RECEIPT = re.compile(
     r"^[ \t]*host_integration_test\.go:[0-9]+: "
-    r"CPA v7\.2\.145 Store installed real archive "
+    r"CPA v7\.2\.159 Store installed real archive "
     r"sha256=([0-9a-f]{64}) path=([^\r\n]+)\n$"
 )
 DIRECT_SO_FALLBACK_MARKER = (
@@ -707,7 +707,7 @@ def validate_report(value: Any, *, check_local_tool: bool = True) -> dict[str, A
         or exact_int(cpa["rpc_schema"], "report.cpa.rpc_schema", 1)
         != CPA_RPC_SCHEMA
     ):
-        fail("report CPA identity is not v7.2.145")
+        fail(f"report CPA identity is not {CPA_TAG}")
     runtime = exact_object(
         report["runtime"], {"go_version", "platform"}, "report.runtime"
     )

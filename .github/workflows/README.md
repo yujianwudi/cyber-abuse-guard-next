@@ -7,7 +7,7 @@ here.
 
 | File | Display name | Trigger | Responsibility |
 |---|---|---|---|
-| `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.145 / C ABI 1 / RPC schema 4 compatibility, tests, fuzzing, development artifacts, and reproducibility |
+| `ci.yml` | `CI` | Pushes and pull requests targeting `main` | Linux quality gates, CPA v7.2.159 / C ABI 1 / RPC schema 6 compatibility, tests, fuzzing, development artifacts, and reproducibility |
 | `codeql.yml` | `CodeQL` | Pushes and pull requests targeting `main`, weekly schedule, manual dispatch | Minimal-permission Linux Go code scanning |
 | `policy-gate.yml` | `Policy and Corpus Gate` | Pushes and pull requests targeting `main` | Benign/malicious policy, corpus, performance, and bounded-fuzz acceptance gates |
 | `release-rc.yml` | `RC Release` | Manual dispatch from the fixed signed `v1.0.0-rc.3` annotated tag | Revalidate protected-main checks and mandatory real second-machine admission, seal the exact audited Linux assets, attest them, and publish a non-latest prerelease |

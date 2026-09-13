@@ -9,23 +9,23 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
-type schema4RequestLifecycleProbe struct{}
+type schema6RequestLifecycleProbe struct{}
 
-func (schema4RequestLifecycleProbe) InterceptRequestBeforeAuth(
+func (schema6RequestLifecycleProbe) InterceptRequestBeforeAuth(
 	context.Context,
 	pluginapi.RequestInterceptRequest,
 ) (pluginapi.RequestInterceptResponse, error) {
 	return pluginapi.RequestInterceptResponse{}, nil
 }
 
-func (schema4RequestLifecycleProbe) InterceptRequestAfterAuth(
+func (schema6RequestLifecycleProbe) InterceptRequestAfterAuth(
 	context.Context,
 	pluginapi.RequestInterceptRequest,
 ) (pluginapi.RequestInterceptResponse, error) {
 	return pluginapi.RequestInterceptResponse{}, nil
 }
 
-func (schema4RequestLifecycleProbe) HandleRequestComplete(
+func (schema6RequestLifecycleProbe) HandleRequestComplete(
 	context.Context,
 	pluginapi.RequestCompletion,
 ) error {
@@ -33,18 +33,18 @@ func (schema4RequestLifecycleProbe) HandleRequestComplete(
 }
 
 var (
-	_ pluginapi.RequestInterceptor     = schema4RequestLifecycleProbe{}
-	_ pluginapi.RequestLifecyclePlugin = schema4RequestLifecycleProbe{}
+	_ pluginapi.RequestInterceptor     = schema6RequestLifecycleProbe{}
+	_ pluginapi.RequestLifecyclePlugin = schema6RequestLifecycleProbe{}
 )
 
-func TestPluginStoreCPASchema4RequestLifecycleCompileContract(t *testing.T) {
+func TestPluginStoreCPASchema6RequestLifecycleCompileContract(t *testing.T) {
 	if pluginabi.ABIVersion != 1 {
 		t.Fatalf("C ABI version=%d, want 1", pluginabi.ABIVersion)
 	}
-	if pluginabi.SchemaVersion != 4 ||
+	if pluginabi.SchemaVersion != 6 ||
 		pluginabi.SchemaVersionStreamChunkOmitRequestBody != 3 ||
 		pluginabi.SchemaVersionWebSocketResponseObserver != 4 {
-		t.Fatalf("RPC schema version=%d omit-request-body version=%d websocket-observer version=%d, want 4/3/4",
+		t.Fatalf("RPC schema version=%d omit-request-body version=%d websocket-observer version=%d, want 6/3/4",
 			pluginabi.SchemaVersion,
 			pluginabi.SchemaVersionStreamChunkOmitRequestBody,
 			pluginabi.SchemaVersionWebSocketResponseObserver,
@@ -54,7 +54,7 @@ func TestPluginStoreCPASchema4RequestLifecycleCompileContract(t *testing.T) {
 		pluginabi.MethodRequestInterceptAfter != "request.intercept_after" ||
 		pluginabi.MethodRequestComplete != "request.complete" ||
 		pluginabi.MethodWebSocketResponseEvent != "websocket.response_event" {
-		t.Fatalf("schema-v4 method names changed: before=%q after=%q complete=%q websocket=%q",
+		t.Fatalf("schema-v6 method names changed: before=%q after=%q complete=%q websocket=%q",
 			pluginabi.MethodRequestInterceptBefore,
 			pluginabi.MethodRequestInterceptAfter,
 			pluginabi.MethodRequestComplete,
@@ -71,7 +71,7 @@ func TestPluginStoreCPASchema4RequestLifecycleCompileContract(t *testing.T) {
 	if !response.Terminate || response.StatusCode != http.StatusForbidden ||
 		response.ResponseHeaders.Get("Content-Type") != "application/json" ||
 		len(response.ResponseBody) == 0 {
-		t.Fatalf("schema-v4 termination response fields unavailable: %#v", response)
+		t.Fatalf("schema-v6 termination response fields unavailable: %#v", response)
 	}
 
 	outcomes := []pluginapi.RequestCompletionOutcome{
@@ -81,9 +81,9 @@ func TestPluginStoreCPASchema4RequestLifecycleCompileContract(t *testing.T) {
 		pluginapi.RequestCompletionCanceled,
 	}
 	for _, outcome := range outcomes {
-		completion := pluginapi.RequestCompletion{RequestID: "schema4-probe", Outcome: outcome}
+		completion := pluginapi.RequestCompletion{RequestID: "schema6-probe", Outcome: outcome}
 		if completion.RequestID == "" || completion.Outcome == "" {
-			t.Fatalf("schema-v4 completion fields unavailable for outcome %q", outcome)
+			t.Fatalf("schema-v6 completion fields unavailable for outcome %q", outcome)
 		}
 	}
 
@@ -94,7 +94,7 @@ func TestPluginStoreCPASchema4RequestLifecycleCompileContract(t *testing.T) {
 	}
 	if headerInit.ChunkIndex != -1 || len(headerInit.OriginalRequest) == 0 ||
 		len(headerInit.RequestBody) == 0 {
-		t.Fatalf("schema-v4 header-init request-body contract unavailable: %#v", headerInit)
+		t.Fatalf("schema-v6 header-init request-body contract unavailable: %#v", headerInit)
 	}
 	payload := pluginapi.StreamChunkInterceptRequest{
 		Body:       []byte("data: fixture\n\n"),
@@ -102,15 +102,15 @@ func TestPluginStoreCPASchema4RequestLifecycleCompileContract(t *testing.T) {
 	}
 	if payload.ChunkIndex != 0 || len(payload.OriginalRequest) != 0 ||
 		len(payload.RequestBody) != 0 || len(payload.Body) == 0 {
-		t.Fatalf("schema-v4 payload omission contract unavailable: %#v", payload)
+		t.Fatalf("schema-v6 payload omission contract unavailable: %#v", payload)
 	}
 
 	websocketEvent := pluginapi.WebSocketResponseEvent{
-		RequestID: "schema4-probe",
+		RequestID: "schema6-probe",
 		EventType: "response.created",
 		Payload:   []byte(`{"type":"response.created"}`),
 	}
 	if websocketEvent.RequestID == "" || websocketEvent.EventType == "" || len(websocketEvent.Payload) == 0 {
-		t.Fatalf("schema-v4 WebSocket response observation fields unavailable: %#v", websocketEvent)
+		t.Fatalf("schema-v6 WebSocket response observation fields unavailable: %#v", websocketEvent)
 	}
 }
