@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"net/http"
 	"net/url"
 	"os"
@@ -269,19 +268,18 @@ func TestRawCaptureManagementBoundsEncodedPreviewResponse(t *testing.T) {
 	if response.Headers.Get("Cache-Control") != "no-store" {
 		t.Fatalf("raw capture Cache-Control=%q, want no-store", response.Headers.Get("Cache-Control"))
 	}
-	hostBody, ok := managementCPAHostSanitizeJSON(body)
-	if !ok || len(hostBody) > maxManagementRawPreviewBytes || len(hostBody) != result.CPAHostResponseBytes {
-		t.Fatalf("CPA Host body bytes=%d ok=%t, budget=%d", len(hostBody), ok, maxManagementRawPreviewBytes)
+	if len(body) > maxManagementRawPreviewBytes || len(body) != result.CPAHostResponseBytes {
+		t.Fatalf("CPA Host body bytes=%d, budget=%d", len(body), maxManagementRawPreviewBytes)
 	}
 	var hostResult struct {
 		Captures []managementRawCapture `json:"captures"`
 	}
-	if err := json.Unmarshal(hostBody, &hostResult); err != nil || len(hostResult.Captures) != result.ReturnedCount {
+	if err := json.Unmarshal(body, &hostResult); err != nil || len(hostResult.Captures) != result.ReturnedCount {
 		t.Fatalf("decode CPA Host body: captures=%d err=%v", len(hostResult.Captures), err)
 	}
-	if hostResult.Captures[0].RawPreview != html.EscapeString(result.Captures[0].RawPreview) {
-		t.Fatalf("CPA Host raw_preview bytes=%d, want HTML-escaped transport bytes=%d",
-			len(hostResult.Captures[0].RawPreview), len(html.EscapeString(result.Captures[0].RawPreview)))
+	if hostResult.Captures[0].RawPreview != result.Captures[0].RawPreview {
+		t.Fatalf("CPA Host raw_preview changed under schema 6: got %q want %q",
+			hostResult.Captures[0].RawPreview, result.Captures[0].RawPreview)
 	}
 	if hostResult.Captures[0].RawPreviewB64 != result.Captures[0].RawPreviewB64 {
 		t.Fatal("CPA Host changed canonical raw_preview_b64")
@@ -301,13 +299,11 @@ func TestManagementRawCaptureSizePredictionMatchesCPAHostSanitizer(t *testing.T)
 		if got, want := managementEncodedJSONStringBytes(value), len(encoded)-2; got != want {
 			t.Fatalf("plugin JSON string bytes=%d, want %d for %q", got, want, value)
 		}
-		var buffer bytes.Buffer
-		encoder := json.NewEncoder(&buffer)
-		encoder.SetEscapeHTML(false)
-		if err := encoder.Encode(html.EscapeString(value)); err != nil {
+		encodedHost, err := json.Marshal(value)
+		if err != nil {
 			t.Fatal(err)
 		}
-		wantHost := len(bytes.TrimSuffix(buffer.Bytes(), []byte("\n"))) - 2
+		wantHost := len(encodedHost) - 2
 		if got := managementCPAHostEncodedJSONStringBytes(value); got != wantHost {
 			t.Fatalf("CPA Host JSON string bytes=%d, want %d for %q", got, wantHost, value)
 		}
@@ -337,10 +333,7 @@ func TestManagementRawCaptureSizePredictionMatchesCPAHostSanitizer(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostCaptureBody, ok := managementCPAHostSanitizeJSON(captureBody)
-	if !ok {
-		t.Fatal("CPA Host sanitizer rejected capture fixture")
-	}
+	hostCaptureBody := captureBody
 	predictedCaptureBytes, err := managementRawCaptureCPAHostJSONBytes(capture)
 	if err != nil || predictedCaptureBytes != len(hostCaptureBody) {
 		t.Fatalf("predicted capture bytes=%d actual=%d err=%v", predictedCaptureBytes, len(hostCaptureBody), err)
@@ -356,9 +349,8 @@ func TestManagementRawCaptureSizePredictionMatchesCPAHostSanitizer(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	hostResponseBody, ok := managementCPAHostSanitizeJSON(responseBody)
-	if !ok || response.CPAHostResponseBytes != len(hostResponseBody) {
-		t.Fatalf("predicted Host response bytes=%d actual=%d ok=%t", response.CPAHostResponseBytes, len(hostResponseBody), ok)
+	if response.CPAHostResponseBytes != len(responseBody) {
+		t.Fatalf("predicted Host response bytes=%d actual=%d", response.CPAHostResponseBytes, len(responseBody))
 	}
 }
 

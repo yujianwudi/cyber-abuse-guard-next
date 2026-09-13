@@ -13,13 +13,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"html"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/htmlsanitize"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
@@ -65,7 +63,7 @@ func cyberAbuseGuardRawCaptureBody(t *testing.T, previews []string) []byte {
 		"response_preview_budget_bytes":        8 << 20,
 		"cpa_host_response_budget_bytes":        8 << 20,
 		"cpa_host_response_bytes":               0,
-		"raw_preview_transport":                "cpa-json-html-escaped-utf8",
+		"raw_preview_transport":                "cpa-json-raw-utf8",
 		"raw_preview_b64_encoding":             "base64-standard-utf8",
 		"raw_preview_rendering":                 "text-only-never-html",
 		"raw_preview_deprecated":                true,
@@ -78,17 +76,13 @@ func cyberAbuseGuardRawCaptureBody(t *testing.T, previews []string) []byte {
 		if err != nil {
 			t.Fatal(err)
 		}
-		hostBody, ok := htmlsanitize.JSONBody(body)
-		if !ok {
-			t.Fatal("CPA Host sanitizer rejected schema-4 Raw Capture fixture")
-		}
-		hostBytes := len(hostBody)
+		hostBytes := len(body)
 		if response["cpa_host_response_bytes"] == hostBytes {
 			return body
 		}
 		response["cpa_host_response_bytes"] = hostBytes
 	}
-	t.Fatal("schema-4 Raw Capture Host response size did not converge")
+	t.Fatal("schema-6 Raw Capture Host response size did not converge")
 	return nil
 }
 
@@ -127,8 +121,8 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("response status=%d cache-control=%q", rec.Code, rec.Header().Get("Cache-Control"))
 	}
-	if rec.Body.Len() <= len(body) {
-		t.Fatalf("Host body bytes=%d, want HTML-sanitizer expansion beyond plugin bytes=%d", rec.Body.Len(), len(body))
+	if rec.Body.Len() != len(body) {
+		t.Fatalf("Host body bytes=%d, want schema-6 raw JSON bytes=%d", rec.Body.Len(), len(body))
 	}
 	if rec.Body.Len() > 8<<20 {
 		t.Fatalf("single maximum preview Host body bytes=%d, want <=8MiB", rec.Body.Len())
@@ -148,8 +142,8 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 	}
 	gotPreview, _ := capture["raw_preview"].(string)
 	gotPreviewB64, _ := capture["raw_preview_b64"].(string)
-	if gotPreview != html.EscapeString(preview) {
-		t.Fatal("Host did not apply the expected HTML transport escaping")
+	if gotPreview != preview {
+		t.Fatal("Host changed raw_preview under schema 6")
 	}
 	if gotPreviewB64 != previewB64 {
 		t.Fatal("Host changed raw_preview_b64")
@@ -158,7 +152,7 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 	if err != nil || string(decoded) != preview {
 		t.Fatalf("decode raw_preview_b64: bytes=%d err=%v", len(decoded), err)
 	}
-	if response["raw_preview_transport"] != "cpa-json-html-escaped-utf8" ||
+	if response["raw_preview_transport"] != "cpa-json-raw-utf8" ||
 		response["raw_preview_b64_encoding"] != "base64-standard-utf8" ||
 		response["raw_preview_rendering"] != "text-only-never-html" ||
 		response["raw_preview_deprecated"] != true ||
@@ -177,7 +171,7 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 		capture["redaction_applied"] != true || capture["redacted"] != true ||
 		capture["redaction_pattern_hits"] != float64(1) ||
 		capture["redaction_version"] != "raw-redactor-v2" {
-		t.Fatalf("schema-4 capture metadata=%+v", capture)
+		t.Fatalf("schema-6 capture metadata=%+v", capture)
 	}
 
 	body = cyberAbuseGuardRawCaptureBody(t, []string{preview, preview})
@@ -185,8 +179,15 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 	if !host.ServeManagementHTTP(rec, req) {
 		t.Fatal("ServeManagementHTTP(two previews) = false, want true")
 	}
-	if rec.Body.Len() <= 8<<20 {
-		t.Fatalf("two maximum previews Host body bytes=%d, want >8MiB to exercise plugin truncation boundary", rec.Body.Len())
+	if rec.Body.Len() > 8<<20 {
+		t.Fatalf("two maximum previews Host body bytes=%d, want <=8MiB under schema 6", rec.Body.Len())
+	}
+	var twoResponse map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &twoResponse); err != nil {
+		t.Fatalf("decode two-preview Host response: %v", err)
+	}
+	if captures, ok := twoResponse["captures"].([]any); !ok || len(captures) != 2 {
+		t.Fatalf("two-preview Host captures=%#v", twoResponse["captures"])
 	}
 }
 `

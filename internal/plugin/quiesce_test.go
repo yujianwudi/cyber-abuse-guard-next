@@ -148,26 +148,26 @@ func TestQuiesceExactReconfigureRestoresCPA144FailedHotReload(t *testing.T) {
 	raw, code := p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t,
 		"mode: audit\naudit:\n  enabled: false\nsubject_control:\n  enabled: false\n"))
 	if code != 0 {
-		t.Fatalf("mismatched CPA v7.2.145 rollback code=%d envelope=%s", code, raw)
+		t.Fatalf("mismatched CPA v7.2.159 rollback code=%d envelope=%s", code, raw)
 	}
 	var mismatch rpcEnvelope
 	if err := json.Unmarshal(raw, &mismatch); err != nil {
 		t.Fatal(err)
 	}
 	if mismatch.OK || mismatch.Error == nil || mismatch.Error.Code != "plugin_quiesce_restore_mismatch" {
-		t.Fatalf("mismatched CPA v7.2.145 rollback envelope=%s", raw)
+		t.Fatalf("mismatched CPA v7.2.159 rollback envelope=%s", raw)
 	}
 	if !p.quiescing.Load() || p.runtime.Load() != before {
-		t.Fatal("mismatched CPA v7.2.145 rollback changed the quiesced runtime")
+		t.Fatal("mismatched CPA v7.2.159 rollback changed the quiesced runtime")
 	}
 
 	raw, code = p.Call(pluginabi.MethodPluginReconfigure, lifecyclePayload(t, configYAML))
 	if code != 0 {
-		t.Fatalf("CPA v7.2.145 rollback plugin.reconfigure code=%d envelope=%s", code, raw)
+		t.Fatalf("CPA v7.2.159 rollback plugin.reconfigure code=%d envelope=%s", code, raw)
 	}
 	decodeOKResult(t, raw, &registration{})
 	if p.quiescing.Load() || p.runtime.Load() != before {
-		t.Fatalf("CPA v7.2.145 rollback restore quiescing=%t runtime_changed=%t", p.quiescing.Load(), p.runtime.Load() != before)
+		t.Fatalf("CPA v7.2.159 rollback restore quiescing=%t runtime_changed=%t", p.quiescing.Load(), p.runtime.Load() != before)
 	}
 	if got := p.counters.quiesceTransitions.Load(); got != 1 {
 		t.Fatalf("quiesce transitions=%d, want 1", got)

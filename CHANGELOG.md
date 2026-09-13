@@ -2,12 +2,23 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
-Source-tree status updated: 2026-08-29 (Asia/Shanghai)
+Source-tree status updated: 2026-09-13 (Asia/Shanghai)
 
 ## Unreleased - v1.0.0-rc.3
+
+- Upgrade the active CPA compatibility lane to
+  `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI 1 / RPC schema 6,
+  module sum `h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=` and go.mod sum
+  `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The verified Linux amd64
+  archive is 21,733,175 bytes / SHA-256
+  `942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218`; its
+  extracted binary is 65,704,424 bytes / SHA-256
+  `2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7`.
+  Schema 6 preserves management JSON response strings without the legacy Host
+  HTML-entity transform; Raw Capture now reports `cpa-json-raw-utf8`.
 
 - Close the CPA v7.2.145 hot-reload boundary for oversized RPC callbacks: once
   `plugin.quiesce` begins, oversized model-route, request-interceptor and
@@ -77,7 +88,7 @@ Source-tree status updated: 2026-08-29 (Asia/Shanghai)
   `plugin.reconfigure` rollback for already-registered retired instances. A
   failed replacement now restores the retained runtime instead of leaving it
   quiesced; config drift remains rejected. The CSAM text closure advances to
-  `csam-text-policy-v1` / `f8e79b5773d578ef2feefba316c273a2da2fdfbe2eed35b48470b01063944680`.
+  `csam-text-policy-v1` / `d1a58171ef8e0eee7431b16cd7e93d37d9288ee944333d38719712da5920315a`.
 
 - Retire the immutable, unpublished `v1.0.0-rc.1` tag after its admission
   correctly failed closed when GitHub added platform-owned Dependabot workflows
@@ -156,7 +167,7 @@ Source-tree status updated: 2026-08-29 (Asia/Shanghai)
   ties retain the same winner, while keeping authoritative aggregate
   replacement intact. The active classifier identity
   remains `classifier-policy-v20` and advances to SHA-256
-  `974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683`.
+  `21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46`.
 - Degrade audit readiness on queue admission loss until a post-loss durable
   write and explicit Flush barrier close the loss generation. Reject unknown
   Raw Capture indexes/triggers before any v6-to-v7 backup or DDL so migration

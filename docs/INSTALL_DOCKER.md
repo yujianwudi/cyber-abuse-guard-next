@@ -1,21 +1,19 @@
 # Docker Sandbox Installation, Staged Rollout, Rollback, and Cleanup
 
 > [!IMPORTANT]
-> For Round 17, substitute only an exact Linux amd64 candidate bound to CPA
-> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4.
+> Use only an exact Linux amd64 candidate bound to CPA
+> `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI 1 / RPC schema 6.
 > The Round 12/13 commands and hashes retained below are historical; they must
 > not be used as current artifacts or PASS evidence. Production deployment
 > remains outside this candidate runbook.
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
-The official CPA archive identity is 21,226,153 bytes / SHA-256
-`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
-the contained binary SHA-256 is
-`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
+The official CPA v7.2.159 archive and contained binary digests are
+`RECHECK_REQUIRED` until the release asset is independently verified.
 Round 15 v7.2.142/schema 3 and every older PASS remain historical and
 non-transferable.
 
@@ -25,14 +23,14 @@ non-transferable.
 > CAG_NOT_VISIBLE**. This installation protects only registered callback paths
 > such as chat and Responses; do not advertise all-traffic coverage.
 
-## Round 17 active installation contract
+## Active installation contract
 
 All current installation and validation work must use the exact Linux amd64
-candidate for CPA `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1,
-and RPC schema 4. The frozen Round 12 procedure below is retained for audit
+candidate for CPA `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI 1,
+and RPC schema 6. The frozen Round 12 procedure below is retained for audit
 history only; do not execute its v7.2.124/schema-2 commands against the active
-candidate. Current Host evidence must load the v7.2.145 candidate bytes, prove
-the schema-4 envelope, and keep `/v1/realtime*` explicitly outside CAG coverage.
+candidate. Current Host evidence must load the v7.2.159 candidate bytes, prove
+the schema-6 envelope, and keep `/v1/realtime*` explicitly outside CAG coverage.
 
 ## Frozen historical Round 12 installation body
 

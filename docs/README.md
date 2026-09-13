@@ -2,7 +2,7 @@
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
 The root [English README](../README.md) and [Chinese README](../README_CN.md)
@@ -10,17 +10,17 @@ are the shortest current-status entry points. The previously documented old
 repository and `v0.15` Release both returned GitHub API `404` on 2026-08-04;
 legacy availability is `UNAVAILABLE` and security support is `SUSPENDED`.
 The current project target is source `1.0.0` and planned prerelease
-`v1.0.0-rc.3`, pinned to CPA v7.2.145 at
-`d9cea8904b14fbbebb77ef26e98ef08f6b48a724`; C ABI 1 and RPC schema 4 are the
+`v1.0.0-rc.3`, pinned to CPA v7.2.159 at
+`ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`; C ABI 1 and RPC schema 6 are the
 active contract. The module sum is
-`h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=` and the go.mod sum is
+`h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=` and the go.mod sum is
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The upstream Linux amd64
 archive SHA-256 is
-`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`
-(21,226,153 bytes); the official checksums-file SHA-256 is
-`df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`; its
-binary SHA-256 is
-`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
+`942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218`
+(21,733,175 bytes); the official checksums-file SHA-256 is
+`c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23`; its
+65,704,424-byte binary SHA-256 is
+`2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7`.
 The active workflow directory contains exactly four repository workflows:
 `ci.yml`, `codeql.yml`, `policy-gate.yml`, and the gated `release-rc.yml`.
 GitHub-owned Dependabot `dynamic/` entries are separately bounded by an exact
@@ -34,7 +34,7 @@ and release readiness are `NOT_PROVIDED`, and no stable `v0.16` exists.
 Commit `21267e742b624b29a75bd3683fd6914f76c764b5` is a confirmed green
 historical v7.2.116 engineering baseline. The supplied v7.2.116 second-machine
 report and any five-repository data are historical diagnostic evidence only;
-they do not transfer to v7.2.145/schema 4. Round 15 v7.2.142/schema 3 results
+they do not transfer to v7.2.159/schema 6. Round 15 v7.2.142/schema 3 results
 also retain their old identity and transfer no PASS. The exact Round 17
 candidate requires a fresh real second-machine execution and canonical,
 non-expired v3 admission report; this mandatory gate remains open. The current
@@ -43,7 +43,7 @@ its own PR checks. Engineering CI validates source and development artifacts
 only; it does not establish a protected Host, independent-audit, release, or
 production PASS.
 
-CPA v7.2.145 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
+CPA v7.2.159 Multi-Agent v2 rewrites `/v1/responses` tool definitions before
 `RequestInterceptor`. The active lane therefore requires a new regression for
 the rewritten tool-schema/tool-payload boundary; no v7.2.116 report may be
 relabelled to satisfy it. Documents under `docs/reports/` retain their recorded
@@ -60,8 +60,10 @@ references remain stable.
 
 ## Current Round 17 navigation
 
+- [CPA v7.2.159 production task book](CPA_V7_2_159_PRODUCTION_TASK_BOOK.md)
+- [CPA v7.2.159 acceptance criteria](CPA_V7_2_159_ACCEPTANCE_CRITERIA.md)
 - [Active Round 17 status and evidence boundary](ROUND16_STATUS.md)
-- [Active CPA v7.2.145 / RPC schema 4 task book](ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md)
+- [Historical Round 17 CPA v7.2.145 / RPC schema 4 task book](ROUND17_CPA_V7_2_145_RC3_TASK_BOOK.md)
 - [Blocked-request review capture operator guide](RAW_CAPTURE.md)
 - [Metadata-only synthetic CSAM text regression contract](../testdata/csam-text-synthetic-v1/README.md)
 - [Release policy](RELEASE_POLICY.md)
@@ -79,7 +81,7 @@ references remain stable.
 ## Historical v0.16 navigation
 
 The following entries preserve the Round 12 and earlier point-in-time identity;
-they do not define the active v7.2.145 implementation:
+they do not define the active v7.2.159 implementation:
 
 - [Historical Round 12 v7.2.124 status and evidence boundary](ROUND12_STATUS.md)
 - [Historical Round 12 v7.2.124 production-hardening task book](ROUND12_PRODUCTION_HARDENING_TASK_BOOK.md)
@@ -185,15 +187,15 @@ Project baselines and engineering evidence:
 
 - [Classifier redesign baseline](reports/CLASSIFIER_REDESIGN_BASELINE.md)
 - [Regression corpus report](reports/CORPUS_REPORT.md)
-- [Active v7.2.145 CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
+- [Active v7.2.159 CPA integration overlay plus frozen history](reports/CPA_INTEGRATION.md)
 - [CPA packaging and contract baseline](reports/PHASE0_CPA_CONTRACT.md)
 - [Performance report and v0.16 acceptance table](reports/PERFORMANCE.md)
 - [Privacy report](reports/PRIVACY.md)
 - [Prompt-injection defensive review](reports/PROMPT_INJECTION_REVIEW.md)
 - [Public jailbreak repository review](reports/PUBLIC_JAILBREAK_REPOSITORY_REVIEW.md)
-- [Release evidence](reports/RELEASE_EVIDENCE.md) — active v7.2.145 boundary
+- [Release evidence](reports/RELEASE_EVIDENCE.md) — active v7.2.159 boundary
   plus retained historical records
-- [Test report](reports/TEST_REPORT.md) — active v7.2.145 boundary plus retained
+- [Test report](reports/TEST_REPORT.md) — active v7.2.159 boundary plus retained
   historical records
 
 Frozen evaluation reports:

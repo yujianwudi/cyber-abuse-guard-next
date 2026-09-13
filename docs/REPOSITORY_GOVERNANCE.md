@@ -40,8 +40,8 @@ publication permission. RC Release remains inert unless its complete,
 exact-candidate admission succeeds. CI and Policy Gate remain push/pull-request
 validation workflows with `contents: read`.
 
-The active compatibility boundary is CPA `v7.2.145` at commit
-`d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI `1`, RPC schema `4`, Linux
+The active compatibility boundary is CPA `v7.2.159` at commit
+`ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI `1`, RPC schema `6`, Linux
 amd64 only. This identity alone is not release authorization; the full
 acceptance and RC admission contracts remain mandatory.
 

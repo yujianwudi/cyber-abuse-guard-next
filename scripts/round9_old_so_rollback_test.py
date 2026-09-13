@@ -118,6 +118,7 @@ class RollbackSourceContractTests(unittest.TestCase):
         self.assertNotIn("ROUND9_OLD_SO_VERIFY_REMOTE", workflow)
 
 
+@unittest.skipIf(os.name == "nt", "mode-0400 rollback contract requires Linux/POSIX semantics")
 class RollbackHelperTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()

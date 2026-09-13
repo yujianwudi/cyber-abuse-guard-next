@@ -1,13 +1,13 @@
-# Test Report — CPA v7.2.145 Round 17 and frozen historical evidence
+# Test Report — CPA v7.2.159 active contract and frozen historical evidence
 
 ## Round 16 current test boundary
 
 > Round 17 overlay: this legacy heading and the `round16_*` field names are
-> retained for parser compatibility; all values in this block bind CPA v7.2.145.
+> retained for parser compatibility; all values in this block bind CPA v7.2.159.
 
 ```text
-round16_cpa: v7.2.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724 / C_ABI_1 / RPC_SCHEMA_4
-round16_module_sum: h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=
+round16_cpa: v7.2.159 / ac02da6c05e18f465aa7e3ed5b0a65a2f060917d / C_ABI_1 / RPC_SCHEMA_6
+round16_module_sum: h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=
 round16_go_mod_sum: h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 round16_schema4_host_fixture_targeted: NOT_RUN / CPA145_LINUX_REQUIRED
 round16_cag_rpc_schema_targeted: NOT_RUN / CPA145_LINUX_REQUIRED

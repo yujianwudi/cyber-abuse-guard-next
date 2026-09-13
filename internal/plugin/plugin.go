@@ -1,4 +1,4 @@
-// Package plugin implements the CPA v7.2.145 schema-v4 RPC surface for the
+// Package plugin implements the CPA v7.2.159 schema-v6 RPC surface for the
 // cyber-abuse guard. The native C boundary in cmd/cyber-abuse-guard is kept
 // deliberately thin; policy state and lifecycle semantics live here so they
 // can be race-tested without loading a shared object.
@@ -59,7 +59,7 @@ var metadata = pluginapi.Metadata{
 		{Name: "hard_block_even_if_authorized", Type: pluginapi.ConfigFieldTypeObject, Description: "Categories whose operational abuse remains protected from authorization score reductions."},
 		{Name: "subject_control", Type: pluginapi.ConfigFieldTypeObject, Description: "Rolling subject-risk, cooldown, and manual-block settings."},
 		{Name: "audit", Type: pluginapi.ConfigFieldTypeObject, Description: "SQLite audit settings plus an explicit default-off, block-only, redacted and truncated operator request-preview capture."},
-		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.145."},
+		{Name: "trusted_proxy", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved for a future verified-peer API; enabling it is rejected on CPA v7.2.159."},
 		{Name: "classifier", Type: pluginapi.ConfigFieldTypeObject, Description: "Reserved local-classifier interface; enabling it is unsupported in v1.0.0 and rejected."},
 	},
 }
@@ -304,7 +304,7 @@ func New() *Plugin {
 	}
 }
 
-// Call dispatches one schema-v4 RPC method. Controlled protocol/policy errors
+// Call dispatches one schema-v6 RPC method. Controlled protocol/policy errors
 // use a valid error envelope with return code zero. A recovered panic uses a
 // non-zero ABI return code while still returning a parseable envelope.
 func (p *Plugin) Call(method string, request []byte) (response []byte, returnCode int) {
@@ -492,7 +492,7 @@ func (p *Plugin) callOversizedExecutor() ([]byte, int) {
 	return errorEnvelope("request_too_large", "plugin executor RPC exceeds the size limit", 413, "rpc_body_limit"), 0
 }
 
-// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v4
+// recoverCallbackPanic is deliberately mode-aware for ModelRouter and schema-v6
 // request-interceptor callbacks. CPA continues after an RPC error, so an
 // enforcing runtime must return a successful local block response. The
 // recovered value is never logged because it can contain attacker-controlled
@@ -526,7 +526,7 @@ func (p *Plugin) recoverCallbackPanic(method string) ([]byte, int) {
 	return errorEnvelope("panic_recovered", "plugin callback failed safely", 0, ""), 1
 }
 
-// countRPCCallback records only one of the fixed schema-v4 callback surfaces.
+// countRPCCallback records only one of the fixed schema-v6 callback surfaces.
 // It deliberately does not retain request IDs, model names, routes, headers,
 // payload sizes, or any caller-controlled label. The counters are used by the
 // isolated Host admission harness to prove both protected-path invocation and
@@ -794,7 +794,7 @@ func (p *Plugin) configure(raw []byte, reconfigure bool) []byte {
 		return errorEnvelope("unsupported_schema", fmt.Sprintf("unsupported schema version %d", request.SchemaVersion), 0, "")
 	}
 	if p.quiescing.Load() {
-		// CPA v7.2.145 keeps the retired instance marked registered and invokes
+		// CPA v7.2.159 keeps the retired instance marked registered and invokes
 		// plugin.reconfigure, not plugin.register, when a replacement cannot be
 		// loaded. Both lifecycle methods therefore use the same exact-byte
 		// rollback contract while quiesced. A changed config remains rejected.
@@ -1055,7 +1055,7 @@ func (p *Plugin) reportABICapabilityLimits() {
 	if !p.abiLimitLogged.CompareAndSwap(false, true) {
 		return
 	}
-	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.145 plugin ABI", map[string]any{
+	p.log("warn", "cyber-abuse-guard cannot verify interceptor ordering or duplicate plugin binaries through the CPA v7.2.159 plugin ABI", map[string]any{
 		"plugin": ID,
 		"code":   "cpa_abi_conflict_detection_unavailable",
 		"request_interceptor_enumeration_supported": false,
@@ -1117,7 +1117,7 @@ func validateRuntimeConfig(cfg config.Config) error {
 		return fmt.Errorf("classifier.enabled is not supported in v%s; use deterministic local rules", buildinfo.Current().Version)
 	}
 	if cfg.TrustedProxy.Enabled {
-		return errors.New("trusted_proxy.enabled is not supported because CPA v7.2.145 request interception does not provide a verified direct peer address")
+		return errors.New("trusted_proxy.enabled is not supported because CPA v7.2.159 request interception does not provide a verified direct peer address")
 	}
 	if cfg.Audit.LogOriginalText {
 		return errors.New("audit.log_original_text is not supported; use the explicit bounded audit.raw_capture feature")
@@ -1499,7 +1499,7 @@ func currentRegistration() registration {
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata:      currentMetadata(),
 		Capabilities: registrationCapabilities{
-			// CPA v7.2.145 does not invoke RequestInterceptor for Alpha Search.
+			// CPA v7.2.159 does not invoke RequestInterceptor for Alpha Search.
 			// ModelRouter is registered only as that narrow compatibility entry;
 			// ordinary Host callbacks are rejected in callModelRouteRequest above.
 			ModelRouter:           true,
@@ -1510,7 +1510,7 @@ func currentRegistration() registration {
 			RequestInterceptor:    true,
 			RequestLifecycle:      true,
 			// CAG inspects requests and terminal lifecycle state only. It must not
-			// join CPA's successful response, stream-chunk rewrite, or schema-4
+			// join CPA's successful response, stream-chunk rewrite, or schema-6
 			// upstream WebSocket observation chains.
 			ResponseInterceptor:    false,
 			StreamChunkInterceptor: false,
@@ -1562,7 +1562,7 @@ func (p *Plugin) loadRuntime() (*runtimeState, error) {
 	return state, nil
 }
 
-// Quiesce is the reversible CPA v7.2.145 hot-reload boundary. It publishes a
+// Quiesce is the reversible CPA v7.2.159 hot-reload boundary. It publishes a
 // mode-aware terminal policy before closing admission, waits for already
 // admitted callbacks behind opMu, persists the current subject snapshot, and
 // drains accepted audit work without closing or replacing the runtime. CPA may
@@ -1637,7 +1637,7 @@ func (p *Plugin) Quiesce() error {
 }
 
 // restoreQuiescedRuntime accepts only CPA's rollback lifecycle call with the
-// exact config bytes that produced the still-live runtime. CPA v7.2.145 uses
+// exact config bytes that produced the still-live runtime. CPA v7.2.159 uses
 // plugin.reconfigure for an already-registered retired instance. It does not
 // rebuild or reopen SQLite and therefore cannot race the old Store with a
 // second handle.
@@ -1672,7 +1672,7 @@ func (p *Plugin) Shutdown() {
 		p.lifecycleMu.Unlock()
 		return
 	}
-	// Publish one terminal enforcement policy before shutdown. CPA v7.2.145
+	// Publish one terminal enforcement policy before shutdown. CPA v7.2.159
 	// continues after interceptor RPC errors, so late callbacks must receive a
 	// successful direct response. An enforcing runtime remains fail-closed;
 	// observe/audit/off remains an intentional pass-through.

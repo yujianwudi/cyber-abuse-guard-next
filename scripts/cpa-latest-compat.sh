@@ -295,9 +295,9 @@ cpa_lane_timeout="$(parse_lane_timeout "${CPA_COMPAT_LANE_TIMEOUT:-25m}")" || ex
 set_profile_identity() {
   case "$1" in
     primary)
-      cpa_version='v7.2.145'
-      cpa_commit='d9cea8904b14fbbebb77ef26e98ef08f6b48a724'
-      cpa_module_sum='h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o='
+      cpa_version='v7.2.159'
+      cpa_commit='ac02da6c05e18f465aa7e3ed5b0a65a2f060917d'
+      cpa_module_sum='h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA='
       cpa_go_mod_sum='h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ='
       ;;
     *)
@@ -407,15 +407,15 @@ fi
 
 assert_checked_in_module_identity \
   "$root" root \
-  v7.2.145 h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o= \
+  v7.2.159 h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/cpalatestcontract" cpalatestcontract \
-  v7.2.145 h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o= \
+  v7.2.159 h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 assert_checked_in_module_identity \
   "$root/integration/pluginstorecontract" pluginstorecontract \
-  v7.2.145 h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o= \
+  v7.2.159 h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA= \
   h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=
 
 verify_primary_latest=0

@@ -317,7 +317,7 @@ def validate_realtime_projection(
 ) -> dict[str, Any]:
     """Validate the portable realtime projection as strictly as machine evidence.
 
-    The report intentionally projects only the fixed v7.2.145 negative-coverage
+    The report intentionally projects only the fixed current-CPA negative-coverage
     proof.  Re-validate every projected field so a portable report cannot turn a
     malformed or side-effecting probe into an unprotected/CAG-invisible claim.
     """
@@ -2510,7 +2510,7 @@ def validate_report(
         or cpa["official_asset_sha256"] != CPA_OFFICIAL_ASSET_SHA256
         or cpa["binary_sha256"] != CPA_OFFICIAL_BINARY_SHA256
     ):
-        fail("report does not bind the fixed CPA v7.2.145 official bytes")
+        fail(f"report does not bind the fixed CPA {CPA_TAG} official bytes")
 
     import native_host_special_paths as native
 

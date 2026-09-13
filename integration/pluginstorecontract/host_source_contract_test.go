@@ -12,9 +12,9 @@ import (
 
 const (
 	cpaModulePath        = "github.com/router-for-me/CLIProxyAPI/v7"
-	cpaPinnedVersion     = "v7.2.145"
-	cpaPinnedCommit      = "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"
-	cpaPinnedModuleSum   = "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o="
+	cpaPinnedVersion     = "v7.2.159"
+	cpaPinnedCommit      = "ac02da6c05e18f465aa7e3ed5b0a65a2f060917d"
+	cpaPinnedModuleSum   = "h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA="
 	cpaPinnedGoModSum    = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 	cpaPluginHostPackage = cpaModulePath + "/internal/pluginhost"
 	cpaHandlersPackage   = cpaModulePath + "/sdk/api/handlers"

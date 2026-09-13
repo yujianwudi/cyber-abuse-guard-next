@@ -3,14 +3,14 @@
 > [!IMPORTANT]
 > The active Round 17 boundary is Linux amd64, source `1.0.0`, planned
 > `v1.0.0-rc.3`, and CPA
-> `v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4.
+> `v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI 1 / RPC schema 6.
 > Round 15 v7.2.142/schema 3 and older evidence below remain historical and
 > non-transferable; current gate status is tracked in
 > [ROUND16_STATUS.md](ROUND16_STATUS.md).
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
 Last updated: 2026-08-29 (Asia/Shanghai)
@@ -21,7 +21,7 @@ All `/v1/realtime*` routes currently bypass CAG `RequestInterceptor`,
 `ModelRouter`, and request lifecycle. They are **OUT_OF_SCOPE / UNPROTECTED /
 CAG_NOT_VISIBLE**. CAG protects only registered callback paths such as chat and
 Responses and does not provide all-traffic coverage. No Round 15 or older PASS
-may be relabelled as v7.2.145/schema 4 evidence.
+may be relabelled as v7.2.159/schema 6 evidence.
 
 The source contract labels this `SOURCE_TOPOLOGY_UNPROTECTED`. Runtime negative
 coverage uses only requests with no credential and terminates at authentication;

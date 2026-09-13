@@ -111,7 +111,7 @@ def _json_event(
 def store_receipt_output(store_archive_sha256: str) -> str:
     return (
         "    host_integration_test.go:4581: "
-        "CPA v7.2.145 Store installed real archive "
+        "CPA v7.2.159 Store installed real archive "
         f"sha256={store_archive_sha256} path={STORE_INSTALL_PATH}\n"
     )
 

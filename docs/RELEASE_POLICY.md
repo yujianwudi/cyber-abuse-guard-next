@@ -6,21 +6,21 @@ current_binary_version: 1.0.0
 current_rc_tag: v1.0.0-rc.3
 current_release_artifact_version: 1.0.0-rc.3
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 current_rc_prerelease: true
 current_rc_make_latest: false
-current_cpa_target: v7.2.145 / d9cea8904b14fbbebb77ef26e98ef08f6b48a724
-current_cpa_contract: C_ABI_1 / RPC_SCHEMA_4
+current_cpa_target: v7.2.159 / ac02da6c05e18f465aa7e3ed5b0a65a2f060917d
+current_cpa_contract: C_ABI_1 / RPC_SCHEMA_6
 current_platform: linux-amd64
 current_go_toolchain: go1.26.6
 current_release_gate: ROUND17_ADMISSION_INCOMPLETE / REQUIRED_CHECKS_AND_REAL_SECOND_MACHINE_ADMISSION_MANDATORY
 ```
 
-The active compatibility identity is CPA v7.2.145/schema 4. Its official
-Linux amd64 archive is 21,226,153 bytes with SHA-256
-`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
-the contained binary SHA-256 is
-`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
+The active compatibility identity is CPA v7.2.159/schema 6. Its official
+Linux amd64 archive is 21,733,175 bytes with SHA-256
+`942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218`;
+the contained 65,704,424-byte binary SHA-256 is
+`2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7`.
 Round 15 v7.2.142/schema 3 and every older PASS remain immutable historical
 evidence and cannot authorize or transfer to this lane. Round 17 permits the
 fixed `v1.0.0-rc.3` prerelease only after every applicable acceptance gate and

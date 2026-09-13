@@ -132,7 +132,7 @@ func TestLatestCPAInteractionsHandlerAndTranslatorOverlayContract(t *testing.T) 
 	})
 }
 
-func TestLatestCPAInteractionsSchema4RequestLifecycleOverlayContract(t *testing.T) {
+func TestLatestCPAInteractionsSchema6RequestLifecycleOverlayContract(t *testing.T) {
 	runLatestCPAOverlayFixture(t, latestCPAOverlayFixture{
 		fixtureName:   cpaLatestInteractionsHostFixture,
 		fixtureSHA256: cpaLatestInteractionsHostFixtureSHA256,

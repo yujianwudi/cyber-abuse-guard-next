@@ -1,4 +1,4 @@
-# CPA v7.2.145 Packaging and Contract Baseline
+# CPA v7.2.159 Packaging and Contract Baseline
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
@@ -9,17 +9,20 @@ This path is retained by the audit-bundle contract, but its contents describe
 only the current CPA target. Historical Phase 0 version matrices are available
 in Git history and are not shipped here as active validation guidance.
 
-The root module and both isolated integration modules pin CPA v7.2.145 at commit
-`d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, module sum
-`h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=`, and go.mod sum
+The root module and both isolated integration modules pin CPA v7.2.159 at commit
+`ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, module sum
+`h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
-archive is 21,226,153 bytes with SHA-256
-`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
-the checksums file SHA-256 is
-`df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`.
-The extracted binary is 64,207,528 bytes with SHA-256
-`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
-This target uses C ABI 1 / RPC schema 4.
+archive `CLIProxyAPI_7.2.159_linux_amd64.tar.gz` is 21,733,175 bytes with
+SHA-256 `942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218`;
+the checksums file is `c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23`,
+and the extracted binary is 65,704,424 bytes with SHA-256
+`2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7`.
+Historical v7.2.145 asset hashes are retained for audit comparison only
+(`ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`,
+`df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`,
+`576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`).
+This target uses C ABI 1 / RPC schema 6.
 Current validation paths are:
 
 - the official Host source and fail-open fixture contract;
@@ -30,7 +33,7 @@ Current validation paths are:
 
 See [CPA_INTEGRATION.md](CPA_INTEGRATION.md) for the active commands, exact
 module checksums, last fully verified source baseline, and evidence boundary.
-The owner-operated isolated CPA v7.2.145 Host + Mock-upstream record remains a
+The owner-operated isolated CPA v7.2.159 Host + Mock-upstream record remains a
 separate release requirement; source or CI compile checks do not authorize
 production deployment.
 

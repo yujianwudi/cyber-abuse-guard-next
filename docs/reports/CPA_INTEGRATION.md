@@ -1,33 +1,37 @@
-# CPA v7.2.145 schema-4 active contract and frozen historical validation
+# CPA v7.2.159 schema-6 active contract and frozen historical validation
 
 ```text
 current_classifier_policy_version: classifier-policy-v20
-current_classifier_policy_sha256: 974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683
+current_classifier_policy_sha256: 21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46
 ```
 
 ## Round 16 active compatibility overlay
 
 > Round 17 overlay: this legacy heading and the `round16_*` field names are
-> retained for parser compatibility; all values in this block bind CPA v7.2.145.
+> retained for parser compatibility; all values in this block bind CPA v7.2.159.
 
 The active classifier remains `classifier-policy-v20`. Its protected summary
 includes the root `go.mod`/`go.sum` together with the bounded multipart and
-streaming implementation, so the CPA v7.2.145 pin plus the current symbol-leet
+streaming implementation, so the CPA v7.2.159 pin plus the current symbol-leet
 and winner-order fixes produce SHA-256
-`974f05d1109bde75847b0063c3110c81944ddef249d9fdf8c374ddcd8c218683`.
+`21aac366aa49b49bbed00f0f788564e73c56e16f6317e062d9902e550f57ca46`.
 
 The sole active source/compile target is CLIProxyAPI
-`v7.2.145@d9cea8904b14fbbebb77ef26e98ef08f6b48a724`, C ABI 1 / RPC schema 4,
-module sum `h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o=`, and go.mod sum
+`v7.2.159@ac02da6c05e18f465aa7e3ed5b0a65a2f060917d`, C ABI 1 / RPC schema 6,
+module sum `h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA=`, and go.mod sum
 `h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ=`. The official Linux amd64
-asset `CLIProxyAPI_7.2.145_linux_amd64.tar.gz` is 21,226,153 bytes with
-SHA-256 `ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`;
-the official checksums file has SHA-256
+asset `CLIProxyAPI_7.2.159_linux_amd64.tar.gz` is 21,733,175 bytes with
+SHA-256 `942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218`;
+the official checksums file is SHA-256
+`c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23`, and the
+extracted Linux amd64 binary is 65,704,424 bytes with SHA-256
+`2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7`.
+Historical v7.2.145 asset SHA-256 values remain recorded below for comparison
+only: `ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37`,
 `df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c`,
-and the contained 64,207,528-byte binary has SHA-256
 `576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713`.
 
-The current v7.2.145-bound repository-owned development self-check now records `320/320 PASS`
+The current v7.2.159-bound repository-owned development self-check now records `320/320 PASS`
 on Linux with zero skips. The receipt records the command, time window, stderr,
 test IDs, all tested implementation/test source bytes and current runner hashes.
 It materializes those bytes into a temporary read-only snapshot and runs
@@ -35,7 +39,7 @@ isolated Python against that snapshot; it is not inferred from test discovery
 or a mutable source-tree subprocess. It is repository-authored and unsigned,
 so it cannot replace exact-commit GitHub CI or independent evidence. The prior
 283-test receipt remains immutable historical evidence and is not relabelled.
-The v7.2.145 changed-behavior source contract is present but requires the
+The v7.2.159 changed-behavior source contract is present but requires the
 Linux compatibility job to execute its named upstream regressions; no local
 Windows result is promoted to a CPA145 PASS.
 The complete Linux matrix, remote/exact-candidate CI, exact-fix second-machine,
@@ -51,11 +55,11 @@ management connection per measured cell without changing the 100 ms cadence or
 any admission threshold. The old candidate transfers no PASS after the
 collector bytes changed. The RC lane may publish only after all applicable acceptance gates
 pass; the current pending state does not yet authorize a tag or Release.
-The upstream v7.2.145 tag/commit and a fresh Linux download of the official
+The upstream v7.2.159 tag/commit and a fresh Linux download of the official
 archive, checksums file, and contained binary were rechecked on 2026-08-29;
 those checks close only upstream identity, not Host execution or release admission.
 
-CPA v7.2.145 `/v1/realtime*` uses a path that bypasses CAG. It is explicitly
+CPA v7.2.159 `/v1/realtime*` uses a path that bypasses CAG. It is explicitly
 `OUT_OF_SCOPE / UNPROTECTED / CAG_NOT_VISIBLE`; protected-route results must not
 be described as all-traffic coverage. This source-topology conclusion is
 reported separately as `SOURCE_TOPOLOGY_UNPROTECTED`. The isolated dynamic

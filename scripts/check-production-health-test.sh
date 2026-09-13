@@ -60,8 +60,8 @@ class ManagementHandler(http.server.BaseHTTPRequestHandler):
     startup_request_logging_installed = False
     emit_request_log_artifact = False
     swap_log_dir_on_probe = False
-    runtime_version = "7.2.145"
-    runtime_commit = "d9cea890"
+    runtime_version = "7.2.159"
+    runtime_commit = "ac02da6c"
     log_dir = ""
     swapped_log_dir = ""
     request_paths = []
@@ -430,8 +430,8 @@ class SplitFrontProxyHandler(http.server.BaseHTTPRequestHandler):
 
 class IsolatedDirectHandler(http.server.BaseHTTPRequestHandler):
     startup_privacy_instance_id = "b" * 64
-    runtime_version = "7.2.145"
-    runtime_commit = "d9cea890"
+    runtime_version = "7.2.159"
+    runtime_commit = "ac02da6c"
     log_dir = ""
     startup_challenges = {}
     startup_proof_requests = 0
@@ -857,7 +857,7 @@ try:
     ManagementHandler.config_contract = "valid"
 
     # A current safe config must not mask middleware installed by an unsafe
-    # startup. The non-management fixed-418 proof models CPA v7.2.145's synchronous
+    # startup. The non-management fixed-418 proof models CPA v7.2.159's synchronous
     # error-only raw-body artifact.
     ManagementHandler.startup_request_logging_installed = True
     stranded_startup_middleware = run_watchdog()
@@ -900,8 +900,8 @@ try:
 
     ManagementHandler.runtime_version = "7.2.143"
     wrong_cpa_version = run_watchdog()
-    ManagementHandler.runtime_version = "7.2.145"
-    ManagementHandler.runtime_commit = "d9cea890"
+    ManagementHandler.runtime_version = "7.2.159"
+    ManagementHandler.runtime_commit = "ac02da6c"
     official_eight_character_commit = run_watchdog()
     ManagementHandler.runtime_commit = "d36b77"
     too_short_cpa_commit = run_watchdog()
@@ -970,9 +970,9 @@ if completed.returncode != 0:
     sys.stderr.write(completed.stdout)
     sys.stderr.write(completed.stderr)
     raise SystemExit("watchdog failed its direct management request")
-if "cpa=7.2.145" not in completed.stdout or "cpa=7.2.130" in completed.stdout:
+if "cpa=7.2.159" not in completed.stdout or "cpa=7.2.130" in completed.stdout:
     sys.stderr.write(completed.stdout)
-    raise SystemExit("watchdog success output did not preserve the exact CPA v7.2.145 identity")
+    raise SystemExit("watchdog success output did not preserve the exact CPA v7.2.159 identity")
 if not initial_request_paths or initial_request_paths[0] != config_path:
     raise SystemExit("CPA logging controls were not checked before plugin health routes")
 if initial_startup_proof_requests != 2:

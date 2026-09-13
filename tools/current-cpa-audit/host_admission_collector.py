@@ -1407,7 +1407,7 @@ class LinuxHostAdmissionCollector:
             "cpa", self.config["identities"]["cpa"]["binary_path"], "running CPA binary"
         )
         if observed_binary != CPA_OFFICIAL_BINARY_SHA256:
-            fail("running CPA binary differs from the frozen v7.2.145 binary")
+            fail(f"running CPA binary differs from the frozen {CPA_TAG} binary")
         observed_so = self._copy_and_hash(
             "cpa", f"/cag/plugins/linux/amd64/{CAG_SO_NAME}", "running candidate SO"
         )

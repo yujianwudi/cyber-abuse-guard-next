@@ -55,23 +55,23 @@ CANDIDATE_REPOSITORY = "yujianwudi/cyber-abuse-guard-next"
 CANDIDATE_WORKFLOW_NAME = "CI"
 CANDIDATE_WORKFLOW_PATH = ".github/workflows/ci.yml"
 CANDIDATE_MAX_BYTES = 2 * 1024 * 1024
-CPA_TAG = "v7.2.145"
-CPA_COMMIT = "d9cea8904b14fbbebb77ef26e98ef08f6b48a724"
-CPA_MODULE_SUM = "h1:5AG1q4MhRK+IU5oP5PPvm04AJYvEkj60br85jiBan5o="
+CPA_TAG = "v7.2.159"
+CPA_COMMIT = "ac02da6c05e18f465aa7e3ed5b0a65a2f060917d"
+CPA_MODULE_SUM = "h1:zDH2YS1ulYMyxIzUymJgvIAN+v9QUYaVvP8HKsiUmcA="
 CPA_GO_MOD_SUM = "h1:lTHwMAGajc1wKGQiRtDvYbwV0FWsM7sy+N0ZU5/gxJQ="
 CPA_C_ABI = 1
-CPA_RPC_SCHEMA = 4
-CPA_OFFICIAL_ASSET_NAME = "CLIProxyAPI_7.2.145_linux_amd64.tar.gz"
-CPA_OFFICIAL_ASSET_SIZE = 21_226_153
+CPA_RPC_SCHEMA = 6
+CPA_OFFICIAL_ASSET_NAME = "CLIProxyAPI_7.2.159_linux_amd64.tar.gz"
+CPA_OFFICIAL_ASSET_SIZE = 21_733_175
 CPA_OFFICIAL_ASSET_SHA256 = (
-    "ffb59d406af9b849ec9174154d96642a1d3ccb315f8687c56ac55202816e9b37"
+    "942d567a525d0f8dd0e78c2843cfefae7f553c0a385c859c20951b12d8a48218"
 )
 CPA_OFFICIAL_CHECKSUMS_SHA256 = (
-    "df71c910a0ceb83f67ada7c193a1b2d87f1bae955929d4a1d18fb4cf7f4b9d7c"
+    "c3eb1364394232f933d74c9fa6855e49b7deb7eec3610d44ec45741f2c744f23"
 )
-CPA_OFFICIAL_BINARY_SIZE = 64_207_528
+CPA_OFFICIAL_BINARY_SIZE = 65_704_424
 CPA_OFFICIAL_BINARY_SHA256 = (
-    "576a0555e5180c48a5cdf51ee92047a6ab78c363dfe612ea75925ba7f1ae1713"
+    "2acd787308dd9b67030157b82f05493ff5fd53f34cce2bfe159a8039d75a23b7"
 )
 REALTIME_ROUTE_CONTRACT: tuple[tuple[str, str, str], ...] = (
     ("GET", "/v1/realtime", "realtime"),
@@ -649,7 +649,7 @@ def validate_realtime_boundary(
     cold_start_count: int,
     label: str,
 ) -> dict[str, Any]:
-    """Validate the fixed v7.2.145 auth-boundary-only realtime evidence.
+    """Validate the fixed current-CPA auth-boundary-only realtime evidence.
 
     These probes intentionally stop at authentication. They prove that none of
     the six fixed, content-free CAG RPC callback counters moved, but they do not
@@ -805,7 +805,7 @@ def validate_realtime_boundary(
                 one_of(route["auth"], ("realtime", "standard"), f"{route_label}.auth"),
             )
             if identity in observed_routes or identity not in expected_routes:
-                fail(f"{route_label} is duplicate or outside the fixed v7.2.145 route set")
+                fail(f"{route_label} is duplicate or outside the fixed {CPA_TAG} route set")
             observed_routes.add(identity)
             if exact_int(route["status"], f"{route_label}.status") not in {401, 403}:
                 fail(f"{route_label} did not terminate at authentication")
@@ -829,7 +829,7 @@ def validate_realtime_boundary(
             if exact_bool(route["upgrade"], f"{route_label}.upgrade"):
                 fail(f"{route_label} unexpectedly upgraded")
         if observed_routes != expected_routes:
-            fail(f"{item_label} omits a fixed v7.2.145 realtime route")
+                fail(f"{item_label} omits a fixed {CPA_TAG} realtime route")
     return realtime
 
 
