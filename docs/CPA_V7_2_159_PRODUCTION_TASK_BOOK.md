@@ -6,7 +6,7 @@
 
 ## 1. 审计结论
 
-本轮审计确认活动 CPA 159 的模块、schema-6 Host 合同、Raw Capture 字节计数和审计工具身份已统一；`tools/current-cpa-audit` 的 362 项 Python 测试通过（38 项按环境/外部证据跳过）。审计还发现并纳入本任务的回归：
+本轮审计确认活动 CPA 159 的模块、schema-6 Host 合同、Raw Capture 字节计数和审计工具身份已统一；`tools/current-cpa-audit` 的 Python 测试套件在 Linux CI 通过（环境/外部证据型项目按策略跳过）。审计还发现并纳入本任务的回归：
 
 - Round 13 历史发布合同的 SHA-256 必须保持不可变，CPA 159 的变更只能出现在活动 Round 16 overlay。
 - 文档一致性 fixture 的 Round 16 active pins 必须显式更新；Round 6 的历史 hash 常量仍保持冻结，不能静默覆盖。
