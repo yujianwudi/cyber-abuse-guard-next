@@ -21,9 +21,9 @@ const (
 	cpaLatestOpenAIGeminiPackage       = cpaLatestModulePath + "/internal/translator/openai/gemini"
 
 	cpaLatestInteractionsHandlerFixture       = "latest_interactions_handler_overlay_test.go.txt"
-	cpaLatestInteractionsHandlerFixtureSHA256 = "b560b95d40d71ed3bd32438f08939d27e6c31f5d34c98b7488bcadedff1b6724"
+	cpaLatestInteractionsHandlerFixtureSHA256 = "756fd6af85f95c6181db80f56743e987cd62630c26808e46ee12151881543452"
 	cpaLatestInteractionsHostFixture          = "latest_interactions_pluginhost_overlay_test.go.txt"
-	cpaLatestInteractionsHostFixtureSHA256    = "a3dce86f434b59b56adb91a20f1ec2d5d7dda5f5da70d671e256497aa6642830"
+	cpaLatestInteractionsHostFixtureSHA256    = "24babd13551fb588ee0ce04eadb31adabfcd30ffe701611f2ad6720cbe3b9c8f"
 	cpaLatestHomeOAuthRetryFixture            = "latest_home_oauth_retry_overlay_test.go.txt"
 	cpaLatestHomeOAuthRetryFixtureSHA256      = "216e40962593363e269e8a3b30f7686137aca4654773168aa2025b0b16fa07cc"
 )
