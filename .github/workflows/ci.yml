@@ -25,7 +25,11 @@ env:
 jobs:
   quality-and-artifacts:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # The race suite runs two independent 20-minute Go race-test budgets plus
+    # the full Linux artifact and provenance checks.  A 60-minute cap caused
+    # healthy runs to be cancelled at the workflow boundary; keep the per-test
+    # 20-minute fail-fast limits while allowing CI startup/compile variance.
+    timeout-minutes: 90
     steps:
       - name: Checkout Round6 safe sparse source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
