@@ -66,6 +66,15 @@ func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel
 	})
 }
 
+// CPA v7.2.159 uses the retry-round constraint surface to redispatch Home
+// credentials after an upstream unauthorized response. Keep the fixture's
+// legacy method as the single token-producing implementation so the second
+// selection is observable without pretending Home-owned credentials support a
+// local Refresh call.
+func (d *cagHomeOAuthRetryDispatcher) RPopAuthWithRetryRoundConstraints(ctx context.Context, requestedModel, sessionID string, headers http.Header, count, _ int, _ []string, _ string) ([]byte, error) {
+	return d.RPopAuth(ctx, requestedModel, sessionID, headers, count)
+}
+
 func (*cagHomeOAuthRetryDispatcher) AbortAmbiguousDispatch() {}
 
 func (d *cagHomeOAuthRetryDispatcher) model() string {

@@ -39,7 +39,7 @@ const (
 	cpaLatestTranslatorSDK     = cpaLatestModulePath + "/sdk/translator"
 	cpaLatestAPIPackage        = cpaLatestModulePath + "/internal/api"
 	cpaLatestCodexLive         = cpaLatestModulePath + "/internal/client/codex/live"
-	cpaLatestFixtureSHA256     = "271390c596d31fe5db0022b2364375fa80e49ddc0f59c06da4b5532ab33aab13"
+	cpaLatestFixtureSHA256     = "82c6a4b617877c4fae8a5357e851de00d05398d8f336a5de300ed652a2e387e2"
 
 	cpaCompatibilityProfileEnv = "CPA_COMPAT_PROFILE"
 	cpaCompatibilityModfileEnv = "CPA_COMPAT_MODFILE"
@@ -387,7 +387,7 @@ func TestLatestCPANoCopyAndResponsesFailureContract(t *testing.T) {
 		{
 			packagePath: cpaLatestSessionPackage,
 			tests: []string{
-				"TestEnrichCarriesRequestPayloadIntoSelectionOptions",
+				"TestEnrichCopiesDerivedIdentityToRequestAndOptions",
 			},
 		},
 		{
@@ -574,14 +574,14 @@ func TestLatestCPAV159ChangedBehaviorContract(t *testing.T) {
 		)
 	}
 
-	// v7.2.159 deliberately restores the fixed Home listener port. Bind the
-	// source shape so a later reintroduction of a remotely supplied port cannot
-	// silently change the deployment contract.
+	// v7.2.159 normalizes the Home listener port through the config helper.
+	// Bind that source shape so a later reintroduction of a remotely supplied
+	// port cannot silently change the deployment contract.
 	serverSource, err := os.ReadFile(filepath.Join(module.Dir, "cmd", "server", "main.go"))
 	if err != nil {
 		t.Fatalf("read CPA v7.2.159 server source: %v", err)
 	}
-	if count := bytes.Count(serverSource, []byte("parsed.Port = 8317")); count != 1 {
+	if count := bytes.Count(serverSource, []byte("parsed.Port = config.NormalizeHomePort(parsed.Port)")); count != 1 {
 		t.Fatalf("CPA v7.2.159 Home port assignment count=%d, want exactly one", count)
 	}
 	authSource, err := os.ReadFile(filepath.Join(module.Dir, "internal", "api", "handlers", "management", "auth_files_fields.go"))

@@ -177,7 +177,12 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 		t.Fatalf("schema-6 capture metadata=%+v", capture)
 	}
 
-	body = cyberAbuseGuardRawCaptureBody(t, []string{preview, preview})
+	// Two full 1 MiB previews would exceed the Host's 8 MiB response budget
+	// once the canonical base64 field and metadata are included. Exercise the
+	// multi-capture path with budget-fitting previews instead of weakening the
+	// production-size guard.
+	budgetPreview := preview[:512<<10]
+	body = cyberAbuseGuardRawCaptureBody(t, []string{budgetPreview, budgetPreview})
 	rec = httptest.NewRecorder()
 	if !host.ServeManagementHTTP(rec, req) {
 		t.Fatal("ServeManagementHTTP(two previews) = false, want true")

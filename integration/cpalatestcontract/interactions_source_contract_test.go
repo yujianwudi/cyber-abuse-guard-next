@@ -25,7 +25,7 @@ const (
 	cpaLatestInteractionsHostFixture          = "latest_interactions_pluginhost_overlay_test.go.txt"
 	cpaLatestInteractionsHostFixtureSHA256    = "24babd13551fb588ee0ce04eadb31adabfcd30ffe701611f2ad6720cbe3b9c8f"
 	cpaLatestHomeOAuthRetryFixture            = "latest_home_oauth_retry_overlay_test.go.txt"
-	cpaLatestHomeOAuthRetryFixtureSHA256      = "6111a06eab69f768780de354fd99e6a8d915ea0f797c01fd31ed378e08b64fa5"
+	cpaLatestHomeOAuthRetryFixtureSHA256      = "2a9bc5015a2625dc19efea14f11d69541fc1f73a96431bf0e7954a088c6682a3"
 )
 
 var latestOfficialInteractionsTests = []struct {
@@ -41,15 +41,15 @@ var latestOfficialInteractionsTests = []struct {
 	{
 		packagePath: cpaLatestCliproxyAuthPackage,
 		testNames: []string{
-			"TestHomeUnauthorizedRefreshesSameSelectionBeforeRedispatch",
-			"TestHomeUnauthorizedRefreshUpdatesRetainedSelection",
+			"TestHomeUnauthorizedReturnsOriginalErrorWithoutRefresh",
+			"TestHomeUnauthorizedDoesNotRefreshRetainedSelection",
 			"TestRefreshHomeSelectionReusesConcurrentNewerToken",
-			"TestHomeUnauthorizedRefreshIsAttemptedAtMostOnce",
-			"TestHomeNoCandidateAfterRefreshFailurePreservesRefreshError",
-			"TestHomeUnauthorizedTransientRefreshFailureIsReturned",
-			"TestHomeUnauthorizedStreamRefreshesAtMostOnceAcrossRedispatch",
+			"TestHomeUnauthorizedDoesNotRefreshOrReplay",
+			"TestHomeNoCandidatePreservesOriginalUpstreamError",
+			"TestHomeUnauthorizedIgnoresExecutorRefreshFailure",
+			"TestHomeUnauthorizedStreamDoesNotRefreshOrReplay",
 			"TestHomeUnauthorizedStartedStreamDoesNotReplay",
-			"TestHomeUnauthorizedStreamRefreshesBeforeRedispatch",
+			"TestHomeUnauthorizedStreamReturnsOriginalErrorWithoutRefresh",
 		},
 	},
 	{
@@ -101,7 +101,7 @@ var latestPrimaryCodexAlphaSearchTests = []string{
 	"TestCodexAlphaSearchFallsBackWhenPluginDoesNotHandleRoute",
 	"TestCodexAlphaSearchRejectsUnsupportedPluginRouteTarget",
 	"TestCodexAlphaSearchUsesPluginProviderTargetModel",
-	"TestHomeCodexAlphaSearchRefreshesUnauthorizedSelectionOnce",
+	"TestHomeCodexAlphaSearchForwardsUnauthorizedResponseWithoutRefresh",
 }
 
 func TestLatestCPAOfficialInteractionsSourceContract(t *testing.T) {
