@@ -51,6 +51,7 @@ func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel
 		Model     string        `json:"model"`
 		Provider  string        `json:"provider"`
 		AuthIndex string        `json:"auth_index"`
+		RequestRetry *int       `json:"request_retry,omitempty"`
 		Auth      coreauth.Auth `json:"auth"`
 	}{
 		Model:     requestedModel,
