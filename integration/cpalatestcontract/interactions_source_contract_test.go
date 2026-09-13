@@ -25,7 +25,7 @@ const (
 	cpaLatestInteractionsHostFixture          = "latest_interactions_pluginhost_overlay_test.go.txt"
 	cpaLatestInteractionsHostFixtureSHA256    = "24babd13551fb588ee0ce04eadb31adabfcd30ffe701611f2ad6720cbe3b9c8f"
 	cpaLatestHomeOAuthRetryFixture            = "latest_home_oauth_retry_overlay_test.go.txt"
-	cpaLatestHomeOAuthRetryFixtureSHA256      = "216e40962593363e269e8a3b30f7686137aca4654773168aa2025b0b16fa07cc"
+	cpaLatestHomeOAuthRetryFixtureSHA256      = "6111a06eab69f768780de354fd99e6a8d915ea0f797c01fd31ed378e08b64fa5"
 )
 
 var latestOfficialInteractionsTests = []struct {

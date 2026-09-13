@@ -37,7 +37,11 @@ type cagHomeOAuthRetryDispatcher struct {
 func (*cagHomeOAuthRetryDispatcher) HeartbeatOK() bool { return true }
 
 func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel, _ string, _ http.Header, _ int) ([]byte, error) {
-	d.calls.Add(1)
+	call := d.calls.Add(1)
+	token := cagHomeOAuthStaleToken
+	if call > 1 {
+		token = cagHomeOAuthFreshToken
+	}
 	d.mu.Lock()
 	d.requestedModel = requestedModel
 	d.mu.Unlock()
@@ -57,7 +61,7 @@ func (d *cagHomeOAuthRetryDispatcher) RPopAuth(_ context.Context, requestedModel
 			Attributes: map[string]string{
 				coreauth.AttributeAuthKind: coreauth.AuthKindOAuth,
 			},
-			Metadata: map[string]any{"access_token": cagHomeOAuthStaleToken},
+			Metadata: map[string]any{"access_token": token},
 		},
 	})
 }
@@ -218,25 +222,25 @@ func TestCyberAbuseGuardHomeOAuthUnauthorizedRetrySingleLogicalLifecycle(t *test
 		t.Fatalf("Home OAuth retry handler error = %#v", errMessage)
 	}
 	if string(body) != `{"ok":true}` {
-		t.Fatalf("Home OAuth retry response body = %q, want successful retry body", body)
+		t.Fatalf("Home OAuth redispatch response body = %q, want successful retry body", body)
 	}
-	if got := dispatcher.calls.Load(); got != 1 {
-		t.Fatalf("Home dispatch calls = %d, want 1 logical selection", got)
+	if got := dispatcher.calls.Load(); got != 2 {
+		t.Fatalf("Home dispatch calls = %d, want one redispatch after the stale token", got)
 	}
 	if got := dispatcher.model(); got != cagHomeOAuthRetryModel {
 		t.Fatalf("Home requested model = %q, want %q", got, cagHomeOAuthRetryModel)
 	}
-	if got := executor.refreshCalls.Load(); got != 1 {
-		t.Fatalf("OAuth refresh calls = %d, want 1", got)
+	if got := executor.refreshCalls.Load(); got != 0 {
+		t.Fatalf("OAuth refresh calls = %d, want 0 for Home-owned credentials", got)
 	}
 	if got := executor.executeCalls.Load(); got != 2 {
-		t.Fatalf("executor attempts = %d, want initial 401 plus one refreshed retry", got)
+		t.Fatalf("executor attempts = %d, want initial 401 plus one Home redispatch", got)
 	}
 	if got := host.beforeCalls.Load(); got != 1 {
 		t.Fatalf("before-auth interceptor calls = %d, want 1 logical request", got)
 	}
-	if got := host.afterCalls.Load(); got != 1 {
-		t.Fatalf("after-auth interceptor calls = %d, want 1 across the Home 401 retry", got)
+	if got := host.afterCalls.Load(); got != 2 {
+		t.Fatalf("after-auth interceptor calls = %d, want one per Home selection", got)
 	}
 	if got := host.responseCalls.Load(); got != 1 {
 		t.Fatalf("response interceptor calls = %d, want 1 logical response", got)
@@ -260,8 +264,8 @@ func TestCyberAbuseGuardHomeOAuthUnauthorizedRetrySingleLogicalLifecycle(t *test
 			t.Fatalf("executor attempt %d has nil Home execution lifecycle", index+1)
 		}
 	}
-	if attempts[0].lifecycle != attempts[1].lifecycle {
-		t.Fatal("Home OAuth retry created a second execution lifecycle instead of reusing the logical selection")
+	if attempts[0].lifecycle == attempts[1].lifecycle {
+		t.Fatal("Home OAuth redispatch reused the failed execution lifecycle")
 	}
 
 	beforeID, afterID, completion, responseBody := host.snapshot()

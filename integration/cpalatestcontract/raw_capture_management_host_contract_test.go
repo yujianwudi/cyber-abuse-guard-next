@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
 
@@ -94,8 +95,10 @@ func TestCyberAbuseGuardRawCaptureManagementHostContract(t *testing.T) {
 	host := newHostWithRecords(capabilityRecord{
 		id: "cyber-abuse-guard",
 		priority: 300,
-		plugin: pluginapi.Plugin{Capabilities: pluginapi.Capabilities{
-			ManagementAPI: &managementPluginDouble{routes: []pluginapi.ManagementRoute{{
+		plugin: pluginapi.Plugin{
+			SchemaVersion: pluginabi.SchemaVersionRawManagementResponse,
+			Capabilities: pluginapi.Capabilities{
+				ManagementAPI: &managementPluginDouble{routes: []pluginapi.ManagementRoute{{
 				Method: http.MethodGet,
 				Path: "/plugins/cyber-abuse-guard/raw-captures",
 				Handler: managementHandlerFunc(func(context.Context, pluginapi.ManagementRequest) (pluginapi.ManagementResponse, error) {
