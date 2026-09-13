@@ -19,15 +19,16 @@ the official Responses namespace/custom `additional_tools` conversion contract,
 two official Codex Responses Lite `additional_tools` role/shape contracts, and
 15 official internal API/Interactions route and handler contracts, including
 the current Codex Alpha Search routes, plus nine official Home unauthorized-
-refresh/retry contracts from `sdk/cliproxy/auth`, then apply four
+handling contracts from `sdk/cliproxy/auth` (including v7.2.159's
+no-refresh/no-replay behavior), then apply four
 checksum-pinned fixture overlays only to ephemeral copies of the selected
 official CPA module: schema-6 fail-open request interception/lifecycle plus the
 narrow Alpha Search ModelRouter capability, Interactions handler/translator,
 Interactions request-lifecycle format, and a non-streaming Home 401 handler
 contract that proves one before-auth/response/completion lifecycle around a
 stale-token attempt and one Home redispatch, with each selected credential
-receiving its own after-auth callback. Stream retry mechanics remain covered
-by the named official upstream tests. A fifth source-controlled
+receiving its own after-auth callback. Stream no-refresh/no-replay mechanics
+remain covered by the named official upstream tests. A fifth source-controlled
 Raw Capture schema-4 transport and response-budget
 management overlay is compiled from this test module. The Raw Capture contract
 resolves the selected CPA source through the same checked-in module identity as
