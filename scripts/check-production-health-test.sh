@@ -909,7 +909,7 @@ try:
     divergent_cpa_commit = run_watchdog()
     ManagementHandler.runtime_commit = "deadbeef"
     wrong_cpa_commit = run_watchdog()
-    ManagementHandler.runtime_commit = "d9cea89"
+    ManagementHandler.runtime_commit = "ac02da6"
     minimum_seven_character_commit = run_watchdog()
 
     missing_log_dir = run_watchdog({"CPA_LOG_DIR": ""})
