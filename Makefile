@@ -793,17 +793,22 @@ sbom:
 	GO=$(GO) VERSION=$(VERSION) CYCLONEDX_GOMOD=$(CYCLONEDX_GOMOD) \
 		CYCLONEDX_GOMOD_VERSION=$(CYCLONEDX_GOMOD_VERSION) ./scripts/release-sbom.sh
 
-vulncheck:
+# Keep the two historical entrypoints free of Make prerequisites: the Round6
+# contract audits their dependency graph and intentionally rejects dynamic
+# prerequisite indirection.  A recipe macro removes command duplication while
+# preserving those stable target boundaries and package scopes.
+define VULNCHECK_RECIPE
 	@toolchain="$$($(GO) env GOVERSION)"; scanner="$$($(GOVULNCHECK) -version | awk '/^Go: / { print $$2 }')"; \
 		[[ "$$toolchain" == go1.26.6 && "$$scanner" == "$$toolchain" ]] || { \
-		printf 'vulncheck requires govulncheck and GO to use go1.26.6 (GO=%s scanner=%s)\n' "$$toolchain" "$$scanner" >&2; exit 1; }
-	$(GOVULNCHECK) ./...
+		printf '$(1) requires govulncheck and GO to use go1.26.6 (GO=%s scanner=%s)\n' "$$toolchain" "$$scanner" >&2; exit 1; }
+	$(GOVULNCHECK) $(2)
+endef
+
+vulncheck:
+	$(call VULNCHECK_RECIPE,vulncheck,./...)
 
 round6-vulncheck:
-	@toolchain="$$($(GO) env GOVERSION)"; scanner="$$($(GOVULNCHECK) -version | awk '/^Go: / { print $$2 }')"; \
-		[[ "$$toolchain" == go1.26.6 && "$$scanner" == "$$toolchain" ]] || { \
-		printf 'round6-vulncheck requires govulncheck and GO to use go1.26.6 (GO=%s scanner=%s)\n' "$$toolchain" "$$scanner" >&2; exit 1; }
-	$(GOVULNCHECK) $(ROUND6_SAFE_PACKAGES)
+	$(call VULNCHECK_RECIPE,round6-vulncheck,$(ROUND6_SAFE_PACKAGES))
 
 round6-cpa-store-contract:
 	@artifacts=("$(SO)" "$(STORE_ZIP)" "$(DIST_DIR)/build-metadata.json" "$(DIST_DIR)/checksums.txt"); \
