@@ -142,7 +142,7 @@ jobs:
         run: make round10-performance ROUND10_PERFORMANCE_OUTPUT="$ROUND10_PERFORMANCE_OUTPUT"
       - name: Upload Round 10 performance JSON
         if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: round10-performance-linux-amd64
           path: ${{ runner.temp }}/round10-performance.json
@@ -370,7 +370,7 @@ jobs:
         run: make clean-tree-check
       - name: Upload exact-merge clean audit candidate
         id: upload_audit_candidate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cyber-abuse-guard-linux-amd64-audit-candidate
           path: |
@@ -701,7 +701,7 @@ jobs:
             ':(glob)internal/*/testdata/fuzz/Fuzz*/*')
       - name: Upload Go fuzz failure corpus
         if: ${{ failure() && steps.fuzz.outcome == 'failure' && steps.collect_fuzz.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: go-fuzz-failure
           path: ${{ runner.temp }}/go-fuzz-failures
