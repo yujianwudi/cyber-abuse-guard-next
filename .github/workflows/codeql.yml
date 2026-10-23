@@ -85,6 +85,6 @@ jobs:
         run: go build -mod=readonly -tags=sqlite_omit_load_extension ./cmd/cyber-abuse-guard ./internal/... ./rules
 
       - name: Analyze Go
-        uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v4
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           category: /language:go
